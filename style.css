@@ -375,14 +375,17 @@ button, input, textarea, select {
 .editor-card {
     width: 100%;
     max-width: 800px;
-    height: 94vh;
+    /* Используем переменную env для отступа сверху */
+    height: calc(100vh - env(safe-area-inset-top)); 
     background: var(--bg);
     border-radius: 32px 32px 0 0;
     border: 1px solid var(--border);
-    border-bottom: none;
     display: flex;
     flex-direction: column;
     animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    
+    /* Важно для iOS: предотвращает "прыжки" интерфейса */
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 @keyframes slideUp {
@@ -391,7 +394,11 @@ button, input, textarea, select {
 }
 
 .editor-header {
-    padding: 16px 20px;
+    /* Добавляем отступ, чтобы кнопка закрытия не залезла на часы */
+    padding-top: calc(16px + env(safe-area-inset-top));
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-bottom: 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
