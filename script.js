@@ -1,7 +1,3 @@
-/**
- * SMART NOTES - FINAL STABLE CORE
- */
-
 const firebaseConfig = {
     apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
     authDomain: "smartnotes-f5733.firebaseapp.com",
@@ -11,7 +7,10 @@ const firebaseConfig = {
     appId: "1:523799066979:web:abc13814f34864230cbb56"
 };
 
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
@@ -51,7 +50,7 @@ const i18n = {
         confirm_del: "Удалить заметку?",
         stat_notes: "заметок",
         login: "LOGIN",
-        contact_us: "Связаться с нами"
+        btn_contact: "Связаться с нами"
     },
     en: {
         app_title: "Smart Notes",
@@ -87,7 +86,7 @@ const i18n = {
         confirm_del: "Delete note?",
         stat_notes: "notes",
         login: "LOGIN",
-        contact_us: "Contact Us"
+        btn_contact: "Contact us"
     }
 };
 
@@ -107,12 +106,10 @@ let state = {
     }
 };
 
-// --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
     state.tempConfig = { ...state.config };
     applyTheme(state.config);
     updateInterfaceText();
-    document.getElementById('universal-color-picker').value = state.config.accent;
 
     auth.onAuthStateChanged(user => {
         state.user = user;
@@ -125,6 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
             renderNotes();
         }
     });
+
+    const colorPicker = document.getElementById('universal-color-picker');
+    if (colorPicker) colorPicker.value = state.config.accent;
 });
 
 function subscribeNotes(uid) {
@@ -135,34 +135,55 @@ function subscribeNotes(uid) {
     });
 }
 
-// --- AUTH ---
-window.login = () => auth.signInWithPopup(provider);
+window.login = () => {
+    auth.signInWithPopup(provider).catch(err => {
+        console.error("Auth error:", err);
+        alert("Ошибка входа. Проверьте консоль браузера.");
+    });
+};
+
 window.logout = () => auth.signOut();
-window.switchAccount = () => auth.signOut().then(login);
+window.switchAccount = () => auth.signOut().then(window.login);
 
 function updateAuthUI(user) {
-    document.getElementById('login-btn').classList.toggle('hidden', !!user);
-    document.getElementById('user-ui').classList.toggle('hidden', !user);
-    document.getElementById('app-content').classList.toggle('hidden', !user);
-    if (user) document.getElementById('user-pic').src = user.photoURL;
+    const loginBtn = document.getElementById('login-btn');
+    const userUi = document.getElementById('user-ui');
+    const appContent = document.getElementById('app-content');
+
+    if (loginBtn) loginBtn.classList.toggle('hidden', !!user);
+    if (userUi) userUi.classList.toggle('hidden', !user);
+    if (appContent) appContent.classList.toggle('hidden', !user);
+    
+    if (user && document.getElementById('user-pic')) {
+        document.getElementById('user-pic').src = user.photoURL;
+    }
 }
 
 function updateProfile(user) {
-    document.getElementById('modal-user-pic').src = user.photoURL;
-    document.getElementById('user-name').textContent = user.displayName;
+    const pic = document.getElementById('modal-user-pic');
+    const name = document.getElementById('user-name');
+    if (pic) pic.src = user.photoURL;
+    if (name) name.textContent = user.displayName;
 }
 
 function updateStats() {
-    document.getElementById('note-count').innerHTML = `${state.notes.length} <small>${i18n[state.config.lang].stat_notes}</small>`;
+    const statEl = document.getElementById('note-count');
+    if (statEl) {
+        statEl.innerHTML = `${state.notes.length} <small>${i18n[state.config.lang].stat_notes}</small>`;
+    }
 }
 
-// --- RENDERING ---
 window.renderNotes = () => {
     const list = document.getElementById('notesList');
-    const q = document.getElementById('search').value.toLowerCase();
-    const sort = document.getElementById('sort-select').value;
+    if (!list) return;
+    
+    const searchEl = document.getElementById('search');
+    const q = searchEl ? searchEl.value.toLowerCase() : '';
+    const sortEl = document.getElementById('sort-select');
+    const sort = sortEl ? sortEl.value : 'newest';
+    
     list.innerHTML = '';
-
+    
     let filtered = state.notes.filter(n => {
         const viewMatch = state.view === 'archive' ? n.isArchived : !n.isArchived;
         const textMatch = (n.title || '').toLowerCase().includes(q) || 
@@ -181,11 +202,11 @@ window.renderNotes = () => {
             return (map[b.priority] || 2) - (map[a.priority] || 2);
         }
         if (sort === 'title') return (a.title || '').localeCompare(b.title || '');
-        return b.createdAt - a.createdAt;
+        return (b.createdAt || 0) - (a.createdAt || 0);
     });
 
     filtered.forEach(n => {
-        const dateStr = new Date(n.createdAt).toLocaleDateString();
+        const dateStr = n.createdAt ? new Date(n.createdAt).toLocaleDateString() : '';
         const div = document.createElement('div');
         div.className = 'note';
         div.setAttribute('data-priority', n.priority || 'normal');
@@ -200,8 +221,8 @@ window.renderNotes = () => {
                 </div>
             </div>
             <div class="note-actions">
-                <button onclick="toggleArchive('${n.id}', ${!n.isArchived})">${n.isArchived ? '⏪' : '📦'}</button>
-                <button onclick="deleteNote('${n.id}')">🗑️</button>
+                <button onclick="event.stopPropagation(); toggleArchive('${n.id}', ${!n.isArchived})">${n.isArchived ? '⏪' : '📦'}</button>
+                <button onclick="event.stopPropagation(); deleteNote('${n.id}')">🗑️</button>
             </div>
         `;
         list.appendChild(div);
@@ -210,28 +231,31 @@ window.renderNotes = () => {
 
 window.setView = (v) => {
     state.view = v;
-    document.getElementById('view-active').classList.toggle('active', v === 'active');
-    document.getElementById('view-archive').classList.toggle('active', v === 'archive');
-    renderNotes();
+    const btnAct = document.getElementById('view-active');
+    const btnArc = document.getElementById('view-archive');
+    if (btnAct) btnAct.classList.toggle('active', v === 'active');
+    if (btnArc) btnArc.classList.toggle('active', v === 'archive');
+    window.renderNotes();
 };
 
-// --- EDITOR LOGIC ---
 window.openEditor = (id = null) => {
     state.editingId = id;
     const t = i18n[state.config.lang];
     const btn = document.getElementById('save-note-btn');
     const modal = document.getElementById('editor-modal');
-    
+
     if (id) {
         const n = state.notes.find(x => x.id === id);
-        document.getElementById('noteTitle').value = n.title || '';
-        document.getElementById('noteText').value = n.text || '';
-        document.getElementById('noteTags').value = (n.tags || []).join(' ');
-        document.getElementById('notePriority').value = n.priority || 'normal';
-        document.getElementById('noteTimestamp').checked = n.showTimestamp;
-        document.getElementById('noteArchive').checked = n.isArchived;
-        state.editorPinned = n.isPinned || false;
-        btn.querySelector('span').textContent = t.update_btn;
+        if (n) {
+            document.getElementById('noteTitle').value = n.title || '';
+            document.getElementById('noteText').value = n.text || '';
+            document.getElementById('noteTags').value = (n.tags || []).join(' ');
+            document.getElementById('notePriority').value = n.priority || 'normal';
+            document.getElementById('noteTimestamp').checked = n.showTimestamp !== false;
+            document.getElementById('noteArchive').checked = !!n.isArchived;
+            state.editorPinned = !!n.isPinned;
+        }
+        if (btn) btn.querySelector('span').textContent = t.update_btn;
     } else {
         document.getElementById('noteTitle').value = '';
         document.getElementById('noteText').value = '';
@@ -240,19 +264,23 @@ window.openEditor = (id = null) => {
         document.getElementById('noteTimestamp').checked = true;
         document.getElementById('noteArchive').checked = false;
         state.editorPinned = false;
-        btn.querySelector('span').textContent = t.save_btn;
+        if (btn) btn.querySelector('span').textContent = t.save_btn;
     }
-
+    
     updatePinBtn();
-    modal.classList.add('active');
+    if (modal) modal.classList.add('active');
 };
 
-window.editNote = (id) => openEditor(id);
+window.editNote = (id) => window.openEditor(id);
 
 window.handleSaveNote = async () => {
     const title = document.getElementById('noteTitle').value.trim();
     const text = document.getElementById('noteText').value.trim();
-    if (!title && !text) return;
+    
+    if (!title && !text) {
+        window.toggleEditor(false);
+        return;
+    }
 
     const data = {
         title, text,
@@ -264,14 +292,18 @@ window.handleSaveNote = async () => {
         updatedAt: Date.now()
     };
 
-    if (state.editingId) {
-        await db.collection("notes").doc(state.editingId).update(data);
-    } else {
-        data.uid = state.user.uid;
-        data.createdAt = Date.now();
-        await db.collection("notes").add(data);
+    try {
+        if (state.editingId) {
+            await db.collection("notes").doc(state.editingId).update(data);
+        } else {
+            data.uid = state.user.uid;
+            data.createdAt = Date.now();
+            await db.collection("notes").add(data);
+        }
+        window.toggleEditor(false);
+    } catch (e) {
+        console.error("Save error:", e);
     }
-    toggleEditor(false);
 };
 
 window.deleteNote = async (id) => {
@@ -290,12 +322,13 @@ window.togglePin = () => {
 };
 
 function updatePinBtn() {
-    document.getElementById('btn-pin').classList.toggle('active', state.editorPinned);
+    const pinBtn = document.getElementById('btn-pin');
+    if (pinBtn) pinBtn.classList.toggle('active', state.editorPinned);
 }
 
-// --- MODALS & TABS ---
 window.toggleModal = (id, show) => {
     const el = document.getElementById(id);
+    if (!el) return;
     if (show) {
         if (id === 'settings-modal') loadSettingsUI();
         el.classList.add('active');
@@ -305,13 +338,16 @@ window.toggleModal = (id, show) => {
 };
 
 window.toggleEditor = (show) => {
-    if (show) openEditor();
-    else document.getElementById('editor-modal').classList.remove('active');
+    if (show) window.openEditor();
+    else {
+        const modal = document.getElementById('editor-modal');
+        if (modal) modal.classList.remove('active');
+    }
 };
 
 window.closeAll = (e) => {
     if (e.target.classList.contains('modal')) {
-        if (e.target.id === 'settings-modal') cancelSettings();
+        if (e.target.id === 'settings-modal') window.cancelSettings();
         else e.target.classList.remove('active');
     }
 };
@@ -319,22 +355,30 @@ window.closeAll = (e) => {
 window.switchTab = (tab) => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
-    document.getElementById(`tab-${tab}`).classList.add('active');
+    
+    const targetBtn = document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`);
+    const targetContent = document.getElementById(`tab-${tab}`);
+    
+    if (targetBtn) targetBtn.classList.add('active');
+    if (targetContent) targetContent.classList.add('active');
 };
 
-// --- THEME & SETTINGS ---
 window.setLangPreview = (lang) => {
     state.tempConfig.lang = lang;
-    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.id === `btn-${lang}`));
-    updateInterfaceText(lang);
+    document.querySelectorAll('.lang-btn').forEach(b => {
+        b.classList.toggle('active', b.id === `btn-${lang}`);
+    });
+    updateInterfaceText(lang); 
 };
 
 window.setColorTarget = (t) => {
     state.colorTarget = t;
-    document.querySelectorAll('.target-btn').forEach(b => b.classList.toggle('active', b.dataset.target === t));
+    document.querySelectorAll('.target-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.target === t);
+    });
     const currentHex = state.tempConfig[t];
-    document.getElementById('universal-color-picker').value = currentHex;
+    const picker = document.getElementById('universal-color-picker');
+    if (picker) picker.value = currentHex;
 };
 
 window.updateColorPreview = (hue) => {
@@ -351,7 +395,8 @@ function applyColor(target, hex) {
     if (target === 'accent') {
         document.documentElement.style.setProperty('--accent-glow', hex + '40');
     }
-    document.getElementById('universal-color-picker').value = hex;
+    const picker = document.getElementById('universal-color-picker');
+    if (picker) picker.value = hex;
 }
 
 window.applySettings = () => {
@@ -360,30 +405,31 @@ window.applySettings = () => {
     localStorage.setItem('sn_accent', state.config.accent);
     localStorage.setItem('sn_bg', state.config.bg);
     localStorage.setItem('sn_text', state.config.text);
+    
     updateInterfaceText();
-    renderNotes();
-    toggleModal('settings-modal', false);
+    window.renderNotes();
+    window.toggleModal('settings-modal', false);
 };
 
 window.cancelSettings = () => {
     state.tempConfig = { ...state.config };
     applyTheme(state.config);
     updateInterfaceText();
-    toggleModal('settings-modal', false);
+    window.toggleModal('settings-modal', false);
 };
 
 window.resetSettings = () => {
     const def = { lang: 'ru', accent: '#00ffcc', bg: '#000000', text: '#ffffff' };
     state.tempConfig = { ...def };
     applyTheme(def);
-    setLangPreview(def.lang);
-    setColorTarget('accent');
+    window.setLangPreview(def.lang);
+    window.setColorTarget('accent');
 };
 
 function loadSettingsUI() {
     state.tempConfig = { ...state.config };
-    setLangPreview(state.config.lang);
-    setColorTarget('accent');
+    window.setLangPreview(state.config.lang);
+    window.setColorTarget('accent');
 }
 
 function applyTheme(cfg) {
@@ -397,6 +443,7 @@ function applyTheme(cfg) {
 function updateInterfaceText(previewLang = null) {
     const lang = previewLang || state.config.lang;
     const dict = i18n[lang];
+
     const map = {
         '[data-lang="app_title"]': dict.app_title,
         '[data-lang="settings_title"]': dict.settings_title,
@@ -420,30 +467,29 @@ function updateInterfaceText(previewLang = null) {
         '#noteTags': [dict.tag_ph, 'placeholder'],
         '.toggle-switch input[id="noteTimestamp"] + span': dict.label_time,
         '.toggle-switch input[id="noteArchive"] + span': dict.label_archive,
-        '#save-note-btn span': dict.editingId ? dict.update_btn : dict.save_btn,
+        '#save-note-btn span': dict.save_btn,
         '#notePriority option[value="low"]': dict.p_low,
         '#notePriority option[value="normal"]': dict.p_norm,
         '#notePriority option[value="high"]': dict.p_high,
         '.settings-footer .btn--text': dict.btn_reset,
         '.settings-footer .btn--secondary': dict.btn_cancel,
         '.settings-footer .btn--primary': dict.btn_apply,
-        '.btn--feedback span': dict.contact_us,
+        '.btn--feedback span': dict.btn_contact,
         '#login-btn': dict.login
     };
 
     for (const [sel, val] of Object.entries(map)) {
-        const el = document.querySelector(sel);
-        if (el) {
+        const els = document.querySelectorAll(sel);
+        els.forEach(el => {
             if (Array.isArray(val)) el[val[1]] = val[0];
             else el.textContent = val;
-        }
+        });
     }
 }
 
-// --- UTILS ---
 function esc(s) {
     if (!s) return '';
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return s.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 function hslToHex(h, s, l) {
