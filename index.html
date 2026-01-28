@@ -13,48 +13,44 @@
 
     <div id="sidebar" class="sidebar">
         <h2>Smart Notes</h2>
-        <div class="menu-item" onclick="showSection('notes')">🚩 Заметки</div>
-        <div class="menu-item" onclick="showSection('archive')">📦 Архив</div>
-        <div class="menu-item" onclick="toggleSettings(true)">⚙️ Настройки</div>
+        <div class="menu-item" onclick="window.toggleSidebar(false)">🚩 Заметки</div>
+        <div class="menu-item" onclick="window.toggleSidebar(false)">📦 Архив</div>
+        <div class="menu-item" onclick="window.toggleSettings(true)">⚙️ Настройки</div>
         <div class="version">Версия 1.0.4 PRO</div>
     </div>
 
     <div class="main-wrapper">
         <header>
-            <div class="menu-toggle" onclick="toggleSidebar(true)">☰</div>
+            <div class="menu-toggle" onclick="window.toggleSidebar(true)">☰</div>
             <div id="user-ui" class="hidden">
                 <img id="user-pic" style="width:38px; height:38px; border-radius:50%; border: 2px solid var(--accent-color);">
             </div>
-            <button id="login-btn" onclick="handleLogin()" style="background:var(--accent-color); border:none; padding:10px 20px; border-radius:12px; font-weight:bold; cursor:pointer;">ВХОД</button>
+            <button id="login-btn" onclick="window.handleLogin()" style="background:var(--accent-color); border:none; padding:10px 20px; border-radius:12px; font-weight:bold; cursor:pointer;">ВХОД</button>
         </header>
 
-        <main id="notesList" class="notes-container">
-            </main>
+        <main id="notesList" class="notes-container"></main>
 
         <div class="bottom-input-area" id="input-panel" style="display: none;">
             <input type="text" id="noteInput" placeholder="Напишите что-нибудь...">
-            <button class="send-btn" onclick="quickSave()">➔</button>
+            <button class="send-btn" onclick="window.quickSave()">➔</button>
         </div>
     </div>
 
     <div id="settings-modal" class="modal-settings">
-<div class="settings-card">
-    <h3>Язык</h3>
-    <div class="lang-btns">
-        <button onclick="setLang('RU')">RU</button>
-        <button onclick="setLang('EN')">EN</button>
-    </div>
-    
-    <h3>Цвет элементов</h3>
-    <input type="color" oninput="setAccent(this.value)" value="#00ffcc" style="width:100%; height:40px; border:none; cursor:pointer; background:none;">
+        <div class="settings-card">
+            <h3>Язык</h3>
+            <div class="lang-btns">
+                <button onclick="window.setLang('RU')">RU</button>
+                <button onclick="window.setLang('EN')">EN</button>
+            </div>
+            
+            <h3>Цвет элементов</h3>
+            <input type="color" oninput="window.setAccent(this.value)" value="#00ffcc" style="width:100%; height:40px; border:none; cursor:pointer; background:none;">
 
-    <h3>Фон</h3>
-    <input type="color" oninput="setBg(this.value)" value="#050505" style="width:100%; height:40px; border:none; cursor:pointer; background:none;">
+            <h3>Фон</h3>
+            <input type="color" oninput="window.setBg(this.value)" value="#050505" style="width:100%; height:40px; border:none; cursor:pointer; background:none;">
 
-    <button class="close-settings" onclick="toggleSettings(false)">ЗАКРЫТЬ</button>
-</div>
-
-            <button class="close-settings" onclick="toggleSettings(false)">ЗАКРЫТЬ</button>
+            <button class="close-settings" onclick="window.toggleSettings(false)">ЗАКРЫТЬ</button>
         </div>
     </div>
 
