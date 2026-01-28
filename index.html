@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Smart Notes PRO</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+    <header class="header blur-bg">
+        <div class="header__logo" data-lang="app_title">Smart Notes</div>
+        <div class="header__actions">
+            <button class="icon-btn" onclick="toggleModal('settings-modal', true)">⚙️</button>
+            <button class="icon-btn" onclick="toggleModal('info-modal', true)">ℹ️</button>
+            
+            <button id="login-btn" class="btn btn--primary btn--sm" onclick="login()">LOGIN</button>
+            
+            <div id="user-ui" class="hidden">
+                <img id="user-pic" class="avatar" onclick="toggleModal('profile-modal', true)" alt="User">
+            </div>
+        </div>
+    </header>
+
+    <div id="app-content" class="container hidden">
+        <div class="search-wrapper">
+            <input type="text" id="search" class="search-input" placeholder="Поиск..." oninput="renderNotes()">
+        </div>
+        
+        <main id="notesList" class="notes-grid"></main>
+        
+        <button class="fab" onclick="toggleEditor(true)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+    </div>
+
+    <div id="settings-modal" class="modal" onclick="closeAll(event)">
+        <div class="modal-card">
+            <h3 data-lang="settings_title">Настройки</h3>
+            
+            <div class="settings-group">
+                <label data-lang="lang_label">Язык</label>
+                <div class="lang-switch">
+                    <button class="lang-btn active" onclick="setLang('ru')" id="btn-ru">RU</button>
+                    <button class="lang-btn" onclick="setLang('en')" id="btn-en">EN</button>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <label data-lang="color_label">Акцент</label>
+                <div class="color-palette">
+                    <div class="color-dot" style="background: #00ffcc;" onclick="setTheme('#00ffcc')"></div>
+                    <div class="color-dot" style="background: #ff0055;" onclick="setTheme('#ff0055')"></div>
+                    <div class="color-dot" style="background: #00ccff;" onclick="setTheme('#00ccff')"></div>
+                    <div class="color-dot" style="background: #ccff00;" onclick="setTheme('#ccff00')"></div>
+                    <div class="color-dot" style="background: #ffffff;" onclick="setTheme('#ffffff')"></div>
+                </div>
+            </div>
+
+            <button class="btn btn--full" onclick="toggleModal('settings-modal', false)" data-lang="close">Закрыть</button>
+        </div>
+    </div>
+
+    <div id="info-modal" class="modal" onclick="closeAll(event)">
+        <div class="modal-card">
+            <h3 class="text-accent">TEAM</h3>
+            <div class="team-list">
+                <p>PM: Ivan Kopaev</p>
+                <p>Lead: Ivan Minyaev</p>
+                <p>Back: Arseniy Alexandrov</p>
+                <p>Design: Egor Malyshev</p>
+            </div>
+            <a href="https://t.me/SmartNotesInfo_bot" class="link-btn">@SmartNotesInfo_bot</a>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="modal" onclick="closeAll(event)">
+        <div class="modal-card center">
+            <img id="modal-user-pic" class="avatar avatar--lg">
+            <h4 id="user-name">User</h4>
+            <div class="spacer"></div>
+            <button class="btn btn--primary btn--full" onclick="switchAccount()" data-lang="switch_acc">Сменить аккаунт</button>
+            <button class="btn btn--danger btn--full" onclick="logout()" data-lang="logout">Выйти</button>
+        </div>
+    </div>
+
+    <div id="editor-modal" class="modal modal--bottom">
+        <div class="editor-card">
+            <div class="editor-header">
+                <span data-lang="new_note">Новая заметка</span>
+                <button class="icon-btn" onclick="toggleEditor(false)">✕</button>
+            </div>
+            <textarea id="noteText" placeholder="Start typing..."></textarea>
+            <div class="editor-footer">
+                <input type="text" id="noteTags" class="tag-input" placeholder="#tags">
+                <button class="btn-send" onclick="addNote()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
