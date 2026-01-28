@@ -26,12 +26,16 @@ window.onload = () => {
 };
 
 // 3. Авторизация
-window.handleLogin = async () => {
-    try {
-        await auth.signInWithRedirect(provider);
-    } catch (e) {
-        console.error("Login Error:", e);
-    }
+window.handleLogin = () => {
+    console.log("Кнопка нажата, запуск авторизации...");
+    auth.signInWithPopup(provider)
+        .then((result) => {
+            console.log("Успех:", result.user);
+        })
+        .catch((error) => {
+            console.error("Ошибка:", error);
+            alert("Firebase Error: " + error.message);
+        });
 };
 
 auth.onAuthStateChanged(user => {
