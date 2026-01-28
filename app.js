@@ -1,3 +1,4 @@
+// 1. Конфигурация Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyCOAAF9hCoEcp0WW5Px34OVWpqae029VkY",
     authDomain: "smartnotes-f5733.firebaseapp.com",
@@ -7,83 +8,126 @@ const firebaseConfig = {
     appId: "1:772658814715:web:8655c65a7e6b7720743b95"
 };
 
+// Инициализация
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
 
-// Языковые пакеты
+// 2. Локализация (RU/EN)
 const i18n = {
-    RU: { notes: "🚩 Заметки", archive: "📦 Архив", settings: "⚙️ Настройки", placeholder: "Напишите что-нибудь...", login: "ВХОД", lang: "ЯЗЫК", color_el: "Цвет элементов", color_bg: "Фон", close: "ЗАКРЫТЬ" },
-    EN: { notes: "🚩 Notes", archive: "📦 Archive", settings: "⚙️ Settings", placeholder: "Write something...", login: "LOGIN", lang: "LANGUAGE", color_el: "Elements Color", color_bg: "Background", close: "CLOSE" }
+    RU: {
+        notes: "Заметки", archive: "Архив", settings: "Настройки",
+        placeholder: "Напишите что-нибудь...", login: "ВХОД",
+        l_lang: "Язык", l_el: "Цвет элементов", l_bg: "Фон", btn_close: "ЗАКРЫТЬ"
+    },
+    EN: {
+        notes: "Notes", archive: "Archive", settings: "Settings",
+        placeholder: "Write something...", login: "LOGIN",
+        l_lang: "Language", l_el: "Elements Color", l_bg: "Background", btn_close: "CLOSE"
+    }
 };
 
-let currentLang = 'RU';
-
-async function handleLogin() {
-    try { await auth.signInWithRedirect(provider); } 
-    catch (e) { alert("Error: " + e.message); }
-}
+// 3. Авторизация
+window.handleLogin = async () => {
+    try {
+        await auth.signInWithRedirect(provider);
+    } catch (e) {
+        alert("Ошибка: " + e.message);
+    }
+};
 
 auth.onAuthStateChanged(user => {
     const loginBtn = document.getElementById('login-btn');
+    const userUi = document.getElementById('user-ui');
     const inputPanel = document.getElementById('input-panel');
+
     if (user) {
         loginBtn.classList.add('hidden');
+        userUi.classList.remove('hidden');
         inputPanel.style.display = 'flex';
         document.getElementById('user-pic').src = user.photoURL;
-        document.getElementById('user-ui').classList.remove('hidden');
         loadNotes(user.uid);
     } else {
         loginBtn.classList.remove('hidden');
+        userUi.classList.add('hidden');
         inputPanel.style.display = 'none';
     }
 });
 
-function setLang(lang) {
-    currentLang = lang;
-    document.querySelector('[onclick*="notes"]').innerText = i18n[lang].notes;
-    document.querySelector('[onclick*="archive"]').innerText = i18n[lang].archive;
-    document.querySelector('[onclick*="toggleSettings(true)"]').innerText = i18n[lang].settings;
-    document.getElementById('noteInput').placeholder = i18n[lang].placeholder;
-    document.getElementById('login-btn').innerText = i18n[lang].login;
-    // Обновляем заголовки в модалке
-    const labels = document.querySelectorAll('.settings-card h3');
-    labels[0].innerText = i18n[lang].lang;
-    labels[1].innerText = i18n[lang].color_el;
-    labels[2].innerText = i18n[lang].color_bg;
-    document.querySelector('.close-settings').innerText = i18n[lang].close;
-}
-
-async function quickSave() {
+// 4. Работа с заметками
+window.quickSave = async () => {
     const input = document.getElementById('noteInput');
-    if (!input.value.trim() || !auth.currentUser) return;
-    await db.collection("notes").add({
-        uid: auth.currentUser.uid,
-        text: input.value,
-        createdAt: Date.now()
-    });
-    input.value = '';
-}
+    const text = input.value.trim();
+    if (!text || !auth.currentUser) return;
+
+    try {
+        await db.collection("notes").add({
+            uid: auth.currentUser.uid,
+            text: text,
+            createdAt: Date.now()
+        });
+        input.value = '';
+    } catch (e) {
+        console.error(e);
+    }
+};
 
 function loadNotes(uid) {
-    db.collection("notes").where("uid", "==", uid).orderBy("createdAt", "desc").onSnapshot(snap => {
-        const list = document.getElementById('notesList');
-        list.innerHTML = '';
-        snap.forEach(doc => {
-            list.innerHTML += `<div class="note-card"><p>${doc.data().text}</p></div>`;
+    db.collection("notes")
+        .where("uid", "==", uid)
+        .orderBy("createdAt", "desc")
+        .onSnapshot(snapshot => {
+            const list = document.getElementById('notesList');
+            list.innerHTML = '';
+            snapshot.forEach(doc => {
+                const note = doc.data();
+                list.innerHTML += `
+                    <div class="note-card">
+                        <p>${note.text}</p>
+                    </div>
+                `;
+            });
         });
-    });
 }
 
-// Функции интерфейса
-window.toggleSidebar = (s) => document.getElementById('sidebar').classList.toggle('active', s);
-window.toggleSettings = (s) => {
-    document.getElementById('settings-modal').style.display = s ? 'flex' : 'none';
-    if(s) window.toggleSidebar(false);
+// 5. Интерфейс и настройки
+window.toggleSidebar = (show) => {
+    document.getElementById('sidebar').classList.toggle('active', show);
 };
-window.setAccent = (c) => document.documentElement.style.setProperty('--accent-color', c);
-window.setBg = (c) => document.documentElement.style.setProperty('--bg-color', c);
-window.setLang = setLang;
-window.handleLogin = handleLogin;
-window.quickSave = quickSave;
+
+window.toggleSettings = (show) => {
+    document.getElementById('settings-modal').style.display = show ? 'flex' : 'none';
+    if (show) window.toggleSidebar(false);
+};
+
+window.setLang = (lang) => {
+    const t = i18n[lang];
+    document.getElementById('m-notes').innerText = t.notes;
+    document.getElementById('m-archive').innerText = t.archive;
+    document.getElementById('m-settings').innerText = t.settings;
+    document.getElementById('noteInput').placeholder = t.placeholder;
+    document.getElementById('login-btn').innerText = t.login;
+    document.getElementById('l-lang').innerText = t.l_lang;
+    document.getElementById('l-el').innerText = t.l_el;
+    document.getElementById('l-bg').innerText = t.l_bg;
+    document.getElementById('btn-close').innerText = t.btn_close;
+};
+
+window.setAccent = (color) => {
+    document.documentElement.style.setProperty('--accent-color', color);
+    document.documentElement.style.setProperty('--sidebar-bg', color);
+};
+
+window.setBg = (color) => {
+    document.documentElement.style.setProperty('--bg-color', color);
+};
+
+// При клике на пустую область закрываем сайдбар
+document.addEventListener('click', (e) => {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.querySelector('.menu-toggle');
+    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !toggle.contains(e.target)) {
+        window.toggleSidebar(false);
+    }
+});
