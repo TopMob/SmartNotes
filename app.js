@@ -1,6 +1,6 @@
 // 1. Конфигурация Firebase (ТВОИ ДАННЫЕ)
 const firebaseConfig = {
-    apiKey: "ВАШ_API_KEY",
+    apiKey: "AIzaSyCOAAF9hCoEcp0WW5Px34OVWpqae029VkY",
     authDomain: "smartnotes-f5733.firebaseapp.com",
     projectId: "smartnotes-f5733",
     storageBucket: "smartnotes-f5733.appspot.com",
