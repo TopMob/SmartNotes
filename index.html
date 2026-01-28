@@ -10,7 +10,6 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 </head>
 <body>
-
     <div id="sidebar" class="sidebar">
         <h2 id="side-title">Smart Notes</h2>
         <div class="menu-item" onclick="window.toggleSidebar(false)">🚩 <span id="m-notes">Заметки</span></div>
@@ -23,15 +22,16 @@
         <header>
             <div class="menu-toggle" onclick="window.toggleSidebar(true)">☰</div>
             <div id="user-ui" class="hidden">
-                <img id="user-pic" alt="User" style="width:38px; height:38px; border-radius:50%; border: 2px solid var(--accent-color);">
+                <img id="user-pic" style="width:38px; height:38px; border-radius:50%; border: 2px solid var(--accent-color);">
             </div>
             <button id="login-btn" onclick="window.handleLogin()" style="background:var(--accent-color); border:none; padding:10px 20px; border-radius:12px; font-weight:bold; cursor:pointer;">ВХОД</button>
         </header>
 
-        <main id="notesList" class="notes-container">
-            </main>
+        <main id="notesList" class="notes-container"></main>
 
-        <div class="bottom-input-area" id="input-panel" style="display: none;">
+        <div class="add-btn-fixed" id="float-add" onclick="window.toggleInput(true)">+</div>
+
+        <div class="bottom-input-area" id="input-panel">
             <input type="text" id="noteInput" placeholder="Напишите что-нибудь...">
             <button class="send-btn" onclick="window.quickSave()">➔</button>
         </div>
@@ -46,19 +46,18 @@
             </div>
             
             <h3 id="l-el">Цвет элементов</h3>
-            <div class="color-picker-wrapper">
-                <input type="color" id="accentPicker" oninput="window.setAccent(this.value)" value="#00ffcc">
+            <div class="palette-circle" id="circle-el">
+                <input type="color" oninput="window.setAccent(this.value)">
             </div>
 
             <h3 id="l-bg">Фон</h3>
-            <div class="color-picker-wrapper">
-                <input type="color" id="bgPicker" oninput="window.setBg(this.value)" value="#050505">
+            <div class="palette-circle" id="circle-bg">
+                <input type="color" oninput="window.setBg(this.value)">
             </div>
 
-            <button class="close-settings" id="btn-close" onclick="window.toggleSettings(false)">ЗАКРЫТЬ</button>
+            <button class="close-settings" id="btn-close" onclick="window.toggleSettings(false)">ОК</button>
         </div>
     </div>
-
     <script src="app.js"></script>
 </body>
 </html>

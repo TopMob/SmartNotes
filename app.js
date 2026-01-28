@@ -14,18 +14,15 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
 
-// 2. Локализация (RU/EN)
-const i18n = {
-    RU: {
-        notes: "Заметки", archive: "Архив", settings: "Настройки",
-        placeholder: "Напишите что-нибудь...", login: "ВХОД",
-        l_lang: "Язык", l_el: "Цвет элементов", l_bg: "Фон", btn_close: "ЗАКРЫТЬ"
-    },
-    EN: {
-        notes: "Notes", archive: "Archive", settings: "Settings",
-        placeholder: "Write something...", login: "LOGIN",
-        l_lang: "Language", l_el: "Elements Color", l_bg: "Background", btn_close: "CLOSE"
-    }
+// 2. Загрузка темы и настроек при старте
+window.onload = () => {
+    const savedAccent = localStorage.getItem('accent') || '#00ffcc';
+    const savedBg = localStorage.getItem('bg') || '#050505';
+    const savedLang = localStorage.getItem('lang') || 'RU';
+    
+    window.setAccent(savedAccent);
+    window.setBg(savedBg);
+    window.setLang(savedLang);
 };
 
 // 3. Авторизация
@@ -33,7 +30,7 @@ window.handleLogin = async () => {
     try {
         await auth.signInWithRedirect(provider);
     } catch (e) {
-        alert("Ошибка: " + e.message);
+        console.error("Login Error:", e);
     }
 };
 
@@ -41,17 +38,18 @@ auth.onAuthStateChanged(user => {
     const loginBtn = document.getElementById('login-btn');
     const userUi = document.getElementById('user-ui');
     const inputPanel = document.getElementById('input-panel');
+    const floatAdd = document.getElementById('float-add');
 
     if (user) {
         loginBtn.classList.add('hidden');
         userUi.classList.remove('hidden');
-        inputPanel.style.display = 'flex';
+        if (floatAdd) floatAdd.classList.remove('hidden');
         document.getElementById('user-pic').src = user.photoURL;
         loadNotes(user.uid);
     } else {
         loginBtn.classList.remove('hidden');
         userUi.classList.add('hidden');
-        inputPanel.style.display = 'none';
+        if (floatAdd) floatAdd.classList.add('hidden');
     }
 });
 
@@ -68,8 +66,9 @@ window.quickSave = async () => {
             createdAt: Date.now()
         });
         input.value = '';
+        window.toggleInput(false); // Скрываем панель после сохранения
     } catch (e) {
-        console.error(e);
+        console.error("Save Error:", e);
     }
 };
 
@@ -91,18 +90,61 @@ function loadNotes(uid) {
         });
 }
 
-// 5. Интерфейс и настройки
+// 5. Интерфейс и переключатели
 window.toggleSidebar = (show) => {
     document.getElementById('sidebar').classList.toggle('active', show);
 };
 
 window.toggleSettings = (show) => {
-    document.getElementById('settings-modal').style.display = show ? 'flex' : 'none';
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.style.display = show ? 'flex' : 'none';
     if (show) window.toggleSidebar(false);
 };
 
+window.toggleInput = (show) => {
+    const panel = document.getElementById('input-panel');
+    const btn = document.getElementById('float-add');
+    if (panel) {
+        panel.classList.toggle('active', show);
+        panel.style.display = show ? 'flex' : 'none';
+    }
+    if (btn) btn.classList.toggle('hidden', show);
+    if (show) document.getElementById('noteInput').focus();
+};
+
+// 6. Настройки (Цвета и Язык)
+window.setAccent = (color) => {
+    document.documentElement.style.setProperty('--accent-color', color);
+    document.documentElement.style.setProperty('--sidebar-bg', color);
+    const circle = document.getElementById('circle-el');
+    if (circle) circle.style.background = color;
+    localStorage.setItem('accent', color);
+};
+
+window.setBg = (color) => {
+    document.documentElement.style.setProperty('--bg-color', color);
+    const circle = document.getElementById('circle-bg');
+    if (circle) circle.style.background = color;
+    localStorage.setItem('bg', color);
+};
+
 window.setLang = (lang) => {
+    const i18n = {
+        RU: {
+            notes: "Заметки", archive: "Архив", settings: "Настройки",
+            placeholder: "Напишите что-нибудь...", login: "ВХОД",
+            l_lang: "Язык", l_el: "Цвет элементов", l_bg: "Фон", ok: "ОК"
+        },
+        EN: {
+            notes: "Notes", archive: "Archive", settings: "Settings",
+            placeholder: "Write something...", login: "LOGIN",
+            l_lang: "Language", l_el: "Elements Color", l_bg: "Background", ok: "OK"
+        }
+    };
+    
     const t = i18n[lang];
+    localStorage.setItem('lang', lang);
+
     document.getElementById('m-notes').innerText = t.notes;
     document.getElementById('m-archive').innerText = t.archive;
     document.getElementById('m-settings').innerText = t.settings;
@@ -111,23 +153,14 @@ window.setLang = (lang) => {
     document.getElementById('l-lang').innerText = t.l_lang;
     document.getElementById('l-el').innerText = t.l_el;
     document.getElementById('l-bg').innerText = t.l_bg;
-    document.getElementById('btn-close').innerText = t.btn_close;
+    document.getElementById('btn-close').innerText = t.ok;
 };
 
-window.setAccent = (color) => {
-    document.documentElement.style.setProperty('--accent-color', color);
-    document.documentElement.style.setProperty('--sidebar-bg', color);
-};
-
-window.setBg = (color) => {
-    document.documentElement.style.setProperty('--bg-color', color);
-};
-
-// При клике на пустую область закрываем сайдбар
+// Закрытие по клику вне сайдбара
 document.addEventListener('click', (e) => {
     const sidebar = document.getElementById('sidebar');
     const toggle = document.querySelector('.menu-toggle');
-    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !toggle.contains(e.target)) {
+    if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !toggle.contains(e.target)) {
         window.toggleSidebar(false);
     }
 });
