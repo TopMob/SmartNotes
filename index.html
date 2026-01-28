@@ -1,4 +1,16 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Notes</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+</head>
 <body>
+
     <div id="sidebar" class="sidebar">
         <h2>Smart Notes</h2>
         <div class="menu-item" onclick="showSection('notes')">🚩 Заметки</div>
@@ -11,14 +23,15 @@
         <header>
             <div class="menu-toggle" onclick="toggleSidebar(true)">☰</div>
             <div id="user-ui" class="hidden">
-                <img id="user-pic" style="width:35px; border-radius:50%">
+                <img id="user-pic" style="width:38px; height:38px; border-radius:50%; border: 2px solid var(--accent-color);">
             </div>
-            <button id="login-btn" onclick="handleLogin()" style="background:var(--accent-color); border:none; padding:8px 15px; border-radius:10px; font-weight:bold">ВХОД</button>
+            <button id="login-btn" onclick="handleLogin()" style="background:var(--accent-color); border:none; padding:10px 20px; border-radius:12px; font-weight:bold; cursor:pointer;">ВХОД</button>
         </header>
 
-        <main id="notesList" class="notes-container"></main>
+        <main id="notesList" class="notes-container">
+            </main>
 
-        <div class="bottom-input-area" id="input-panel">
+        <div class="bottom-input-area" id="input-panel" style="display: none;">
             <input type="text" id="noteInput" placeholder="Напишите что-нибудь...">
             <button class="send-btn" onclick="quickSave()">➔</button>
         </div>
@@ -26,18 +39,23 @@
 
     <div id="settings-modal" class="modal-settings">
         <div class="settings-card">
-            <h3>ЯЗЫК</h3>
-            <div style="margin: 15px 0;">
+            <h3>Язык</h3>
+            <div class="lang-btns">
                 <button onclick="setLang('RU')">RU</button>
                 <button onclick="setLang('EN')">EN</button>
             </div>
-            <h3>ЦВЕТ</h3>
-            <div class="color-circle" style="background:#00ffcc" onclick="setAccent('#00ffcc')"></div>
-            <div class="color-circle" style="background:#ffcc00" onclick="setAccent('#ffcc00')"></div>
-            <br>
-            <button onclick="toggleSettings(false)">ЗАКРЫТЬ</button>
+            
+            <h3>Цвет элементов</h3>
+            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 10px;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#00ffcc; border:2px solid #000; cursor:pointer;" onclick="setAccent('#00ffcc')"></div>
+                <div style="width:40px; height:40px; border-radius:50%; background:#ffcc00; border:2px solid #000; cursor:pointer;" onclick="setAccent('#ffcc00')"></div>
+                <div style="width:40px; height:40px; border-radius:50%; background:#ff4444; border:2px solid #000; cursor:pointer;" onclick="setAccent('#ff4444')"></div>
+            </div>
+
+            <button class="close-settings" onclick="toggleSettings(false)">ЗАКРЫТЬ</button>
         </div>
     </div>
 
     <script src="app.js"></script>
 </body>
+</html>
