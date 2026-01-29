@@ -1,33 +1,40 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Notes</title>
-    <link rel="stylesheet" href="style.css">
-    
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <title>Smart Notes Pro</title>
+    <link rel="stylesheet" href="style.css" />
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
-
+    <!-- LOGIN SCREEN -->
     <div id="login-screen" class="auth-container">
         <div class="auth-box">
             <h1 id="lang-login-title">Smart Notes</h1>
             <p>Твои мысли в безопасности</p>
-            <button id="login-btn" onclick="login()" class="btn-login-google">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="">
+            <button id="login-btn" onclick="login()" class="btn-login-google" aria-label="Login with Google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" />
                 <span id="lang-login">ВОЙТИ ЧЕРЕЗ GOOGLE</span>
             </button>
         </div>
     </div>
 
+    <!-- APP CONTENT -->
     <div id="app-content" class="hidden">
-        
         <header class="main-header">
             <div class="header-info left-controls">
-                <button id="left-menu-btn" class="menu-toggle" onclick="toggleLeftMenu()">⭠⭠⭠</button>
+                <button id="left-menu-btn" class="menu-toggle" onclick="toggleLeftMenu()" aria-label="Open menu">
+                    <!-- simple accessible hamburger svg -->
+                    <svg viewBox="0 0 24 18" width="22" height="16" aria-hidden="true">
+                        <rect x="0" y="0" width="24" height="2" rx="1" fill="currentColor"></rect>
+                        <rect x="0" y="8" width="24" height="2" rx="1" fill="currentColor"></rect>
+                        <rect x="0" y="16" width="24" height="2" rx="1" fill="currentColor"></rect>
+                    </svg>
+                </button>
+
                 <div>
                     <h1 id="lang-app-title">Smart Notes</h1>
                     <div class="stats">
@@ -36,123 +43,127 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="header-controls">
                 <div class="search-bar">
-                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск за��етки...">
+                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск заметки..." />
                 </div>
-                <select id="sort-select" onchange="renderNotes()" class="sort-dropdown">
+
+                <select id="sort-select" onchange="renderNotes()" class="sort-dropdown" aria-label="Sort notes">
                     <option value="newest" id="lang-sort-newest">Сначала новые</option>
                     <option value="priority" id="lang-sort-priority">По важности</option>
                     <option value="title" id="lang-sort-title">По названию</option>
                 </select>
-                <div class="user-profile-trigger" onclick="document.getElementById('profile-modal').classList.add('active')">
-                    <img id="user-pic" class="user-avatar" src="" alt="User">
+
+                <div class="user-profile-trigger" onclick="document.getElementById('profile-modal').classList.add('active')" role="button" aria-label="Open profile">
+                    <img id="user-pic" class="user-avatar" src="" alt="User" />
                 </div>
             </div>
         </header>
 
-        <nav class="view-tabs">
-            <button id="lang-view-active" class="view-tab active" onclick="switchView('active')">Заметки</button>
-            <button id="lang-view-archive" class="view-tab" onclick="switchView('archive')">Архив</button>
+        <nav class="view-tabs" role="tablist" aria-label="Views">
+            <button id="lang-view-active" class="view-tab active" onclick="switchView('active')" role="tab">Заметки</button>
+            <button id="lang-view-archive" class="view-tab" onclick="switchView('archive')" role="tab">Архив</button>
         </nav>
 
-        <main id="notes-grid" class="notes-container"></main>
+        <main id="notes-grid" class="notes-container" role="main" aria-live="polite"></main>
 
         <button class="btn-fab-add" onclick="openEditor()" aria-label="Add note">+</button>
     </div>
 
-    <!-- ЛЕВОЕ ВЫДВИЖНОЕ МЕНЮ -->
-    <aside id="left-menu" class="left-menu">
+    <!-- LEFT SLIDE MENU -->
+    <aside id="left-menu" class="left-menu" aria-hidden="true">
         <div class="left-menu-header">
             <h3 id="menu-title">Меню</h3>
-            <button class="modal-close-x" onclick="toggleLeftMenu()">×</button>
+            <button class="modal-close-x" onclick="toggleLeftMenu()" aria-label="Close menu">×</button>
         </div>
 
         <div class="left-menu-section">
-            <button class="menu-action" onclick="openSettings()">
+            <button class="menu-action" onclick="openSettings()" aria-label="Open settings">
                 ⚙️ <span id="menu-settings">Настройки</span>
             </button>
         </div>
 
         <div class="left-menu-section">
             <label class="menu-label" id="menu-language-label">Язык</label>
-            <div class="toggle-group">
-                <button id="menu-lang-ru" class="toggle-btn" onclick="setLanguage('ru')">Русский</button>
-                <button id="menu-lang-en" class="toggle-btn" onclick="setLanguage('en')">English</button>
+            <div class="toggle-group" role="group" aria-label="Language">
+                <button id="menu-lang-ru" class="toggle-btn" onclick="setLanguage('ru')" aria-pressed="false">Русский</button>
+                <button id="menu-lang-en" class="toggle-btn" onclick="setLanguage('en')" aria-pressed="false">English</button>
             </div>
         </div>
 
         <div class="left-menu-section">
             <label class="menu-label" id="menu-folders-label">Папки (Категории)</label>
+
+            <!-- Button first, then name & color -->
             <div class="folder-controls">
-                <input id="new-folder-name" placeholder="Новая папка..." />
-                <button class="btn-apply" onclick="createFolder()">Создать</button>
+                <button id="btn-create-folder" class="btn-apply" onclick="createFolder()" aria-label="Create folder">Создать</button>
+                <input id="new-folder-name" placeholder="Название папки..." aria-label="New folder name" />
+                <input id="new-folder-color" type="color" value="#00ffcc" title="Цвет папки" aria-label="Folder color" />
             </div>
-            <div id="folders-list" class="folders-list">
-                <!-- Сюда рендерятся папки -->
+
+            <div id="folders-list" class="folders-list" aria-live="polite">
+                <!-- folders rendered here -->
             </div>
+
             <div class="folders-actions">
                 <button class="btn-text" onclick="selectFolder(null)" id="menu-all-notes">Все заметки</button>
             </div>
         </div>
     </aside>
 
-    <div id="profile-modal" class="modal-overlay">
+    <!-- PROFILE MODAL -->
+    <div id="profile-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-content profile-modal-box">
-            <button class="modal-close-x" onclick="this.closest('.modal-overlay').classList.remove('active')">×</button>
+            <button class="modal-close-x" onclick="this.closest('.modal-overlay').classList.remove('active')" aria-label="Close">×</button>
             <div class="profile-header">
-                <img id="modal-user-pic" class="avatar-big" src="">
+                <img id="modal-user-pic" class="avatar-big" src="" alt="User avatar" />
                 <h2 id="user-name">Пользователь</h2>
             </div>
+
             <div class="profile-menu">
-                <button onclick="openSettings()" class="menu-btn">
-                    <i>⚙️</i> <span id="lang-settings-title">Настройки</span>
-                </button>
-                <button onclick="openFeedback()" class="menu-btn">
-                    <i>💬</i> <span>Обратная связь</span>
-                </button>
-                <button onclick="switchAccount()" class="menu-btn">
-                    <i>🔄</i> <span>Сменить аккаунт</span>
-                </button>
+                <button onclick="openSettings()" class="menu-btn"><i>⚙️</i> <span id="lang-settings-title">Настройки</span></button>
+                <button onclick="openFeedback()" class="menu-btn"><i>💬</i> <span>Обратная связь</span></button>
+                <button onclick="switchAccount()" class="menu-btn"><i>🔄</i> <span>Сменить аккаунт</span></button>
                 <div class="menu-divider"></div>
-                <button onclick="logout()" class="menu-btn btn-danger">
-                    <i>🚪</i> <span>Выйти из системы</span>
-                </button>
+                <button onclick="logout()" class="menu-btn btn-danger"><i>🚪</i> <span>Выйти</span></button>
             </div>
         </div>
     </div>
 
-    <div id="editor-modal" class="modal-overlay">
+    <!-- EDITOR MODAL -->
+    <div id="editor-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-content editor-window">
             <div class="editor-toolbar">
                 <button id="pin-btn" class="tool-btn" onclick="togglePin()" title="Закрепить">📌</button>
-                <div class="priority-badge" onclick="cyclePriority()">
+                <div class="priority-badge" onclick="cyclePriority()" role="button" title="Приоритет">
                     <div id="priority-indicator"></div>
                     <span id="priority-label" data-priority="normal">Средний</span>
                 </div>
-                <button class="modal-close-x" onclick="closeEditor()">×</button>
+                <button class="modal-close-x" onclick="closeEditor()" aria-label="Close editor">×</button>
             </div>
-            
+
             <div class="editor-body">
-                <input type="text" id="note-title" class="input-title" placeholder="Заголовок">
+                <input type="text" id="note-title" class="input-title" placeholder="Заголовок" />
                 <textarea id="note-text" class="input-text" placeholder="Начните писать..."></textarea>
+
                 <div class="editor-row">
-                    <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел">
-                    <select id="note-folder-select" class="input-tags">
+                    <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел" />
+                    <select id="note-folder-select" class="input-tags" aria-label="Select folder">
                         <option value="">Без папки</option>
                     </select>
                 </div>
             </div>
-            
+
             <div class="editor-footer">
                 <div class="footer-left">
                     <label class="checkbox-container">
-                        <input type="checkbox" id="show-time">
+                        <input type="checkbox" id="show-time" />
                         <span class="checkmark"></span>
                         <span id="lang-label-time">Показывать время</span>
                     </label>
                 </div>
+
                 <div class="footer-right">
                     <button id="archive-btn" class="btn-icon" onclick="toggleArchive()" title="В архив">📦</button>
                     <button id="delete-btn" class="btn-icon" onclick="deleteNoteWrapper()" title="Удалить">🗑️</button>
@@ -164,10 +175,11 @@
         </div>
     </div>
 
-    <div id="settings-modal" class="modal-overlay">
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-content settings-window">
             <h2 id="lang-settings-title">Настройки</h2>
-            
+
             <div class="settings-tabs">
                 <button id="lang-tab-general" class="tab-trigger active" onclick="switchTab('general')">Общие</button>
                 <button id="lang-tab-appearance" class="tab-trigger" onclick="switchTab('appearance')">Оформление</button>
@@ -192,10 +204,10 @@
                         <button class="target-btn" data-target="text" onclick="setColorTarget('text')" id="lang-target-text">Текст</button>
                     </div>
                 </div>
-                
+
                 <div class="setting-item">
                     <label id="lang-spectrum-label">Цветовая палитра</label>
-                    <input type="range" class="color-slider" min="0" max="360" oninput="updateColorPreview(this.value)">
+                    <input type="range" class="color-slider" min="0" max="360" oninput="updateColorPreview(this.value)" aria-label="Color hue" />
                     <div class="preset-colors">
                         <div class="color-dot" onclick="setQuickColor('#00ffcc')" style="background:#00ffcc"></div>
                         <div class="color-dot" onclick="setQuickColor('#ff4444')" style="background:#ff4444"></div>
@@ -209,11 +221,13 @@
                 <button onclick="resetSettings()" class="btn-text" id="lang-btn-reset">Сбросить всё</button>
                 <button onclick="applySettings()" class="btn-apply" id="lang-btn-apply">ПРИМЕНИТЬ</button>
             </div>
-            <button class="modal-close-top" onclick="closeSettings()">×</button>
+
+            <button class="modal-close-top" onclick="closeSettings()" aria-label="Close settings">×</button>
         </div>
     </div>
 
-    <div id="feedback-modal" class="modal-overlay">
+    <!-- FEEDBACK MODAL -->
+    <div id="feedback-modal" class="modal-overlay" aria-hidden="true">
         <div class="modal-content feedback-window">
             <h3>Обратная связь</h3>
             <p>Ваше мнение помогает нам стать лучше</p>
@@ -228,4 +242,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
