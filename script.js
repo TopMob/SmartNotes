@@ -356,15 +356,6 @@ function escapeHtml(t) {
     return d.innerHTML;
 }
 
-function registerGlobals() {
-    const w = window;
-    w.login = login; w.logout = logout; w.switchView = (v) => { state.view = v; renderNotes(); };
-    w.openEditor = openEditor; w.closeEditor = closeEditor; w.saveNote = saveNote;
-    w.deleteNoteWrapper = deleteNoteWrapper; w.togglePin = togglePin; w.toggleArchive = toggleArchive;
-    w.cyclePriority = cyclePriority; w.openSettings = openSettings; w.closeSettings = closeSettings;
-    w.switchTab = switchTab; w.setColorTarget = setColorTarget; w.updateColorPreview = updateColorPreview;
-    w.setQuickColor = setQuickColor; w.applySettings = applySettings; w.setLanguage = (l) => { state.tempConfig.lang = l; updateInterfaceText(l); };
-}
 function loadSettingsUI() {
     const l = state.tempConfig.lang;
     document.getElementById('lang-ru')?.classList.toggle('active', l === 'ru');
@@ -443,6 +434,7 @@ const resetSettings = () => {
 function registerGlobals() {
     const w = window;
     w.login = login; w.logout = logout; w.switchAccount = switchAccount;
+    w.switchView = (v) => { state.view = v; renderNotes(); };
     w.openEditor = openEditor; w.closeEditor = closeEditor; w.saveNote = saveNote;
     w.deleteNoteWrapper = deleteNoteWrapper; w.togglePin = togglePin; w.toggleArchive = toggleArchive;
     w.cyclePriority = cyclePriority; w.openSettings = openSettings; w.closeSettings = closeSettings;
@@ -450,5 +442,5 @@ function registerGlobals() {
     w.setQuickColor = setQuickColor; w.applySettings = applySettings; w.resetSettings = resetSettings;
     w.setLanguage = (l) => { state.tempConfig.lang = l; updateInterfaceText(l); loadSettingsUI(); };
     w.openFeedback = openFeedback; w.closeFeedback = closeFeedback; w.sendFeedback = sendFeedback;
-}
 
+}
