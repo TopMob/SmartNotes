@@ -247,12 +247,17 @@ const saveNote = async () => {
 
 const toggleArchive = async () => {
     if (!state.editingId) return;
-    const n = state.notes.find(x => x.id === state.editingId);
-    if (!n) return;
+    const note = state.notes.find(n => n.id === state.editingId);
+    if (!note) return;
+
     try {
-        await db.collection("notes").doc(state.editingId).update({ isArchived: !n.isArchived });
-        closeEditor();
-    } catch (e) { console.error(e); }
+        await db.collection("notes").doc(state.editingId).update({
+            isArchived: !note.isArchived
+        });
+        closeEditor(); // Закрываем, чтобы увидеть результат в общем списке
+    } catch (e) {
+        console.error("Ошибка архивации:", e);
+    }
 };
 
 const deleteNoteWrapper = async () => {
@@ -446,3 +451,4 @@ function registerGlobals() {
     w.setLanguage = (l) => { state.tempConfig.lang = l; updateInterfaceText(l); loadSettingsUI(); };
     w.openFeedback = openFeedback; w.closeFeedback = closeFeedback; w.sendFeedback = sendFeedback;
 }
+
