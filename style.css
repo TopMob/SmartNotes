@@ -19,13 +19,17 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+html, body, #app-content {
+    height: 100%;
+}
+
 body {
     background-color: var(--bg);
     color: var(--text);
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.5;
     overflow-x: hidden;
-    transition: background-color var(--transition);
+    transition: background-color var(--transition), color var(--transition);
 }
 
 /* --- ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ --- */
@@ -98,6 +102,33 @@ body {
     border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
+.header-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.left-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.left-controls .menu-toggle {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-weight: 800;
+    cursor: pointer;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.left-controls .menu-toggle:hover {
+    color: var(--accent);
+}
+
 .header-info h1 {
     font-size: 1.5rem;
     font-weight: 800;
@@ -123,6 +154,7 @@ body {
     color: #fff;
     outline: none;
     transition: var(--transition);
+    min-width: 220px;
 }
 
 .search-bar input:focus {
@@ -195,7 +227,7 @@ body {
     gap: 20px;
     padding: 20px 5%;
     max-width: 1400px;
-    margin: 0 auto;
+    margin: 0 auto 80px;
 }
 
 /* --- КАРТОЧКА ЗАМЕТКИ --- */
@@ -245,6 +277,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
 }
 
 .tags {
@@ -266,6 +299,15 @@ body {
     top: 10px;
     right: 10px;
     font-size: 0.8rem;
+}
+
+.note-folder {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 /* --- ПЛАВАЮЩАЯ КНОПКА (FAB) --- */
@@ -337,6 +379,7 @@ body {
     font-size: 24px;
     cursor: pointer;
 }
+
 /* --- МОДАЛКА ПРОФИЛЯ --- */
 .profile-modal-box {
     padding: 30px;
@@ -483,6 +526,21 @@ body {
     outline: none;
 }
 
+.editor-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.editor-row select {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text);
+    outline: none;
+}
+
 .editor-footer {
     margin-top: 25px;
     display: flex;
@@ -602,6 +660,7 @@ body {
     border-color: var(--accent);
     background: var(--accent-glow);
 }
+
 /* --- ВЫБОР ЦВЕТА (SETTINGS CONTINUED) --- */
 .target-selectors {
     display: flex;
@@ -720,7 +779,150 @@ body {
     cursor: pointer;
 }
 
+/* --- ЛЕВОЕ ВЫДВИЖНОЕ МЕНЮ --- */
+.left-menu {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 280px;
+    height: 100vh;
+    background: linear-gradient(180deg, rgba(20,20,20,0.98), var(--card-bg));
+    border-right: 1px solid rgba(255,255,255,0.04);
+    padding: 20px;
+    transform: translateX(-320px);
+    transition: transform 0.25s ease;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.left-menu.open {
+    transform: translateX(0);
+}
+
+.left-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.left-menu h3, .left-menu .menu-label {
+    color: var(--text-dim);
+    margin: 0;
+}
+
+.left-menu .menu-action {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--text);
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: var(--transition);
+    text-align: left;
+    font-size: 0.95rem;
+}
+
+.left-menu .menu-action:hover {
+    background: rgba(255,255,255,0.03);
+    border-color: var(--accent);
+}
+
+.left-menu .toggle-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.left-menu .toggle-btn {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.02);
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.left-menu .toggle-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+
+.folder-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.folder-controls input {
+    flex: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    color: var(--text);
+    outline: none;
+}
+
+.folder-controls input::placeholder {
+    color: rgba(255,255,255,0.35);
+}
+
+.folders-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.02);
+    transition: var(--transition);
+}
+
+.folder-item:hover {
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+}
+
+.folder-item.active {
+    background: rgba(0,0,0,0.6);
+    color: var(--accent);
+    border-left: 3px solid var(--accent);
+}
+
+.folder-item .folder-actions button {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+/* --- РАЗМЕЩЕНИЕ В РЕДАКТОРЕ --- */
+.input-tags, .editor-row select {
+    flex: 1;
+}
+
 /* --- АДАПТИВНОСТЬ (RESPONSIVE) --- */
+@media (max-width: 1024px) {
+    .search-bar input { min-width: 140px; }
+    .notes-container { padding: 16px; }
+}
+
 @media (max-width: 768px) {
     .main-header {
         flex-direction: column;
@@ -769,6 +971,9 @@ body {
         width: 55px;
         height: 55px;
     }
+
+    .left-menu { width: 240px; transform: translateX(-300px); }
+    .left-menu.open { transform: translateX(0); }
 }
 
 /* --- КАСТОМНЫЙ СКРОЛЛБАР --- */
