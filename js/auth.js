@@ -1,74 +1,101 @@
-// =========================================
-// 1. СЛУШАТЕЛЬ СОСТОЯНИЯ (AUTH STATE)
-// =========================================
+/**
+ * Smart Notes - Модуль авторизации
+ */
+
+// Слушатель состояния авторизации
 auth.onAuthStateChanged(user => {
+    const loginScreen = document.getElementById('login-screen');
+    const appScreen = document.getElementById('app');
+    const userPhoto = document.getElementById('user-photo');
+    const userName = document.getElementById('user-name');
+
     if (user) {
         state.user = user;
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app').style.display = 'grid';
         
-        // Обновляем UI данными пользователя
-        document.getElementById('user-photo').src = user.photoURL || '';
-        document.getElementById('user-name').innerText = user.displayName;
+        // Скрываем вход, показываем приложение
+        if (loginScreen) loginScreen.style.display = 'none';
+        if (appScreen) appScreen.style.display = 'grid';
         
-        log("Пользователь вошел:", user.displayName);
+        // Обновляем данные профиля
+        if (userPhoto) userPhoto.src = user.photoURL || '';
+        if (userName) userName.innerText = user.displayName || 'Пользователь';
         
-        // Инициализируем загрузку данных из db.js (напишем в следующем файле)
-        if (window.initApp) initApp(); 
+        console.log("Авторизован:", user.displayName);
+        
+        // Запускаем загрузку данных из db.js
+        if (typeof initApp === 'function') {
+            initApp();
+        }
     } else {
         state.user = null;
-        document.getElementById('login-screen').style.display = 'flex';
-        document.getElementById('app').style.display = 'none';
-        log("Пользователь не авторизован");
+        
+        // Показываем вход, скрываем приложение
+        if (loginScreen) loginScreen.style.display = 'flex';
+        if (appScreen) appScreen.style.display = 'none';
+        
+        console.log("Пользователь вышел");
     }
 });
 
-// =========================================
-// 2. ФУНКЦИИ ВХОДА И ВЫХОДА
-// =========================================
+/**
+ * Вход через Google
+ */
 async function login() {
     try {
         await auth.signInWithPopup(provider);
     } catch (error) {
-        console.error("Ошибка входа:", error);
+        console.error("Ошибка при входе:", error);
+        alert("Не удалось войти через Google");
     }
 }
 
-// Универсальная функция подтверждения (для смены аккаунта и выхода)
+/**
+ * Универсальное окно подтверждения
+ * @param {string} type - 'logout' или 'switch'
+ */
 function confirmAction(type) {
     const modal = document.getElementById('confirm-modal');
     const title = document.getElementById('confirm-title');
     const btn = document.getElementById('confirm-action-btn');
     
+    if (!modal) return;
+
     modal.classList.add('active');
     
     if (type === 'logout') {
-        title.innerText = "Выйти из аккаунта?";
+        if (title) title.innerText = "Выйти из аккаунта?";
         btn.onclick = async () => {
             await auth.signOut();
             closeConfirm();
         };
     } else if (type === 'switch') {
-        title.innerText = "Сменить аккаунт?";
+        if (title) title.innerText = "Сменить аккаунт?";
         btn.onclick = async () => {
-            // Принудительный выбор аккаунта через провайдер
+            // Принудительный вызов окна выбора аккаунта
             await auth.signInWithPopup(provider);
             closeConfirm();
         };
     }
 }
 
+/**
+ * Закрытие окна подтверждения
+ */
 function closeConfirm() {
-    document.getElementById('confirm-modal').classList.remove('active');
+    const modal = document.getElementById('confirm-modal');
+    if (modal) modal.classList.remove('active');
 }
 
-// Переключение выпадающего меню пользователя
-document.getElementById('user-menu-trigger').onclick = (e) => {
-    e.stopPropagation();
-    document.getElementById('user-dropdown').classList.toggle('active');
-};
+// Логика выпадающего меню профиля
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('user-dropdown');
+    const trigger = document.getElementById('user-menu-trigger');
+    
+    if (!dropdown) return;
 
-// Закрытие меню при клике в любом месте
-window.onclick = () => {
-    document.getElementById('user-dropdown').classList.remove('active');
-};
+    if (trigger && trigger.contains(e.target)) {
+        dropdown.classList.toggle('active');
+    } else {
+        dropdown.classList.remove('active');
+    }
+});
