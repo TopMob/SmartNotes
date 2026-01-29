@@ -1,81 +1,115 @@
-// =========================================
-// 1. КОНФИГУРАЦИЯ ТЕМ
-// =========================================
-const PRESETS = [
-    { name: 'Киберпанк', primary: '#00ffcc', bg: '#0a0a0a' },
-    { name: 'Полночь', primary: '#7c4dff', bg: '#050505' },
-    { name: 'Закат', primary: '#ff5252', bg: '#0f0a0a' },
-    { name: 'Лес', primary: '#69f0ae', bg: '#0a0f0d' },
-    { name: 'Океан', primary: '#40c4ff', bg: '#0a0d0f' }
-];
-
-// =========================================
-// 2. ФУНКЦИИ ПРИМЕНЕНИЯ ЦВЕТА
-// =========================================
-
-// Основная функция смены темы
-function applyTheme(primaryColor, bgColor = null) {
-    const root = document.documentElement;
-    
-    // Меняем переменную акцента
-    root.style.setProperty('--primary', primaryColor);
-    
-    // Генерируем свечение (glow) с прозрачностью 30%
-    root.style.setProperty('--primary-glow', primaryColor + '4d');
-    
-    if (bgColor) {
-        root.style.setProperty('--bg', bgColor);
+const themes = {
+    neon: {
+        primary: '#00ffcc',
+        secondary: '#7c4dff',
+        glow: 'rgba(0, 255, 204, 0.35)'
+    },
+    cyber: {
+        primary: '#ff0055',
+        secondary: '#00d4ff',
+        glow: 'rgba(255, 0, 85, 0.35)'
+    },
+    gold: {
+        primary: '#ffcc00',
+        secondary: '#ff6600',
+        glow: 'rgba(255, 204, 0, 0.35)'
+    },
+    forest: {
+        primary: '#2ecc71',
+        secondary: '#27ae60',
+        glow: 'rgba(46, 204, 113, 0.35)'
+    },
+    ocean: {
+        primary: '#00d2ff',
+        secondary: '#3a7bd5',
+        glow: 'rgba(0, 210, 255, 0.35)'
     }
+};
 
-    // Сохраняем в локальное хранилище, чтобы тема не слетала после перезагрузки
-    localStorage.setItem('sn-accent', primaryColor);
-    if (bgColor) localStorage.setItem('sn-bg', bgColor);
+function applyTheme(themeName) {
+    const selectedTheme = themes[themeName] || themes.neon;
+    const root = document.documentElement;
 
-    log(`Тема обновлена: ${primaryColor}`);
-}
+    root.style.setProperty('--primary', selectedTheme.primary);
+    root.style.setProperty('--secondary', selectedTheme.secondary);
+    root.style.setProperty('--primary-glow', selectedTheme.glow);
 
-// Выбор из палитры
-function applyCustomColor(color) {
-    applyTheme(color);
-}
-
-// =========================================
-// 3. ИНИЦИАЛИЗАЦИЯ НАСТРОЕК
-// =========================================
-function initThemeSettings() {
-    const presetsGrid = document.getElementById('presets-grid');
-    if (!presetsGrid) return;
-
-    presetsGrid.innerHTML = '';
+    localStorage.setItem('smart-notes-theme', themeName);
     
-    PRESETS.forEach(preset => {
-        const btn = document.createElement('button');
-        btn.className = 'preset-card';
-        btn.style.backgroundColor = preset.bg;
-        btn.style.border = `2px solid ${preset.primary}`;
-        btn.innerHTML = `<span style="color: ${preset.primary}">${preset.name}</span>`;
+    updateThemeSelectorUI(themeName);
+    playThemeTransitionEffect();
+}
+
+function updateThemeSelectorUI(activeTheme) {
+    document.querySelectorAll('.theme-dot').forEach(dot => {
+        dot.classList.remove('active');
+        if (dot.dataset.theme === activeTheme) {
+            dot.classList.add('active');
+        }
+    });
+}
+
+function playThemeTransitionEffect() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'var(--primary)';
+    overlay.style.opacity = '0.15';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '9999';
+    overlay.style.transition = 'opacity 0.8s ease';
+    
+    document.body.appendChild(overlay);
+    
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 800);
+    });
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('smart-notes-theme') || 'neon';
+    applyTheme(savedTheme);
+}
+
+function createThemePicker() {
+    const container = document.createElement('div');
+    container.className = 'theme-picker-container';
+    container.style.display = 'flex';
+    container.style.gap = '12px';
+    container.style.padding = '15px';
+    container.style.justifyContent = 'center';
+
+    Object.keys(themes).forEach(name => {
+        const dot = document.createElement('div');
+        dot.className = 'theme-dot';
+        dot.dataset.theme = name;
+        dot.style.width = '24px';
+        dot.style.height = '24px';
+        dot.style.borderRadius = '50%';
+        dot.style.backgroundColor = themes[name].primary;
+        dot.style.cursor = 'pointer';
+        dot.style.border = '2px solid transparent';
+        dot.style.transition = 'var(--transition)';
         
-        btn.onclick = () => applyTheme(preset.primary, preset.bg);
-        presetsGrid.appendChild(btn);
+        dot.onclick = () => applyTheme(name);
+        
+        container.appendChild(dot);
     });
 
-    // Загружаем сохраненную тему
-    const savedAccent = localStorage.getItem('sn-accent');
-    const savedBg = localStorage.getItem('sn-bg');
-    if (savedAccent) applyTheme(savedAccent, savedBg);
+    const sidebarFooter = document.querySelector('.sidebar-footer');
+    if (sidebarFooter) {
+        sidebarFooter.prepend(container);
+    }
 }
 
-// Функции модалки настроек
-function openSettings() {
-    document.getElementById('settings-modal').classList.add('active');
-    initThemeSettings();
-}
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    createThemePicker();
+});
 
-function closeSettings() {
-    document.getElementById('settings-modal').classList.remove('active');
-}
-
-// Инициализация при загрузке
-window.addEventListener('DOMContentLoaded', () => {
-    initThemeSettings();
+window.addEventListener('storage', (e) => {
+    if (e.key === 'smart-notes-theme') {
+        applyTheme(e.newValue);
+    }
 });
