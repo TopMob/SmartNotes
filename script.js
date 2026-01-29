@@ -136,10 +136,7 @@ function subscribeNotes(uid) {
 }
 
 window.login = () => {
-    auth.signInWithPopup(provider).catch(err => {
-        console.error("Auth error:", err);
-        alert("Ошибка входа. Проверьте консоль браузера.");
-    });
+    auth.signInWithRedirect(provider);
 };
 
 window.logout = () => auth.signOut();
