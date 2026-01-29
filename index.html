@@ -7,7 +7,7 @@
     
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="css/sidebar.css">
+    <link rel="stylesheet" href="css/stylessidebar.css">
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
@@ -18,35 +18,42 @@
 <body>
 
     <div id="login-screen" class="modal active" style="display: none;">
-        <div class="modal-content sm">
-            <h1 style="text-align: center; margin-bottom: 20px;">Smart Notes</h1>
-            <button onclick="login()" class="btn-primary" style="width: 100%;">Войти через Google</button>
+        <div class="auth-box">
+            <h1 class="logo-text" style="font-size: 3rem; margin-bottom: 30px;">Smart Notes</h1>
+            <button onclick="login()" class="btn-google">
+                <span class="material-icons-round">account_circle</span>
+                Войти через Google
+            </button>
         </div>
     </div>
 
     <div id="app" class="app-layout" style="display: none;">
         <header class="main-header">
             <div class="header-left">
-                <span class="logo-text">Smart Notes</span>
-                <button class="btn-icon" id="menu-toggle">
+                <button class="btn-editor" id="menu-toggle" style="padding: 8px;">
                     <span class="material-icons-round">menu</span>
                 </button>
+                <span class="logo-text">Smart Notes</span>
             </div>
             
             <div class="header-center">
                 <div class="search-bar">
                     <span class="material-icons-round">search</span>
-                    <input type="text" id="search-input" placeholder="Поиск заметок...">
+                    <input type="text" id="search-input" placeholder="Поиск по заметкам или #тегам...">
                 </div>
             </div>
 
             <div class="header-right">
-                <div class="user-profile" id="user-menu-trigger">
-                    <img id="user-photo" src="" alt="User">
+                <div class="user-profile" id="user-menu-trigger" style="position: relative; cursor: pointer;">
+                    <img id="user-photo" src="" alt="Profile">
                     <div id="user-dropdown" class="user-dropdown">
-                        <div id="user-name" style="padding: 10px; font-weight: bold; border-bottom: 1px solid #333;"></div>
-                        <button onclick="confirmAction('switch')" class="dropdown-item">Сменить аккаунт</button>
-                        <button onclick="confirmAction('logout')" class="dropdown-item danger">Выйти</button>
+                        <div id="user-name" style="padding: 10px 16px; font-weight: 800; color: var(--primary); font-size: 0.9rem;"></div>
+                        <button onclick="confirmAction('switch')" class="dropdown-item">
+                            <span class="material-icons-round" style="font-size: 18px; vertical-align: middle;">sync</span> Сменить аккаунт
+                        </button>
+                        <button onclick="confirmAction('logout')" class="dropdown-item danger">
+                            <span class="material-icons-round" style="font-size: 18px; vertical-align: middle;">logout</span> Выйти
+                        </button>
                     </div>
                 </div>
             </div>
@@ -55,10 +62,10 @@
         <div class="content-wrapper">
             <aside class="sidebar" id="sidebar">
                 <nav class="sidebar-nav">
-                    <button class="nav-item active" id="nav-all">
-                        <span class="material-icons-round">description</span> Все заметки
+                    <button class="nav-item active" id="nav-all" onclick="setView('notes')">
+                        <span class="material-icons-round">grid_view</span> Заметки
                     </button>
-                    <button class="nav-item" id="nav-archive">
+                    <button class="nav-item" id="nav-archive" onclick="setView('archive')">
                         <span class="material-icons-round">archive</span> Архив
                     </button>
                 </nav>
@@ -66,26 +73,25 @@
                 <div class="sidebar-section">
                     <div class="section-header">
                         <span>Папки</span>
-                        <button class="btn-icon sm" onclick="openFolderModal()">+</button>
+                        <button class="btn-editor" onclick="openFolderModal()" style="padding: 2px 8px;">+</button>
                     </div>
-                    <div id="folders-list" class="folders-list"></div>
+                    <div id="folders-list"></div>
                 </div>
 
                 <div class="sidebar-footer">
                     <div class="team-info">
-                        <p class="team-label">Команда:</p>
-                        <p class="team-names">Егор, Арсений, Иван М., Иван К.</p>
+                        <span class="team-label">КОМАНДА ПРОЕКТА</span>
+                        <p>Егор, Арсений, Иван М., Иван К.</p>
                     </div>
                     <a href="https://t.me/SmartNotesInfo_bot" target="_blank" class="tg-bot-link">
-                        <span class="material-icons-round">smart_toy</span> Наш бот
+                        <span class="material-icons-round">smart_toy</span> @SmartNotesInfo_bot
                     </a>
-                    <button class="btn-feedback-text" onclick="openFeedbackModal()">Оставить отзыв</button>
+                    <button class="btn-editor" style="width: 100%; justify-content: center;" onclick="openFeedbackModal()">Оценить нас</button>
                 </div>
             </aside>
 
             <main class="main-content">
-                <div id="notes-grid" class="notes-grid">
-                    </div>
+                <div id="notes-grid" class="notes-grid"></div>
                 <button class="fab" onclick="openEditor()">
                     <span class="material-icons-round">add</span>
                 </button>
@@ -93,19 +99,41 @@
         </div>
     </div>
 
+    <div id="editor-modal" class="modal">
+        <div class="modal-content editor-box">
+            <div class="editor-header">
+                <button id="priority-btn" class="btn-editor" onclick="cyclePriority()">
+                    <span class="material-icons-round">priority_high</span>
+                </button>
+                <button class="btn-editor" onclick="insertCurrentTime()">
+                    <span class="material-icons-round">schedule</span> Время
+                </button>
+                <button class="btn-editor" style="margin-left: auto;" onclick="closeEditor()">
+                    <span class="material-icons-round">done_all</span>
+                </button>
+            </div>
+            <input type="text" id="note-title" placeholder="Заголовок">
+            <textarea id="note-content" placeholder="Начни писать свою историю..."></textarea>
+            <div class="note-footer-ui">
+                <div id="note-tags-container" style="display: flex; gap: 8px;"></div>
+                <input type="text" id="note-tags-input" placeholder="+ добавить тег" style="width: 150px; font-size: 0.9rem; border: none; background: none; color: var(--primary); outline: none;">
+            </div>
+        </div>
+    </div>
+
     <div id="confirm-modal" class="modal">
-        <div class="modal-content sm">
-            <h3 id="confirm-title">Вы уверены?</h3>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn-primary" id="confirm-action-btn">Да</button>
-                <button class="btn-text" onclick="closeConfirm()">Отмена</button>
+        <div class="modal-content sm" style="text-align: center; padding: 30px;">
+            <h3 id="confirm-title" style="margin-bottom: 25px;">Подтвердите действие</h3>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button id="confirm-action-btn" class="btn-primary">Да, уверен</button>
+                <button onclick="closeConfirm()" class="btn-editor">Отмена</button>
             </div>
         </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/db.js"></script>
+    <script src="js/ab.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/editor.js"></script>
     <script src="js/theme.js"></script>
