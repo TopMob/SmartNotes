@@ -1,129 +1,120 @@
-function initApp() {
-    if (!state.user) return;
-    
-    console.log("🚀 Smart Notes System Initialized");
-    
-    syncFolders();
-    syncNotes();
-    setupSearchEngine();
-}
+const state = {
+    notes: [],
+    folders: [],
+    activeFolderId: null,
+    currentView: 'all',
+    searchQuery: ''
+};
 
-function syncFolders() {
-    db.collection('users').doc(state.user.uid).collection('folders')
-        .orderBy('createdAt', 'asc')
-        .onSnapshot(snapshot => {
-            state.folders = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            renderFolders();
-        }, error => {
-            console.error("❌ Folder Sync Error:", error);
+const DataEngine = {
+    async init() {
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (user) {
+                this.syncCore();
+                this.injectUserMeta(user);
+            } else {
+                location.reload();
+            }
         });
-}
+    },
 
-function syncNotes() {
-    db.collection('users').doc(state.user.uid).collection('notes')
-        .orderBy('createdAt', 'desc')
-        .onSnapshot(snapshot => {
-            state.notes = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            filterAndRender();
-        }, error => {
-            console.error("❌ Notes Sync Error:", error);
-        });
-}
+    injectUserMeta(user) {
+        const photo = document.getElementById('user-photo');
+        const name = document.getElementById('user-name');
+        if (photo) photo.src = user.photoURL || 'https://via.placeholder.com/150';
+        if (name) name.innerText = user.displayName || 'Explorer';
+    },
 
-function filterAndRender() {
-    let results = [...state.notes];
+    syncCore() {
+        const uid = firebase.auth().currentUser.uid;
+        
+        db.collection('notes')
+            .where('userId', '==', uid)
+            .orderBy('updatedAt', 'desc')
+            .onSnapshot(snapshot => {
+                state.notes = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                this.processAndRender();
+            }, error => {
+                console.error("Sync Error:", error);
+                UI.showNotification('Ошибка синхронизации', 'error');
+            });
 
-    if (state.currentView === 'archive') {
-        results = results.filter(n => n.isArchived);
-    } else if (state.currentView === 'folder') {
-        results = results.filter(n => n.folderId === state.activeFolderId && !n.isArchived);
-    } else {
-        results = results.filter(n => !n.isArchived);
+        db.collection('folders')
+            .where('userId', '==', uid)
+            .onSnapshot(snapshot => {
+                state.folders = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                if (window.renderFolders) renderFolders();
+            });
+    },
+
+    processAndRender() {
+        let filtered = [...state.notes];
+
+        if (state.currentView === 'archive') {
+            filtered = filtered.filter(n => n.isArchived);
+        } else if (state.currentView === 'folder') {
+            filtered = filtered.filter(n => n.folderId === state.activeFolderId);
+        } else {
+            filtered = filtered.filter(n => !n.isArchived);
+        }
+
+        if (state.searchQuery) {
+            const query = state.searchQuery.toLowerCase();
+            filtered = filtered.filter(n => 
+                n.title.toLowerCase().includes(query) || 
+                n.content.toLowerCase().includes(query) ||
+                (n.tags && n.tags.some(t => t.toLowerCase().includes(query)))
+            );
+        }
+
+        UI.renderNotes(filtered);
+    },
+
+    async createFolder(name, color = '#00d4ff') {
+        const uid = firebase.auth().currentUser.uid;
+        try {
+            await db.collection('folders').add({
+                name,
+                color,
+                userId: uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            UI.showNotification('Коллекция создана');
+        } catch (e) {
+            UI.showNotification('Ошибка папки', 'error');
+        }
     }
+};
 
-    const query = state.searchQuery.toLowerCase().trim();
-    if (query) {
-        results = results.filter(n => {
-            const titleMatch = (n.title || "").toLowerCase().includes(query);
-            const contentMatch = (n.content || "").toLowerCase().includes(query);
-            const tagMatch = n.tags?.some(tag => tag.toLowerCase().includes(query.replace('#', '')));
-            return titleMatch || contentMatch || tagMatch;
-        });
-    }
-
-    renderNotes(results);
+const searchInput = document.getElementById('search-input');
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        DataEngine.processAndRender();
+    });
 }
 
-function setupSearchEngine() {
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            state.searchQuery = e.target.value;
-            filterAndRender();
-        });
-    }
-}
+document.querySelectorAll('.nav-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        const type = pill.innerText.toLowerCase();
+        document.querySelectorAll('.nav-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
 
-async function createFolder(name, color) {
-    try {
-        await db.collection('users').doc(state.user.uid).collection('folders').add({
-            name: name,
-            color: color,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        return true;
-    } catch (e) {
-        console.error("Folder creation failed:", e);
-        return false;
-    }
-}
+        if (type.includes('инборд')) state.currentView = 'all';
+        if (type.includes('архив')) state.currentView = 'archive';
+        
+        DataEngine.processAndRender();
+        if (window.innerWidth < 1024) UI.toggleSidebar(false);
+    });
+});
 
-async function updateNoteStatus(noteId, status) {
-    try {
-        await db.collection('users').doc(state.user.uid).collection('notes').doc(noteId).update({
-            isArchived: status,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-    } catch (e) {
-        console.error("Status update failed:", e);
-    }
-}
 
-async function permanentDelete(noteId) {
-    const confirmed = confirm("Удалить заметку навсегда? Это действие нельзя отменить.");
-    if (!confirmed) return;
 
-    try {
-        await db.collection('users').doc(state.user.uid).collection('notes').doc(noteId).delete();
-    } catch (e) {
-        console.error("Deletion failed:", e);
-    }
-}
-
-async function addNoteFeedback(rating, comment) {
-    try {
-        await db.collection('feedback').add({
-            uid: state.user.uid,
-            userName: state.user.displayName,
-            rating: rating,
-            comment: comment,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert("Спасибо за ваш отзыв! Мы становимся лучше для вас.");
-    } catch (e) {
-        console.error("Feedback error:", e);
-    }
-}
-
-function getNoteStats() {
-    const total = state.notes.length;
-    const archived = state.notes.filter(n => n.isArchived).length;
-    const active = total - archived;
-    return { total, archived, active };
-}
+window.fetchNotes = () => DataEngine.processAndRender();
+DataEngine.init();
