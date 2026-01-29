@@ -40,30 +40,53 @@ async function closeEditor() {
     currentEditorNote = null;
 }
 
-async function saveNote(title, content) {
-    const noteData = {
-        title: title,
-        content: content,
-        priority: currentPriority,
-        tags: editorTags,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        folderId: state.activeFolderId || null,
-        isArchived: currentEditorNote ? currentEditorNote.isArchived : false
+const saveNote = async () => {
+    const title = document.getElementById('note-title').value.trim();
+    const text = document.getElementById('note-text').value.trim();
+    if (!title && !text) return closeEditor();
+
+    const data = {
+        title, text,
+        tags: document.getElementById('note-tags').value.split(' ').filter(t => t.trim()),
+        priority: document.getElementById('priority-label').dataset.priority || 'normal',
+        showTimestamp: document.getElementById('show-time').checked,
+        isPinned: state.editorPinned,
+        updatedAt: Date.now()
     };
 
+    const folderSelect = document.getElementById('note-folder-select');
+    data.folderId = (folderSelect && folderSelect.value) ? folderSelect.value : null;
+
+    // Получаем имя папки для красивой записи в таблицу
+    const folderName = data.folderId 
+        ? (state.folders.find(f => f.id === data.folderId)?.name || '') 
+        : '';
+
     try {
-        if (currentEditorNote) {
-            await db.collection('users').doc(state.user.uid)
-                .collection('notes').doc(currentEditorNote.id).update(noteData);
+        if (state.editingId) {
+            await db.collection("notes").doc(state.editingId).update(data);
         } else {
-            noteData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            await db.collection('users').doc(state.user.uid)
-                .collection('notes').add(noteData);
+            if (!state.user) { alert("Требуется авторизация"); return; }
+            data.uid = state.user.uid;
+            data.createdAt = Date.now();
+            data.isArchived = false;
+            await db.collection("notes").add(data);
         }
-    } catch (error) {
-        console.error("Save error:", error);
+        
+        // --- ОТПРАВКА В GOOGLE ТАБЛИЦУ ---
+        // Отправляем копию данных, добавляя имя папки
+        sendToGoogleSheet({ ...data, folderName });
+        // ---------------------------------
+
+        closeEditor();
+    } catch (e) {
+        console.error("Ошибка сохранения заметки:", e);
+        const msg = (e && e.message && e.message.includes('Missing or insufficient permissions')) ?
+            i18n[state.config.lang].perm_error :
+            (e.message || String(e));
+        alert("Ошибка: " + msg);
     }
-}
+};
 
 function cyclePriority() {
     const priorities = ['low', 'medium', 'high'];
@@ -138,4 +161,5 @@ document.addEventListener('keydown', (e) => {
             closeEditor();
         }
     }
+
 });
