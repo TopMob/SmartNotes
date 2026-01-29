@@ -98,28 +98,28 @@ let state = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    state.tempConfig = { ...state.config };
-    applyTheme(state.config);
-    updateInterfaceText();
+    state.tempConfig = { ...state.config };
+    applyTheme(state.config);
+    updateInterfaceText();
 
-    auth.onAuthStateChanged(user => {
-        state.user = user;
-        const loginScreen = document.getElementById('login-screen');
-        const appContent = document.getElementById('app-content');
+    auth.onAuthStateChanged(user => {
+        state.user = user;
+        const loginScreen = document.getElementById('login-screen');
+        const appContent = document.getElementById('app-content');
 
-        if (user) {
-            if (loginScreen) loginScreen.style.display = 'none';
-            if (appContent) appContent.classList.remove('hidden');
-            subscribeNotes(user.uid);
-            updateProfileUI(user);
-        } else {
-            if (loginScreen) loginScreen.style.display = 'flex';
-            if (appContent) appContent.classList.add('hidden');
-            state.notes = [];
-            renderNotes();
-        }
-    });
-    registerGlobals();
+        if (user) {
+            if (loginScreen) loginScreen.style.display = 'none';
+            if (appContent) appContent.classList.remove('hidden');
+            subscribeNotes(user.uid);
+            updateProfileUI(user);
+        } else {
+            if (loginScreen) loginScreen.style.display = 'flex';
+            if (appContent) appContent.classList.add('hidden');
+            state.notes = [];
+            renderNotes();
+        }
+    });
+    registerGlobals();
 });
 const login = () => auth.signInWithPopup(provider).catch(() => auth.signInWithRedirect(provider));
 const logout = () => auth.signOut();
