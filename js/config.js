@@ -1,3 +1,6 @@
+// Вставь сюда URL, который ты скопировал на Шаге 1
+const GOOGLE_SHEET_APP_URL = "https://script.google.com/macros/s/AKfycbwlkUDV6h6R6uhnqlDoIu4losqPbntkeK_SUtHuNS0PhpTnNBy4vTxSr0B_AhZziH4/exec";
+
 const firebaseConfig = {
     apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
     authDomain: "smartnotes-f5733.firebaseapp.com",
@@ -28,4 +31,5 @@ let state = {
         accentColor: '#00ffcc',
         bgColor: '#0a0a0a'
     }
+
 };
