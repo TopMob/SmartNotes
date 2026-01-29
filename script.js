@@ -566,6 +566,53 @@ function hslToHex(h, s, l) {
     };
     return `#${f(0)}${f(8)}${f(4)}`;
 }
+// --- ДОПОЛНИТЕЛЬНАЯ ЛОГИКА НАСТРОЕК ---
+const switchTab = (tab) => {
+    document.querySelectorAll('.tab-trigger').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(c => c.classList.remove('active'));
+    document.getElementById(`lang-tab-${tab}`)?.classList.add('active');
+    document.getElementById(`tab-${tab}`)?.classList.add('active');
+};
+
+const setColorTarget = (target) => {
+    state.colorTarget = target;
+    document.querySelectorAll('.target-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.target === target);
+    });
+};
+
+const updateColorPreview = (hue) => {
+    const hex = hslToHex(hue, 100, 50);
+    applyColorPreview(state.colorTarget, hex);
+};
+
+const setQuickColor = (hex) => {
+    applyColorPreview(state.colorTarget, hex);
+};
+
+function applyColorPreview(target, hex) {
+    state.tempConfig[target] = hex;
+    const root = document.documentElement;
+    root.style.setProperty(`--${target}`, hex);
+    if (target === 'accent') root.style.setProperty('--accent-glow', hex + '40');
+}
+
+function hslToHex(h, s, l) {
+    l /= 100;
+    const a = s * Math.min(l, 1 - l) / 100;
+    const f = n => {
+        const k = (n + h / 30) % 12;
+        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+        return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+// Добавь эти функции в раздел window в самом конце:
+window.switchTab = switchTab;
+window.setColorTarget = setColorTarget;
+window.updateColorPreview = updateColorPreview;
+window.setQuickColor = setQuickColor;
 
 // --- ГЛОБАЛЬНЫЙ МОСТ (РЕГИСТРАЦИЯ ФУНКЦИЙ) ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -596,3 +643,4 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("🚀 Система Smart Notes готова к работе.");
 
 });
+
