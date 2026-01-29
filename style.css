@@ -993,3 +993,84 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
 }
+
+/* --- ДОПОЛНИТЕЛЬНЫЕ СТИЛИ ДЛЯ ЛЕВОГО МЕНЮ И ФИЛЬТРОВ (Улучшение внешнего вида) --- */
+
+/* Стили для кнопки-хамбургера (левый верх) */
+.left-controls .menu-toggle {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    color: var(--text-dim);
+    font-size: 18px;
+}
+.left-controls .menu-toggle:hover {
+    transform: translateY(-2px);
+    color: var(--accent);
+    box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+/* Фильтры: приглушённый вид, активный — контрастный */
+.left-menu .toggle-btn {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.01);
+    color: var(--text-dim);
+    opacity: 0.8;
+    transition: background-color 0.18s, color 0.18s, opacity 0.18s;
+}
+.left-menu .toggle-btn.active {
+    background: var(--accent);
+    color: #000;
+    opacity: 1;
+    box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+/* Папки: добавлено отображение цвета, более читаемый список */
+.folder-item .folder-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.folder-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+
+/* Порядок контролов: кнопка Создать слева, поля справа */
+.folder-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+}
+.folder-controls input[type="color"] {
+    width: 36px;
+    height: 36px;
+    border: none;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Мелкие правки: уменьшить "засвет" у переключателей в общих настройках */
+.tab-trigger, .target-btn {
+    opacity: 0.95;
+}
+
+/* Если нужно — добавьте плавный переход при open/close меню */
+.left-menu { transition: transform 0.22s cubic-bezier(.2,.9,.3,1); }
