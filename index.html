@@ -31,7 +31,7 @@
 
         <div class="container">
             <div class="controls-wrapper">
-                <input type="text" id="search-input" class="search-input" placeholder="Поиск заметок...">
+                <input type="text" id="search-input" class="search-input" placeholder="Поиск заметок..." oninput="renderNotes()">
                 
                 <div class="view-filters">
                     <div class="toggle-group">
@@ -79,13 +79,13 @@
 
             <div class="editor-footer">
                 <div class="editor-options">
-                    <div class="toggle-switch" onclick="cyclePriority()">
+                    <div class="toggle-switch-priority" onclick="cyclePriority()" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
                         <span id="priority-label">Средний</span>
-                        <div id="priority-indicator" style="width: 10px; height: 10px; border-radius: 50%; background: #fff;"></div>
+                        <div id="priority-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent);"></div>
                     </div>
                     
                     <label class="toggle-switch">
-                        <input type="checkbox" id="show-time">
+                        <input type="checkbox" id="show-time" checked>
                         <span id="lang-label-time">Время</span>
                     </label>
                 </div>
@@ -95,8 +95,8 @@
                     <input type="text" id="note-tags" placeholder="теги через пробел">
                 </div>
 
-                <button class="btn-send-lg" onclick="saveNote()" id="save-btn-text">
-                    СОХРАНИТЬ
+                <button class="btn-send-lg" onclick="saveNote()">
+                    <span id="save-btn-text">СОХРАНИТЬ</span>
                 </button>
             </div>
         </div>
@@ -106,10 +106,12 @@
         <div class="modal-card">
             <h2 id="lang-settings-title" style="margin-bottom: 20px; text-align: center;">Настройки</h2>
 
-            <img id="modal-user-pic" class="avatar--lg" src="" alt="">
-            <div id="user-name" class="user-name">User</div>
-            <div class="profile-stats">
-                <span id="notes-count">0</span> <span id="lang-stat-notes">записей</span>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img id="modal-user-pic" class="avatar--lg" src="" alt="">
+                <div id="user-name" class="user-name">User</div>
+                <div class="profile-stats">
+                    <span id="note-count">0</span> <span id="lang-stat-notes">записей</span>
+                </div>
             </div>
 
             <div class="settings-tabs">
@@ -121,8 +123,8 @@
                 <div class="setting-group">
                     <label id="lang-lang-label">Язык / Language</label>
                     <div class="target-selector">
-                        <div class="target-btn active" onclick="setLanguage('ru')">RU</div>
-                        <div class="target-btn" onclick="setLanguage('en')">EN</div>
+                        <div class="target-btn" id="lang-ru" onclick="setLanguage('ru')">RU</div>
+                        <div class="target-btn" id="lang-en" onclick="setLanguage('en')">EN</div>
                     </div>
                 </div>
 
@@ -135,28 +137,29 @@
                 <div class="setting-group">
                     <label id="lang-target-label">Что красим?</label>
                     <div class="target-selector">
-                        <div class="target-btn active" onclick="setTarget('accent')" id="lang-target-accent">Акцент</div>
-                        <div class="target-btn" onclick="setTarget('bg')" id="lang-target-bg">Фон</div>
-                        <div class="target-btn" onclick="setTarget('text')" id="lang-target-text">Текст</div>
+                        <div class="target-btn active" data-target="accent" onclick="setColorTarget('accent')" id="lang-target-accent">Акцент</div>
+                        <div class="target-btn" data-target="bg" onclick="setColorTarget('bg')" id="lang-target-bg">Фон</div>
+                        <div class="target-btn" data-target="text" onclick="setColorTarget('text')" id="lang-target-text">Текст</div>
                     </div>
                 </div>
 
                 <div class="setting-group">
                     <label id="lang-spectrum-label">Выбери цвет</label>
                     <div class="spectrum-slider-container">
-                        <input type="range" min="0" max="360" value="160" class="hue-slider" id="hue-slider" oninput="updateColorFromHue(this.value)">
+                        <input type="range" min="0" max="360" value="160" class="hue-slider" id="hue-slider" oninput="updateColorPreview(this.value)">
                     </div>
                     
                     <div class="quick-colors">
-                        <div class="q-color-btn black" onclick="setManualColor('#000000')">Black</div>
-                        <div class="q-color-btn white" onclick="setManualColor('#ffffff')">White</div>
+                        <div class="q-color-btn" style="background: #000;" onclick="setQuickColor('#000000')"></div>
+                        <div class="q-color-btn" style="background: #fff;" onclick="setQuickColor('#ffffff')"></div>
+                        <div class="q-color-btn" style="background: #00ffcc;" onclick="setQuickColor('#00ffcc')"></div>
                     </div>
                 </div>
             </div>
 
             <div class="settings-footer">
-                <button class="btn btn--text" onclick="resetConfig()" id="lang-btn-reset">Сброс</button>
-                <button class="btn btn--primary" onclick="closeSettings()" id="lang-btn-apply">ОК</button>
+                <button class="btn btn--text" onclick="resetSettings()" id="lang-btn-reset">Сброс</button>
+                <button class="btn btn--primary" onclick="applySettings()" id="lang-btn-apply">ОК</button>
             </div>
         </div>
     </div>
