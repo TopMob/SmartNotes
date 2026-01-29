@@ -26,35 +26,35 @@
 
     <div id="app" class="app-layout" style="display: none; opacity: 0;">
         <header class="main-header">
-            <div class="header-left">
-                <span class="logo-text">Smart Notes</span>
-            </div>
-            
-            <div class="header-center">
-                <div class="search-bar">
-                    <span class="material-icons-round">search</span>
-                    <input type="text" id="search-input" placeholder="Поиск заметок...">
-                </div>
-            </div>
+    <div class="header-left">
+        <button class="menu-toggle-btn" onclick="toggleSidebar(true)" style="margin-right: 15px;">
+            <span class="material-icons-round">menu</span>
+        </button>
+        <span class="logo-text">Smart Notes</span>
+    </div>
+    
+    <div class="header-center">
+        <div class="search-bar">
+            <span class="material-icons-round">search</span>
+            <input type="text" id="search-input" placeholder="Поиск заметок...">
+        </div>
+    </div>
 
-            <div class="header-right">
-                <div class="user-profile" id="user-menu-trigger">
-                    <img id="user-photo" src="" alt="">
-                    <div id="user-dropdown" class="user-dropdown">
-                        <div id="user-name" class="user-name-display"></div>
-                        <button onclick="switchAccount()" class="dropdown-item">
-                            <span class="material-icons-round">sync</span> Сменить аккаунт
-                        </button>
-                        <button onclick="logout()" class="dropdown-item danger">
-                            <span class="material-icons-round">logout</span> Выйти
-                        </button>
-                    </div>
-                </div>
-                <button class="menu-toggle-btn" onclick="toggleSidebar(true)">
-                    <span class="material-icons-round">menu_open</span>
+    <div class="header-right">
+        <div class="user-profile" id="user-menu-trigger">
+            <img id="user-photo" src="" alt="">
+            <div id="user-dropdown" class="user-dropdown">
+                <div id="user-name" class="user-name-display"></div>
+                <button onclick="switchAccount()" class="dropdown-item">
+                    <span class="material-icons-round">sync</span> Сменить аккаунт
+                </button>
+                <button onclick="logout()" class="dropdown-item danger">
+                    <span class="material-icons-round">logout</span> Выйти
                 </button>
             </div>
-        </header>
+        </div>
+    </div>
+</header>
 
         <div class="content-wrapper">
             <aside class="sidebar" id="sidebar">
@@ -173,3 +173,4 @@
     <script src="js/theme.js"></script>
 </body>
 </html>
+
