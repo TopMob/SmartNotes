@@ -1,223 +1,244 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Smart Notes</title>
-  <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <title>Smart Notes Pro</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
-  <div id="app-shell">
-    <aside id="sidebar" class="sidebar" aria-hidden="false">
-      <div class="brand">
-        <div id="app-logo" class="app-logo">Smart Notes</div>
-        <button id="menu-open" class="icon-btn menu-open" aria-label="Открыть меню">
-          <span class="material-icons-round">menu</span>
-        </button>
-      </div>
-      <nav id="main-nav" class="nav">
-        <button data-view="notes" class="nav-item active">
-          <span class="material-icons-round">notes</span>
-          <span class="nav-text">Все заметки</span>
-        </button>
-        <button data-view="archive" class="nav-item">
-          <span class="material-icons-round">archive</span>
-          <span class="nav-text">Архив</span>
-        </button>
-      </nav>
-      <section class="folders">
-        <div class="folders-head">
-          <span>ПАПКИ</span>
-          <button id="create-folder-btn" class="icon-btn" aria-haspopup="dialog" aria-controls="folder-modal">
-            <span class="material-icons-round">add</span>
-          </button>
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="auth-container">
+        <div class="auth-box">
+            <h1 id="lang-login-title">Smart Notes</h1>
+            <p>Твои мысли в безопасности</p>
+            <button id="login-btn" onclick="login()" class="btn-login-google" aria-label="Login with Google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" />
+                <span id="lang-login">ВОЙТИ ЧЕРЕЗ GOOGLE</span>
+            </button>
         </div>
-        <div id="folders-list" class="folders-list" role="list"></div>
-      </section>
-      <div class="sidebar-bottom">
-        <button id="open-feedback" class="nav-item" aria-haspopup="dialog" aria-controls="feedback-modal">
-          <span class="material-icons-round">feedback</span>
-          <span class="nav-text">Обратная связь</span>
-        </button>
-      </div>
+    </div>
+
+    <!-- APP CONTENT -->
+    <div id="app-content" class="hidden">
+        <header class="main-header">
+            <div class="header-info left-controls">
+                <button id="left-menu-btn" class="menu-toggle" onclick="toggleLeftMenu()" aria-label="Open menu">
+                    <!-- simple accessible hamburger svg -->
+                    <svg viewBox="0 0 24 18" width="22" height="16" aria-hidden="true">
+                        <rect x="0" y="0" width="24" height="2" rx="1" fill="currentColor"></rect>
+                        <rect x="0" y="8" width="24" height="2" rx="1" fill="currentColor"></rect>
+                        <rect x="0" y="16" width="24" height="2" rx="1" fill="currentColor"></rect>
+                    </svg>
+                </button>
+
+                <div>
+                    <h1 id="lang-app-title">Smart Notes</h1>
+                    <div class="stats">
+                        <span id="note-count">0</span>
+                        <span id="lang-stat-notes">записей</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-controls">
+                <div class="search-bar">
+                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск заметки..." />
+                </div>
+
+                <select id="sort-select" onchange="renderNotes()" class="sort-dropdown" aria-label="Sort notes">
+                    <option value="newest" id="lang-sort-newest">Сначала новые</option>
+                    <option value="priority" id="lang-sort-priority">По важности</option>
+                    <option value="title" id="lang-sort-title">По названию</option>
+                </select>
+
+                <div class="user-profile-trigger" onclick="document.getElementById('profile-modal').classList.add('active')" role="button" aria-label="Open profile">
+                    <img id="user-pic" class="user-avatar" src="" alt="User" />
+                </div>
+            </div>
+        </header>
+
+        <nav class="view-tabs" role="tablist" aria-label="Views">
+            <button id="lang-view-active" class="view-tab active" onclick="switchView('active')" role="tab">Заметки</button>
+            <button id="lang-view-archive" class="view-tab" onclick="switchView('archive')" role="tab">Архив</button>
+        </nav>
+
+        <main id="notes-grid" class="notes-container" role="main" aria-live="polite"></main>
+
+        <button class="btn-fab-add" onclick="openEditor()" aria-label="Add note">+</button>
+    </div>
+
+    <!-- LEFT SLIDE MENU -->
+    <aside id="left-menu" class="left-menu" aria-hidden="true">
+        <div class="left-menu-header">
+            <h3 id="menu-title">Меню</h3>
+            <button class="modal-close-x" onclick="toggleLeftMenu()" aria-label="Close menu">×</button>
+        </div>
+
+        <div class="left-menu-section">
+            <button class="menu-action" onclick="openSettings()" aria-label="Open settings">
+                ⚙️ <span id="menu-settings">Настройки</span>
+            </button>
+        </div>
+
+        <div class="left-menu-section">
+            <label class="menu-label" id="menu-language-label">Язык</label>
+            <div class="toggle-group" role="group" aria-label="Language">
+                <button id="menu-lang-ru" class="toggle-btn" onclick="setLanguage('ru')" aria-pressed="false">Русский</button>
+                <button id="menu-lang-en" class="toggle-btn" onclick="setLanguage('en')" aria-pressed="false">English</button>
+            </div>
+        </div>
+
+        <div class="left-menu-section">
+            <label class="menu-label" id="menu-folders-label">Папки (Категории)</label>
+
+            <!-- Button first, then name & color -->
+            <div class="folder-controls">
+                <button id="btn-create-folder" class="btn-apply" onclick="createFolder()" aria-label="Create folder">Создать</button>
+                <input id="new-folder-name" placeholder="Название папки..." aria-label="New folder name" />
+                <input id="new-folder-color" type="color" value="#00ffcc" title="Цвет папки" aria-label="Folder color" />
+            </div>
+
+            <div id="folders-list" class="folders-list" aria-live="polite">
+                <!-- folders rendered here -->
+            </div>
+
+            <div class="folders-actions">
+                <button class="btn-text" onclick="selectFolder(null)" id="menu-all-notes">Все заметки</button>
+            </div>
+        </div>
     </aside>
-    <header class="topbar">
-      <div class="topbar-left">
-        <div id="logo-compact" class="logo-compact">Smart Notes</div>
-      </div>
-      <div class="topbar-center">
-        <div class="search">
-          <span class="material-icons-round">search</span>
-          <input id="search" type="search" placeholder="Поиск (текст, #тег)" aria-label="Поиск" />
-        </div>
-      </div>
-      <div class="topbar-right">
-        <button id="open-settings" class="icon-btn" aria-haspopup="dialog" aria-controls="settings-modal">
-          <span class="material-icons-round">palette</span>
-        </button>
-        <div class="profile">
-          <img id="avatar" class="avatar" src="" alt="Аватар" tabindex="0" aria-haspopup="menu" aria-expanded="false" />
-          <div id="profile-menu" class="profile-menu" role="menu" aria-hidden="true">
-            <div class="profile-info">
-              <div id="profile-name">Имя</div>
-              <div id="profile-email">email@example.com</div>
+
+    <!-- PROFILE MODAL -->
+    <div id="profile-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content profile-modal-box">
+            <button class="modal-close-x" onclick="this.closest('.modal-overlay').classList.remove('active')" aria-label="Close">×</button>
+            <div class="profile-header">
+                <img id="modal-user-pic" class="avatar-big" src="" alt="User avatar" />
+                <h2 id="user-name">Пользователь</h2>
             </div>
-            <div class="profile-actions">
-              <button id="switch-account" class="menu-btn" data-action="switch-account">Сменить аккаунт</button>
-              <button id="sign-out" class="menu-btn danger" data-action="sign-out">Выйти из аккаунта</button>
+
+            <div class="profile-menu">
+                <button onclick="openSettings()" class="menu-btn"><i>⚙️</i> <span id="lang-settings-title">Настройки</span></button>
+                <button onclick="openFeedback()" class="menu-btn"><i>💬</i> <span>Обратная связь</span></button>
+                <button onclick="switchAccount()" class="menu-btn"><i>🔄</i> <span>Сменить аккаунт</span></button>
+                <div class="menu-divider"></div>
+                <button onclick="logout()" class="menu-btn btn-danger"><i>🚪</i> <span>Выйти</span></button>
             </div>
-          </div>
         </div>
-      </div>
-    </header>
-    <main id="content" class="content">
-      <section id="notes-view" class="notes-view">
-        <div id="notes-grid" class="notes-grid" role="list"></div>
-      </section>
-    </main>
-    <button id="add-note" class="fab" aria-label="Добавить заметку">
-      <span class="material-icons-round">add</span>
-    </button>
-  </div>
-  <div id="modal-layer" class="modal-layer" aria-hidden="true"></div>
-  <div id="editor" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card editor-card">
-      <div class="editor-top">
-        <button id="editor-back" class="icon-btn" aria-label="Назад">
-          <span class="material-icons-round">arrow_back</span>
-        </button>
-        <div id="editor-meta" class="editor-meta">Редактирование</div>
-        <div class="editor-actions">
-          <button id="priority" class="icon-btn" aria-label="Приоритет">
-            <span class="material-icons-round">flag</span>
-          </button>
-          <button id="pin" class="icon-btn" aria-label="Закрепить">
-            <span class="material-icons-round">push_pin</span>
-          </button>
-        </div>
-      </div>
-      <div class="editor-body">
-        <input id="note-title" class="note-title" type="text" placeholder="Заголовок" />
-        <textarea id="note-text" class="note-text" placeholder="Текст заметки"></textarea>
-      </div>
-      <div class="editor-bottom">
-        <div class="editor-left">
-          <div class="tags">
-            <span class="material-icons-round">tag</span>
-            <input id="note-tags" type="text" placeholder="Теги через пробел или #тег" />
-          </div>
-        </div>
-        <div class="editor-right">
-          <label class="time-input">
-            <input id="note-datetime" type="datetime-local" />
-          </label>
-          <button id="archive-note" class="tool-btn">Архив</button>
-          <button id="delete-note" class="tool-btn danger">Удалить</button>
-        </div>
-      </div>
     </div>
-  </div>
-  <div id="folder-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card">
-      <h3>Новая папка</h3>
-      <input id="folder-name" type="text" placeholder="Название папки" />
-      <div class="folder-color">
-        <label>Цвет категории</label>
-        <input id="folder-color" type="color" value="#00ffcc" />
-      </div>
-      <div class="modal-actions">
-        <button id="folder-cancel" class="btn">Отмена</button>
-        <button id="folder-create" class="btn primary">Создать</button>
-      </div>
+
+    <!-- EDITOR MODAL -->
+    <div id="editor-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content editor-window">
+            <div class="editor-toolbar">
+                <button id="pin-btn" class="tool-btn" onclick="togglePin()" title="Закрепить">📌</button>
+                <div class="priority-badge" onclick="cyclePriority()" role="button" title="Приоритет">
+                    <div id="priority-indicator"></div>
+                    <span id="priority-label" data-priority="normal">Средний</span>
+                </div>
+                <button class="modal-close-x" onclick="closeEditor()" aria-label="Close editor">×</button>
+            </div>
+
+            <div class="editor-body">
+                <input type="text" id="note-title" class="input-title" placeholder="Заголовок" />
+                <textarea id="note-text" class="input-text" placeholder="Начните писать..."></textarea>
+
+                <div class="editor-row">
+                    <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел" />
+                    <select id="note-folder-select" class="input-tags" aria-label="Select folder">
+                        <option value="">Без папки</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="editor-footer">
+                <div class="footer-left">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="show-time" />
+                        <span class="checkmark"></span>
+                        <span id="lang-label-time">Показывать время</span>
+                    </label>
+                </div>
+
+                <div class="footer-right">
+                    <button id="archive-btn" class="btn-icon" onclick="toggleArchive()" title="В архив">📦</button>
+                    <button id="delete-btn" class="btn-icon" onclick="deleteNoteWrapper()" title="Удалить">🗑️</button>
+                    <button id="save-note-btn" class="btn-save" onclick="saveNote()">
+                        <span id="save-btn-text">СОХРАНИТЬ</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
-  <div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card">
-      <div class="settings-head">
-        <h3>Настройки внешнего вида</h3>
-        <button id="settings-close" class="icon-btn" aria-label="Закрыть">
-          <span class="material-icons-round">close</span>
-        </button>
-      </div>
-      <div class="settings-body">
-        <div class="presets">
-          <button data-preset="default" class="preset">По умолчанию</button>
-          <button data-preset="dark" class="preset">Dark</button>
-          <button data-preset="light" class="preset">Light</button>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content settings-window">
+            <h2 id="lang-settings-title">Настройки</h2>
+
+            <div class="settings-tabs">
+                <button id="lang-tab-general" class="tab-trigger active" onclick="switchTab('general')">Общие</button>
+                <button id="lang-tab-appearance" class="tab-trigger" onclick="switchTab('appearance')">Оформление</button>
+            </div>
+
+            <div id="tab-general" class="tab-pane active">
+                <div class="setting-item">
+                    <label id="lang-lang-label">Язык интерфейса</label>
+                    <div class="toggle-group">
+                        <button id="lang-ru" class="toggle-btn" onclick="setLanguage('ru')">Русский</button>
+                        <button id="lang-en" class="toggle-btn" onclick="setLanguage('en')">English</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-appearance" class="tab-pane">
+                <div class="setting-item">
+                    <label id="lang-target-label">Редактируемый элемент</label>
+                    <div class="target-selectors">
+                        <button class="target-btn active" data-target="accent" onclick="setColorTarget('accent')" id="lang-target-accent">Акцент</button>
+                        <button class="target-btn" data-target="bg" onclick="setColorTarget('bg')" id="lang-target-bg">Фон</button>
+                        <button class="target-btn" data-target="text" onclick="setColorTarget('text')" id="lang-target-text">Текст</button>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <label id="lang-spectrum-label">Цветовая палитра</label>
+                    <input type="range" class="color-slider" min="0" max="360" oninput="updateColorPreview(this.value)" aria-label="Color hue" />
+                    <div class="preset-colors">
+                        <div class="color-dot" onclick="setQuickColor('#00ffcc')" style="background:#00ffcc"></div>
+                        <div class="color-dot" onclick="setQuickColor('#ff4444')" style="background:#ff4444"></div>
+                        <div class="color-dot" onclick="setQuickColor('#ffaa00')" style="background:#ffaa00"></div>
+                        <div class="color-dot" onclick="setQuickColor('#9d4edd')" style="background:#9d4edd"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button onclick="resetSettings()" class="btn-text" id="lang-btn-reset">Сбросить всё</button>
+                <button onclick="applySettings()" class="btn-apply" id="lang-btn-apply">ПРИМЕНИТЬ</button>
+            </div>
+
+            <button class="modal-close-top" onclick="closeSettings()" aria-label="Close settings">×</button>
         </div>
-        <div class="palette">
-          <label>Акцент</label>
-          <input id="accent-color" type="color" />
-          <label>Фон</label>
-          <input id="bg-color" type="color" />
-          <div class="advanced">
-            <label>Расширенная палитра</label>
-            <input id="advanced-palette" type="color" />
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
-  <div id="feedback-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card">
-      <div class="feedback-head">
-        <h3>Обратная связь</h3>
-        <button id="feedback-close" class="icon-btn" aria-label="Закрыть">
-          <span class="material-icons-round">close</span>
-        </button>
-      </div>
-      <div class="feedback-body">
-        <div class="team">
-          <h4>Наша команда</h4>
-          <ul>
-            <li>Малышев Егор</li>
-            <li>Александров Арсений</li>
-            <li>Миняев Иван</li>
-            <li>Копаев Иван</li>
-          </ul>
+
+    <!-- FEEDBACK MODAL -->
+    <div id="feedback-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content feedback-window">
+            <h3>Обратная связь</h3>
+            <p>Ваше мнение помогает нам стать лучше</p>
+            <textarea id="feedback-text" class="feedback-input" placeholder="Опишите ошибку или предложите идею..."></textarea>
+            <div class="feedback-footer">
+                <button class="btn-text" onclick="closeFeedback()">Отмена</button>
+                <button class="btn-save" onclick="sendFeedback()">Отправить отзыв</button>
+            </div>
         </div>
-        <div class="contact">
-          <div>Связаться с нами</div>
-          <a href="https://t.me/SmartNotesInfo_bot" target="_blank">@SmartNotesInfo_bot</a>
-        </div>
-        <div class="rating">
-          <div>Оцените приложение</div>
-          <div id="star-rating" class="stars">
-            <button data-value="1" class="star">★</button>
-            <button data-value="2" class="star">★</button>
-            <button data-value="3" class="star">★</button>
-            <button data-value="4" class="star">★</button>
-            <button data-value="5" class="star">★</button>
-          </div>
-        </div>
-        <textarea id="feedback-text" placeholder="Предложения и критика"></textarea>
-        <div class="modal-actions">
-          <button id="feedback-send" class="btn primary">Отправить</button>
-        </div>
-      </div>
     </div>
-  </div>
-  <div id="confirm-switch" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card small">
-      <h3>Сменить аккаунт?</h3>
-      <p>Подтвердите действие</p>
-      <div class="modal-actions">
-        <button id="switch-cancel" class="btn">Отмена</button>
-        <button id="switch-confirm" class="btn danger">Подтвердить</button>
-      </div>
-    </div>
-  </div>
-  <div id="confirm-signout" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card small">
-      <h3>Выйти из аккаунта?</h3>
-      <p>Вы будете перенаправлены на экран входа</p>
-      <div class="modal-actions">
-        <button id="signout-cancel" class="btn">Отмена</button>
-        <button id="signout-confirm" class="btn danger">Выйти</button>
-      </div>
-    </div>
-  </div>
-  <script src="script.js" defer></script>
+
+    <script src="script.js"></script>
 </body>
 </html>
