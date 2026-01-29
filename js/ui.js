@@ -381,3 +381,22 @@ const UI = {
 };
 
 document.addEventListener('DOMContentLoaded', () => UI.init());
+
+async function sendToGoogleSheet(data) {
+    if (!GOOGLE_SHEET_APP_URL || GOOGLE_SHEET_APP_URL.includes(".......")) return;
+
+    try {
+        // mode: 'no-cors' важен, чтобы браузер не блокировал запрос к Google
+        await fetch(GOOGLE_SHEET_APP_URL, {
+            method: 'POST',
+            mode: 'no-cors', 
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        console.log("Заметка отправлена в Google Таблицу");
+    } catch (error) {
+        console.error("Ошибка отправки в таблицу:", error);
+    }
+}
