@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Notes</title>
+    <title>SmartNotes | Future Interface</title>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/stylessidebar.css">
@@ -16,37 +16,54 @@
 
     <div id="login-screen" class="modal active">
         <div class="auth-box">
-            <h1 class="logo-text" style="font-size: 4rem; margin-bottom: 30px;">Smart Notes</h1>
-            <button onclick="login()" class="btn-google">
-                <span class="material-icons-round">bolt</span>
-                Войти через Google
+            <div class="auth-visual">
+                <div class="orb"></div>
+            </div>
+            <h1 class="logo-text">SmartNotes</h1>
+            <p class="auth-tagline">Think. Save. Create.</p>
+            <button onclick="login()" class="btn-google-auth">
+                <svg viewBox="0 0 48 48" width="24"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                <span>Google Connect</span>
             </button>
         </div>
     </div>
 
-    <div id="app" class="app-layout" style="display: none; opacity: 0;">
+    <div id="app" class="app-layout" style="display: none;">
         <header class="main-header">
             <div class="header-left">
-                <span class="logo-text">Smart Notes</span>
+                <div class="logo-container">
+                    <span class="logo-text">SmartNotes</span>
+                    <span class="logo-badge">V3</span>
+                </div>
             </div>
             
             <div class="header-center">
-                <div class="search-bar">
+                <div class="search-wrapper">
                     <span class="material-icons-round">search</span>
-                    <input type="text" id="search-input" placeholder="Поиск идей...">
+                    <input type="text" id="search-input" placeholder="Найти гениальную идею...">
+                    <span class="search-hint">CMD + K</span>
                 </div>
             </div>
 
             <div class="header-right">
-                <div class="user-profile" id="user-menu-trigger">
-                    <img id="user-photo" src="" alt="">
+                <div class="user-control" id="user-menu-trigger">
+                    <div class="avatar-container">
+                        <img id="user-photo" src="" alt="user">
+                        <div class="status-indicator"></div>
+                    </div>
                     <div id="user-dropdown" class="user-dropdown">
-                        <div id="user-name" class="user-name-display"></div>
-                        <button onclick="switchAccount()" class="dropdown-item">
-                            <span class="material-icons-round">loop</span> Аккаунты
+                        <div class="user-meta">
+                            <span id="user-name">Guest</span>
+                            <span class="user-role">Pro Account</span>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <button onclick="switchAccount()" class="drop-link">
+                            <span class="material-icons-round">shuffle</span>
+                            <span>Аккаунты</span>
                         </button>
-                        <button onclick="logout()" class="dropdown-item danger">
-                            <span class="material-icons-round">power_settings_new</span> Выход
+                        <button onclick="logout()" class="drop-link danger">
+                            <span class="material-icons-round">logout</span>
+                            <span>Выйти</span>
                         </button>
                     </div>
                 </div>
@@ -55,103 +72,105 @@
 
         <div class="content-wrapper">
             <aside class="sidebar" id="sidebar">
+                <div class="sidebar-blur"></div>
                 <div class="sidebar-header">
-                    <div class="logo-mini">SMART</div>
-                    <button class="close-sidebar" onclick="toggleSidebar(false)">
-                        <span class="material-icons-round">west</span>
+                    <div class="nav-title">Explorer</div>
+                    <button class="close-btn" onclick="toggleSidebar(false)">
+                        <span class="material-icons-round">close</span>
                     </button>
                 </div>
 
-                <div class="sidebar-content">
-                    <div class="nav-group top">
-                        <button class="nav-item active">
-                            <span class="material-icons-round">sticky_note_2</span>
-                            Заметки
+                <div class="sidebar-scroll">
+                    <div class="nav-group">
+                        <div class="group-label">Workspace</div>
+                        <button class="nav-pill active">
+                            <span class="material-icons-round">grid_view</span>
+                            <span>Инборд</span>
                         </button>
-                        <button class="nav-item">
+                        <button class="nav-pill">
                             <span class="material-icons-round">auto_delete</span>
-                            Архив
+                            <span>Архив</span>
                         </button>
-                        <div class="folder-section">
-                            <div class="section-label">Коллекции</div>
-                            <div id="folders-list"></div>
-                            <button class="add-folder-link">+ Новый тег</button>
-                        </div>
                     </div>
 
-                    <div class="nav-group bottom">
-                        <div class="settings-block">
-                            <div class="section-label">Кастомизация</div>
-                            <button class="nav-item disabled">
-                                <span class="material-icons-round">language</span>
-                                RU / EN
-                            </button>
-                            <div class="appearance-submenu">
-                                <div class="nav-item disabled">
-                                    <span class="material-icons-round">auto_fix_high</span>
-                                    Визуал
-                                </div>
-                                <div class="theme-dots-static">
-                                    <div class="theme-dot" style="background: #00d4ff"></div>
-                                    <div class="theme-dot" style="background: #ff0055"></div>
-                                    <div class="theme-dot" style="background: #a200ff"></div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="nav-group">
+                        <div class="group-label">Tags & Folders</div>
+                        <div id="folders-list" class="dynamic-folders"></div>
+                        <button class="create-folder-pill">
+                            <span class="material-icons-round">add</span>
+                            <span>Новый тег</span>
+                        </button>
+                    </div>
 
-                        <div class="about-block">
-                            <div class="section-label">Core Team</div>
-                            <div class="team-card">
-                                <div class="team-members">Егор • Арсений • Иван М. • Иван К.</div>
-                            </div>
-                            <button class="nav-item" onclick="confirmBotTransition()">
-                                <span class="material-icons-round">terminal</span>
-                                Connect Bot
-                            </button>
-                            <button class="nav-item" onclick="openFeedbackModal()">
-                                <span class="material-icons-round">mood</span>
-                                Rate App
-                            </button>
+                    <div class="sidebar-footer">
+                        <div class="group-label">Customize</div>
+                        <div class="theme-shelf">
+                            <div class="theme-dot" style="--c: #00d4ff" onclick="setTheme('cyan')"></div>
+                            <div class="theme-dot" style="--c: #ff0055" onclick="setTheme('rose')"></div>
+                            <div class="theme-dot" style="--c: #a200ff" onclick="setTheme('violet')"></div>
                         </div>
+                        <div class="divider"></div>
+                        <div class="team-capsule">
+                            <span class="material-icons-round">groups</span>
+                            <div class="team-stack">
+                                <span class="team-lead">Core Crew</span>
+                                <span class="team-names">Егор, Арсений, Иван М., Иван К.</span>
+                            </div>
+                        </div>
+                        <button class="bot-action-pill" onclick="confirmBotTransition()">
+                            <span class="material-icons-round">bolt</span>
+                            <span>Connect Bot</span>
+                        </button>
                     </div>
                 </div>
             </aside>
 
             <main class="main-content">
-                <button class="floating-menu-btn" onclick="toggleSidebar(true)">
-                    <span class="material-icons-round">menu_open</span>
-                    <span class="btn-label">Навигация</span>
-                </button>
+                <div class="action-row">
+                    <button class="menu-trigger-btn" onclick="toggleSidebar(true)">
+                        <span class="material-icons-round">menu_open</span>
+                        <div class="trigger-aura"></div>
+                    </button>
+                </div>
 
                 <div id="notes-grid" class="notes-grid"></div>
 
-                <button class="fab" onclick="openEditor()">
-                    <span class="material-icons-round">add_circle</span>
+                <button class="main-fab" onclick="openEditor()">
+                    <span class="material-icons-round">add</span>
+                    <div class="fab-glow"></div>
                 </button>
             </main>
         </div>
     </div>
 
     <div id="editor-modal" class="modal">
-        <div class="modal-content editor-box">
-            <div class="editor-header">
-                <div class="editor-controls">
-                    <button id="priority-btn" class="btn-editor" onclick="cyclePriority()">
-                        <span class="material-icons-round">priority_high</span>
+        <div class="editor-glass-container">
+            <div class="editor-nav">
+                <div class="editor-actions-left">
+                    <button class="editor-btn" id="priority-btn" onclick="cyclePriority()">
+                        <span class="material-icons-round">stars</span>
                     </button>
-                    <button class="btn-editor" onclick="insertCurrentTime()">
-                        <span class="material-icons-round">timer</span>
+                    <button class="editor-btn" onclick="insertCurrentTime()">
+                        <span class="material-icons-round">history_toggle_off</span>
                     </button>
                 </div>
-                <button class="btn-editor save-btn" onclick="closeEditor()">
-                    <span class="material-icons-round">check_circle</span>
-                </button>
+                <div class="editor-actions-right">
+                    <button class="editor-save-btn" onclick="closeEditor()">
+                        <span class="material-icons-round">check</span>
+                        <span>Готово</span>
+                    </button>
+                </div>
             </div>
-            <input type="text" id="note-title" placeholder="Заголовок">
-            <textarea id="note-content" placeholder="Твои мысли здесь..."></textarea>
+            <div class="editor-canvas">
+                <input type="text" id="note-title" placeholder="Заголовок" maxlength="100">
+                <textarea id="note-content" placeholder="Пиши как чувствуешь..."></textarea>
+            </div>
             <div class="editor-footer">
-                <div id="note-tags-container"></div>
-                <input type="text" id="note-tags-input" placeholder="#тег">
+                <div id="note-tags-container" class="tags-row"></div>
+                <div class="tag-input-box">
+                    <span class="material-icons-round">tag</span>
+                    <input type="text" id="note-tags-input" placeholder="категории...">
+                </div>
             </div>
         </div>
     </div>
