@@ -117,16 +117,21 @@ document.addEventListener('DOMContentLoaded', () => {
     updateInterfaceText();
 
 auth.onAuthStateChanged(user => {
-    console.log("Auth state changed. User:", user ? user.displayName : "none"); // Проверка в консоли
     state.user = user;
     
+    // 1. Обновляем видимость кнопок и панелей
+    updateAuthUI(user);
+    
     if (user) {
-        updateAuthUI(user);
-        updateProfile(user);
+        console.log("Пользователь авторизован:", user.uid);
+        // 2. Подписываемся на данные
         subscribeNotes(user.uid);
+        // 3. Обновляем профиль (аватар, имя)
+        updateProfile(user);
+        // 4. Добавляем класс для CSS (если нужно)
         document.body.classList.add('logged-in');
     } else {
-        updateAuthUI(null);
+        console.log("Пользователь вышел");
         state.notes = [];
         renderNotes();
         document.body.classList.remove('logged-in');
@@ -154,7 +159,19 @@ function subscribeNotes(uid) {
     });
 }
 
-window.login = () => auth.signInWithRedirect(provider);
+window.login = () => {
+    auth.signInWithPopup(provider)
+        .then((result) => {
+            console.log("Успешный вход:", result.user.displayName);
+        })
+        .catch((error) => {
+            console.error("Ошибка входа:", error.code, error.message);
+            // Если попап заблокирован браузером, пробуем редирект как запасной вариант
+            if (error.code === 'auth/popup-blocked') {
+                auth.signInWithRedirect(provider);
+            }
+        });
+};
 window.logout = () => auth.signOut();
 window.switchAccount = () => auth.signOut().then(window.login);
 
@@ -187,8 +204,12 @@ function updateAuthUI(user) {
     const userUi = document.getElementById('user-ui');
     const appContent = document.getElementById('app-content');
 
-    // Если user есть — скрываем кнопку входа, показываем контент
-    if (loginBtn) loginBtn.style.display = user ? 'none' : 'block';
+    if (loginBtn) {
+        // Если юзер есть — скрываем LOGIN, если нет — показываем
+        loginBtn.classList.toggle('hidden', !!user);
+        loginBtn.style.display = user ? 'none' : 'block'; 
+    }
+    
     if (userUi) userUi.classList.toggle('hidden', !user);
     if (appContent) appContent.classList.toggle('hidden', !user);
 }
