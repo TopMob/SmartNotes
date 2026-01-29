@@ -111,37 +111,38 @@ window.openFeedback = () => document.getElementById('feedback-modal').classList.
 window.closeFeedback = () => document.getElementById('feedback-modal').classList.remove('active');
 
 // --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     state.tempConfig = { ...state.config };
     applyTheme(state.config);
     updateInterfaceText();
 
-auth.onAuthStateChanged(user => {
-    state.user = user;
-    
-    // 1. Обновляем видимость кнопок и панелей
-    updateAuthUI(user);
-    
-    if (user) {
-        console.log("Пользователь авторизован:", user.uid);
-        // 2. Подписываемся на данные
-        subscribeNotes(user.uid);
-        // 3. Обновляем профиль (аватар, имя)
-        updateProfile(user);
-        // 4. Добавляем класс для CSS (если нужно)
-        document.body.classList.add('logged-in');
-    } else {
-        console.log("Пользователь вышел");
-        state.notes = [];
-        renderNotes();
-        document.body.classList.remove('logged-in');
+    // 1. Сначала обрабатываем результат редиректа (важно для iOS/Android)
+    try {
+        const result = await auth.getRedirectResult();
+        if (result.user) {
+            console.log("Успешный вход через редирект:", result.user.displayName);
+        }
+    } catch (error) {
+        console.error("Ошибка редиректа:", error.message);
     }
-});
 
-    // Обработка результата редиректа для авторизации
-    auth.getRedirectResult().then((result) => {
-        if (result.user) console.log("Успешный вход");
-    }).catch((error) => console.error("Ошибка редиректа:", error.message));
+    // 2. Единый слушатель состояния (ОСТАВЛЯЕМ ТОЛЬКО ЭТОТ ОДИН)
+    auth.onAuthStateChanged(user => {
+        state.user = user;
+        updateAuthUI(user);
+        
+        if (user) {
+            console.log("Авторизован:", user.uid);
+            subscribeNotes(user.uid);
+            updateProfile(user);
+            document.body.classList.add('logged-in');
+        } else {
+            console.log("Сессия отсутствует");
+            state.notes = [];
+            renderNotes();
+            document.body.classList.remove('logged-in');
+        }
+    });
 
     // Слушатель для рейтинга в отзывах
     document.getElementById('feedback-rating')?.addEventListener('input', (e) => {
