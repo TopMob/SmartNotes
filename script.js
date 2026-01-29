@@ -3,12 +3,12 @@
 // =========================================
 // ВАЖНО: Замени эти данные на свои из Firebase Console
 const firebaseConfig = {
-    apiKey: "AIzaSy...ТВОЙ_API_KEY",
-    authDomain: "smartnotes-....firebaseapp.com",
-    projectId: "smartnotes-...",
-    storageBucket: "smartnotes-....firebasestorage.app",
-    messagingSenderId: "...",
-    appId: "1:...:web:..."
+    apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
+    authDomain: "smartnotes-f5733.firebaseapp.com",
+    projectId: "smartnotes-f5733",
+    storageBucket: "smartnotes-f5733.firebasestorage.app",
+    messagingSenderId: "523799066979",
+    appId: "1:523799066979:web:abc13814f34864230cbb56"
 };
 
 // Проверка инициализации, чтобы не было ошибок при перезагрузке
@@ -649,3 +649,4 @@ window.openFeedback = openFeedback;
 window.closeFeedback = closeFeedback;
 window.submitFeedback = submitFeedback;
 window.closeConfirmModal = closeConfirmModal;
+
