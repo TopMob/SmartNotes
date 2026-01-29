@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Notes</title>
+    
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/stylessidebar.css"> <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+<body>
+
+    <div id="login-screen" class="auth-container">
+        <div class="auth-box">
+            <div class="logo-large">Smart Notes</div>
+            <p class="auth-subtitle">Твои мысли. Твой порядок.</p>
+            <button onclick="login()" class="btn-google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="G">
+                <span>Войти через Google</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="app" class="app-layout" style="display: none;">
+        
+        <header class="main-header">
+            <div class="header-left">
+                <div class="brand">
+                    <span class="logo-text" id="main-logo">Smart Notes</span>
+                </div>
+                <button class="btn-icon" id="menu-toggle">
+                    <span class="material-icons-round">menu</span>
+                </button>
+            </div>
+
+            <div class="header-center">
+                <div class="search-bar">
+                    <span class="material-icons-round">search</span>
+                    <input type="text" id="search-input" placeholder="Поиск по заметкам и #тегам...">
+                </div>
+            </div>
+
+            <div class="header-right">
+                <div class="user-profile" id="user-menu-trigger">
+                    <img id="user-photo" src="" alt="User">
+                    <div class="user-dropdown" id="user-dropdown">
+                        <button onclick="confirmAction('switch')" class="dropdown-item">
+                            <span class="material-icons-round">sync</span>
+                            Сменить аккаунт
+                        </button>
+                        <button onclick="confirmAction('logout')" class="dropdown-item danger">
+                            <span class="material-icons-round">logout</span>
+                            Выйти из аккаунта
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-wrapper">
+            <aside class="sidebar" id="sidebar">
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-view="notes">
+                        <span class="material-icons-round">description</span>
+                        Заметки
+                    </button>
+                    <button class="nav-item" data-view="archive">
+                        <span class="material-icons-round">archive</span>
+                        Архив
+                    </button>
+                </nav>
+
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <span>Папки</span>
+                        <button class="btn-icon-sm" onclick="openFolderModal()">
+                            <span class="material-icons-round">create_new_folder</span>
+                        </button>
+                    </div>
+                    <div id="folders-list" class="folders-list"></div>
+                </div>
+
+                <div class="sidebar-footer">
+                    <div class="team-info">
+                        <p class="team-label">Наша команда:</p>
+                        <p class="team-names">Малышев Егор, Александров Арсений, Миняев Иван, Копаев Иван</p>
+                    </div>
+                    
+                    <a href="https://t.me/SmartNotesInfo_bot" target="_blank" class="tg-bot-link">
+                        <span class="material-icons-round">smart_toy</span>
+                        @SmartNotesInfo_bot
+                    </a>
+
+                    <div class="sidebar-feedback">
+                        <p>Оцените нас:</p>
+                        <div class="star-rating-mini" id="mini-rating">
+                            <span class="material-icons-round" data-v="1">star_outline</span>
+                            <span class="material-icons-round" data-v="2">star_outline</span>
+                            <span class="material-icons-round" data-v="3">star_outline</span>
+                            <span class="material-icons-round" data-v="4">star_outline</span>
+                            <span class="material-icons-round" data-v="5">star_outline</span>
+                        </div>
+                        <button class="btn-feedback-text" onclick="openFeedbackModal()">Предложения и критика</button>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="main-content">
+                <div id="notes-grid" class="notes-grid"></div>
+                <button class="fab" onclick="openEditor()">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </main>
+        </div>
+    </div>
+
+    <div id="editor-modal" class="modal">
+        <div class="modal-content editor-box">
+            <div class="editor-header">
+                <div class="editor-actions-left">
+                    <button class="btn-icon" id="priority-btn" onclick="cyclePriority()">
+                        <span class="material-icons-round">priority_high</span>
+                    </button>
+                    <button class="btn-icon" onclick="insertCurrentTime()">
+                        <span class="material-icons-round">schedule</span>
+                    </button>
+                </div>
+                <div class="editor-actions-right">
+                    <button class="btn-icon" id="archive-note-btn"><span class="material-icons-round">archive</span></button>
+                    <button class="btn-icon danger" id="delete-note-btn"><span class="material-icons-round">delete</span></button>
+                    <button class="btn-icon close-modal" onclick="closeEditor()"><span class="material-icons-round">close</span></button>
+                </div>
+            </div>
+            <input type="text" id="note-title" placeholder="Заголовок" class="editor-title">
+            <textarea id="note-content" placeholder="Текст заметки..." class="editor-text"></textarea>
+            <div class="editor-footer">
+                <div id="note-tags-container" class="tags-container"></div>
+                <input type="text" id="note-tags-input" placeholder="+ тег" class="tag-input">
+            </div>
+        </div>
+    </div>
+
+    <div id="folder-modal" class="modal">
+        <div class="modal-content sm">
+            <h3>Новая папка</h3>
+            <input type="text" id="folder-name-input" placeholder="Название">
+            <div class="color-picker-box">
+                <label>Цвет:</label>
+                <input type="color" id="folder-color-input" value="#00ffcc">
+            </div>
+            <div class="modal-btns">
+                <button class="btn-text" onclick="closeFolderModal()">Отмена</button>
+                <button class="btn-primary" onclick="saveFolder()">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content sm">
+            <h3 id="confirm-title">Вы уверены?</h3>
+            <div class="modal-btns">
+                <button class="btn-text" onclick="closeConfirm()">Отмена</button>
+                <button id="confirm-action-btn" class="btn-primary">Да, продолжить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/db.js"></script> <script src="js/ui.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/theme.js"></script>
+
+</body>
+</html>
