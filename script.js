@@ -256,6 +256,11 @@ function applyTheme(cfg) {
 
 // --- ЛОГИКА РЕДАКТОРА ---
 const openEditor = (id = null) => {
+const archiveBtn = document.getElementById('archive-btn');
+if (archiveBtn) {
+    archiveBtn.style.display = 'block';
+    archiveBtn.textContent = note.isArchived ? '📤' : '📦'; // 📤 для возврата, 📦 для архива
+}
     state.editingId = id;
     const modal = document.getElementById('editor-modal');
     const deleteBtn = document.getElementById('delete-btn');
@@ -299,6 +304,25 @@ const togglePin = () => {
     updatePinBtnUI();
 };
 
+const toggleArchive = async () => {
+    if (!state.editingId) return;
+    
+    // Находим текущую заметку
+    const note = state.notes.find(n => n.id === state.editingId);
+    if (!note) return;
+
+    try {
+        await db.collection("notes").doc(state.editingId).update({
+            isArchived: !note.isArchived // Меняем статус на противоположный
+        });
+        closeEditor(); // Закрываем редактор после перемещения
+    } catch (e) {
+        alert("Ошибка архивации: " + e.message);
+    }
+};
+
+// Не забудь добавить в "мост" (в самом конце файла внутри DOMContentLoaded):
+window.toggleArchive = toggleArchive;
 function updatePinBtnUI() {
     const btn = document.getElementById('pin-btn');
     if (btn) btn.classList.toggle('active', state.editorPinned);
