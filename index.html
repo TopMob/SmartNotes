@@ -1,244 +1,1076 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
-    <title>Smart Notes Pro</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-</head>
-<body>
-    <!-- LOGIN SCREEN -->
-    <div id="login-screen" class="auth-container">
-        <div class="auth-box">
-            <h1 id="lang-login-title">Smart Notes</h1>
-            <p>Твои мысли в безопасности</p>
-            <button id="login-btn" onclick="login()" class="btn-login-google" aria-label="Login with Google">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" />
-                <span id="lang-login">ВОЙТИ ЧЕРЕЗ GOOGLE</span>
-            </button>
-        </div>
-    </div>
+/* --- БАЗОВЫЕ ПЕРЕМЕННЫЕ (Управляются через JS) --- */
+:root {
+    --accent: #00ffcc;
+    --accent-glow: rgba(0, 255, 204, 0.25);
+    --bg: #0a0a0a;
+    --card-bg: #161616;
+    --text: #ffffff;
+    --text-dim: #b0b0b0;
+    --danger: #ff4444;
+    --radius: 16px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-    <!-- APP CONTENT -->
-    <div id="app-content" class="hidden">
-        <header class="main-header">
-            <div class="header-info left-controls">
-                <button id="left-menu-btn" class="menu-toggle" onclick="toggleLeftMenu()" aria-label="Open menu">
-                    <!-- simple accessible hamburger svg -->
-                    <svg viewBox="0 0 24 18" width="22" height="16" aria-hidden="true">
-                        <rect x="0" y="0" width="24" height="2" rx="1" fill="currentColor"></rect>
-                        <rect x="0" y="8" width="24" height="2" rx="1" fill="currentColor"></rect>
-                        <rect x="0" y="16" width="24" height="2" rx="1" fill="currentColor"></rect>
-                    </svg>
-                </button>
+/* --- ОБНУЛЕНИЕ --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
 
-                <div>
-                    <h1 id="lang-app-title">Smart Notes</h1>
-                    <div class="stats">
-                        <span id="note-count">0</span>
-                        <span id="lang-stat-notes">записей</span>
-                    </div>
-                </div>
-            </div>
+html, body, #app-content {
+    height: 100%;
+}
 
-            <div class="header-controls">
-                <div class="search-bar">
-                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск заметки..." />
-                </div>
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    overflow-x: hidden;
+    transition: background-color var(--transition), color var(--transition);
+}
 
-                <select id="sort-select" onchange="renderNotes()" class="sort-dropdown" aria-label="Sort notes">
-                    <option value="newest" id="lang-sort-newest">Сначала новые</option>
-                    <option value="priority" id="lang-sort-priority">По важности</option>
-                    <option value="title" id="lang-sort-title">По названию</option>
-                </select>
+/* --- ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ --- */
+.hidden { display: none !important; }
 
-                <div class="user-profile-trigger" onclick="document.getElementById('profile-modal').classList.add('active')" role="button" aria-label="Open profile">
-                    <img id="user-pic" class="user-avatar" src="" alt="User" />
-                </div>
-            </div>
-        </header>
+.full-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
 
-        <nav class="view-tabs" role="tablist" aria-label="Views">
-            <button id="lang-view-active" class="view-tab active" onclick="switchView('active')" role="tab">Заметки</button>
-            <button id="lang-view-archive" class="view-tab" onclick="switchView('archive')" role="tab">Архив</button>
-        </nav>
+/* --- АВТОРИЗАЦИЯ --- */
+.auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    padding: 20px;
+    background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+}
 
-        <main id="notes-grid" class="notes-container" role="main" aria-live="polite"></main>
+.auth-box {
+    text-align: center;
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
 
-        <button class="btn-fab-add" onclick="openEditor()" aria-label="Add note">+</button>
-    </div>
+.auth-box h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    color: var(--accent);
+    text-shadow: 0 0 15px var(--accent-glow);
+}
 
-    <!-- LEFT SLIDE MENU -->
-    <aside id="left-menu" class="left-menu" aria-hidden="true">
-        <div class="left-menu-header">
-            <h3 id="menu-title">Меню</h3>
-            <button class="modal-close-x" onclick="toggleLeftMenu()" aria-label="Close menu">×</button>
-        </div>
+.btn-login-google {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 30px;
+    padding: 12px 24px;
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
 
-        <div class="left-menu-section">
-            <button class="menu-action" onclick="openSettings()" aria-label="Open settings">
-                ⚙️ <span id="menu-settings">Настройки</span>
-            </button>
-        </div>
+.btn-login-google:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(255,255,255,0.2);
+}
 
-        <div class="left-menu-section">
-            <label class="menu-label" id="menu-language-label">Язык</label>
-            <div class="toggle-group" role="group" aria-label="Language">
-                <button id="menu-lang-ru" class="toggle-btn" onclick="setLanguage('ru')" aria-pressed="false">Русский</button>
-                <button id="menu-lang-en" class="toggle-btn" onclick="setLanguage('en')" aria-pressed="false">English</button>
-            </div>
-        </div>
+/* --- ХЕДЕР (MAIN HEADER) --- */
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 5%;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
 
-        <div class="left-menu-section">
-            <label class="menu-label" id="menu-folders-label">Папки (Категории)</label>
+.header-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
 
-            <!-- Button first, then name & color -->
-            <div class="folder-controls">
-                <button id="btn-create-folder" class="btn-apply" onclick="createFolder()" aria-label="Create folder">Создать</button>
-                <input id="new-folder-name" placeholder="Название папки..." aria-label="New folder name" />
-                <input id="new-folder-color" type="color" value="#00ffcc" title="Цвет папки" aria-label="Folder color" />
-            </div>
+.left-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
 
-            <div id="folders-list" class="folders-list" aria-live="polite">
-                <!-- folders rendered here -->
-            </div>
+.left-controls .menu-toggle {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-weight: 800;
+    cursor: pointer;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 1rem;
+}
 
-            <div class="folders-actions">
-                <button class="btn-text" onclick="selectFolder(null)" id="menu-all-notes">Все заметки</button>
-            </div>
-        </div>
-    </aside>
+.left-controls .menu-toggle:hover {
+    color: var(--accent);
+}
 
-    <!-- PROFILE MODAL -->
-    <div id="profile-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal-content profile-modal-box">
-            <button class="modal-close-x" onclick="this.closest('.modal-overlay').classList.remove('active')" aria-label="Close">×</button>
-            <div class="profile-header">
-                <img id="modal-user-pic" class="avatar-big" src="" alt="User avatar" />
-                <h2 id="user-name">Пользователь</h2>
-            </div>
+.header-info h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
 
-            <div class="profile-menu">
-                <button onclick="openSettings()" class="menu-btn"><i>⚙️</i> <span id="lang-settings-title">Настройки</span></button>
-                <button onclick="openFeedback()" class="menu-btn"><i>💬</i> <span>Обратная связь</span></button>
-                <button onclick="switchAccount()" class="menu-btn"><i>🔄</i> <span>Сменить аккаунт</span></button>
-                <div class="menu-divider"></div>
-                <button onclick="logout()" class="menu-btn btn-danger"><i>🚪</i> <span>Выйти</span></button>
-            </div>
-        </div>
-    </div>
+.stats {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
 
-    <!-- EDITOR MODAL -->
-    <div id="editor-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal-content editor-window">
-            <div class="editor-toolbar">
-                <button id="pin-btn" class="tool-btn" onclick="togglePin()" title="Закрепить">📌</button>
-                <div class="priority-badge" onclick="cyclePriority()" role="button" title="Приоритет">
-                    <div id="priority-indicator"></div>
-                    <span id="priority-label" data-priority="normal">Средний</span>
-                </div>
-                <button class="modal-close-x" onclick="closeEditor()" aria-label="Close editor">×</button>
-            </div>
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
 
-            <div class="editor-body">
-                <input type="text" id="note-title" class="input-title" placeholder="Заголовок" />
-                <textarea id="note-text" class="input-text" placeholder="Начните писать..."></textarea>
+.search-bar input {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 10px 15px;
+    border-radius: 10px;
+    color: #fff;
+    outline: none;
+    transition: var(--transition);
+    min-width: 220px;
+}
 
-                <div class="editor-row">
-                    <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел" />
-                    <select id="note-folder-select" class="input-tags" aria-label="Select folder">
-                        <option value="">Без папки</option>
-                    </select>
-                </div>
-            </div>
+.search-bar input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
 
-            <div class="editor-footer">
-                <div class="footer-left">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="show-time" />
-                        <span class="checkmark"></span>
-                        <span id="lang-label-time">Показывать время</span>
-                    </label>
-                </div>
+.sort-dropdown {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #fff;
+    padding: 9px;
+    border-radius: 10px;
+    outline: none;
+    cursor: pointer;
+}
 
-                <div class="footer-right">
-                    <button id="archive-btn" class="btn-icon" onclick="toggleArchive()" title="В архив">📦</button>
-                    <button id="delete-btn" class="btn-icon" onclick="deleteNoteWrapper()" title="Удалить">🗑️</button>
-                    <button id="save-note-btn" class="btn-save" onclick="saveNote()">
-                        <span id="save-btn-text">СОХРАНИТЬ</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    cursor: pointer;
+    transition: var(--transition);
+    object-fit: cover;
+}
 
-    <!-- SETTINGS MODAL -->
-    <div id="settings-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal-content settings-window">
-            <h2 id="lang-settings-title">Настройки</h2>
+.user-avatar:hover {
+    transform: scale(1.1);
+}
 
-            <div class="settings-tabs">
-                <button id="lang-tab-general" class="tab-trigger active" onclick="switchTab('general')">Общие</button>
-                <button id="lang-tab-appearance" class="tab-trigger" onclick="switchTab('appearance')">Оформление</button>
-            </div>
+/* --- ТАБЫ НАВИГАЦИИ --- */
+.view-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 20px 0;
+}
 
-            <div id="tab-general" class="tab-pane active">
-                <div class="setting-item">
-                    <label id="lang-lang-label">Язык интерфейса</label>
-                    <div class="toggle-group">
-                        <button id="lang-ru" class="toggle-btn" onclick="setLanguage('ru')">Русский</button>
-                        <button id="lang-en" class="toggle-btn" onclick="setLanguage('en')">English</button>
-                    </div>
-                </div>
-            </div>
+.view-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 8px 20px;
+    font-weight: 600;
+    cursor: pointer;
+    position: relative;
+    transition: var(--transition);
+}
 
-            <div id="tab-appearance" class="tab-pane">
-                <div class="setting-item">
-                    <label id="lang-target-label">Редактируемый элемент</label>
-                    <div class="target-selectors">
-                        <button class="target-btn active" data-target="accent" onclick="setColorTarget('accent')" id="lang-target-accent">Акцент</button>
-                        <button class="target-btn" data-target="bg" onclick="setColorTarget('bg')" id="lang-target-bg">Фон</button>
-                        <button class="target-btn" data-target="text" onclick="setColorTarget('text')" id="lang-target-text">Текст</button>
-                    </div>
-                </div>
+.view-tab.active {
+    color: var(--accent);
+}
 
-                <div class="setting-item">
-                    <label id="lang-spectrum-label">Цветовая палитра</label>
-                    <input type="range" class="color-slider" min="0" max="360" oninput="updateColorPreview(this.value)" aria-label="Color hue" />
-                    <div class="preset-colors">
-                        <div class="color-dot" onclick="setQuickColor('#00ffcc')" style="background:#00ffcc"></div>
-                        <div class="color-dot" onclick="setQuickColor('#ff4444')" style="background:#ff4444"></div>
-                        <div class="color-dot" onclick="setQuickColor('#ffaa00')" style="background:#ffaa00"></div>
-                        <div class="color-dot" onclick="setQuickColor('#9d4edd')" style="background:#9d4edd"></div>
-                    </div>
-                </div>
-            </div>
+.view-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 20%;
+    width: 60%;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+}
 
-            <div class="settings-actions">
-                <button onclick="resetSettings()" class="btn-text" id="lang-btn-reset">Сбросить всё</button>
-                <button onclick="applySettings()" class="btn-apply" id="lang-btn-apply">ПРИМЕНИТЬ</button>
-            </div>
+/* --- СЕТКА ЗАМЕТОК --- */
+.notes-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 20px 5%;
+    max-width: 1400px;
+    margin: 0 auto 80px;
+}
 
-            <button class="modal-close-top" onclick="closeSettings()" aria-label="Close settings">×</button>
-        </div>
-    </div>
+/* --- КАРТОЧКА ЗАМЕТКИ --- */
+.note-card {
+    background: var(--card-bg);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    cursor: pointer;
+    transition: all var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+}
 
-    <!-- FEEDBACK MODAL -->
-    <div id="feedback-modal" class="modal-overlay" aria-hidden="true">
-        <div class="modal-content feedback-window">
-            <h3>Обратная связь</h3>
-            <p>Ваше мнение помогает нам стать лучше</p>
-            <textarea id="feedback-text" class="feedback-input" placeholder="Опишите ошибку или предложите идею..."></textarea>
-            <div class="feedback-footer">
-                <button class="btn-text" onclick="closeFeedback()">Отмена</button>
-                <button class="btn-save" onclick="sendFeedback()">Отправить отзыв</button>
-            </div>
-        </div>
-    </div>
+.note-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--accent);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
 
-    <script src="script.js"></script>
-</body>
-</html>
+.note-card.pinned {
+    border-left: 4px solid var(--accent);
+}
+
+.note-card__title {
+    font-weight: 700;
+    font-size: 1.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.note-card__text {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.note-card__footer {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag {
+    font-size: 0.75rem;
+    background: rgba(255,255,255,0.05);
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: var(--accent);
+}
+
+.pin-tag {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.8rem;
+}
+
+.note-folder {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* --- ПЛАВАЮЩАЯ КНОПКА (FAB) --- */
+.btn-fab-add {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-size: 30px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 5px 20px var(--accent-glow);
+    transition: var(--transition);
+    z-index: 99;
+}
+
+.btn-fab-add:hover {
+    transform: scale(1.1) rotate(90deg);
+}
+
+/* --- ОБЩИЕ СТИЛИ МОДАЛОК --- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(5px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-overlay.active {
+    display: flex;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 500px;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.1);
+    position: relative;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+}
+
+.modal-close-x {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 24px;
+    cursor: pointer;
+}
+
+/* --- МОДАЛКА ПРОФИЛЯ --- */
+.profile-modal-box {
+    padding: 30px;
+    text-align: center;
+}
+
+.profile-header {
+    margin-bottom: 25px;
+}
+
+.avatar-big {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 3px solid var(--accent);
+    margin-bottom: 15px;
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.profile-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.menu-btn {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 14px 20px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+}
+
+.menu-btn:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: var(--accent);
+    transform: translateX(5px);
+}
+
+.menu-btn.btn-danger {
+    color: var(--danger);
+}
+
+.menu-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 10px 0;
+}
+
+/* --- ОКНО РЕДАКТОРА --- */
+.editor-window {
+    max-width: 650px;
+    padding: 25px;
+}
+
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.tool-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.tool-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+
+.priority-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.05);
+    padding: 5px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.priority-badge:hover {
+    border-color: rgba(255,255,255,0.2);
+}
+
+#priority-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.editor-body {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.input-title {
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    font-size: 1.5rem;
+    font-weight: 700;
+    padding: 10px 0;
+    outline: none;
+}
+
+.input-text {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 1.1rem;
+    min-height: 200px;
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+}
+
+.input-tags {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--accent);
+    font-family: monospace;
+    outline: none;
+}
+
+.editor-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.editor-row select {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text);
+    outline: none;
+}
+
+.editor-footer {
+    margin-top: 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-save {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-save:hover {
+    box-shadow: 0 0 20px var(--accent-glow);
+    transform: scale(1.05);
+}
+
+.btn-delete {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 10px;
+    opacity: 0.6;
+    transition: var(--transition);
+}
+
+.btn-delete:hover {
+    opacity: 1;
+    transform: rotate(10deg);
+}
+
+/* --- НАСТРОЙКИ: ВКЛАДКИ --- */
+.settings-window {
+    padding: 30px;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 5px;
+    background: rgba(0,0,0,0.2);
+    padding: 5px;
+    border-radius: 12px;
+    margin: 20px 0;
+}
+
+.tab-trigger {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.tab-trigger.active {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
+}
+
+.tab-pane {
+    display: none;
+    padding-top: 10px;
+}
+
+.tab-pane.active {
+    display: block;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- ЭЛЕМЕНТЫ НАСТРОЕК --- */
+.setting-item {
+    margin-bottom: 25px;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 10px;
+}
+
+.toggle-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.toggle-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+
+/* --- ВЫБОР ЦВЕТА (SETTINGS CONTINUED) --- */
+.target-selectors {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.target-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-dim);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.target-btn.active {
+    background: var(--text);
+    color: #000;
+    border-color: var(--text);
+}
+
+.color-slider {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 8px;
+    border-radius: 5px;
+    background: linear-gradient(to right, 
+        #ff0000 0%, #ffff00 17%, #00ff00 33%, 
+        #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+    outline: none;
+    margin: 20px 0;
+}
+
+.color-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+    border: 2px solid #000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.preset-colors {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.color-dot {
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.color-dot:hover {
+    transform: scale(1.15);
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 30px;
+}
+
+/* --- ОБРАТНАЯ СВЯЗЬ (FEEDBACK) --- */
+.feedback-window {
+    padding: 30px;
+}
+
+.feedback-input {
+    width: 100%;
+    min-height: 120px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 15px;
+    margin: 15px 0;
+    resize: none;
+    outline: none;
+}
+
+.feedback-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+}
+
+/* --- КНОПКИ (УНИВЕРСАЛЬНЫЕ) --- */
+.btn-text {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 10px;
+    font-weight: 600;
+}
+
+.btn-apply {
+    background: var(--text);
+    color: #000;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* --- ЛЕВОЕ ВЫДВИЖНОЕ МЕНЮ --- */
+.left-menu {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 280px;
+    height: 100vh;
+    background: linear-gradient(180deg, rgba(20,20,20,0.98), var(--card-bg));
+    border-right: 1px solid rgba(255,255,255,0.04);
+    padding: 20px;
+    transform: translateX(-320px);
+    transition: transform 0.25s ease;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.left-menu.open {
+    transform: translateX(0);
+}
+
+.left-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.left-menu h3, .left-menu .menu-label {
+    color: var(--text-dim);
+    margin: 0;
+}
+
+.left-menu .menu-action {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--text);
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: var(--transition);
+    text-align: left;
+    font-size: 0.95rem;
+}
+
+.left-menu .menu-action:hover {
+    background: rgba(255,255,255,0.03);
+    border-color: var(--accent);
+}
+
+.left-menu .toggle-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.left-menu .toggle-btn {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.02);
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.left-menu .toggle-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+
+.folder-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.folder-controls input {
+    flex: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    color: var(--text);
+    outline: none;
+}
+
+.folder-controls input::placeholder {
+    color: rgba(255,255,255,0.35);
+}
+
+.folders-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.02);
+    transition: var(--transition);
+}
+
+.folder-item:hover {
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+}
+
+.folder-item.active {
+    background: rgba(0,0,0,0.6);
+    color: var(--accent);
+    border-left: 3px solid var(--accent);
+}
+
+.folder-item .folder-actions button {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+/* --- РАЗМЕЩЕНИЕ В РЕДАКТОРЕ --- */
+.input-tags, .editor-row select {
+    flex: 1;
+}
+
+/* --- АДАПТИВНОСТЬ (RESPONSIVE) --- */
+@media (max-width: 1024px) {
+    .search-bar input { min-width: 140px; }
+    .notes-container { padding: 16px; }
+}
+
+@media (max-width: 768px) {
+    .main-header {
+        flex-direction: column;
+        gap: 15px;
+        padding: 15px;
+    }
+
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .search-bar {
+        flex-grow: 1;
+    }
+
+    .search-bar input {
+        width: 100%;
+    }
+
+    .notes-container {
+        grid-template-columns: 1fr; /* Одна колонка на телефонах */
+        padding: 10px;
+    }
+
+    .modal-content {
+        max-width: 100%;
+        margin: 10px;
+        border-radius: 20px;
+    }
+
+    .editor-window {
+        padding: 15px;
+        height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .input-text {
+        flex-grow: 1;
+    }
+
+    .btn-fab-add {
+        bottom: 20px;
+        right: 20px;
+        width: 55px;
+        height: 55px;
+    }
+
+    .left-menu { width: 240px; transform: translateX(-300px); }
+    .left-menu.open { transform: translateX(0); }
+}
+
+/* --- КАСТОМНЫЙ СКРОЛЛБАР --- */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+}
+
+/* --- ДОПОЛНИТЕЛЬНЫЕ СТИЛИ ДЛЯ ЛЕВОГО МЕНЮ И ФИЛЬТРОВ (Улучшение внешнего вида) --- */
+
+/* Стили для кнопки-хамбургера (левый верх) */
+.left-controls .menu-toggle {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    color: var(--text-dim);
+    font-size: 18px;
+}
+.left-controls .menu-toggle:hover {
+    transform: translateY(-2px);
+    color: var(--accent);
+    box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+/* Фильтры: приглушённый вид, активный — контрастный */
+.left-menu .toggle-btn {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.01);
+    color: var(--text-dim);
+    opacity: 0.8;
+    transition: background-color 0.18s, color 0.18s, opacity 0.18s;
+}
+.left-menu .toggle-btn.active {
+    background: var(--accent);
+    color: #000;
+    opacity: 1;
+    box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+/* Папки: добавлено отображение цвета, более читаемый список */
+.folder-item .folder-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.folder-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+
+/* Порядок контролов: кнопка Создать слева, поля справа */
+.folder-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+}
+.folder-controls input[type="color"] {
+    width: 36px;
+    height: 36px;
+    border: none;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Мелкие правки: уменьшить "засвет" у переключателей в общих настройках */
+.tab-trigger, .target-btn {
+    opacity: 0.95;
+}
+
+/* Если нужно — добавьте плавный переход при open/close меню */
+.left-menu { transition: transform 0.22s cubic-bezier(.2,.9,.3,1); }
