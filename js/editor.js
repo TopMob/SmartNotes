@@ -1,115 +1,141 @@
-// =========================================
-// 1. ОТКРЫТИЕ И ЗАКРЫТИЕ РЕДАКТОРА
-// =========================================
+let currentEditorNote = null;
+let currentPriority = 'low';
+let editorTags = [];
+
 function openEditor(note = null) {
-    state.activeNote = note;
+    currentEditorNote = note;
     const modal = document.getElementById('editor-modal');
+    const titleInp = document.getElementById('note-title');
+    const contentInp = document.getElementById('note-content');
+    const priorityBtn = document.getElementById('priority-btn');
     
-    // Элементы полей
-    const titleInput = document.getElementById('note-title');
-    const contentInput = document.getElementById('note-content');
-    const tagsContainer = document.getElementById('note-tags-container');
+    editorTags = note && note.tags ? [...note.tags] : [];
+    currentPriority = note && note.priority ? note.priority : 'low';
 
     if (note) {
-        titleInput.value = note.title || '';
-        contentInput.value = note.content || '';
-        renderEditorTags(note.tags || []);
-        updatePriorityUI(note.priority || 'low');
+        titleInp.value = note.title || "";
+        contentInp.value = note.content || "";
     } else {
-        titleInput.value = '';
-        contentInput.value = '';
-        renderEditorTags([]);
-        updatePriorityUI('low');
+        titleInp.value = "";
+        contentInp.value = "";
     }
-
+    
+    updatePriorityUI();
+    renderEditorTags();
+    
     modal.classList.add('active');
+    setTimeout(() => titleInp.focus(), 300);
 }
 
-function closeEditor() {
-    saveNote(); // Сохраняем при закрытии
-    document.getElementById('editor-modal').classList.remove('active');
-    state.activeNote = null;
-}
-
-// =========================================
-// 2. ЛОГИКА СОХРАНЕНИЯ
-// =========================================
-async function saveNote() {
+async function closeEditor() {
+    const modal = document.getElementById('editor-modal');
     const title = document.getElementById('note-title').value.trim();
     const content = document.getElementById('note-content').value.trim();
-    
-    // Если пусто — не сохраняем
-    if (!title && !content) return;
 
+    if (title || content) {
+        await saveNote(title, content);
+    }
+
+    modal.classList.remove('active');
+    currentEditorNote = null;
+}
+
+async function saveNote(title, content) {
     const noteData = {
-        title,
-        content,
-        priority: state.editorPriority || 'low',
-        tags: state.editorTags || [],
+        title: title,
+        content: content,
+        priority: currentPriority,
+        tags: editorTags,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         folderId: state.activeFolderId || null,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        isArchived: currentEditorNote ? currentEditorNote.isArchived : false
     };
 
-    if (state.activeNote) {
-        await db.collection('users').doc(state.user.uid).collection('notes').doc(state.activeNote.id).update(noteData);
-    } else {
-        noteData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        noteData.isArchived = false;
-        await db.collection('users').doc(state.user.uid).collection('notes').add(noteData);
+    try {
+        if (currentEditorNote) {
+            await db.collection('users').doc(state.user.uid)
+                .collection('notes').doc(currentEditorNote.id).update(noteData);
+        } else {
+            noteData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection('users').doc(state.user.uid)
+                .collection('notes').add(noteData);
+        }
+    } catch (error) {
+        console.error("Save error:", error);
     }
 }
 
-// =========================================
-// 3. ПРИОРИТЕТ И ВРЕМЯ (ИСПРАВЛЕНИЯ)
-// =========================================
-
-// Циклическое переключение: Low -> Medium -> High -> Low
 function cyclePriority() {
-    const sequence = ['low', 'medium', 'high'];
-    let current = state.editorPriority || 'low';
-    let next = sequence[(sequence.indexOf(current) + 1) % sequence.length];
-    updatePriorityUI(next);
+    const priorities = ['low', 'medium', 'high'];
+    let index = priorities.indexOf(currentPriority);
+    currentPriority = priorities[(index + 1) % priorities.length];
+    updatePriorityUI();
 }
 
-function updatePriorityUI(level) {
-    state.editorPriority = level;
+function updatePriorityUI() {
     const btn = document.getElementById('priority-btn');
-    const colors = { low: '#00ffcc', medium: '#ffaa00', high: '#ff4444' };
-    btn.style.color = colors[level];
+    if (!btn) return;
+
+    const colors = {
+        low: 'var(--primary)',
+        medium: '#ffaa00',
+        high: '#ff4444'
+    };
+
+    btn.style.color = colors[currentPriority];
+    btn.style.borderColor = colors[currentPriority];
+    btn.style.boxShadow = `0 0 15px ${colors[currentPriority]}33`;
 }
 
-// Добавление времени (Теперь с часами и минутами!)
 function insertCurrentTime() {
+    const contentInp = document.getElementById('note-content');
     const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateString = now.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timestamp = `\n[${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}] `;
     
-    const textarea = document.getElementById('note-content');
-    const fullStamp = `\n[${timeString} ${dateString}]\n`;
+    const start = contentInp.selectionStart;
+    const end = contentInp.selectionEnd;
+    const text = contentInp.value;
     
-    // Вставляем в место курсора
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    textarea.value = textarea.value.substring(0, start) + fullStamp + textarea.value.substring(end);
-    textarea.focus();
+    contentInp.value = text.slice(0, start) + timestamp + text.slice(end);
+    contentInp.focus();
 }
 
-// =========================================
-// 4. ТЕГИ В РЕДАКТОРЕ
-// =========================================
-function renderEditorTags(tags) {
-    state.editorTags = tags;
-    const container = document.getElementById('note-tags-container');
-    container.innerHTML = tags.map(t => `<span class="tag">#${t}</span>`).join('');
-}
-
-document.getElementById('note-tags-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        const val = e.target.value.trim().replace('#', '');
-        if (val && !state.editorTags.includes(val)) {
-            state.editorTags.push(val);
-            renderEditorTags(state.editorTags);
+const tagInput = document.getElementById('note-tags-input');
+if (tagInput) {
+    tagInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const val = tagInput.value.replace('#', '').trim();
+            if (val && !editorTags.includes(val)) {
+                editorTags.push(val);
+                renderEditorTags();
+                tagInput.value = '';
+            }
         }
-        e.target.value = '';
+    });
+}
+
+function renderEditorTags() {
+    const container = document.getElementById('note-tags-container');
+    if (!container) return;
+
+    container.innerHTML = editorTags.map((tag, index) => `
+        <span class="tag" onclick="removeTag(${index})">
+            #${tag}
+            <span style="margin-left: 5px; opacity: 0.5;">×</span>
+        </span>
+    `).join('');
+}
+
+function removeTag(index) {
+    editorTags.splice(index, 1);
+    renderEditorTags();
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('editor-modal');
+        if (modal && modal.classList.contains('active')) {
+            closeEditor();
+        }
     }
 });
