@@ -26,17 +26,20 @@
     <div id="app-content" class="hidden">
         
         <header class="main-header">
-            <div class="header-info">
-                <h1 id="lang-app-title">Smart Notes</h1>
-                <div class="stats">
-                    <span id="note-count">0</span>
-                    <span id="lang-stat-notes">записей</span>
+            <div class="header-info left-controls">
+                <button id="left-menu-btn" class="menu-toggle" onclick="toggleLeftMenu()">⭠⭠⭠</button>
+                <div>
+                    <h1 id="lang-app-title">Smart Notes</h1>
+                    <div class="stats">
+                        <span id="note-count">0</span>
+                        <span id="lang-stat-notes">записей</span>
+                    </div>
                 </div>
             </div>
             
             <div class="header-controls">
                 <div class="search-bar">
-                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск заметки...">
+                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск за��етки...">
                 </div>
                 <select id="sort-select" onchange="renderNotes()" class="sort-dropdown">
                     <option value="newest" id="lang-sort-newest">Сначала новые</option>
@@ -54,11 +57,46 @@
             <button id="lang-view-archive" class="view-tab" onclick="switchView('archive')">Архив</button>
         </nav>
 
-        <main id="notes-grid" class="notes-container">
-            </main>
+        <main id="notes-grid" class="notes-container"></main>
 
         <button class="btn-fab-add" onclick="openEditor()" aria-label="Add note">+</button>
     </div>
+
+    <!-- ЛЕВОЕ ВЫДВИЖНОЕ МЕНЮ -->
+    <aside id="left-menu" class="left-menu">
+        <div class="left-menu-header">
+            <h3 id="menu-title">Меню</h3>
+            <button class="modal-close-x" onclick="toggleLeftMenu()">×</button>
+        </div>
+
+        <div class="left-menu-section">
+            <button class="menu-action" onclick="openSettings()">
+                ⚙️ <span id="menu-settings">Настройки</span>
+            </button>
+        </div>
+
+        <div class="left-menu-section">
+            <label class="menu-label" id="menu-language-label">Язык</label>
+            <div class="toggle-group">
+                <button id="menu-lang-ru" class="toggle-btn" onclick="setLanguage('ru')">Русский</button>
+                <button id="menu-lang-en" class="toggle-btn" onclick="setLanguage('en')">English</button>
+            </div>
+        </div>
+
+        <div class="left-menu-section">
+            <label class="menu-label" id="menu-folders-label">Папки (Категории)</label>
+            <div class="folder-controls">
+                <input id="new-folder-name" placeholder="Новая папка..." />
+                <button class="btn-apply" onclick="createFolder()">Создать</button>
+            </div>
+            <div id="folders-list" class="folders-list">
+                <!-- Сюда рендерятся папки -->
+            </div>
+            <div class="folders-actions">
+                <button class="btn-text" onclick="selectFolder(null)" id="menu-all-notes">Все заметки</button>
+            </div>
+        </div>
+    </aside>
 
     <div id="profile-modal" class="modal-overlay">
         <div class="modal-content profile-modal-box">
@@ -99,7 +137,12 @@
             <div class="editor-body">
                 <input type="text" id="note-title" class="input-title" placeholder="Заголовок">
                 <textarea id="note-text" class="input-text" placeholder="Начните писать..."></textarea>
-                <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел">
+                <div class="editor-row">
+                    <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел">
+                    <select id="note-folder-select" class="input-tags">
+                        <option value="">Без папки</option>
+                    </select>
+                </div>
             </div>
             
             <div class="editor-footer">
