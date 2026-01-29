@@ -1,19 +1,14 @@
-/**
- * Smart Notes - Работа с базой данных Firestore
- */
-
-// Инициализация загрузки при входе
 function initApp() {
     if (!state.user) return;
     
-    console.log("📥 Загрузка данных...");
-    loadFolders();
-    loadNotes();
-    setupSearch();
+    console.log("🚀 Smart Notes System Initialized");
+    
+    syncFolders();
+    syncNotes();
+    setupSearchEngine();
 }
 
-// Загрузка папок
-function loadFolders() {
+function syncFolders() {
     db.collection('users').doc(state.user.uid).collection('folders')
         .orderBy('createdAt', 'asc')
         .onSnapshot(snapshot => {
@@ -21,12 +16,13 @@ function loadFolders() {
                 id: doc.id,
                 ...doc.data()
             }));
-            if (typeof renderFolders === 'function') renderFolders();
-        }, err => console.error("Ошибка загрузки папок:", err));
+            renderFolders();
+        }, error => {
+            console.error("❌ Folder Sync Error:", error);
+        });
 }
 
-// Загрузка заметок
-function loadNotes() {
+function syncNotes() {
     db.collection('users').doc(state.user.uid).collection('notes')
         .orderBy('createdAt', 'desc')
         .onSnapshot(snapshot => {
@@ -35,52 +31,99 @@ function loadNotes() {
                 ...doc.data()
             }));
             filterAndRender();
-        }, err => console.error("Ошибка загрузки заметок:", err));
+        }, error => {
+            console.error("❌ Notes Sync Error:", error);
+        });
 }
 
-// Фильтрация и запуск отрисовки
 function filterAndRender() {
-    let filtered = state.notes;
+    let results = [...state.notes];
 
-    // Сортировка по виду (Архив / Обычные)
     if (state.currentView === 'archive') {
-        filtered = filtered.filter(n => n.isArchived);
+        results = results.filter(n => n.isArchived);
     } else if (state.currentView === 'folder') {
-        filtered = filtered.filter(n => n.folderId === state.activeFolderId && !n.isArchived);
+        results = results.filter(n => n.folderId === state.activeFolderId && !n.isArchived);
     } else {
-        filtered = filtered.filter(n => !n.isArchived);
+        results = results.filter(n => !n.isArchived);
     }
 
-    // Поиск
-    const q = state.searchQuery.toLowerCase().trim();
-    if (q) {
-        filtered = filtered.filter(n => {
-            const inTitle = (n.title || "").toLowerCase().includes(q);
-            const inText = (n.content || "").toLowerCase().includes(q);
-            const inTags = n.tags?.some(t => t.toLowerCase().includes(q.replace('#','')));
-            return inTitle || inText || inTags;
+    const query = state.searchQuery.toLowerCase().trim();
+    if (query) {
+        results = results.filter(n => {
+            const titleMatch = (n.title || "").toLowerCase().includes(query);
+            const contentMatch = (n.content || "").toLowerCase().includes(query);
+            const tagMatch = n.tags?.some(tag => tag.toLowerCase().includes(query.replace('#', '')));
+            return titleMatch || contentMatch || tagMatch;
         });
     }
 
-    if (typeof renderNotes === 'function') renderNotes(filtered);
+    renderNotes(results);
 }
 
-// Поиск
-function setupSearch() {
-    const input = document.getElementById('search-input');
-    if (input) {
-        input.addEventListener('input', (e) => {
+function setupSearchEngine() {
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
             state.searchQuery = e.target.value;
             filterAndRender();
         });
     }
 }
 
-// Удаление
-async function deleteNote(id) {
+async function createFolder(name, color) {
     try {
-        await db.collection('users').doc(state.user.uid).collection('notes').doc(id).delete();
+        await db.collection('users').doc(state.user.uid).collection('folders').add({
+            name: name,
+            color: color,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return true;
     } catch (e) {
-        alert("Ошибка при удалении");
+        console.error("Folder creation failed:", e);
+        return false;
     }
+}
+
+async function updateNoteStatus(noteId, status) {
+    try {
+        await db.collection('users').doc(state.user.uid).collection('notes').doc(noteId).update({
+            isArchived: status,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (e) {
+        console.error("Status update failed:", e);
+    }
+}
+
+async function permanentDelete(noteId) {
+    const confirmed = confirm("Удалить заметку навсегда? Это действие нельзя отменить.");
+    if (!confirmed) return;
+
+    try {
+        await db.collection('users').doc(state.user.uid).collection('notes').doc(noteId).delete();
+    } catch (e) {
+        console.error("Deletion failed:", e);
+    }
+}
+
+async function addNoteFeedback(rating, comment) {
+    try {
+        await db.collection('feedback').add({
+            uid: state.user.uid,
+            userName: state.user.displayName,
+            rating: rating,
+            comment: comment,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert("Спасибо за ваш отзыв! Мы становимся лучше для вас.");
+    } catch (e) {
+        console.error("Feedback error:", e);
+    }
+}
+
+function getNoteStats() {
+    const total = state.notes.length;
+    const archived = state.notes.filter(n => n.isArchived).length;
+    const active = total - archived;
+    return { total, archived, active };
 }
