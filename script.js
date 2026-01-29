@@ -458,10 +458,10 @@ function loadSettingsUI() {
     window.setColorTarget(state.colorTarget);
 }
 
-// Обновление всех текстов на странице
 function updateInterfaceText(previewLang = null) {
     const lang = previewLang || state.config.lang;
     const dict = i18n[lang];
+    if (!dict) return;
 
     const map = {
         '#lang-login': dict.login,
@@ -485,26 +485,82 @@ function updateInterfaceText(previewLang = null) {
         '#lang-stat-notes': dict.stat_notes
     };
 
-    for (let [id, text] of Object.entries(map)) {
+for (let [id, text] of Object.entries(map)) {
         const el = document.querySelector(id);
         if (el) el.textContent = text;
     }
 
-    // Плейсхолдеры
-    document.getElementById('search-input').placeholder = dict.search_ph;
-    document.getElementById('note-title').placeholder = dict.editor_title_ph;
-    document.getElementById('note-text').placeholder = dict.editor_text_ph;
-    document.getElementById('note-tags').placeholder = dict.tag_ph;
-}
-
-// Утилита конвертации цвета
-function hslToHex(h, s, l) {
-    l /= 100;
-    const a = s * Math.min(l, 1 - l) / 100;
-    const f = n => {
-        const k = (n + h / 30) % 12;
-        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-        return Math.round(255 * color).toString(16).padStart(2, '0');
+    // Безопасное обновление плейсхолдеров
+    const inputs = {
+        'search-input': dict.search_ph,
+        'note-title': dict.editor_title_ph,
+        'note-text': dict.editor_text_ph,
+        'note-tags': dict.tag_ph
     };
-    return `#${f(0)}${f(8)}${f(4)}`;
+
+    for (let [id, ph] of Object.entries(inputs)) {
+        const el = document.getElementById(id);
+        if (el) el.placeholder = ph;
+    }
 }
+window.renderNotes = () => {
+    const grid = document.getElementById('notes-grid');
+    if (!grid) return;
+
+    const searchEl = document.getElementById('search-input');
+    const sortEl = document.getElementById('sort-select');
+    
+    const searchTerm = searchEl ? searchEl.value.toLowerCase() : '';
+    const sortBy = sortEl ? sortEl.value : 'newest';
+
+    let filtered = state.notes.filter(n => {
+        const isCorrectView = state.view === 'archive' ? n.isArchived : !n.isArchived;
+        const matchesSearch = (n.title || '').toLowerCase().includes(searchTerm) || 
+                              (n.text || '').toLowerCase().includes(searchTerm);
+        return isCorrectView && matchesSearch;
+    });
+
+    // Сортировка (без изменений)
+    filtered.sort((a, b) => {
+        if (state.view === 'active') {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+        }
+        if (sortBy === 'priority') {
+            const weights = { high: 3, normal: 2, low: 1 };
+            return (weights[b.priority] || 2) - (weights[a.priority] || 2);
+        }
+        if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+        return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    grid.innerHTML = '';
+    filtered.forEach(n => {
+        const card = document.createElement('div');
+        card.className = `note-card ${n.isPinned ? 'pinned' : ''}`;
+        card.style.borderColor = getPriorityColor(n.priority);
+        // Исправляем вызов редактора
+        card.onclick = () => window.openEditor(n.id);
+
+        card.innerHTML = `
+            ${n.isPinned ? '<div class="pin-tag">📌</div>' : ''}
+            <div class="note-card__title">${escapeHtml(n.title || '')}</div>
+            <div class="note-card__text">${escapeHtml(n.text || '')}</div>
+            <div class="note-card__footer">
+                <div class="tags">${(n.tags || []).map(t => `<span class="tag">#${t}</span>`).join('')}</div>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+};
+
+// --- ФИНАЛЬНЫЙ МОСТ (ДОБАВЬ В САМЫЙ КОНЕЦ ФАЙЛА) ---
+// Этот блок принудительно регистрирует функции, даже если скрипт модульный
+document.addEventListener('DOMContentLoaded', () => {
+    window.openSettings = openSettings;
+    window.switchView = switchView;
+    window.openEditor = openEditor;
+    window.saveNote = saveNote;
+    // Добавь сюда остальные функции, которые выдают ReferenceError
+    console.log("Система команд SmartNotes готова.");
+});
