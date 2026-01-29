@@ -54,7 +54,8 @@ const i18n = {
         menu_language: "Язык",
         menu_folders: "Папки",
         menu_create_folder: "Создать",
-        menu_all_notes: "Все заметки"
+        menu_all_notes: "Все заметки",
+        perm_error: "Не хватает прав для этой операции. Проверьте правила безопасности Firestore."
     },
     en: {
         app_title: "Smart Notes",
@@ -91,7 +92,8 @@ const i18n = {
         menu_language: "Language",
         menu_folders: "Folders",
         menu_create_folder: "Create",
-        menu_all_notes: "All notes"
+        menu_all_notes: "All notes",
+        perm_error: "Missing or insufficient permissions. Check Firestore security rules."
     }
 };
 
@@ -101,7 +103,7 @@ let state = {
     notes: [],
     folders: [],
     view: 'active',
-    selectedFolderId: null, // null = все папки
+    selectedFolderId: null,
     editingId: null,
     editorPinned: false,
     colorTarget: 'accent',
@@ -121,9 +123,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateInterfaceText();
 
     try {
+        // если использовался redirect, заберём результат (без этого popup может сломаться)
         await auth.getRedirectResult();
-    } catch (error) {
-        console.error("Ошибка редиректа:", error);
+    } catch (e) {
+        console.warn("Redirect result error:", e);
     }
 
     auth.onAuthStateChanged(user => {
@@ -147,7 +150,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    registerGlobals(); // регистрируем глобальные функции
+    registerGlobals();
 });
 
 // --- АВТОРИЗАЦИЯ И АККАУНТ ---
@@ -155,10 +158,12 @@ const login = async () => {
     try {
         await auth.signInWithPopup(provider);
     } catch (e) {
+        // если всплывашка заблокирована — попробуем redirect
         if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
             await auth.signInWithRedirect(provider);
         } else {
-            console.error(e);
+            console.error("Login error:", e);
+            alert(e.message || "Login failed");
         }
     }
 };
@@ -179,7 +184,7 @@ function updateProfileUI(user) {
     if (name) name.textContent = user.displayName || 'User';
 }
 
-// --- РАБОТА С ДАННЫМИ (FIRESTORE) ---
+// --- Firestore подписки ---
 function subscribeNotes(uid) {
     db.collection("notes")
       .where("uid", "==", uid)
@@ -187,7 +192,9 @@ function subscribeNotes(uid) {
           state.notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           renderNotes();
           updateStats();
-      }, err => console.error("Ошибка Firestore:", err));
+      }, err => {
+          console.error("Ошибка Firestore (notes):", err);
+      });
 }
 
 function subscribeFolders(uid) {
@@ -198,22 +205,41 @@ function subscribeFolders(uid) {
           state.folders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           renderFolders();
           populateEditorFolderSelect();
-      }, err => console.error("Ошибка Firestore (folders):", err));
+      }, err => {
+          console.error("Ошибка Firestore (folders):", err);
+      });
 }
 
+// --- СОЗДАНИЕ/УДАЛЕНИЕ ПАПКИ ---
 async function createFolder() {
     const input = document.getElementById('new-folder-name');
+    const colorInput = document.getElementById('new-folder-color');
     const name = (input?.value || '').trim();
-    if (!name || !state.user) return;
+    const color = (colorInput?.value || '#00ffcc').trim();
+
+    if (!name) {
+        alert("Введите название папки.");
+        return;
+    }
+    if (!state.user) {
+        alert("Требуется авторизация для создания папки.");
+        return;
+    }
+
     try {
         await db.collection("folders").add({
             uid: state.user.uid,
             name,
+            color,
             createdAt: Date.now()
         });
         input.value = '';
     } catch (e) {
-        alert("Ошибка создания папки: " + e.message);
+        console.error("Ошибка создания папки:", e);
+        const msg = (e && e.message && e.message.includes('Missing or insufficient permissions')) ?
+            i18n[state.config.lang].perm_error :
+            (e.message || String(e));
+        alert("Ошибка создания папки: " + msg);
     }
 }
 
@@ -221,9 +247,9 @@ async function deleteFolder(folderId) {
     if (!folderId) return;
     if (!confirm("Удалить папку? Заметки останутся без папки.")) return;
     try {
-        // Удалим саму папку
+        // удаляем папку
         await db.collection("folders").doc(folderId).delete();
-        // Очищаем folderId у заметок (опционально)
+        // очищаем folderId у заметок (batch)
         const notesSnapshot = await db.collection("notes")
             .where("uid", "==", state.user.uid)
             .where("folderId", "==", folderId)
@@ -232,22 +258,28 @@ async function deleteFolder(folderId) {
         notesSnapshot.forEach(d => batch.update(d.ref, { folderId: null }));
         await batch.commit();
     } catch (e) {
-        alert("Ошибка удаления папки: " + e.message);
+        console.error("Ошибка удаления папки:", e);
+        const msg = (e && e.message && e.message.includes('Missing or insufficient permissions')) ?
+            i18n[state.config.lang].perm_error :
+            (e.message || String(e));
+        alert("Ошибка удаления папки: " + msg);
     }
 }
 
-// --- РЕНДЕРИНГ ПАПОК ---
+// --- РЕНДЕР ПАПОК ---
 function renderFolders() {
     const list = document.getElementById('folders-list');
     if (!list) return;
     list.innerHTML = '';
 
+    // Сортировка: можно оставить уже упорядоченной из запросa
     state.folders.forEach(f => {
         const el = document.createElement('div');
         el.className = 'folder-item' + (state.selectedFolderId === f.id ? ' active' : '');
-        el.innerHTML = `<span class="folder-name">${escapeHtml(f.name)}</span>
+        const colorDot = `<span class="folder-color-dot" style="background:${escapeHtml(f.color || '#555')};"></span>`;
+        el.innerHTML = `<div class="folder-name">${colorDot}<span class="folder-title">${escapeHtml(f.name)}</span></div>
             <div class="folder-actions">
-                <button title="Выбрать" onclick="selectFolder('${f.id}')">📁</button>
+                <button title="Выбрать" onclick="event.stopPropagation(); selectFolder('${f.id}')">📁</button>
                 <button title="Удалить" onclick="event.stopPropagation(); deleteFolder('${f.id}')">🗑️</button>
             </div>`;
         el.onclick = () => selectFolder(f.id);
@@ -255,26 +287,24 @@ function renderFolders() {
     });
 }
 
+// --- ВЫБОР ПАПКИ ---
 function selectFolder(id) {
-    // id === null означает все заметки
     state.selectedFolderId = id;
-    // Обновим визуалку списка папок
+    // обновим UI списка (файнд по data)
     document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
     if (id) {
         const target = Array.from(document.querySelectorAll('.folder-item'))
-            .find(el => el.innerHTML.includes(`selectFolder('${id}')`) || el.querySelector('.folder-actions button')?.getAttribute('onclick')?.includes(id));
+            .find(el => el.querySelector('.folder-actions button')?.getAttribute('onclick')?.includes(id));
         if (target) target.classList.add('active');
     }
-    // Обновим select в редакторе
     populateEditorFolderSelect();
     renderNotes();
 }
 
-// Заполняем выпадающий список папок в редакторе
+// --- Заполнение select в редакторе ---
 function populateEditorFolderSelect() {
     const sel = document.getElementById('note-folder-select');
     if (!sel) return;
-    // запомним текущий выбор
     const prev = sel.value || '';
     sel.innerHTML = `<option value="">Без папки</option>`;
     state.folders.forEach(f => {
@@ -283,12 +313,11 @@ function populateEditorFolderSelect() {
         o.textContent = f.name;
         sel.appendChild(o);
     });
-    // если ранее был выбран folder в state, ставим его
     if (state.selectedFolderId) sel.value = state.selectedFolderId;
     else sel.value = prev;
 }
 
-// --- РЕНДЕРИНГ ЗАМЕТОК ---
+// --- ��ЕНДЕР ЗАМЕТОК ---
 const renderNotes = () => {
     const grid = document.getElementById('notes-grid');
     if (!grid) return;
@@ -299,18 +328,16 @@ const renderNotes = () => {
     let filtered = state.notes.filter(n => {
         const isCorrectView = state.view === 'archive' ? n.isArchived : !n.isArchived;
         const matchesFolder = state.selectedFolderId ? (n.folderId === state.selectedFolderId) : true;
-        const matchesSearch = (n.title || '').toLowerCase().includes(searchTerm) || 
+        const matchesSearch = (n.title || '').toLowerCase().includes(searchTerm) ||
                              (n.text || '').toLowerCase().includes(searchTerm);
         return isCorrectView && matchesFolder && matchesSearch;
     });
 
-    // Сортировка
     filtered.sort((a, b) => {
         if (state.view === 'active') {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
         }
-
         if (sortBy === 'priority') {
             const weights = { high: 3, normal: 2, low: 1 };
             return (weights[b.priority] || 2) - (weights[a.priority] || 2);
@@ -327,6 +354,8 @@ const renderNotes = () => {
         card.onclick = () => openEditor(n.id);
 
         const folderName = n.folderId ? (state.folders.find(f => f.id === n.folderId)?.name || '') : '';
+        const folderColor = n.folderId ? (state.folders.find(f => f.id === n.folderId)?.color || '') : '';
+
         card.innerHTML = `
             ${n.isPinned ? '<div class="pin-tag">📌</div>' : ''}
             <div class="note-card__title">${escapeHtml(n.title || '')}</div>
@@ -335,12 +364,13 @@ const renderNotes = () => {
                 <div class="tags">${(n.tags || []).map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('')}</div>
                 ${n.showTimestamp ? `<div class="date">${new Date(n.createdAt).toLocaleDateString()}</div>` : ''}
             </div>
-            ${folderName ? `<div class="note-folder">📁 ${escapeHtml(folderName)}</div>` : ''}
+            ${folderName ? `<div class="note-folder">${folderColor ? `<span class="folder-color-dot" style="background:${escapeHtml(folderColor)}"></span>` : ''}📁 ${escapeHtml(folderName)}</div>` : ''}
         `;
         grid.appendChild(card);
     });
 };
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ UI ---
+
+// --- UI HELPERS ---
 const switchView = (v) => {
     state.view = v;
     document.querySelectorAll('.view-tab').forEach(btn => {
@@ -361,6 +391,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// --- THEME & I/O ---
 function applyTheme(cfg) {
     const r = document.documentElement;
     r.style.setProperty('--accent', cfg.accent);
@@ -369,7 +400,17 @@ function applyTheme(cfg) {
     r.style.setProperty('--accent-glow', cfg.accent + '40');
 }
 
-// --- ЛОГИКА РЕДАКТОРА ---
+function hslToHex(h, s, l) {
+    l /= 100;
+    const a = s * Math.min(l, 1 - l) / 100;
+    const f = n => {
+        const k = (n + h / 30) % 12;
+        return Math.round(255 * (l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1))).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+// --- РЕДАКТОР ---
 const openEditor = (id = null) => {
     state.editingId = id;
     const modal = document.getElementById('editor-modal');
@@ -408,6 +449,7 @@ const openEditor = (id = null) => {
     updatePinBtnUI();
     if (modal) modal.classList.add('active');
 };
+
 const closeEditor = () => {
     const modal = document.getElementById('editor-modal');
     if (modal) modal.classList.remove('active');
@@ -428,10 +470,8 @@ const saveNote = async () => {
         updatedAt: Date.now()
     };
 
-    // folder selection from editor
     const folderSelect = document.getElementById('note-folder-select');
-    if (folderSelect && folderSelect.value) data.folderId = folderSelect.value;
-    else data.folderId = null;
+    data.folderId = (folderSelect && folderSelect.value) ? folderSelect.value : null;
 
     try {
         if (state.editingId) {
@@ -444,14 +484,25 @@ const saveNote = async () => {
             await db.collection("notes").add(data);
         }
         closeEditor();
-    } catch (e) { alert("Ошибка: " + e.message); }
+    } catch (e) {
+        console.error("Ошибка сохранения заметки:", e);
+        const msg = (e && e.message && e.message.includes('Missing or insufficient permissions')) ?
+            i18n[state.config.lang].perm_error :
+            (e.message || String(e));
+        alert("Ошибка: " + msg);
+    }
 };
 
 const deleteNoteWrapper = async () => {
     if (!state.editingId) return;
     if (confirm(i18n[state.config.lang].confirm_del)) {
-        await db.collection("notes").doc(state.editingId).delete();
-        closeEditor();
+        try {
+            await db.collection("notes").doc(state.editingId).delete();
+            closeEditor();
+        } catch (e) {
+            console.error("Ошибка удаления заметки:", e);
+            alert(e.message || "Ошибка удаления");
+        }
     }
 };
 
@@ -462,18 +513,14 @@ const togglePin = () => {
 
 const toggleArchive = async () => {
     if (!state.editingId) return;
-    
-    // Находим текущую заметку
     const note = state.notes.find(n => n.id === state.editingId);
     if (!note) return;
-
     try {
-        await db.collection("notes").doc(state.editingId).update({
-            isArchived: !note.isArchived // Меняем статус на противоположный
-        });
-        closeEditor(); // Закрываем редактор после перемещения
+        await db.collection("notes").doc(state.editingId).update({ isArchived: !note.isArchived });
+        closeEditor();
     } catch (e) {
-        alert("Ошибка архивации: " + e.message);
+        console.error("Ошибка архивации:", e);
+        alert(e.message || "Ошибка архивации");
     }
 };
 
@@ -484,7 +531,7 @@ function updatePinBtnUI() {
 
 const cyclePriority = () => {
     const label = document.getElementById('priority-label');
-    const current = label.dataset.priority || 'normal';
+    const current = label?.dataset?.priority || 'normal';
     const sequence = ['low', 'normal', 'high'];
     const next = sequence[(sequence.indexOf(current) + 1) % sequence.length];
     updatePriorityUI(next);
@@ -493,8 +540,7 @@ const cyclePriority = () => {
 function updatePriorityUI(p) {
     const label = document.getElementById('priority-label');
     const indicator = document.getElementById('priority-indicator');
-    const dict = i18n[state.config.lang];
-
+    const dict = i18n[state.config.lang] || i18n.ru;
     if (!label) return;
     label.dataset.priority = p;
     if (p === 'low') {
@@ -509,20 +555,23 @@ function updatePriorityUI(p) {
     }
 }
 
-// --- СОХРАНЕНИЕ, УДАЛЕНИЕ, ОТЗЫВ ---
+// --- ОБРАТНАЯ СВЯЗЬ ---
 const sendFeedback = async () => {
     const textEl = document.getElementById('feedback-text');
     if (!textEl?.value.trim()) return;
     try {
         await db.collection("feedback").add({
-            uid: state.user.uid,
+            uid: state.user?.uid || null,
             text: textEl.value,
             createdAt: Date.now()
         });
         alert("Спасибо за отзыв!");
         textEl.value = "";
         closeFeedback();
-    } catch (e) { alert(e.message); }
+    } catch (e) {
+        console.error("Ошибка отправки отзыва:", e);
+        alert(e.message || "Ошибка отправки отзыва");
+    }
 };
 
 const openFeedback = () => document.getElementById('feedback-modal')?.classList.add('active');
@@ -534,16 +583,15 @@ const openSettings = () => {
     document.getElementById('settings-modal')?.classList.add('active');
     loadSettingsUI();
 };
-// --- ЛОГИКА НАСТРОЕК (ПРОДОЛЖЕНИЕ) ---
+
 const closeSettings = () => {
     document.getElementById('settings-modal')?.classList.remove('active');
-    applyTheme(state.config); // Откат изменений, если не нажали ОК
+    applyTheme(state.config);
 };
 
 const switchTab = (tab) => {
     document.querySelectorAll('.tab-trigger').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(c => c.classList.remove('active'));
-    
     document.getElementById(`lang-tab-${tab}`)?.classList.add('active');
     document.getElementById(`tab-${tab}`)?.classList.add('active');
 };
@@ -554,7 +602,6 @@ const setLanguage = (lang) => {
     localStorage.setItem('sn_lang', lang);
     updateInterfaceText(lang);
     loadSettingsUI();
-    // обновляем кнопки меню (в левой панели)
     document.getElementById('menu-lang-ru')?.classList.toggle('active', lang === 'ru');
     document.getElementById('menu-lang-en')?.classList.toggle('active', lang === 'en');
 };
@@ -588,7 +635,6 @@ const applySettings = () => {
     localStorage.setItem('sn_accent', state.config.accent);
     localStorage.setItem('sn_bg', state.config.bg);
     localStorage.setItem('sn_text', state.config.text);
-    
     updateInterfaceText();
     document.getElementById('settings-modal')?.classList.remove('active');
 };
@@ -610,7 +656,7 @@ function loadSettingsUI() {
 
 function updateInterfaceText(previewLang = null) {
     const lang = previewLang || state.config.lang;
-    const dict = i18n[lang];
+    const dict = i18n[lang] || i18n.ru;
     if (!dict) return;
 
     const map = {
@@ -640,9 +686,9 @@ function updateInterfaceText(previewLang = null) {
         '#menu-all-notes': dict.menu_all_notes
     };
 
-    for (let [id, text] of Object.entries(map)) {
-        const el = document.querySelector(id);
-        if (el) el.textContent = text;
+    for (let [sel, txt] of Object.entries(map)) {
+        const el = document.querySelector(sel);
+        if (el) el.textContent = txt;
     }
 
     const inputs = {
@@ -658,29 +704,18 @@ function updateInterfaceText(previewLang = null) {
     }
 }
 
-// Утилита для конвертации цвета
-function hslToHex(h, s, l) {
-    l /= 100;
-    const a = s * Math.min(l, 1 - l) / 100;
-    const f = n => {
-        const k = (n + h / 30) % 12;
-        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-        return Math.round(255 * color).toString(16).padStart(2, '0');
-    };
-    return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-// --- ЛЕВОЕ МЕНЮ ---
+// --- ЛЕВОЕ ВЫДВИЖНОЕ МЕНЮ ---
 function toggleLeftMenu() {
     const menu = document.getElementById('left-menu');
     if (!menu) return;
-    menu.classList.toggle('open');
-    // актуализируем активные кнопки языка
+    const isOpen = menu.classList.toggle('open');
+    menu.setAttribute('aria-hidden', (!isOpen).toString());
+    // обновляем активные кнопки языка
     document.getElementById('menu-lang-ru')?.classList.toggle('active', state.config.lang === 'ru');
     document.getElementById('menu-lang-en')?.classList.toggle('active', state.config.lang === 'en');
 }
 
-// --- ГЛОБАЛЬНЫЙ МОСТ (РЕГИСТРАЦИЯ ФУНКЦИЙ) ---
+// --- РЕГИСТРАЦИЯ ГЛОБАЛЬНЫХ ФУНКЦИЙ ---
 function registerGlobals() {
     const w = window;
     w.login = login;
