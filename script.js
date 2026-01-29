@@ -211,15 +211,41 @@ const renderNotes = () => {
         const card = document.createElement('div');
         card.className = `note-card ${n.isPinned ? 'pinned' : ''}`;
         card.style.borderColor = getPriorityColor(n.priority);
-        card.onclick = () => openEditor(n.id);
+        const openEditor = (id = null) => {
+    state.editingId = id;
+    const modal = document.getElementById('editor-modal');
+    const deleteBtn = document.getElementById('delete-btn');
+    const archiveBtn = document.getElementById('archive-btn');
+    const saveBtnText = document.getElementById('save-btn-text');
 
-        card.innerHTML = `
-            ${n.isPinned ? '<div class="pin-tag">📌</div>' : ''}
-            <div class="note-card__title">${escapeHtml(n.title || '')}</div>
-            <div class="note-card__text">${escapeHtml(n.text || '')}</div>
-            <div class="note-card__footer">
-                <div class="tags">${(n.tags || []).map(t => `<span class="tag">#${t}</span>`).join('')}</div>
-                ${n.showTimestamp ? `<div class="date">${new Date(n.createdAt).toLocaleDateString()}</div>` : ''}
+    if (id) {
+        const note = state.notes.find(n => n.id === id);
+        if (note) {
+            if (archiveBtn) {
+                archiveBtn.style.display = 'block';
+                archiveBtn.textContent = note.isArchived ? '📤' : '📦';
+            }
+            document.getElementById('note-title').value = note.title || '';
+            document.getElementById('note-text').value = note.text || '';
+            document.getElementById('note-tags').value = (note.tags || []).join(' ');
+            document.getElementById('show-time').checked = note.showTimestamp !== false;
+            state.editorPinned = !!note.isPinned;
+            updatePriorityUI(note.priority || 'normal');
+            if (deleteBtn) deleteBtn.style.display = 'block';
+            if (saveBtnText) saveBtnText.textContent = i18n[state.config.lang].update_btn;
+        }
+    } else {
+        if (archiveBtn) archiveBtn.style.display = 'none';
+        document.getElementById('note-title').value = '';
+        document.getElementById('note-text').value = '';
+        document.getElementById('note-tags').value = '';
+        document.getElementById('show-time').checked = true;
+        state.editorPinned = false;
+        updatePriorityUI('normal');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (saveBtnText) saveBtnText.textContent = i18n[state.config.lang].save_btn;
+    }
+        ${n.showTimestamp ? `<div class="date">${new Date(n.createdAt).toLocaleDateString()}</div>` : ''}
             </div>
         `;
         grid.appendChild(card);
@@ -568,4 +594,5 @@ document.addEventListener('DOMContentLoaded', () => {
     window.sendFeedback = sendFeedback;
 
     console.log("🚀 Система Smart Notes готова к работе.");
+
 });
