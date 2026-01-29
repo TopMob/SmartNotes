@@ -1,28 +1,36 @@
-// =========================================
-// 1. ОТРИСОВКА ЗАМЕТОК
-// =========================================
-function renderNotes(notesToRender) {
+/**
+ * Smart Notes - Управление интерфейсом и отрисовка
+ */
+
+// 1. ОТРИСОВКА КАРТОЧЕК ЗАМЕТОК
+function renderNotes(notes) {
     const grid = document.getElementById('notes-grid');
+    if (!grid) return;
     grid.innerHTML = '';
 
-    notesToRender.forEach(note => {
+    if (notes.length === 0) {
+        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; opacity: 0.5; margin-top: 50px;">
+            <span class="material-icons-round" style="font-size: 48px;">note_stack</span>
+            <p>Здесь пока пусто...</p>
+        </div>`;
+        return;
+    }
+
+    notes.forEach(note => {
         const card = document.createElement('div');
-        // Добавляем класс приоритета для полоски слева
         card.className = `note-card priority-${note.priority || 'low'}`;
         
-        // Находим цвет папки, если она есть
+        // Поиск имени папки для тега на карточке
         const folder = state.folders.find(f => f.id === note.folderId);
-        const folderTag = folder ? `<span class="note-folder-tag" style="color: ${folder.color}">${folder.name}</span>` : '';
+        const folderTag = folder ? `<span class="note-folder-info" style="color: ${folder.color}">${folder.name}</span>` : '';
 
         card.innerHTML = `
-            <div class="note-card-content">
-                <h3>${note.title || 'Без названия'}</h3>
-                <p>${note.content || ''}</p>
-                <div class="note-footer-ui">
-                    ${folderTag}
-                    <div class="note-tags">
-                        ${(note.tags || []).map(t => `<span class="tag">#${t}</span>`).join('')}
-                    </div>
+            <h3>${note.title || 'Без названия'}</h3>
+            <p>${note.content || ''}</p>
+            <div class="note-card-footer">
+                ${folderTag}
+                <div class="tags">
+                    ${(note.tags || []).map(t => `<span class="tag">#${t}</span>`).join('')}
                 </div>
             </div>
         `;
@@ -32,70 +40,74 @@ function renderNotes(notesToRender) {
     });
 }
 
-// =========================================
 // 2. ОТРИСОВКА ПАПОК В САЙДБАРЕ
-// =========================================
 function renderFolders() {
-    const container = document.getElementById('folders-list');
-    container.innerHTML = '';
+    const list = document.getElementById('folders-list');
+    if (!list) return;
+    list.innerHTML = '';
 
     state.folders.forEach(folder => {
-        const item = document.createElement('button');
-        item.className = `nav-item ${state.activeFolderId === folder.id ? 'active' : ''}`;
+        const item = document.createElement('div');
+        item.className = `folder-item ${state.activeFolderId === folder.id ? 'active' : ''}`;
         item.innerHTML = `
-            <span class="folder-color-dot" style="background: ${folder.color}"></span>
-            <span class="folder-name">${folder.name}</span>
+            <span class="folder-dot" style="background: ${folder.color}"></span>
+            <span class="folder-text">${folder.name}</span>
         `;
         
         item.onclick = () => {
             state.currentView = 'folder';
             state.activeFolderId = folder.id;
-            // Убираем активный класс у всех и ставим этому
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            item.classList.add('active');
-            filterAndRenderNotes();
+            
+            // На мобилках закрываем меню после выбора папки
+            if (window.innerWidth <= 768) toggleSidebar(false);
+            
+            filterAndRender();
         };
-        container.appendChild(item);
+        list.appendChild(item);
     });
 }
 
-// =========================================
-// 3. УПРАВЛЕНИЕ МОДАЛКАМИ
-// =========================================
-function openFolderModal() {
-    document.getElementById('folder-modal').classList.add('active');
+// 3. УПРАВЛЕНИЕ МОБИЛЬНЫМ МЕНЮ (SIDEBAR)
+const menuToggle = document.getElementById('menu-toggle');
+const sidebar = document.getElementById('sidebar');
+
+function toggleSidebar(forceState = null) {
+    if (!sidebar) return;
+    const isActive = forceState !== null ? forceState : !sidebar.classList.contains('active');
+    
+    if (isActive) {
+        sidebar.classList.add('active');
+    } else {
+        sidebar.classList.remove('active');
+    }
 }
 
-function closeFolderModal() {
-    document.getElementById('folder-modal').classList.remove('active');
-}
-
-function openFeedbackModal() {
-    document.getElementById('feedback-modal').classList.add('active');
-}
-
-function closeFeedbackModal() {
-    document.getElementById('feedback-modal').classList.remove('active');
-}
-
-// Переключатель сайдбара (для мобилок)
-document.getElementById('menu-toggle').onclick = () => {
-    const sidebar = document.getElementById('sidebar');
-    sidebar.classList.toggle('active');
-};
-
-// Инициализация звезд рейтинга
-document.querySelectorAll('.star-rating-mini span, .star-rating span').forEach(star => {
-    star.onclick = (e) => {
-        const val = e.target.getAttribute('data-value') || e.target.getAttribute('data-v');
-        state.currentRating = val;
-        updateStars(val);
+if (menuToggle) {
+    menuToggle.onclick = (e) => {
+        e.stopPropagation();
+        toggleSidebar();
     };
+}
+
+// Закрытие сайдбара при клике вне его (на мобилках)
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('active')) {
+        if (!sidebar.contains(e.target) && e.target !== menuToggle) {
+            toggleSidebar(false);
+        }
+    }
 });
 
-function updateStars(rating) {
-    document.querySelectorAll('[data-value], [data-v]').forEach(star => {
-        const v = star.getAttribute('data-value') || star.getAttribute('data-v');
-        star.innerText = v <= rating ? 'star' : 'star_outline';
-    });
+// 4. ПЕРЕКЛЮЧЕНИЕ ОСНОВНЫХ ВИДОВ
+function setView(view) {
+    state.currentView = view;
+    state.activeFolderId = null;
+    
+    // Обновляем активные классы в меню
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+    if(view === 'notes') document.getElementById('nav-all')?.classList.add('active');
+    if(view === 'archive') document.getElementById('nav-archive')?.classList.add('active');
+
+    if (window.innerWidth <= 768) toggleSidebar(false);
+    filterAndRender();
 }
