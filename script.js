@@ -116,20 +116,22 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTheme(state.config);
     updateInterfaceText();
 
-    // Единый слушатель состояния авторизации
-    auth.onAuthStateChanged(user => {
-        state.user = user;
+auth.onAuthStateChanged(user => {
+    console.log("Auth state changed. User:", user ? user.displayName : "none"); // Проверка в консоли
+    state.user = user;
+    
+    if (user) {
         updateAuthUI(user);
-        if (user) {
-            subscribeNotes(user.uid);
-            updateProfile(user);
-            document.body.classList.add('logged-in');
-        } else {
-            state.notes = [];
-            renderNotes();
-            document.body.classList.remove('logged-in');
-        }
-    });
+        updateProfile(user);
+        subscribeNotes(user.uid);
+        document.body.classList.add('logged-in');
+    } else {
+        updateAuthUI(null);
+        state.notes = [];
+        renderNotes();
+        document.body.classList.remove('logged-in');
+    }
+});
 
     // Обработка результата редиректа для авторизации
     auth.getRedirectResult().then((result) => {
