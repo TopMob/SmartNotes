@@ -1,302 +1,383 @@
 const UI = {
-    init() {
-        this.appContainer = document.getElementById('app');
-        this.sidebar = document.getElementById('sidebar');
-        this.searchBar = document.getElementById('search-input');
-        this.userDropdown = document.getElementById('user-dropdown');
-        this.notesGrid = document.getElementById('notes-grid');
-        this.viewTitle = document.getElementById('view-title');
-        
-        this.setupEventListeners();
-        this.setupIntersectionObserver();
-        this.initSidebarState();
+    nodes: {},
+    state: {
+        sidebarOpen: localStorage.getItem('sn_sidebar') !== 'false',
+        lastScroll: 0,
+        isMobile: window.innerWidth <= 768
     },
 
-    setupEventListeners() {
-        document.addEventListener('keydown', (e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-                e.preventDefault();
-                this.searchBar.focus();
-            }
-            if (e.key === 'Escape') this.closeAllOverlays();
+    init() {
+        this.cacheDOM();
+        this.bindEvents();
+        this.setupObservers();
+        this.restoreState();
+        this.initEffects();
+        this.greetUser();
+    },
+
+    cacheDOM() {
+        this.nodes = {
+            app: document.getElementById('app'),
+            sidebar: document.getElementById('sidebar'),
+            header: document.querySelector('.main-navigator'),
+            grid: document.getElementById('notes-grid'),
+            search: document.getElementById('search-input'),
+            fab: document.querySelector('.floating-action-button'),
+            userMenu: document.getElementById('user-dropdown'),
+            folderList: document.getElementById('folders-list-container'),
+            editor: document.getElementById('editor-modal'),
+            editorPanel: document.querySelector('.editor-glass-panel')
+        };
+    },
+
+    bindEvents() {
+        window.addEventListener('resize', () => {
+            this.state.isMobile = window.innerWidth <= 768;
+            if (this.state.isMobile) this.toggleSidebar(false);
+        });
+
+        document.addEventListener('keydown', e => this.handleHotkeys(e));
+        
+        this.nodes.search.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value.toLowerCase();
+            this.animateSearch(e.target);
+            filterAndRender();
         });
 
         const viewport = document.querySelector('.content-viewport');
-        viewport.addEventListener('scroll', () => {
-            const nav = document.querySelector('.main-navigator');
-            if (viewport.scrollTop > 30) {
-                nav.classList.add('floating');
-            } else {
-                nav.classList.remove('floating');
-            }
-        });
-
-        this.searchBar.addEventListener('focus', () => {
-            this.searchBar.parentElement.classList.add('active-glow');
-        });
-
-        this.searchBar.addEventListener('blur', () => {
-            this.searchBar.parentElement.classList.remove('active-glow');
-        });
-    },
-
-    initSidebarState() {
-        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-        if (isCollapsed) {
-            this.appContainer.classList.add('sidebar-collapsed');
-        } else {
-            this.appContainer.classList.remove('sidebar-collapsed');
+        if (viewport) {
+            viewport.addEventListener('scroll', () => this.handleScroll(viewport));
         }
+
+        document.addEventListener('click', (e) => this.handleOutsideClick(e));
+
+        if (this.state.isMobile) this.initSwipeGestures();
     },
 
-    toggleSidebar() {
-        const isNowCollapsed = this.appContainer.classList.toggle('sidebar-collapsed');
-        localStorage.setItem('sidebarCollapsed', isNowCollapsed);
+    restoreState() {
+        if (!this.state.sidebarOpen) {
+            this.nodes.app.classList.add('sidebar-collapsed');
+        } else {
+            this.nodes.app.classList.remove('sidebar-collapsed');
+        }
         
-        const icon = document.querySelector('.menu-toggle-v2 span');
-        icon.style.transform = 'scale(0.5) rotate(180deg)';
         setTimeout(() => {
-            icon.textContent = isNowCollapsed ? 'menu' : 'menu_open';
-            icon.style.transform = 'scale(1) rotate(0deg)';
-        }, 200);
+            document.body.style.opacity = '1'; 
+            this.nodes.app.classList.add('loaded');
+        }, 100);
     },
 
-    toggleUserMenu() {
-        this.userDropdown.classList.toggle('active');
+    toggleSidebar(forceState = null) {
+        const newState = forceState !== null ? forceState : !this.state.sidebarOpen;
+        this.state.sidebarOpen = newState;
+        localStorage.setItem('sn_sidebar', newState);
+
+        if (newState) {
+            this.nodes.app.classList.remove('sidebar-collapsed');
+        } else {
+            this.nodes.app.classList.add('sidebar-collapsed');
+        }
+
+        this.triggerHaptic();
     },
 
-    closeAllOverlays() {
-        this.userDropdown.classList.remove('active');
-        document.querySelectorAll('.editor-overlay, .system-alert-overlay').forEach(el => {
-            el.classList.remove('active');
-        });
-    },
+    handleScroll(viewport) {
+        const current = viewport.scrollTop;
+        const delta = current - this.state.lastScroll;
+        
+        if (current > 20) {
+            this.nodes.header.classList.add('scrolled');
+        } else {
+            this.nodes.header.classList.remove('scrolled');
+        }
 
-    updateHeader(title) {
-        if (!this.viewTitle) return;
-        this.viewTitle.classList.add('title-change');
-        setTimeout(() => {
-            this.viewTitle.textContent = title;
-            this.viewTitle.classList.remove('title-change');
-        }, 300);
+        if (delta > 0 && current > 100 && !this.state.isMobile) {
+            this.nodes.fab.classList.add('fab-hidden');
+        } else {
+            this.nodes.fab.classList.remove('fab-hidden');
+        }
+
+        this.state.lastScroll = current;
     },
 
     renderNotes(notes) {
-        if (!this.notesGrid) return;
-        
-        this.notesGrid.style.opacity = '0';
-        
+        const grid = this.nodes.grid;
+        if (!grid) return;
+
+        const oldCards = Array.from(grid.children);
+        oldCards.forEach(c => {
+            c.style.transform = 'scale(0.9) translateY(20px)';
+            c.style.opacity = '0';
+        });
+
         setTimeout(() => {
-            this.notesGrid.innerHTML = '';
+            grid.innerHTML = '';
             
-            if (notes.length === 0) {
+            if (!notes || notes.length === 0) {
                 this.renderEmptyState();
-                this.notesGrid.style.opacity = '1';
                 return;
             }
 
-            notes.forEach((note, index) => {
-                const noteElement = this.createNoteCard(note, index);
-                this.notesGrid.appendChild(noteElement);
+            notes.forEach((note, i) => {
+                const card = this.createCardElement(note, i);
+                grid.appendChild(card);
+                this.applyTiltEffect(card);
             });
-
-            this.notesGrid.style.opacity = '1';
         }, 200);
     },
 
-    createNoteCard(note, index) {
-        const card = document.createElement('div');
-        card.className = `note-card-v3 priority-${note.priority || 'low'}`;
-        card.style.animationDelay = `${index * 0.05}s`;
+    createCardElement(note, index) {
+        const el = document.createElement('div');
+        el.className = `note-card-v3 p-${note.priority || 'low'}`;
+        el.style.animationDelay = `${index * 0.05}s`;
         
-        const cleanContent = note.content ? note.content.replace(/<[^>]*>?/gm, '') : '';
-        const date = this.getRelativeTime(note.updatedAt || note.createdAt);
+        const rawContent = note.content || '';
+        const preview = rawContent.replace(/<[^>]*>?/gm, '').substring(0, 140);
+        const dateStr = this.formatTime(note.updatedAt || note.createdAt);
 
-        card.innerHTML = `
-            <div class="card-glass-base" onclick="openEditor(${JSON.stringify(note).replace(/"/g, '&quot;')})">
-                <div class="card-energy-line"></div>
-                <div class="card-body">
-                    <div class="card-meta">
-                        <span class="meta-date">${date}</span>
-                        ${note.priority === 'high' ? '<span class="priority-badge">STORM</span>' : ''}
-                    </div>
-                    <h3 class="card-title">${note.title || 'Untitled'}</h3>
-                    <p class="card-preview">${cleanContent.substring(0, 120)}${cleanContent.length > 120 ? '...' : ''}</p>
-                    <div class="card-tags">
-                        ${(note.tags || []).map(t => `<span class="mini-tag">#${t}</span>`).join('')}
-                    </div>
+        el.innerHTML = `
+            <div class="card-inner" onclick="openEditor(${JSON.stringify(note).replace(/"/g, '&quot;')})">
+                <div class="card-glow"></div>
+                <div class="card-header">
+                    <span class="card-date">${dateStr}</span>
+                    <div class="status-dot"></div>
                 </div>
-                <div class="card-hover-actions">
-                    <button class="icon-action-btn" onclick="event.stopPropagation(); toggleArchive('${note.id}', ${!note.isArchived})">
-                        <span class="material-icons-round">${note.isArchived ? 'unarchive' : 'inventory_2'}</span>
-                    </button>
-                    <button class="icon-action-btn delete-trigger" onclick="event.stopPropagation(); permanentDelete('${note.id}')">
-                        <span class="material-icons-round">delete_outline</span>
-                    </button>
+                <h3 class="card-title">${note.title || 'Без названия'}</h3>
+                <p class="card-body-text">${preview || 'Пустота...'}</p>
+                <div class="card-footer">
+                    <div class="tags-row">
+                        ${(note.tags || []).slice(0, 3).map(t => `<span class="mini-tag">#${t}</span>`).join('')}
+                    </div>
+                    <div class="card-actions-hover">
+                        <button class="icon-btn-glass" onclick="event.stopPropagation(); toggleArchive('${note.id}', ${!note.isArchived})">
+                            <span class="material-icons-round">${note.isArchived ? 'unarchive' : 'inventory_2'}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
-        
-        return card;
-    },
-
-    renderFolders() {
-        const container = document.getElementById('folders-list-container');
-        if (!container) return;
-
-        container.innerHTML = '';
-        state.folders.forEach((folder, index) => {
-            const folderItem = document.createElement('div');
-            folderItem.className = `nav-item ${state.activeFolderId === folder.id ? 'active' : ''}`;
-            folderItem.style.transitionDelay = `${index * 0.03}s`;
-            
-            folderItem.innerHTML = `
-                <span class="material-icons-round" style="color: ${folder.color || 'var(--primary-neon)'}">folder</span>
-                <span class="item-label">${folder.name}</span>
-            `;
-
-            folderItem.onclick = () => {
-                state.currentView = 'folder';
-                state.activeFolderId = folder.id;
-                this.updateHeader(folder.name);
-                filterAndRender();
-            };
-
-            container.appendChild(folderItem);
-        });
+        return el;
     },
 
     renderEmptyState() {
-        this.notesGrid.innerHTML = `
-            <div class="void-state">
-                <div class="void-animation">
-                    <div class="circle"></div>
-                    <div class="circle"></div>
-                    <div class="circle"></div>
+        this.nodes.grid.innerHTML = `
+            <div class="empty-zone">
+                <div class="hologram-container">
+                    <div class="hologram-ring"></div>
+                    <span class="material-icons-round hologram-icon">auto_stories</span>
                 </div>
-                <h3>Пространство пусто</h3>
-                <p>Заполни этот вакуум своими идеями</p>
-                <button class="void-btn" onclick="openEditor()">
-                    <span>Начать поток</span>
-                    <span class="material-icons-round">auto_awesome</span>
-                </button>
+                <h3>Здесь пока тихо</h3>
+                <p>Создай новую реальность прямо сейчас</p>
             </div>
         `;
     },
 
-    getRelativeTime(timestamp) {
-        if (!timestamp) return 'Сейчас';
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-        const now = new Date();
-        const diffInSeconds = Math.floor((now - date) / 1000);
+    renderFolders() {
+        if (!this.nodes.folderList) return;
+        this.nodes.folderList.innerHTML = '';
+        
+        state.folders.forEach((folder, i) => {
+            const item = document.createElement('div');
+            item.className = `nav-item ${state.activeFolderId === folder.id ? 'active' : ''}`;
+            item.style.transitionDelay = `${i * 0.03}s`;
+            item.onclick = () => {
+                state.currentView = 'folder';
+                state.activeFolderId = folder.id;
+                this.updateHeaderTitle(folder.name);
+                filterAndRender();
+                if (this.state.isMobile) this.toggleSidebar(false);
+            };
 
-        if (diffInSeconds < 60) return 'Только что';
-        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}м назад`;
-        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}ч назад`;
+            item.innerHTML = `
+                <span class="material-icons-round" style="color: ${folder.color || '#fff'}">folder</span>
+                <span class="item-label">${folder.name}</span>
+                ${state.activeFolderId === folder.id ? '<div class="active-glow-dot"></div>' : ''}
+            `;
+            this.nodes.folderList.appendChild(item);
+        });
+    },
+
+    updateHeaderTitle(text) {
+        const titleEl = document.getElementById('view-title');
+        titleEl.style.transform = 'translateY(-10px) skewX(-10deg)';
+        titleEl.style.opacity = '0';
+        titleEl.style.filter = 'blur(10px)';
+
+        setTimeout(() => {
+            titleEl.textContent = text;
+            titleEl.style.transform = 'translateY(0) skewX(0)';
+            titleEl.style.opacity = '1';
+            titleEl.style.filter = 'blur(0)';
+        }, 300);
+    },
+
+    openEditorModal(note) {
+        this.nodes.editor.classList.add('active');
+        this.nodes.app.classList.add('blur-bg');
+        
+        setTimeout(() => {
+            this.nodes.editorPanel.classList.add('born');
+        }, 50);
+
+        this.triggerHaptic();
+    },
+
+    closeEditorModal() {
+        this.nodes.editorPanel.classList.remove('born');
+        this.nodes.app.classList.remove('blur-bg');
+        
+        setTimeout(() => {
+            this.nodes.editor.classList.remove('active');
+        }, 300);
+    },
+
+    showToast(msg, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `cyber-toast ${type}`;
+        toast.innerHTML = `
+            <div class="toast-icon-box">
+                <span class="material-icons-round">${type === 'success' ? 'done_all' : 'priority_high'}</span>
+            </div>
+            <div class="toast-text">${msg}</div>
+            <div class="toast-timer"></div>
+        `;
+
+        document.body.appendChild(toast);
+        
+        requestAnimationFrame(() => {
+            toast.style.transform = 'translateY(0) scale(1)';
+            toast.style.opacity = '1';
+        });
+
+        setTimeout(() => {
+            toast.style.transform = 'translateY(20px) scale(0.9)';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+
+        this.triggerHaptic();
+    },
+
+    applyTiltEffect(card) {
+        if (this.state.isMobile) return;
+        
+        card.addEventListener('mousemove', (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const xPct = x / rect.width;
+            const yPct = y / rect.height;
+            
+            const xRot = (0.5 - yPct) * 10;
+            const yRot = (xPct - 0.5) * 10;
+            
+            card.style.transform = `perspective(1000px) rotateX(${xRot}deg) rotateY(${yRot}deg) scale(1.02)`;
+            
+            const glow = card.querySelector('.card-glow');
+            if(glow) {
+                glow.style.background = `radial-gradient(circle at ${x}px ${y}px, rgba(255,255,255,0.1), transparent 100px)`;
+                glow.style.opacity = '1';
+            }
+        });
+
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale(1)';
+            const glow = card.querySelector('.card-glow');
+            if(glow) glow.style.opacity = '0';
+        });
+    },
+
+    initEffects() {
+        document.addEventListener('click', (e) => {
+            this.createClickRipple(e.clientX, e.clientY);
+        });
+
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mouseenter', () => this.triggerHaptic());
+        });
+    },
+
+    createClickRipple(x, y) {
+        const ripple = document.createElement('div');
+        ripple.className = 'system-ripple';
+        ripple.style.left = `${x}px`;
+        ripple.style.top = `${y}px`;
+        document.body.appendChild(ripple);
+        
+        setTimeout(() => ripple.remove(), 600);
+    },
+
+    animateSearch(input) {
+        input.parentElement.animate([
+            { transform: 'scale(1)' },
+            { transform: 'scale(0.98)' },
+            { transform: 'scale(1)' }
+        ], { duration: 200 });
+    },
+
+    handleHotkeys(e) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            this.nodes.search.focus();
+        }
+        if (e.key === 'Escape') this.closeEditorModal();
+    },
+
+    handleOutsideClick(e) {
+        if (this.nodes.userMenu.classList.contains('active')) {
+            if (!e.target.closest('.profile-capsule') && !e.target.closest('#user-dropdown')) {
+                this.nodes.userMenu.classList.remove('active');
+            }
+        }
+    },
+
+    initSwipeGestures() {
+        let startX = 0;
+        document.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+        document.addEventListener('touchend', e => {
+            const endX = e.changedTouches[0].clientX;
+            if (startX < 30 && endX > 100) this.toggleSidebar(true);
+            if (startX > 200 && startX - endX > 100) this.toggleSidebar(false);
+        });
+    },
+
+    greetUser() {
+        const h = new Date().getHours();
+        let text = 'Welcome Back';
+        if (h >= 5 && h < 12) text = 'Good Morning';
+        else if (h >= 12 && h < 18) text = 'Good Afternoon';
+        else if (h >= 18) text = 'Good Evening';
+        else text = 'Late Night Flow';
+        
+        console.log(`%c ${text} `, 'background: #222; color: #00ffcc; padding: 5px; border-radius: 4px;');
+    },
+
+    formatTime(ts) {
+        if (!ts) return '';
+        const date = ts.toDate ? ts.toDate() : new Date(ts);
+        const diff = (new Date() - date) / 1000;
+        
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
         return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     },
 
-    setupIntersectionObserver() {
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        this.revealObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('revealed');
-                    this.revealObserver.unobserve(entry.target);
-                }
-            });
-        }, observerOptions);
+    triggerHaptic() {
+        if (navigator.vibrate) navigator.vibrate(10);
     },
 
-    showToast(message, type = 'default') {
-        const toast = document.createElement('div');
-        toast.className = `smart-toast ${type}`;
-        toast.innerHTML = `
-            <div class="toast-content">
-                <span class="material-icons-round">${type === 'success' ? 'verified' : 'info'}</span>
-                <span>${message}</span>
-            </div>
-            <div class="toast-progress"></div>
-        `;
-        
-        document.body.appendChild(toast);
-        
-        requestAnimationFrame(() => toast.classList.add('visible'));
-        
-        setTimeout(() => {
-            toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 400);
-        }, 3000);
+    setupObservers() {
+        const resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.target === this.nodes.grid) {
+                    
+                }
+            }
+        });
+        if(this.nodes.grid) resizeObserver.observe(this.nodes.grid);
     }
 };
 
-function openEditor(note = null) {
-    const editor = document.getElementById('editor-modal');
-    const titleInp = document.getElementById('note-title');
-    const contentInp = document.getElementById('note-content');
-    
-    currentEditorNote = note;
-    editorTags = note && note.tags ? [...note.tags] : [];
-    currentPriority = note && note.priority ? note.priority : 'low';
-
-    titleInp.value = note ? (note.title || '') : '';
-    contentInp.value = note ? (note.content || '') : '';
-
-    updatePriorityUI();
-    renderEditorTags();
-    
-    editor.classList.add('active');
-    
-    setTimeout(() => {
-        titleInp.focus();
-        document.querySelector('.editor-glass-panel').classList.add('born');
-    }, 100);
-}
-
-async function closeEditor() {
-    const editor = document.getElementById('editor-modal');
-    const title = document.getElementById('note-title').value.trim();
-    const content = document.getElementById('note-content').value.trim();
-
-    document.querySelector('.editor-glass-panel').classList.remove('born');
-
-    if (title || content) {
-        const success = await saveNote(title, content);
-        if (success) UI.showToast('Мысль сохранена', 'success');
-    }
-
-    setTimeout(() => {
-        editor.classList.remove('active');
-        currentEditorNote = null;
-    }, 300);
-}
-
-function updatePriorityUI() {
-    const btn = document.getElementById('priority-btn');
-    const label = document.getElementById('priority-label');
-    if (!btn) return;
-
-    btn.className = `priority-chip p-${currentPriority}`;
-    label.textContent = currentPriority.charAt(0).toUpperCase() + currentPriority.slice(1) + ' Priority';
-}
-
-function togglePriority() {
-    const steps = ['low', 'medium', 'high'];
-    let currentIdx = steps.indexOf(currentPriority);
-    currentPriority = steps[(currentIdx + 1) % steps.length];
-    updatePriorityUI();
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    UI.init();
-    
-    window.onclick = (event) => {
-        if (!event.target.closest('.profile-capsule') && !event.target.closest('.glass-dropdown')) {
-            UI.userDropdown.classList.remove('active');
-        }
-    };
-});
+document.addEventListener('DOMContentLoaded', () => UI.init());
