@@ -159,19 +159,54 @@ function subscribeNotes(uid) {
     });
 }
 
-window.login = () => {
-    auth.signInWithPopup(provider)
-        .then((result) => {
-            console.log("Успешный вход:", result.user.displayName);
-        })
-        .catch((error) => {
-            console.error("Ошибка входа:", error.code, error.message);
-            // Если попап заблокирован браузером, пробуем редирект как запасной вариант
-            if (error.code === 'auth/popup-blocked') {
-                auth.signInWithRedirect(provider);
-            }
-        });
+// 1. Универсальная функция входа
+window.login = async () => {
+    try {
+        // Сначала пробуем всплывающее окно (самый удобный вариант для ПК и Android)
+        await auth.signInWithPopup(provider);
+        console.log("Вход через Popup выполнен");
+    } catch (error) {
+        // Если попап заблокирован (iOS, Safari, Telegram) — используем редирект
+        if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+            console.log("Попап заблокирован, переходим на редирект...");
+            auth.signInWithRedirect(provider);
+        } else {
+            console.error("Ошибка входа:", error.message);
+            alert("Ошибка при входе: " + error.message);
+        }
+    }
 };
+
+// 2. Вставь это ВНУТРЬ document.addEventListener('DOMContentLoaded', ...
+// Это критически важно для корректной работы редиректа на iPhone и в Linux/Windows браузерах
+auth.getRedirectResult()
+    .then((result) => {
+        if (result.user) {
+            console.log("Успешный возврат после редиректа:", result.user.displayName);
+            // Интерфейс обновится сам через onAuthStateChanged
+        }
+    })
+    .catch((error) => {
+        if (error.code !== 'auth/no-current-user') {
+            console.error("Ошибка при обработке редиректа:", error.message);
+        }
+    });
+
+// 3. Твой основной слушатель (оставь один, без дублей)
+auth.onAuthStateChanged(user => {
+    state.user = user;
+    updateAuthUI(user); // Эта функция ПРИНУДИТЕЛЬНО меняет видимость элементов
+    
+    if (user) {
+        subscribeNotes(user.uid);
+        updateProfile(user);
+        document.body.classList.add('logged-in');
+    } else {
+        state.notes = [];
+        renderNotes();
+        document.body.classList.remove('logged-in');
+    }
+});
 window.logout = () => auth.signOut();
 window.switchAccount = () => auth.signOut().then(window.login);
 
@@ -201,17 +236,18 @@ window.sendFeedback = async () => {
 
 function updateAuthUI(user) {
     const loginBtn = document.getElementById('login-btn');
-    const userUi = document.getElementById('user-ui');
     const appContent = document.getElementById('app-content');
+    const userUi = document.getElementById('user-ui');
 
-    if (loginBtn) {
-        // Если юзер есть — скрываем LOGIN, если нет — показываем
-        loginBtn.classList.toggle('hidden', !!user);
-        loginBtn.style.display = user ? 'none' : 'block'; 
+    if (user) {
+        if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
+        if (appContent) appContent.classList.remove('hidden');
+        if (userUi) userUi.classList.remove('hidden');
+    } else {
+        if (loginBtn) loginBtn.style.setProperty('display', 'block', 'important');
+        if (appContent) appContent.classList.add('hidden');
+        if (userUi) userUi.classList.add('hidden');
     }
-    
-    if (userUi) userUi.classList.toggle('hidden', !user);
-    if (appContent) appContent.classList.toggle('hidden', !user);
 }
 
 function updateProfile(user) {
