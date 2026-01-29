@@ -181,19 +181,16 @@ window.sendFeedback = async () => {
     }
 };
 
-// --- ИНТЕРФЕЙС АВТОРИЗАЦИИ ---
+
 function updateAuthUI(user) {
     const loginBtn = document.getElementById('login-btn');
     const userUi = document.getElementById('user-ui');
     const appContent = document.getElementById('app-content');
 
-    if (loginBtn) loginBtn.classList.toggle('hidden', !!user);
+    // Если user есть — скрываем кнопку входа, показываем контент
+    if (loginBtn) loginBtn.style.display = user ? 'none' : 'block';
     if (userUi) userUi.classList.toggle('hidden', !user);
     if (appContent) appContent.classList.toggle('hidden', !user);
-    
-    if (user && document.getElementById('user-pic')) {
-        document.getElementById('user-pic').src = user.photoURL;
-    }
 }
 
 function updateProfile(user) {
