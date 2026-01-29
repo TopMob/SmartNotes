@@ -108,12 +108,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(state.config);
     updateInterfaceText();
 
-    try {
-        await auth.getRedirectResult();
-    } catch (error) {
-        console.error("Ошибка редиректа:", error);
-    }
-
     auth.onAuthStateChanged(user => {
         state.user = user;
         const loginScreen = document.getElementById('login-screen');
@@ -133,34 +127,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
-// --- АВТОРИЗАЦИЯ И АККАУНТ ---
+// --- АВТОРИЗАЦИЯ ---
 const login = async () => {
-    try {
-        await auth.signInWithPopup(provider);
-    } catch (e) {
-        if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
-            await auth.signInWithRedirect(provider);
-        }
-    }
+    try { await auth.signInWithPopup(provider); } 
+    catch (e) { await auth.signInWithRedirect(provider); }
 };
-
 const logout = () => auth.signOut();
-
-const switchAccount = async () => {
-    await auth.signOut();
-    login();
-};
 
 function updateProfileUI(user) {
     const pic = document.getElementById('user-pic');
-    const modalPic = document.getElementById('modal-user-pic');
     const name = document.getElementById('user-name');
     if (pic) pic.src = user.photoURL || '';
-    if (modalPic) modalPic.src = user.photoURL || '';
     if (name) name.textContent = user.displayName || 'User';
 }
 
-// --- РАБОТА С ДАННЫМИ (FIRESTORE) ---
+// --- ДАННЫЕ ---
 function subscribeNotes(uid) {
     db.collection("notes")
       .where("uid", "==", uid)
@@ -168,7 +149,7 @@ function subscribeNotes(uid) {
           state.notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           renderNotes();
           updateStats();
-      }, err => console.error("Ошибка Firestore:", err));
+      });
 }
 
 function updateStats() {
@@ -176,7 +157,7 @@ function updateStats() {
     if (countEl) countEl.textContent = state.notes.length;
 }
 
-// --- РЕНДЕРИНГ ЗАМЕТОК ---
+// --- РЕНДЕРИНГ ---
 const renderNotes = () => {
     const grid = document.getElementById('notes-grid');
     if (!grid) return;
@@ -191,18 +172,15 @@ const renderNotes = () => {
         return isCorrectView && matchesSearch;
     });
 
-    // Сортировка
     filtered.sort((a, b) => {
         if (state.view === 'active') {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
         }
-
         if (sortBy === 'priority') {
             const weights = { high: 3, normal: 2, low: 1 };
             return (weights[b.priority] || 2) - (weights[a.priority] || 2);
         }
-        if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
         return (b.createdAt || 0) - (a.createdAt || 0);
     });
 
@@ -211,41 +189,16 @@ const renderNotes = () => {
         const card = document.createElement('div');
         card.className = `note-card ${n.isPinned ? 'pinned' : ''}`;
         card.style.borderColor = getPriorityColor(n.priority);
-        const openEditor = (id = null) => {
-    state.editingId = id;
-    const modal = document.getElementById('editor-modal');
-    const deleteBtn = document.getElementById('delete-btn');
-    const archiveBtn = document.getElementById('archive-btn');
-    const saveBtnText = document.getElementById('save-btn-text');
-
-    if (id) {
-        const note = state.notes.find(n => n.id === id);
-        if (note) {
-            if (archiveBtn) {
-                archiveBtn.style.display = 'block';
-                archiveBtn.textContent = note.isArchived ? '📤' : '📦';
-            }
-            document.getElementById('note-title').value = note.title || '';
-            document.getElementById('note-text').value = note.text || '';
-            document.getElementById('note-tags').value = (note.tags || []).join(' ');
-            document.getElementById('show-time').checked = note.showTimestamp !== false;
-            state.editorPinned = !!note.isPinned;
-            updatePriorityUI(note.priority || 'normal');
-            if (deleteBtn) deleteBtn.style.display = 'block';
-            if (saveBtnText) saveBtnText.textContent = i18n[state.config.lang].update_btn;
-        }
-    } else {
-        if (archiveBtn) archiveBtn.style.display = 'none';
-        document.getElementById('note-title').value = '';
-        document.getElementById('note-text').value = '';
-        document.getElementById('note-tags').value = '';
-        document.getElementById('show-time').checked = true;
-        state.editorPinned = false;
-        updatePriorityUI('normal');
-        if (deleteBtn) deleteBtn.style.display = 'none';
-        if (saveBtnText) saveBtnText.textContent = i18n[state.config.lang].save_btn;
-    }
-        ${n.showTimestamp ? `<div class="date">${new Date(n.createdAt).toLocaleDateString()}</div>` : ''}
+        card.onclick = () => openEditor(n.id);
+        card.innerHTML = `
+            <div class="note-content">
+                ${n.isPinned ? '<div class="pin-icon">📌</div>' : ''}
+                <h3 class="note-card-title">${escapeHtml(n.title || '')}</h3>
+                <p class="note-card-text">${escapeHtml(n.text || '')}</p>
+                <div class="note-card-tags">
+                    ${(n.tags || []).map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join('')}
+                </div>
+                ${n.showTimestamp ? `<div class="date">${new Date(n.createdAt).toLocaleDateString()}</div>` : ''}
             </div>
         `;
         grid.appendChild(card);
@@ -282,19 +235,19 @@ function applyTheme(cfg) {
 
 // --- ЛОГИКА РЕДАКТОРА ---
 const openEditor = (id = null) => {
-const archiveBtn = document.getElementById('archive-btn');
-if (archiveBtn) {
-    archiveBtn.style.display = 'block';
-    archiveBtn.textContent = note.isArchived ? '📤' : '📦'; // 📤 для возврата, 📦 для архива
-}
     state.editingId = id;
     const modal = document.getElementById('editor-modal');
     const deleteBtn = document.getElementById('delete-btn');
+    const archiveBtn = document.getElementById('archive-btn');
     const saveBtnText = document.getElementById('save-btn-text');
 
     if (id) {
         const note = state.notes.find(n => n.id === id);
         if (note) {
+            if (archiveBtn) {
+                archiveBtn.style.display = 'block';
+                archiveBtn.textContent = note.isArchived ? '📤' : '📦';
+            }
             document.getElementById('note-title').value = note.title || '';
             document.getElementById('note-text').value = note.text || '';
             document.getElementById('note-tags').value = (note.tags || []).join(' ');
@@ -305,13 +258,14 @@ if (archiveBtn) {
             if (saveBtnText) saveBtnText.textContent = i18n[state.config.lang].update_btn;
         }
     } else {
+        if (archiveBtn) archiveBtn.style.display = 'none';
+        if (deleteBtn) deleteBtn.style.display = 'none';
         document.getElementById('note-title').value = '';
         document.getElementById('note-text').value = '';
         document.getElementById('note-tags').value = '';
         document.getElementById('show-time').checked = true;
         state.editorPinned = false;
         updatePriorityUI('normal');
-        if (deleteBtn) deleteBtn.style.display = 'none';
         if (saveBtnText) saveBtnText.textContent = i18n[state.config.lang].save_btn;
     }
 
@@ -332,23 +286,16 @@ const togglePin = () => {
 
 const toggleArchive = async () => {
     if (!state.editingId) return;
-    
-    // Находим текущую заметку
     const note = state.notes.find(n => n.id === state.editingId);
     if (!note) return;
-
     try {
         await db.collection("notes").doc(state.editingId).update({
-            isArchived: !note.isArchived // Меняем статус на противоположный
+            isArchived: !note.isArchived
         });
-        closeEditor(); // Закрываем редактор после перемещения
-    } catch (e) {
-        alert("Ошибка архивации: " + e.message);
-    }
+        closeEditor();
+    } catch (e) { console.error(e); }
 };
 
-// Не забудь добавить в "мост" (в самом конце файла внутри DOMContentLoaded):
-window.toggleArchive = toggleArchive;
 function updatePinBtnUI() {
     const btn = document.getElementById('pin-btn');
     if (btn) btn.classList.toggle('active', state.editorPinned);
@@ -366,21 +313,12 @@ function updatePriorityUI(p) {
     const label = document.getElementById('priority-label');
     const indicator = document.getElementById('priority-indicator');
     const dict = i18n[state.config.lang];
-
+    if (!label) return;
     label.dataset.priority = p;
-    if (p === 'low') {
-        label.textContent = dict.p_low;
-        indicator.style.background = '#888';
-    } else if (p === 'high') {
-        label.textContent = dict.p_high;
-        indicator.style.background = '#ff4444';
-    } else {
-        label.textContent = dict.p_norm;
-        indicator.style.background = 'var(--accent)';
-    }
+    label.textContent = p === 'low' ? dict.p_low : (p === 'high' ? dict.p_high : dict.p_norm);
+    if (indicator) indicator.style.background = p === 'low' ? '#888' : (p === 'high' ? '#ff4444' : 'var(--accent)');
 }
-
-// --- СОХРАНЕНИЕ, УДАЛЕНИЕ, ОТЗЫВ ---
+// --- СОХРАНЕНИЕ И УДАЛЕНИЕ ---
 const saveNote = async () => {
     const title = document.getElementById('note-title').value.trim();
     const text = document.getElementById('note-text').value.trim();
@@ -416,72 +354,17 @@ const deleteNoteWrapper = async () => {
     }
 };
 
-const sendFeedback = async () => {
-    const textEl = document.getElementById('feedback-text');
-    if (!textEl?.value.trim()) return;
-    try {
-        await db.collection("feedback").add({
-            uid: state.user.uid,
-            text: textEl.value,
-            createdAt: Date.now()
-        });
-        alert("Спасибо за отзыв!");
-        textEl.value = "";
-        closeFeedback();
-    } catch (e) { alert(e.message); }
-};
-
-const openFeedback = () => document.getElementById('feedback-modal')?.classList.add('active');
-const closeFeedback = () => document.getElementById('feedback-modal')?.classList.remove('active');
-
 // --- НАСТРОЙКИ ---
 const openSettings = () => {
     state.tempConfig = { ...state.config };
     document.getElementById('settings-modal')?.classList.add('active');
     loadSettingsUI();
 };
-// --- ЛОГИКА НАСТРОЕК (ПРОДОЛЖЕНИЕ) ---
+
 const closeSettings = () => {
     document.getElementById('settings-modal')?.classList.remove('active');
-    applyTheme(state.config); // Откат изменений, если не нажали ОК
+    applyTheme(state.config);
 };
-
-const switchTab = (tab) => {
-    document.querySelectorAll('.tab-trigger').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(c => c.classList.remove('active'));
-    
-    document.getElementById(`lang-tab-${tab}`)?.classList.add('active');
-    document.getElementById(`tab-${tab}`)?.classList.add('active');
-};
-
-const setLanguage = (lang) => {
-    state.tempConfig.lang = lang;
-    updateInterfaceText(lang);
-    loadSettingsUI();
-};
-
-const setColorTarget = (target) => {
-    state.colorTarget = target;
-    document.querySelectorAll('.target-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.target === target);
-    });
-};
-
-const updateColorPreview = (hue) => {
-    const hex = hslToHex(hue, 100, 50);
-    applyColorPreview(state.colorTarget, hex);
-};
-
-const setQuickColor = (hex) => {
-    applyColorPreview(state.colorTarget, hex);
-};
-
-function applyColorPreview(target, hex) {
-    state.tempConfig[target] = hex;
-    const root = document.documentElement;
-    root.style.setProperty(`--${target}`, hex);
-    if (target === 'accent') root.style.setProperty('--accent-glow', hex + '40');
-}
 
 const applySettings = () => {
     state.config = { ...state.tempConfig };
@@ -489,16 +372,14 @@ const applySettings = () => {
     localStorage.setItem('sn_accent', state.config.accent);
     localStorage.setItem('sn_bg', state.config.bg);
     localStorage.setItem('sn_text', state.config.text);
-    
     updateInterfaceText();
-    document.getElementById('settings-modal')?.classList.remove('active');
+    closeSettings();
 };
 
 const resetSettings = () => {
-    if (confirm("Сбросить все настройки?")) {
+    if (confirm("Сбросить всё?")) {
         state.tempConfig = { lang: 'ru', accent: '#00ffcc', bg: '#000000', text: '#ffffff' };
         applyTheme(state.tempConfig);
-        updateInterfaceText(state.tempConfig.lang);
         loadSettingsUI();
     }
 };
@@ -506,93 +387,44 @@ const resetSettings = () => {
 function loadSettingsUI() {
     document.getElementById('lang-ru')?.classList.toggle('active', state.tempConfig.lang === 'ru');
     document.getElementById('lang-en')?.classList.toggle('active', state.tempConfig.lang === 'en');
-    setColorTarget(state.colorTarget);
 }
+
+const setLanguage = (lang) => {
+    state.tempConfig.lang = lang;
+    updateInterfaceText(lang);
+    loadSettingsUI();
+};
 
 function updateInterfaceText(previewLang = null) {
     const lang = previewLang || state.config.lang;
     const dict = i18n[lang];
-    if (!dict) return;
-
     const map = {
-        '#lang-login': dict.login,
         '#lang-view-active': dict.view_active,
         '#lang-view-archive': dict.view_archive,
-        '#lang-sort-newest': dict.sort_newest,
-        '#lang-sort-priority': dict.sort_priority,
-        '#lang-sort-title': dict.sort_title,
-        '#lang-settings-title': dict.settings_title,
-        '#lang-tab-general': dict.tab_general,
-        '#lang-tab-appearance': dict.tab_appearance,
-        '#lang-lang-label': dict.lang_label,
-        '#lang-target-label': dict.target_label,
-        '#lang-target-accent': dict.target_accent,
-        '#lang-target-bg': dict.target_bg,
-        '#lang-target-text': dict.target_text,
-        '#lang-spectrum-label': dict.spectrum_label,
-        '#lang-btn-reset': dict.btn_reset,
-        '#lang-btn-apply': dict.btn_apply,
-        '#lang-label-time': dict.label_time,
-        '#lang-stat-notes': dict.stat_notes,
+        '#lang-save-btn-text': state.editingId ? dict.update_btn : dict.save_btn,
         '#lang-app-title': dict.app_title
     };
-
     for (let [id, text] of Object.entries(map)) {
         const el = document.querySelector(id);
         if (el) el.textContent = text;
     }
-
-    const inputs = {
-        'search-input': dict.search_ph,
-        'note-title': dict.editor_title_ph,
-        'note-text': dict.editor_text_ph,
-        'note-tags': dict.tag_ph
-    };
-
-    for (let [id, ph] of Object.entries(inputs)) {
-        const el = document.getElementById(id);
-        if (el) el.placeholder = ph;
-    }
 }
 
-// Утилита для конвертации цвета
-function hslToHex(h, s, l) {
-    l /= 100;
-    const a = s * Math.min(l, 1 - l) / 100;
-    const f = n => {
-        const k = (n + h / 30) % 12;
-        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-        return Math.round(255 * color).toString(16).padStart(2, '0');
-    };
-    return `#${f(0)}${f(8)}${f(4)}`;
-}
+// --- ГЛОБАЛЬНАЯ РЕГИСТРАЦИЯ ---
+window.login = login;
+window.logout = logout;
+window.switchView = switchView;
+window.openEditor = openEditor;
+window.closeEditor = closeEditor;
+window.saveNote = saveNote;
+window.deleteNoteWrapper = deleteNoteWrapper;
+window.togglePin = togglePin;
+window.toggleArchive = toggleArchive;
+window.cyclePriority = cyclePriority;
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.applySettings = applySettings;
+window.resetSettings = resetSettings;
+window.setLanguage = setLanguage;
 
-// --- ГЛОБАЛЬНЫЙ МОСТ (РЕГИСТРАЦИЯ ФУНКЦИЙ) ---
-document.addEventListener('DOMContentLoaded', () => {
-    window.login = login;
-    window.logout = logout;
-    window.switchAccount = switchAccount;
-    window.switchView = switchView;
-    window.renderNotes = renderNotes;
-    window.openEditor = openEditor;
-    window.closeEditor = closeEditor;
-    window.saveNote = saveNote;
-    window.deleteNoteWrapper = deleteNoteWrapper;
-    window.togglePin = togglePin;
-    window.cyclePriority = cyclePriority;
-    window.openSettings = openSettings;
-    window.closeSettings = closeSettings;
-    window.switchTab = switchTab;
-    window.setLanguage = setLanguage;
-    window.setColorTarget = setColorTarget;
-    window.updateColorPreview = updateColorPreview;
-    window.setQuickColor = setQuickColor;
-    window.applySettings = applySettings;
-    window.resetSettings = resetSettings;
-    window.openFeedback = openFeedback;
-    window.closeFeedback = closeFeedback;
-    window.sendFeedback = sendFeedback;
-
-    console.log("🚀 Система Smart Notes готова к работе.");
-
-});
+console.log("✅ Smart Notes полностью загружен.");
