@@ -106,27 +106,44 @@ let state = {
     }
 };
 
+// --- ОТЗЫВЫ (FEEDBACK) ---
+window.openFeedback = () => document.getElementById('feedback-modal').classList.add('active');
+window.closeFeedback = () => document.getElementById('feedback-modal').classList.remove('active');
+
+// --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
 document.addEventListener('DOMContentLoaded', () => {
     state.tempConfig = { ...state.config };
     applyTheme(state.config);
     updateInterfaceText();
 
+    // Единый слушатель состояния авторизации
     auth.onAuthStateChanged(user => {
         state.user = user;
         updateAuthUI(user);
         if (user) {
             subscribeNotes(user.uid);
             updateProfile(user);
+            document.body.classList.add('logged-in');
         } else {
             state.notes = [];
             renderNotes();
+            document.body.classList.remove('logged-in');
         }
     });
 
-    const colorPicker = document.getElementById('universal-color-picker');
-    if (colorPicker) colorPicker.value = state.config.accent;
+    // Обработка результата редиректа для авторизации
+    auth.getRedirectResult().then((result) => {
+        if (result.user) console.log("Успешный вход");
+    }).catch((error) => console.error("Ошибка редиректа:", error.message));
+
+    // Слушатель для рейтинга в отзывах
+    document.getElementById('feedback-rating')?.addEventListener('input', (e) => {
+        const valEl = document.getElementById('rating-value');
+        if (valEl) valEl.innerText = e.target.value;
+    });
 });
 
+// --- FIREBASE ОПЕРАЦИИ ---
 function subscribeNotes(uid) {
     db.collection("notes").where("uid", "==", uid).onSnapshot(snap => {
         state.notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -135,13 +152,34 @@ function subscribeNotes(uid) {
     });
 }
 
-window.login = () => {
-    auth.signInWithRedirect(provider);
-};
-
+window.login = () => auth.signInWithRedirect(provider);
 window.logout = () => auth.signOut();
 window.switchAccount = () => auth.signOut().then(window.login);
 
+window.sendFeedback = async () => {
+    const rating = document.getElementById('feedback-rating').value;
+    const text = document.getElementById('feedback-text').value;
+    const user = state.user;
+
+    if (!text.trim()) return alert("Напишите хоть что-нибудь");
+
+    try {
+        await db.collection("feedback").add({
+            rating: parseInt(rating),
+            comment: text,
+            userId: user ? user.uid : "anonymous",
+            userName: user ? user.displayName : "Аноним",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert("Спасибо за отзыв!");
+        window.closeFeedback();
+        document.getElementById('feedback-text').value = "";
+    } catch (e) {
+        console.error("Ошибка фидбека:", e);
+    }
+};
+
+// --- ИНТЕРФЕЙС АВТОРИЗАЦИИ ---
 function updateAuthUI(user) {
     const loginBtn = document.getElementById('login-btn');
     const userUi = document.getElementById('user-ui');
@@ -170,6 +208,7 @@ function updateStats() {
     }
 }
 
+// --- ОТРИСОВКА ЗАМЕТОК ---
 window.renderNotes = () => {
     const list = document.getElementById('notesList');
     if (!list) return;
@@ -348,7 +387,6 @@ window.closeAll = (e) => {
         else e.target.classList.remove('active');
     }
 };
-
 window.switchTab = (tab) => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
