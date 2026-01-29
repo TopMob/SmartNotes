@@ -1,90 +1,84 @@
 const UI = {
     init() {
-        this.appInitSequence();
-        this.attachGlobalListeners();
-        this.setupMagneticButtons();
+        this.launchSequence();
+        this.setupEventHub();
+        this.initMotionEngine();
     },
 
-    appInitSequence() {
+    launchSequence() {
         const app = document.getElementById('app');
+        const login = document.getElementById('login-screen');
+        
         if (app) {
-            app.style.display = 'flex';
+            document.body.style.opacity = '0';
             setTimeout(() => {
-                app.style.opacity = '1';
-                app.style.filter = 'blur(0px)';
-                this.showNotification('Система готова к работе', 'success');
+                document.body.style.transition = 'opacity 1s ease';
+                document.body.style.opacity = '1';
             }, 100);
         }
     },
 
-    attachGlobalListeners() {
-        document.addEventListener('keydown', (e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-                e.preventDefault();
-                document.getElementById('search-input').focus();
+    setupEventHub() {
+        document.addEventListener('click', (e) => {
+            const sidebar = document.getElementById('sidebar');
+            const menuBtn = document.querySelector('.menu-trigger-btn');
+            const dropdown = document.getElementById('user-dropdown');
+            const trigger = document.getElementById('user-menu-trigger');
+
+            if (sidebar && sidebar.classList.contains('active')) {
+                if (!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+                    this.toggleSidebar(false);
+                }
             }
-            if (e.key === 'Escape') {
-                this.toggleSidebar(false);
-                if (typeof Editor !== 'undefined') Editor.close();
+
+            if (trigger && trigger.contains(e.target)) {
+                dropdown.classList.toggle('active');
+            } else if (dropdown && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('active');
             }
         });
 
-        const trigger = document.getElementById('user-menu-trigger');
-        const dropdown = document.getElementById('user-dropdown');
-        
-        if (trigger) {
-            trigger.onclick = (e) => {
-                e.stopPropagation();
-                dropdown.classList.toggle('active');
-            };
-        }
-
-        window.onclick = () => {
-            if (dropdown) dropdown.classList.remove('active');
-        };
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('.main-header');
+            if (window.scrollY > 20) {
+                header.style.background = 'rgba(2, 2, 2, 0.95)';
+                header.style.height = '65px';
+            } else {
+                header.style.background = 'rgba(2, 2, 2, 0.8)';
+                header.style.height = '75px';
+            }
+        });
     },
 
-    toggleSidebar(open) {
+    toggleSidebar(state) {
         const sidebar = document.getElementById('sidebar');
-        const mainContent = document.querySelector('.main-content');
-        
-        if (open) {
+        const main = document.querySelector('.main-content');
+        const trigger = document.querySelector('.menu-trigger-btn');
+
+        if (state) {
             sidebar.classList.add('active');
-            mainContent.style.filter = 'blur(10px) brightness(0.7)';
-            mainContent.style.transform = 'scale(0.98)';
-            this.staggerSidebarItems();
+            main.style.transform = 'scale(0.96) translateX(20px)';
+            main.style.filter = 'blur(8px) brightness(0.6)';
+            trigger.style.transform = 'rotate(180deg) scale(0.8)';
+            this.staggerNav();
         } else {
             sidebar.classList.remove('active');
-            mainContent.style.filter = 'none';
-            mainContent.style.transform = 'scale(1)';
+            main.style.transform = 'scale(1) translateX(0)';
+            main.style.filter = 'none';
+            trigger.style.transform = 'rotate(0deg) scale(1)';
         }
     },
 
-    staggerSidebarItems() {
-        const items = document.querySelectorAll('.nav-pill, .group-label, .theme-dot');
-        items.forEach((item, index) => {
-            item.style.opacity = '0';
-            item.style.transform = 'translateX(-20px)';
+    staggerNav() {
+        const pills = document.querySelectorAll('.nav-pill, .group-label, .bot-action-pill');
+        pills.forEach((pill, i) => {
+            pill.style.opacity = '0';
+            pill.style.transform = 'translateX(-30px)';
             setTimeout(() => {
-                item.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                item.style.opacity = '1';
-                item.style.transform = 'translateX(0)';
-            }, index * 40);
-        });
-    },
-
-    setupMagneticButtons() {
-        const buttons = document.querySelectorAll('.menu-trigger-btn, .main-fab, .editor-btn');
-        buttons.forEach(btn => {
-            btn.addEventListener('mousemove', (e) => {
-                const rect = btn.getBoundingClientRect();
-                const x = e.clientX - rect.left - rect.width / 2;
-                const y = e.clientY - rect.top - rect.height / 2;
-                btn.style.transform = `translate(${x * 0.3}px, ${y * 0.3}px)`;
-            });
-            btn.addEventListener('mouseleave', () => {
-                btn.style.transform = `translate(0, 0)`;
-            });
+                pill.style.transition = 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                pill.style.opacity = '1';
+                pill.style.transform = 'translateX(0)';
+            }, 100 + (i * 40));
         });
     },
 
@@ -92,112 +86,138 @@ const UI = {
         const grid = document.getElementById('notes-grid');
         if (!grid) return;
 
-        grid.innerHTML = '';
+        grid.style.opacity = '0';
         
-        if (!notes || notes.length === 0) {
-            this.renderEmptyState(grid);
-            return;
-        }
+        setTimeout(() => {
+            grid.innerHTML = '';
+            
+            if (!notes.length) {
+                this.renderEmpty(grid);
+                grid.style.opacity = '1';
+                return;
+            }
 
-        notes.forEach((note, index) => {
-            const card = document.createElement('div');
-            card.className = 'note-card';
-            card.style.animationDelay = `${index * 0.05}s`;
-            
-            card.innerHTML = `
-                <div class="note-priority-bar ${note.priority || 'low'}"></div>
-                <h3>${note.title || 'Без названия'}</h3>
-                <p>${note.content || 'Пустая заметка...'}</p>
-                <div class="note-card-footer">
-                    <span class="note-date">${this.formatRelativeTime(note.updatedAt)}</span>
-                    <div class="note-tags">
-                        ${(note.tags || []).slice(0, 2).map(t => `<span class="tag-pill">#${t}</span>`).join('')}
+            notes.forEach((note, i) => {
+                const card = document.createElement('div');
+                card.className = 'note-card';
+                card.style.animationDelay = `${i * 0.08}s`;
+                
+                card.innerHTML = `
+                    <div class="note-priority-tag priority-${note.priority || 'low'}"></div>
+                    <h3>${note.title || 'Untitled'}</h3>
+                    <p>${note.content || 'No description provided...'}</p>
+                    <div class="card-metadata">
+                        <div class="tag-cloud">
+                            ${(note.tags || []).map(t => `<span class="mini-tag">#${t}</span>`).join('')}
+                        </div>
+                        <span class="material-icons-round" style="font-size: 18px; opacity: 0.3">north_east</span>
                     </div>
-                </div>
-            `;
+                `;
+
+                card.addEventListener('mousemove', (e) => this.tiltCard(e, card));
+                card.addEventListener('mouseleave', () => this.resetTilt(card));
+                card.onclick = () => openEditor(note);
+                
+                grid.appendChild(card);
+            });
             
-            card.onclick = () => openEditor(note);
-            grid.appendChild(card);
-        });
+            grid.style.opacity = '1';
+        }, 300);
     },
 
-    renderEmptyState(container) {
+    renderEmpty(container) {
         container.innerHTML = `
-            <div class="empty-state">
-                <span class="material-icons-round">cloud_off</span>
-                <h2>Пока ничего нет</h2>
-                <p>Нажми на плюс, чтобы зафиксировать первую мысль</p>
+            <div class="empty-state-visual">
+                <span class="material-icons-round empty-icon">Tips_and_updates</span>
+                <h2 style="font-weight: 800; color: #fff">Zero Gravity</h2>
+                <p style="color: var(--text-dim)">Твои идеи где-то в космосе. Пора их заземлить.</p>
             </div>
         `;
     },
 
-    showNotification(message, type = 'success') {
+    tiltCard(e, card) {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        const rotateX = (y - centerY) / 10;
+        const rotateY = (centerX - x) / 10;
+        
+        card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-10px) scale(1.02)`;
+        card.style.setProperty('--x', `${x}px`);
+        card.style.setProperty('--y', `${y}px`);
+    },
+
+    resetTilt(card) {
+        card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0) scale(1)`;
+    },
+
+    initMotionEngine() {
+        const fab = document.querySelector('.main-fab');
+        if (fab) {
+            fab.addEventListener('mousedown', () => fab.style.transform = 'scale(0.9) rotate(45deg)');
+            fab.addEventListener('mouseup', () => fab.style.transform = 'scale(1.1) rotate(90deg)');
+        }
+    },
+
+    showNotification(text, type = 'success') {
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        const icon = type === 'success' ? 'done_all' : 'warning';
+        toast.className = `toast ${type}`;
+        const icon = type === 'success' ? 'check_circle' : 'bolt';
         
         toast.innerHTML = `
-            <span class="material-icons-round">${icon}</span>
-            <span class="toast-text">${message}</span>
+            <span class="material-icons-round toast-icon">${icon}</span>
+            <div class="toast-content">
+                <span style="display: block; font-weight: 800; font-size: 0.9rem">${type.toUpperCase()}</span>
+                <span style="font-size: 0.85rem; opacity: 0.7">${text}</span>
+            </div>
         `;
         
         document.body.appendChild(toast);
         
         setTimeout(() => {
-            toast.style.transform = 'translateX(120%)';
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 500);
-        }, 3000);
+            toast.style.transform = 'translateX(150%)';
+            setTimeout(() => toast.remove(), 600);
+        }, 3500);
     },
 
     confirmBotTransition() {
-        const overlay = document.createElement('div');
-        overlay.className = 'custom-confirm-overlay';
-        overlay.innerHTML = `
-            <div class="custom-confirm-card">
-                <div class="confirm-icon">
-                    <span class="material-icons-round">bolt</span>
+        const modal = document.createElement('div');
+        modal.className = 'confirm-backdrop';
+        modal.innerHTML = `
+            <div class="confirm-dialog">
+                <div class="confirm-icon-box" style="margin-bottom: 20px">
+                    <span class="material-icons-round" style="font-size: 60px; color: var(--accent-primary)">smart_toy</span>
                 </div>
-                <h2>Connect Bot?</h2>
-                <p>Это перенесет тебя в Telegram для настройки уведомлений и быстрой синхронизации.</p>
-                <div class="confirm-actions">
-                    <button class="confirm-no" onclick="this.closest('.custom-confirm-overlay').remove()">Отмена</button>
-                    <button class="confirm-yes" onclick="UI.handleBotRedirect(this)">Погнали</button>
+                <h2>Neural Link</h2>
+                <p>Подключить Telegram-бота для мгновенного доступа к твоим черновикам?</p>
+                <div class="action-flex">
+                    <button class="btn-secondary" onclick="this.closest('.confirm-backdrop').remove()">Позже</button>
+                    <button class="btn-primary" onclick="UI.executeRedirect(this)">Подключить</button>
                 </div>
             </div>
         `;
-        document.body.appendChild(overlay);
+        document.body.appendChild(modal);
     },
 
-    handleBotRedirect(btn) {
-        btn.innerHTML = '<span class="material-icons-round loading-spin">sync</span>';
+    executeRedirect(btn) {
+        btn.innerHTML = '<span class="loading-circle" style="width: 20px; height: 20px; border-width: 2px"></span>';
         setTimeout(() => {
             window.open('https://t.me/your_bot', '_blank');
-            btn.closest('.custom-confirm-overlay').remove();
-            this.showNotification('Бот подключен', 'success');
-        }, 1500);
-    },
-
-    formatRelativeTime(timestamp) {
-        if (!timestamp) return 'Только что';
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-        const now = new Date();
-        const diff = Math.floor((now - date) / 1000);
-
-        if (diff < 60) return 'Только что';
-        if (diff < 3600) return `${Math.floor(diff / 60)}м назад`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}ч назад`;
-        return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+            btn.closest('.confirm-backdrop').remove();
+            this.showNotification('Синхронизация запущена', 'success');
+        }, 1200);
     }
 };
 
+
+
 window.toggleSidebar = (state) => UI.toggleSidebar(state);
-window.openFeedbackModal = () => UI.showNotification('Скоро будет доступно!', 'error');
-window.setTheme = (theme) => {
-    document.documentElement.style.setProperty('--accent-primary', `var(--accent-${theme})`);
-    UI.showNotification(`Тема ${theme} активирована`);
-};
-
-
+window.renderNotes = (notes) => UI.renderNotes(notes);
+window.showNotification = (msg, type) => UI.showNotification(msg, type);
+window.confirmBotTransition = () => UI.confirmBotTransition();
 
 UI.init();
