@@ -1,119 +1,143 @@
 const UI = {
     init() {
-        this.dom = {
-            search: document.getElementById('search-input'),
-            sidebar: document.getElementById('sidebar'),
-            notesGrid: document.getElementById('notes-grid'),
-            userDrop: document.getElementById('user-dropdown'),
-            viewTitle: document.getElementById('view-title'),
-            editor: document.getElementById('editor-modal')
-        };
+        this.appContainer = document.getElementById('app');
+        this.sidebar = document.getElementById('sidebar');
+        this.searchBar = document.getElementById('search-input');
+        this.userDropdown = document.getElementById('user-dropdown');
+        this.notesGrid = document.getElementById('notes-grid');
+        this.viewTitle = document.getElementById('view-title');
         
-        this.bindEvents();
-        this.initVisuals();
+        this.setupEventListeners();
+        this.setupIntersectionObserver();
+        this.initSidebarState();
     },
 
-    bindEvents() {
+    setupEventListeners() {
         document.addEventListener('keydown', (e) => {
-            if (e.key === '/') {
-                if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-                    e.preventDefault();
-                    this.dom.search.focus();
-                }
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                this.searchBar.focus();
             }
             if (e.key === 'Escape') this.closeAllOverlays();
         });
 
-        this.dom.search?.addEventListener('focus', () => {
-            this.dom.search.parentElement.classList.add('focused');
-        });
-
-        this.dom.search?.addEventListener('blur', () => {
-            this.dom.search.parentElement.classList.remove('focused');
-        });
-
-        window.addEventListener('scroll', () => {
-            const header = document.querySelector('.glass-header');
-            if (window.scrollY > 20) {
-                header.classList.add('scrolled');
+        const viewport = document.querySelector('.content-viewport');
+        viewport.addEventListener('scroll', () => {
+            const nav = document.querySelector('.main-navigator');
+            if (viewport.scrollTop > 30) {
+                nav.classList.add('floating');
             } else {
-                header.classList.remove('scrolled');
+                nav.classList.remove('floating');
             }
         });
+
+        this.searchBar.addEventListener('focus', () => {
+            this.searchBar.parentElement.classList.add('active-glow');
+        });
+
+        this.searchBar.addEventListener('blur', () => {
+            this.searchBar.parentElement.classList.remove('active-glow');
+        });
     },
 
-    initVisuals() {
-        this.revealObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0) scale(1)';
-                }
-            });
-        }, { threshold: 0.1 });
+    initSidebarState() {
+        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        if (isCollapsed) {
+            this.appContainer.classList.add('sidebar-collapsed');
+        } else {
+            this.appContainer.classList.remove('sidebar-collapsed');
+        }
     },
 
-    updateViewHeader(title) {
-        if (!this.dom.viewTitle) return;
-        this.dom.viewTitle.style.opacity = '0';
-        this.dom.viewTitle.style.transform = 'translateX(-20px)';
+    toggleSidebar() {
+        const isNowCollapsed = this.appContainer.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('sidebarCollapsed', isNowCollapsed);
         
+        const icon = document.querySelector('.menu-toggle-v2 span');
+        icon.style.transform = 'scale(0.5) rotate(180deg)';
         setTimeout(() => {
-            this.dom.viewTitle.textContent = title;
-            this.dom.viewTitle.style.opacity = '1';
-            this.dom.viewTitle.style.transform = 'translateX(0)';
+            icon.textContent = isNowCollapsed ? 'menu' : 'menu_open';
+            icon.style.transform = 'scale(1) rotate(0deg)';
+        }, 200);
+    },
+
+    toggleUserMenu() {
+        this.userDropdown.classList.toggle('active');
+    },
+
+    closeAllOverlays() {
+        this.userDropdown.classList.remove('active');
+        document.querySelectorAll('.editor-overlay, .system-alert-overlay').forEach(el => {
+            el.classList.remove('active');
+        });
+    },
+
+    updateHeader(title) {
+        if (!this.viewTitle) return;
+        this.viewTitle.classList.add('title-change');
+        setTimeout(() => {
+            this.viewTitle.textContent = title;
+            this.viewTitle.classList.remove('title-change');
         }, 300);
     },
 
     renderNotes(notes) {
-        if (!this.dom.notesGrid) return;
-        this.dom.notesGrid.innerHTML = '';
+        if (!this.notesGrid) return;
+        
+        this.notesGrid.style.opacity = '0';
+        
+        setTimeout(() => {
+            this.notesGrid.innerHTML = '';
+            
+            if (notes.length === 0) {
+                this.renderEmptyState();
+                this.notesGrid.style.opacity = '1';
+                return;
+            }
 
-        if (notes.length === 0) {
-            this.renderEmptyState();
-            return;
-        }
-
-        notes.forEach((note, index) => {
-            const card = document.createElement('div');
-            card.className = `note-card-v2 priority-${note.priority || 'low'}`;
-            card.style.opacity = '0';
-            card.style.transform = 'translateY(30px) scale(0.9)';
-            card.style.transition = `all 0.5s cubic-bezier(0.23, 1, 0.32, 1) ${index * 0.05}s`;
-
-            const date = this.formatSmartDate(note.updatedAt || note.createdAt);
-
-            card.innerHTML = `
-                <div class="card-inner" onclick="openEditor(${JSON.stringify(note).replace(/"/g, '&quot;')})">
-                    <div class="card-glow"></div>
-                    <div class="card-header">
-                        <span class="card-date">${date}</span>
-                        ${note.priority === 'high' ? '<span class="hot-badge">HOT</span>' : ''}
-                    </div>
-                    <h3 class="card-title">${note.title || 'Untitled Space'}</h3>
-                    <p class="card-text">${note.content || 'No thoughts, head empty...'}</p>
-                    <div class="card-footer">
-                        <div class="card-tags">
-                            ${(note.tags || []).map(t => `<span class="tag-pill">#${t}</span>`).join('')}
-                        </div>
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <button class="mini-action" onclick="toggleArchive('${note.id}', ${!note.isArchived})">
-                        <span class="material-icons-round">${note.isArchived ? 'unarchive' : 'archive'}</span>
-                    </button>
-                    <button class="mini-action delete" onclick="permanentDelete('${note.id}')">
-                        <span class="material-icons-round">delete</span>
-                    </button>
-                </div>
-            `;
-
-            this.dom.notesGrid.appendChild(card);
-            requestAnimationFrame(() => {
-                card.style.opacity = '1';
-                card.style.transform = 'translateY(0) scale(1)';
+            notes.forEach((note, index) => {
+                const noteElement = this.createNoteCard(note, index);
+                this.notesGrid.appendChild(noteElement);
             });
-        });
+
+            this.notesGrid.style.opacity = '1';
+        }, 200);
+    },
+
+    createNoteCard(note, index) {
+        const card = document.createElement('div');
+        card.className = `note-card-v3 priority-${note.priority || 'low'}`;
+        card.style.animationDelay = `${index * 0.05}s`;
+        
+        const cleanContent = note.content ? note.content.replace(/<[^>]*>?/gm, '') : '';
+        const date = this.getRelativeTime(note.updatedAt || note.createdAt);
+
+        card.innerHTML = `
+            <div class="card-glass-base" onclick="openEditor(${JSON.stringify(note).replace(/"/g, '&quot;')})">
+                <div class="card-energy-line"></div>
+                <div class="card-body">
+                    <div class="card-meta">
+                        <span class="meta-date">${date}</span>
+                        ${note.priority === 'high' ? '<span class="priority-badge">STORM</span>' : ''}
+                    </div>
+                    <h3 class="card-title">${note.title || 'Untitled'}</h3>
+                    <p class="card-preview">${cleanContent.substring(0, 120)}${cleanContent.length > 120 ? '...' : ''}</p>
+                    <div class="card-tags">
+                        ${(note.tags || []).map(t => `<span class="mini-tag">#${t}</span>`).join('')}
+                    </div>
+                </div>
+                <div class="card-hover-actions">
+                    <button class="icon-action-btn" onclick="event.stopPropagation(); toggleArchive('${note.id}', ${!note.isArchived})">
+                        <span class="material-icons-round">${note.isArchived ? 'unarchive' : 'inventory_2'}</span>
+                    </button>
+                    <button class="icon-action-btn delete-trigger" onclick="event.stopPropagation(); permanentDelete('${note.id}')">
+                        <span class="material-icons-round">delete_outline</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        return card;
     },
 
     renderFolders() {
@@ -122,125 +146,133 @@ const UI = {
 
         container.innerHTML = '';
         state.folders.forEach((folder, index) => {
-            const el = document.createElement('div');
-            el.className = `nav-link ${state.activeFolderId === folder.id ? 'active' : ''}`;
-            el.style.animation = `slideIn 0.4s ease forwards ${index * 0.1}s`;
-            el.style.opacity = '0';
+            const folderItem = document.createElement('div');
+            folderItem.className = `nav-item ${state.activeFolderId === folder.id ? 'active' : ''}`;
+            folderItem.style.transitionDelay = `${index * 0.03}s`;
             
-            el.innerHTML = `
-                <span class="material-icons-round" style="color: ${folder.color || 'var(--accent-blue)'}">folder</span>
-                <span class="folder-label">${folder.name}</span>
-                <div class="active-blob"></div>
+            folderItem.innerHTML = `
+                <span class="material-icons-round" style="color: ${folder.color || 'var(--primary-neon)'}">folder</span>
+                <span class="item-label">${folder.name}</span>
             `;
 
-            el.onclick = () => {
+            folderItem.onclick = () => {
                 state.currentView = 'folder';
                 state.activeFolderId = folder.id;
-                this.updateViewHeader(folder.name);
+                this.updateHeader(folder.name);
                 filterAndRender();
             };
 
-            container.appendChild(el);
+            container.appendChild(folderItem);
         });
     },
 
     renderEmptyState() {
-        this.dom.notesGrid.innerHTML = `
-            <div class="empty-hero">
-                <div class="hero-icon">
-                    <span class="material-icons-round">cloud_off</span>
+        this.notesGrid.innerHTML = `
+            <div class="void-state">
+                <div class="void-animation">
+                    <div class="circle"></div>
+                    <div class="circle"></div>
+                    <div class="circle"></div>
                 </div>
-                <h3>Чистый лист — новые возможности</h3>
-                <p>Создай свою первую заметку, чтобы начать историю</p>
-                <button class="btn-create-magic" onclick="openEditor()">
-                    <span>Создать шедевр</span>
+                <h3>Пространство пусто</h3>
+                <p>Заполни этот вакуум своими идеями</p>
+                <button class="void-btn" onclick="openEditor()">
+                    <span>Начать поток</span>
+                    <span class="material-icons-round">auto_awesome</span>
                 </button>
             </div>
         `;
     },
 
-    toggleUserMenu() {
-        this.dom.userDrop?.classList.toggle('active');
-    },
-
-    closeAllOverlays() {
-        this.dom.userDrop?.classList.remove('active');
-        document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
-    },
-
-    formatSmartDate(timestamp) {
-        if (!timestamp) return 'Just now';
-        const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    getRelativeTime(timestamp) {
+        if (!timestamp) return 'Сейчас';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
         const now = new Date();
-        const diff = (now - d) / 1000;
+        const diffInSeconds = Math.floor((now - date) / 1000);
 
-        if (diff < 60) return 'Только что';
-        if (diff < 3600) return Math.floor(diff / 60) + 'м назад';
-        if (diff < 86400) return Math.floor(diff / 3600) + 'ч назад';
-        
-        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        if (diffInSeconds < 60) return 'Только что';
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}м назад`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}ч назад`;
+        return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     },
 
-    notify(text, type = 'info') {
+    setupIntersectionObserver() {
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        this.revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('revealed');
+                    this.revealObserver.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+    },
+
+    showToast(message, type = 'default') {
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
+        toast.className = `smart-toast ${type}`;
         toast.innerHTML = `
-            <span class="material-icons-round">${type === 'success' ? 'done_all' : 'info'}</span>
-            <span>${text}</span>
+            <div class="toast-content">
+                <span class="material-icons-round">${type === 'success' ? 'verified' : 'info'}</span>
+                <span>${message}</span>
+            </div>
+            <div class="toast-progress"></div>
         `;
+        
         document.body.appendChild(toast);
         
-        setTimeout(() => toast.classList.add('visible'), 100);
+        requestAnimationFrame(() => toast.classList.add('visible'));
+        
         setTimeout(() => {
             toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 500);
+            setTimeout(() => toast.remove(), 400);
         }, 3000);
     }
 };
 
 function openEditor(note = null) {
-    const modal = document.getElementById('editor-modal');
+    const editor = document.getElementById('editor-modal');
     const titleInp = document.getElementById('note-title');
     const contentInp = document.getElementById('note-content');
     
     currentEditorNote = note;
-    
-    if (note) {
-        titleInp.value = note.title || '';
-        contentInp.value = note.content || '';
-        currentPriority = note.priority || 'low';
-    } else {
-        titleInp.value = '';
-        contentInp.value = '';
-        currentPriority = 'low';
-    }
+    editorTags = note && note.tags ? [...note.tags] : [];
+    currentPriority = note && note.priority ? note.priority : 'low';
+
+    titleInp.value = note ? (note.title || '') : '';
+    contentInp.value = note ? (note.content || '') : '';
 
     updatePriorityUI();
-    modal.classList.add('active');
+    renderEditorTags();
+    
+    editor.classList.add('active');
     
     setTimeout(() => {
         titleInp.focus();
-    }, 400);
+        document.querySelector('.editor-glass-panel').classList.add('born');
+    }, 100);
 }
 
 async function closeEditor() {
+    const editor = document.getElementById('editor-modal');
     const title = document.getElementById('note-title').value.trim();
     const content = document.getElementById('note-content').value.trim();
 
+    document.querySelector('.editor-glass-panel').classList.remove('born');
+
     if (title || content) {
         const success = await saveNote(title, content);
-        if (success) UI.notify('Сохранено!', 'success');
+        if (success) UI.showToast('Мысль сохранена', 'success');
     }
 
-    document.getElementById('editor-modal').classList.remove('active');
-    currentEditorNote = null;
-}
-
-function togglePriority() {
-    const levels = ['low', 'medium', 'high'];
-    let idx = levels.indexOf(currentPriority);
-    currentPriority = levels[(idx + 1) % levels.length];
-    updatePriorityUI();
+    setTimeout(() => {
+        editor.classList.remove('active');
+        currentEditorNote = null;
+    }, 300);
 }
 
 function updatePriorityUI() {
@@ -248,8 +280,23 @@ function updatePriorityUI() {
     const label = document.getElementById('priority-label');
     if (!btn) return;
 
-    btn.className = `priority-selector p-${currentPriority}`;
-    label.textContent = currentPriority.charAt(0).toUpperCase() + currentPriority.slice(1);
+    btn.className = `priority-chip p-${currentPriority}`;
+    label.textContent = currentPriority.charAt(0).toUpperCase() + currentPriority.slice(1) + ' Priority';
 }
 
-document.addEventListener('DOMContentLoaded', () => UI.init());
+function togglePriority() {
+    const steps = ['low', 'medium', 'high'];
+    let currentIdx = steps.indexOf(currentPriority);
+    currentPriority = steps[(currentIdx + 1) % steps.length];
+    updatePriorityUI();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    UI.init();
+    
+    window.onclick = (event) => {
+        if (!event.target.closest('.profile-capsule') && !event.target.closest('.glass-dropdown')) {
+            UI.userDropdown.classList.remove('active');
+        }
+    };
+});
