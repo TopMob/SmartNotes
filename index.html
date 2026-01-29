@@ -5,223 +5,162 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Smart Notes</title>
     
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
-	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-	<script src="script.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <header class="header">
-        <div class="header__logo" data-lang="app_title">Smart Notes</div>
-        
-        <div class="header__actions">
-            <button class="icon-btn" onclick="toggleModal('settings-modal', true)" aria-label="Settings">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            </button>
-            <button class="icon-btn" onclick="toggleModal('info-modal', true)" aria-label="Info">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            </button>
-            <button id="login-btn" class="btn btn--primary" onclick="login()">LOGIN</button>
-            <div id="user-ui" class="hidden user-badge" onclick="toggleModal('profile-modal', true)">
-                <img id="user-pic" class="avatar" alt="User">
-            </div>
-        </div>
-    </header>
-
-    <main id="app-content" class="container hidden">
-        <section class="controls-wrapper">
-            <div class="search-box">
-                <input type="text" id="search" class="search-input" oninput="renderNotes()">
-            </div>
-            
-            <div class="view-filters">
-                <select id="sort-select" class="filter-select" onchange="renderNotes()">
-                    <option value="newest" selected></option>
-                    <option value="priority"></option>
-                    <option value="title"></option>
-                </select>
-                
-                <nav class="toggle-group">
-                    <button id="view-active" class="toggle-btn active" onclick="setView('active')"></button>
-                    <button id="view-archive" class="toggle-btn" onclick="setView('archive')"></button>
-                </nav>
-            </div>
-        </section>
-        
-        <div id="notesList" class="notes-grid"></div>
-        
-        <button class="fab" onclick="openEditor()" aria-label="Add note">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    <div id="login-btn" class="container" style="text-align: center; margin-top: 40vh;">
+        <h1 style="margin-bottom: 20px; color: var(--accent);">SMART NOTES</h1>
+        <button class="btn btn--primary" onclick="login()">
+            <span id="lang-login">ВОЙТИ ЧЕРЕЗ GOOGLE</span>
         </button>
-    </main>
-
-    <div id="settings-modal" class="modal" onclick="closeAll(event)">
-        <div class="modal-card">
-            <h3 data-lang="settings_title"></h3>
-            
-            <div class="settings-tabs">
-                <button class="tab-btn active" onclick="switchTab('general')"></button>
-                <button class="tab-btn" onclick="switchTab('appearance')"></button>
-            </div>
-
-            <div id="tab-general" class="tab-content active">
-                <div class="setting-group">
-                    <label></label>
-                    <div class="lang-switch">
-                        <button class="lang-btn" id="btn-ru" onclick="setLangPreview('ru')">Русский</button>
-                        <button class="lang-btn" id="btn-en" onclick="setLangPreview('en')">English</button>
-                    </div>
-                </div>
-            </div>
-
-            <div id="tab-appearance" class="tab-content">
-                <div class="setting-group">
-                    <label></label>
-                    <div class="target-selector">
-                        <button class="target-btn active" data-target="accent" onclick="setColorTarget('accent')"></button>
-                        <button class="target-btn" data-target="bg" onclick="setColorTarget('bg')"></button>
-                        <button class="target-btn" data-target="text" onclick="setColorTarget('text')"></button>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <label></label>
-                    <div class="spectrum-slider-container">
-                        <input type="range" min="0" max="360" value="160" class="hue-slider" id="main-hue-slider" oninput="updateColorPreview(this.value)">
-                    </div>
-                    <div class="quick-colors">
-                        <button class="q-color-btn black" onclick="setQuickColor('#000000')">Pure Black</button>
-                        <button class="q-color-btn white" onclick="setQuickColor('#ffffff')">Pure White</button>
-                    </div>
-                </div>
-
-                <details class="advanced-colors">
-                    <summary></summary>
-                    <div class="theme-option">
-                        <span>HEX</span>
-                        <input type="color" id="universal-color-picker" oninput="updateManualColor(this.value)">
-                    </div>
-                </details>
-            </div>
-
-            <div class="settings-footer">
-                <button class="btn btn--text" onclick="resetSettings()"></button>
-                <div class="action-buttons">
-                    <button class="btn btn--secondary" onclick="cancelSettings()"></button>
-                    <button class="btn btn--primary" onclick="applySettings()"></button>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <div id="editor-modal" class="modal modal--full" onclick="closeAll(event)">
-        <article class="editor-card">
-            <div class="editor-header">
-                <button class="icon-btn" onclick="toggleEditor(false)">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
+    <div id="app-content" class="hidden">
+        
+        <header class="header">
+            <div class="header__logo">Smart Notes</div>
+            <div class="header__actions" id="user-ui">
+                <img id="user-pic" class="avatar" src="" alt="User" onclick="openSettings()">
+            </div>
+        </header>
+
+        <div class="container">
+            <div class="controls-wrapper">
+                <input type="text" id="search-input" class="search-input" placeholder="Поиск заметок...">
                 
-                <div class="editor-tools-top">
-                    <select id="notePriority" class="priority-select">
-                        <option value="low"></option>
-                        <option value="normal" selected></option>
-                        <option value="high"></option>
+                <div class="view-filters">
+                    <div class="toggle-group">
+                        <div class="toggle-btn active" onclick="switchView('active')" id="lang-view-active">Заметки</div>
+                        <div class="toggle-btn" onclick="switchView('archive')" id="lang-view-archive">Архив</div>
+                    </div>
+                    
+                    <select id="sort-select" class="filter-select" onchange="renderNotes()">
+                        <option value="newest" id="lang-sort-newest">Сначала новые</option>
+                        <option value="priority" id="lang-sort-priority">По важности</option>
+                        <option value="title" id="lang-sort-title">По названию</option>
                     </select>
-                    <button id="btn-pin" class="icon-btn tool-btn" onclick="togglePin()">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10V8l-1-1V5l-1-1H5L4 5v2L3 8v2l5 2v4l2 2v2h4v-2l2-2v-4l5-2z"></path></svg>
+                </div>
+            </div>
+
+            <div id="notes-grid" class="notes-grid">
+                </div>
+        </div>
+
+        <div class="fab" onclick="openEditor()">+</div>
+    </div>
+
+    <div id="editor-modal" class="modal modal--full">
+        <div class="editor-card">
+            
+            <div class="editor-header">
+                <button class="icon-btn" onclick="closeEditor()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                </button>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="icon-btn" id="pin-btn" onclick="togglePin()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"></path></svg>
+                    </button>
+                    <button class="icon-btn" id="delete-btn" onclick="deleteNoteWrapper()" style="color: #ff4444; display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>
                 </div>
             </div>
 
             <div class="editor-body">
-                <input type="text" id="noteTitle" class="editor-title">
-                <textarea id="noteText" class="editor-textarea"></textarea>
+                <input type="text" id="note-title" class="editor-title" placeholder="Заголовок">
+                <textarea id="note-text" class="editor-textarea" placeholder="Начните писать..."></textarea>
             </div>
 
-            <footer class="editor-footer">
+            <div class="editor-footer">
                 <div class="editor-options">
+                    <div class="toggle-switch" onclick="cyclePriority()">
+                        <span id="priority-label">Средний</span>
+                        <div id="priority-indicator" style="width: 10px; height: 10px; border-radius: 50%; background: #fff;"></div>
+                    </div>
+                    
                     <label class="toggle-switch">
-                        <input type="checkbox" id="noteTimestamp">
-                        <span></span>
-                    </label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="noteArchive">
-                        <span></span>
+                        <input type="checkbox" id="show-time">
+                        <span id="lang-label-time">Время</span>
                     </label>
                 </div>
 
                 <div class="tag-input-wrapper">
-                    <span class="tag-icon">#</span>
-                    <input type="text" id="noteTags" class="tag-input">
+                    <span style="opacity: 0.5;">#</span>
+                    <input type="text" id="note-tags" placeholder="теги через пробел">
                 </div>
 
-                <button id="save-note-btn" class="btn-send-lg" onclick="handleSaveNote()">
-                    <span></span>
+                <button class="btn-send-lg" onclick="saveNote()" id="save-btn-text">
+                    СОХРАНИТЬ
                 </button>
-            </footer>
-        </article>
-    </div>
-
-    <div id="info-modal" class="modal" onclick="closeAll(event)">
-        <div class="modal-card">
-            <h3 class="brand-title">SMART NOTES</h3>
-            <div class="team-section">
-                <p class="section-label" style="opacity: 0.6; font-size: 0.8rem; margin-bottom: 10px;">TEAM</p>
-                <div class="team-list">
-                    <div class="team-member">Копаев Иван</div>
-                    <div class="team-member">Миняев Иван</div>
-                    <div class="team-member">Александров Арсений</div>
-                    <div class="team-member">Малышев Егор</div>
-                </div>
             </div>
-            <div class="feedback-section" style="margin-top: 25px;">
-                <a href="https://t.me/SmartNotesInfo_bot" target="_blank" class="btn btn--feedback">
-                    <span></span>
-                </a>
-            </div>
-            <button class="btn btn--secondary mt-4" style="width: 100%; margin-top: 15px;" onclick="toggleModal('info-modal', false)">OK</button>
         </div>
     </div>
 
-    <div id="profile-modal" class="modal" onclick="closeAll(event)">
-        <div class="modal-card profile-card">
-            <img id="modal-user-pic" class="avatar avatar--lg" alt="Profile">
-            <h4 id="user-name" class="user-name"></h4>
-            <div id="note-count" class="profile-stats"></div>
-            
-            <div class="profile-actions">
-                <button class="btn btn--secondary" style="width: 100%;" onclick="switchAccount()">Switch Account</button>
-                <button class="btn btn--danger" style="width: 100%;" onclick="logout()">Logout</button>
+    <div id="settings-modal" class="modal">
+        <div class="modal-card">
+            <h2 id="lang-settings-title" style="margin-bottom: 20px; text-align: center;">Настройки</h2>
+
+            <img id="modal-user-pic" class="avatar--lg" src="" alt="">
+            <div id="user-name" class="user-name">User</div>
+            <div class="profile-stats">
+                <span id="notes-count">0</span> <span id="lang-stat-notes">записей</span>
+            </div>
+
+            <div class="settings-tabs">
+                <div class="tab-btn active" onclick="switchTab('general')" id="lang-tab-general">Общие</div>
+                <div class="tab-btn" onclick="switchTab('appearance')" id="lang-tab-appearance">Стиль</div>
+            </div>
+
+            <div id="tab-general" class="tab-content active">
+                <div class="setting-group">
+                    <label id="lang-lang-label">Язык / Language</label>
+                    <div class="target-selector">
+                        <div class="target-btn active" onclick="setLanguage('ru')">RU</div>
+                        <div class="target-btn" onclick="setLanguage('en')">EN</div>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <button class="btn btn--secondary" style="width: 100%;" onclick="logout()">ВЫЙТИ ИЗ АККАУНТА</button>
+                </div>
+            </div>
+
+            <div id="tab-appearance" class="tab-content">
+                <div class="setting-group">
+                    <label id="lang-target-label">Что красим?</label>
+                    <div class="target-selector">
+                        <div class="target-btn active" onclick="setTarget('accent')" id="lang-target-accent">Акцент</div>
+                        <div class="target-btn" onclick="setTarget('bg')" id="lang-target-bg">Фон</div>
+                        <div class="target-btn" onclick="setTarget('text')" id="lang-target-text">Текст</div>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label id="lang-spectrum-label">Выбери цвет</label>
+                    <div class="spectrum-slider-container">
+                        <input type="range" min="0" max="360" value="160" class="hue-slider" id="hue-slider" oninput="updateColorFromHue(this.value)">
+                    </div>
+                    
+                    <div class="quick-colors">
+                        <div class="q-color-btn black" onclick="setManualColor('#000000')">Black</div>
+                        <div class="q-color-btn white" onclick="setManualColor('#ffffff')">White</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-footer">
+                <button class="btn btn--text" onclick="resetConfig()" id="lang-btn-reset">Сброс</button>
+                <button class="btn btn--primary" onclick="closeSettings()" id="lang-btn-apply">ОК</button>
             </div>
         </div>
     </div>
 
     <script src="script.js"></script>
-
-<div id="feedback-modal" class="modal">
-    <div class="modal-card">
-        <h2 class="user-name">Оцените сервис</h2>
-        <div class="setting-group">
-            <label>Ваша оценка (1-10):</label>
-            <input type="range" id="feedback-rating" min="1" max="10" step="1" class="hue-slider">
-            <div id="rating-value" style="text-align:center; font-weight:bold; color:var(--accent);">6</div>
-        </div>
-        <div class="setting-group">
-            <label>Что можно улучшить?</label>
-            <textarea id="feedback-text" class="search-input" style="height:100px; resize:none;" placeholder="Ваш отзыв..."></textarea>
-        </div>
-        <div style="display:flex; gap:10px;">
-            <button class="btn btn--secondary" onclick="closeFeedback()">Отмена</button>
-            <button class="btn btn--primary" style="flex:1;" onclick="sendFeedback()">Отправить</button>
-        </div>
-    </div>
-</div>
 </body>
 </html>

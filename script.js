@@ -7,6 +7,7 @@ const firebaseConfig = {
     appId: "1:523799066979:web:abc13814f34864230cbb56"
 };
 
+// Проверка инициализации, чтобы не было ошибок при перезагрузке модулей
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
@@ -14,6 +15,11 @@ if (!firebase.apps.length) {
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
+
+// Настройка для Google Auth (помогает избежать некоторых циклов редиректа)
+provider.setCustomParameters({
+    prompt: 'select_account'
+});
 
 const i18n = {
     ru: {
@@ -106,27 +112,25 @@ let state = {
     }
 };
 
-// --- ОТЗЫВЫ (FEEDBACK) ---
-window.openFeedback = () => document.getElementById('feedback-modal').classList.add('active');
-window.closeFeedback = () => document.getElementById('feedback-modal').classList.remove('active');
-
 // --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
 document.addEventListener('DOMContentLoaded', async () => {
     state.tempConfig = { ...state.config };
     applyTheme(state.config);
     updateInterfaceText();
 
-    // 1. Сначала обрабатываем результат редиректа (важно для iOS/Android)
+    // 1. Сначала обрабатываем результат редиректа (Критично для Safari/iOS)
     try {
         const result = await auth.getRedirectResult();
         if (result.user) {
             console.log("Успешный вход через редирект:", result.user.displayName);
+            // Интерфейс обновится автоматически через onAuthStateChanged
         }
     } catch (error) {
-        console.error("Ошибка редиректа:", error.message);
+        console.error("Ошибка при возврате с редиректа:", error.code, error.message);
+        // Если аккаунт существует с другим методом входа, Firebase может вернуть ошибку здесь
     }
 
-    // 2. Единый слушатель состояния (ОСТАВЛЯЕМ ТОЛЬКО ЭТОТ ОДИН)
+    // 2. Единый слушатель состояния
     auth.onAuthStateChanged(user => {
         state.user = user;
         updateAuthUI(user);
@@ -140,6 +144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Сессия отсутствует");
             state.notes = [];
             renderNotes();
+            updateStats();
             document.body.classList.remove('logged-in');
         }
     });
@@ -151,69 +156,110 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+function esc(s) {
+    if (!s) return '';
+    return s.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function updateStats() {
+    const statEl = document.getElementById('note-count');
+    if (statEl) {
+        statEl.innerHTML = `${state.notes.length} <small>${i18n[state.config.lang].stat_notes}</small>`;
+    }
+}
+
+function updatePinBtn() {
+    const pinBtn = document.getElementById('btn-pin');
+    if (pinBtn) pinBtn.classList.toggle('active', state.editorPinned);
+}
+
+// --- УПРАВЛЕНИЕ UI (Глобальные функции) ---
+
+window.toggleEditor = (show) => {
+    const modal = document.getElementById('editor-modal');
+    if (show) window.openEditor();
+    else if (modal) modal.classList.remove('active');
+};
+
+window.togglePin = () => {
+    state.editorPinned = !state.editorPinned;
+    updatePinBtn();
+};
+
+window.setView = (v) => {
+    state.view = v;
+    document.getElementById('view-active')?.classList.toggle('active', v === 'active');
+    document.getElementById('view-archive')?.classList.toggle('active', v === 'archive');
+    window.renderNotes();
+};
+
+window.openFeedback = () => document.getElementById('feedback-modal')?.classList.add('active');
+window.closeFeedback = () => document.getElementById('feedback-modal')?.classList.remove('active');
+
 // --- FIREBASE ОПЕРАЦИИ ---
+
 function subscribeNotes(uid) {
     db.collection("notes").where("uid", "==", uid).onSnapshot(snap => {
         state.notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderNotes();
         updateStats();
+    }, error => {
+        console.error("Ошибка подписки на заметки:", error);
     });
 }
 
-// 1. Универсальная функция входа
+// 1. Универсальная функция входа (Fix для Safari)
 window.login = async () => {
     try {
-        // Сначала пробуем всплывающее окно (самый удобный вариант для ПК и Android)
+        // Пробуем сначала Popup (удобнее на Desktop)
         await auth.signInWithPopup(provider);
-        console.log("Вход через Popup выполнен");
-    } catch (error) {
-        // Если попап заблокирован (iOS, Safari, Telegram) — используем редирект
-        if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
-            console.log("Попап заблокирован, переходим на редирект...");
-            auth.signInWithRedirect(provider);
+    } catch (e) {
+        // Список ошибок, которые намекают на блокировку браузером или закрытие окна
+        const redirectTriggers = [
+            'auth/popup-blocked',
+            'auth/cancelled-popup-request',
+            'auth/popup-closed-by-user',
+            'auth/network-request-failed' // Иногда Safari так реагирует на ITP блокировку
+        ];
+
+        if (redirectTriggers.includes(e.code) || e.message.includes('popup')) {
+            console.log("Попап не сработал (Safari/Mobile), пробуем редирект...");
+            // Редирект - самый надежный метод для мобильных устройств
+            try {
+                await auth.signInWithRedirect(provider);
+            } catch (redirectError) {
+                console.error("Ошибка даже при редиректе:", redirectError);
+                alert("Ошибка входа: " + redirectError.message);
+            }
         } else {
-            console.error("Ошибка входа:", error.message);
-            alert("Ошибка при входе: " + error.message);
+            console.error("Критическая ошибка входа:", e);
+            alert("Ошибка: " + e.message);
         }
     }
 };
 
-// 2. Вставь это ВНУТРЬ document.addEventListener('DOMContentLoaded', ...
-// Это критически важно для корректной работы редиректа на iPhone и в Linux/Windows браузерах
-auth.getRedirectResult()
-    .then((result) => {
-        if (result.user) {
-            console.log("Успешный возврат после редиректа:", result.user.displayName);
-            // Интерфейс обновится сам через onAuthStateChanged
-        }
-    })
-    .catch((error) => {
-        if (error.code !== 'auth/no-current-user') {
-            console.error("Ошибка при обработке редиректа:", error.message);
-        }
-    });
-
-// 3. Твой основной слушатель (оставь один, без дублей)
-auth.onAuthStateChanged(user => {
-    state.user = user;
-    updateAuthUI(user); // Эта функция ПРИНУДИТЕЛЬНО меняет видимость элементов
-    
-    if (user) {
-        subscribeNotes(user.uid);
-        updateProfile(user);
-        document.body.classList.add('logged-in');
-    } else {
-        state.notes = [];
-        renderNotes();
-        document.body.classList.remove('logged-in');
-    }
-});
 window.logout = () => auth.signOut();
-window.switchAccount = () => auth.signOut().then(window.login);
+
+window.switchAccount = async () => {
+    await auth.signOut();
+    window.login();
+};
 
 window.sendFeedback = async () => {
-    const rating = document.getElementById('feedback-rating').value;
-    const text = document.getElementById('feedback-text').value;
+    const ratingEl = document.getElementById('feedback-rating');
+    const textEl = document.getElementById('feedback-text');
+    
+    if (!ratingEl || !textEl) return;
+
+    const rating = ratingEl.value;
+    const text = textEl.value;
     const user = state.user;
 
     if (!text.trim()) return alert("Напишите хоть что-нибудь");
@@ -228,12 +274,12 @@ window.sendFeedback = async () => {
         });
         alert("Спасибо за отзыв!");
         window.closeFeedback();
-        document.getElementById('feedback-text').value = "";
+        textEl.value = "";
     } catch (e) {
         console.error("Ошибка фидбека:", e);
+        alert("Не удалось отправить отзыв.");
     }
 };
-
 
 function updateAuthUI(user) {
     const loginBtn = document.getElementById('login-btn');
@@ -254,15 +300,8 @@ function updateAuthUI(user) {
 function updateProfile(user) {
     const pic = document.getElementById('modal-user-pic');
     const name = document.getElementById('user-name');
-    if (pic) pic.src = user.photoURL;
-    if (name) name.textContent = user.displayName;
-}
-
-function updateStats() {
-    const statEl = document.getElementById('note-count');
-    if (statEl) {
-        statEl.innerHTML = `${state.notes.length} <small>${i18n[state.config.lang].stat_notes}</small>`;
-    }
+    if (pic && user.photoURL) pic.src = user.photoURL;
+    if (name && user.displayName) name.textContent = user.displayName;
 }
 
 // --- ОТРИСОВКА ЗАМЕТОК ---
@@ -322,14 +361,7 @@ window.renderNotes = () => {
     });
 };
 
-window.setView = (v) => {
-    state.view = v;
-    const btnAct = document.getElementById('view-active');
-    const btnArc = document.getElementById('view-archive');
-    if (btnAct) btnAct.classList.toggle('active', v === 'active');
-    if (btnArc) btnArc.classList.toggle('active', v === 'archive');
-    window.renderNotes();
-};
+// --- РЕДАКТОР ---
 
 window.openEditor = (id = null) => {
     state.editingId = id;
@@ -337,25 +369,33 @@ window.openEditor = (id = null) => {
     const btn = document.getElementById('save-note-btn');
     const modal = document.getElementById('editor-modal');
 
+    // Элементы формы
+    const elTitle = document.getElementById('noteTitle');
+    const elText = document.getElementById('noteText');
+    const elTags = document.getElementById('noteTags');
+    const elPriority = document.getElementById('notePriority');
+    const elTime = document.getElementById('noteTimestamp');
+    const elArchive = document.getElementById('noteArchive');
+
     if (id) {
         const n = state.notes.find(x => x.id === id);
         if (n) {
-            document.getElementById('noteTitle').value = n.title || '';
-            document.getElementById('noteText').value = n.text || '';
-            document.getElementById('noteTags').value = (n.tags || []).join(' ');
-            document.getElementById('notePriority').value = n.priority || 'normal';
-            document.getElementById('noteTimestamp').checked = n.showTimestamp !== false;
-            document.getElementById('noteArchive').checked = !!n.isArchived;
+            if(elTitle) elTitle.value = n.title || '';
+            if(elText) elText.value = n.text || '';
+            if(elTags) elTags.value = (n.tags || []).join(' ');
+            if(elPriority) elPriority.value = n.priority || 'normal';
+            if(elTime) elTime.checked = n.showTimestamp !== false;
+            if(elArchive) elArchive.checked = !!n.isArchived;
             state.editorPinned = !!n.isPinned;
         }
         if (btn) btn.querySelector('span').textContent = t.update_btn;
     } else {
-        document.getElementById('noteTitle').value = '';
-        document.getElementById('noteText').value = '';
-        document.getElementById('noteTags').value = '';
-        document.getElementById('notePriority').value = 'normal';
-        document.getElementById('noteTimestamp').checked = true;
-        document.getElementById('noteArchive').checked = false;
+        if(elTitle) elTitle.value = '';
+        if(elText) elText.value = '';
+        if(elTags) elTags.value = '';
+        if(elPriority) elPriority.value = 'normal';
+        if(elTime) elTime.checked = true;
+        if(elArchive) elArchive.checked = false;
         state.editorPinned = false;
         if (btn) btn.querySelector('span').textContent = t.save_btn;
     }
@@ -367,8 +407,13 @@ window.openEditor = (id = null) => {
 window.editNote = (id) => window.openEditor(id);
 
 window.handleSaveNote = async () => {
-    const title = document.getElementById('noteTitle').value.trim();
-    const text = document.getElementById('noteText').value.trim();
+    const elTitle = document.getElementById('noteTitle');
+    const elText = document.getElementById('noteText');
+    
+    if (!elTitle || !elText) return;
+
+    const title = elTitle.value.trim();
+    const text = elText.value.trim();
     
     if (!title && !text) {
         window.toggleEditor(false);
@@ -396,6 +441,7 @@ window.handleSaveNote = async () => {
         window.toggleEditor(false);
     } catch (e) {
         console.error("Save error:", e);
+        alert("Ошибка сохранения: " + e.message);
     }
 };
 
@@ -409,15 +455,7 @@ window.toggleArchive = async (id, status) => {
     await db.collection("notes").doc(id).update({ isArchived: status });
 };
 
-window.togglePin = () => {
-    state.editorPinned = !state.editorPinned;
-    updatePinBtn();
-};
-
-function updatePinBtn() {
-    const pinBtn = document.getElementById('btn-pin');
-    if (pinBtn) pinBtn.classList.toggle('active', state.editorPinned);
-}
+// --- МОДАЛЬНЫЕ ОКНА ---
 
 window.toggleModal = (id, show) => {
     const el = document.getElementById(id);
@@ -430,20 +468,15 @@ window.toggleModal = (id, show) => {
     }
 };
 
-window.toggleEditor = (show) => {
-    if (show) window.openEditor();
-    else {
-        const modal = document.getElementById('editor-modal');
-        if (modal) modal.classList.remove('active');
-    }
-};
-
 window.closeAll = (e) => {
     if (e.target.classList.contains('modal')) {
         if (e.target.id === 'settings-modal') window.cancelSettings();
         else e.target.classList.remove('active');
     }
 };
+
+// --- НАСТРОЙКИ ---
+
 window.switchTab = (tab) => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -535,6 +568,7 @@ function applyTheme(cfg) {
 function updateInterfaceText(previewLang = null) {
     const lang = previewLang || state.config.lang;
     const dict = i18n[lang];
+    if(!dict) return;
 
     const map = {
         '[data-lang="app_title"]': dict.app_title,
@@ -577,11 +611,6 @@ function updateInterfaceText(previewLang = null) {
             else el.textContent = val;
         });
     }
-}
-
-function esc(s) {
-    if (!s) return '';
-    return s.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 function hslToHex(h, s, l) {
