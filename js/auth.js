@@ -1,101 +1,118 @@
-/**
- * Smart Notes - Модуль авторизации
- */
+// =========================================
+// ЛОГИКА АВТОРИЗАЦИИ (AUTH SYSTEM)
+// =========================================
 
-// Слушатель состояния авторизации
+/**
+ * Вход через Google Popup
+ * Использует провайдер, настроенный в config.js
+ */
+async function login() {
+    try {
+        console.log("🔐 Попытка входа...");
+        await auth.signInWithPopup(provider);
+        // После успешного входа сработает onAuthStateChanged
+    } catch (error) {
+        console.error("❌ Ошибка входа:", error);
+        alert("Не удалось войти. Проверьте консоль для деталей.");
+    }
+}
+
+/**
+ * Полный выход из системы
+ */
+async function logout() {
+    try {
+        await auth.signOut();
+        // Перезагрузка страницы для очистки состояния JS
+        window.location.reload();
+    } catch (error) {
+        console.error("Ошибка выхода:", error);
+    }
+}
+
+/**
+ * Слушатель изменений состояния авторизации
+ * Это "сердце", которое решает, что показывать: вход или приложение
+ */
 auth.onAuthStateChanged(user => {
     const loginScreen = document.getElementById('login-screen');
     const appScreen = document.getElementById('app');
+    
+    // Элементы профиля в шапке
     const userPhoto = document.getElementById('user-photo');
     const userName = document.getElementById('user-name');
 
     if (user) {
+        // === ПОЛЬЗОВАТЕЛЬ АВТОРИЗОВАН ===
+        console.log("✅ Пользователь:", user.displayName);
+        
+        // 1. Сохраняем пользователя в глобальный стейт
         state.user = user;
-        
-        // Скрываем вход, показываем приложение
-        if (loginScreen) loginScreen.style.display = 'none';
-        if (appScreen) appScreen.style.display = 'grid';
-        
-        // Обновляем данные профиля
-        if (userPhoto) userPhoto.src = user.photoURL || '';
-        if (userName) userName.innerText = user.displayName || 'Пользователь';
-        
-        console.log("Авторизован:", user.displayName);
-        
-        // Запускаем загрузку данных из db.js
-        if (typeof initApp === 'function') {
-            initApp();
+
+        // 2. Обновляем UI профиля
+        if (userPhoto) userPhoto.src = user.photoURL || 'https://via.placeholder.com/150';
+        if (userName) userName.textContent = user.displayName || 'Пользователь';
+
+        // 3. Анимация скрытия логина и появления приложения
+        if (loginScreen) {
+            loginScreen.style.opacity = '0';
+            setTimeout(() => {
+                loginScreen.style.display = 'none';
+                loginScreen.classList.remove('active');
+            }, 500);
         }
+
+        if (appScreen) {
+            appScreen.style.display = 'grid'; // Возвращаем grid-раскладку
+            // Небольшая задержка для плавного fade-in
+            setTimeout(() => {
+                appScreen.style.opacity = '1';
+                appScreen.classList.add('active');
+            }, 100);
+        }
+
+        // 4. Запускаем "движок" приложения (функция из ab.js/main.js)
+        if (typeof initApp === 'function') {
+            initApp(); 
+        } else {
+            console.warn("⚠️ Функция initApp() не найдена. Проверьте подключение ab.js");
+            // Если initApp еще не загрузилась, попробуем запустить загрузку напрямую
+            if (typeof syncFolders === 'function') syncFolders();
+            if (typeof syncNotes === 'function') syncNotes();
+        }
+
     } else {
+        // === ПОЛЬЗОВАТЕЛЬ НЕ АВТОРИЗОВАН ===
+        console.log("🔒 Ожидание входа...");
+        
         state.user = null;
-        
-        // Показываем вход, скрываем приложение
-        if (loginScreen) loginScreen.style.display = 'flex';
-        if (appScreen) appScreen.style.display = 'none';
-        
-        console.log("Пользователь вышел");
+
+        if (appScreen) {
+            appScreen.style.opacity = '0';
+            appScreen.style.display = 'none';
+        }
+
+        if (loginScreen) {
+            loginScreen.style.display = 'flex';
+            setTimeout(() => {
+                loginScreen.style.opacity = '1';
+                loginScreen.classList.add('active');
+            }, 100);
+        }
     }
 });
 
 /**
- * Вход через Google
+ * Вспомогательная функция для смены аккаунта
+ * Используется в выпадающем меню профиля
  */
-async function login() {
+async function switchAccount() {
     try {
-        await auth.signInWithPopup(provider);
+        await auth.signOut();
+        // Сразу вызываем окно входа с параметром выбора аккаунта
+        provider.setCustomParameters({ prompt: 'select_account' });
+        await login();
     } catch (error) {
-        console.error("Ошибка при входе:", error);
-        alert("Не удалось войти через Google");
+        console.error("Ошибка смены аккаунта:", error);
     }
 }
-
-/**
- * Универсальное окно подтверждения
- * @param {string} type - 'logout' или 'switch'
- */
-function confirmAction(type) {
-    const modal = document.getElementById('confirm-modal');
-    const title = document.getElementById('confirm-title');
-    const btn = document.getElementById('confirm-action-btn');
-    
-    if (!modal) return;
-
-    modal.classList.add('active');
-    
-    if (type === 'logout') {
-        if (title) title.innerText = "Выйти из аккаунта?";
-        btn.onclick = async () => {
-            await auth.signOut();
-            closeConfirm();
-        };
-    } else if (type === 'switch') {
-        if (title) title.innerText = "Сменить аккаунт?";
-        btn.onclick = async () => {
-            // Принудительный вызов окна выбора аккаунта
-            await auth.signInWithPopup(provider);
-            closeConfirm();
-        };
-    }
-}
-
-/**
- * Закрытие окна подтверждения
- */
-function closeConfirm() {
-    const modal = document.getElementById('confirm-modal');
-    if (modal) modal.classList.remove('active');
-}
-
-// Логика выпадающего меню профиля
-document.addEventListener('click', (e) => {
-    const dropdown = document.getElementById('user-dropdown');
-    const trigger = document.getElementById('user-menu-trigger');
-    
-    if (!dropdown) return;
-
-    if (trigger && trigger.contains(e.target)) {
-        dropdown.classList.toggle('active');
-    } else {
-        dropdown.classList.remove('active');
-    }
-});
