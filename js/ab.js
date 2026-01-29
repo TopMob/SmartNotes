@@ -1,56 +1,48 @@
-// =========================================
-// 1. ИНИЦИАЛИЗАЦИЯ ДАННЫХ
-// =========================================
+/**
+ * Smart Notes - Работа с базой данных Firestore
+ */
+
+// Инициализация загрузки при входе
 function initApp() {
+    if (!state.user) return;
+    
+    console.log("📥 Загрузка данных...");
     loadFolders();
     loadNotes();
     setupSearch();
 }
 
-// =========================================
-// 2. РАБОТА С ПАПКАМИ
-// =========================================
+// Загрузка папок
 function loadFolders() {
     db.collection('users').doc(state.user.uid).collection('folders')
+        .orderBy('createdAt', 'asc')
         .onSnapshot(snapshot => {
-            state.folders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            renderFolders(); // Функция из ui.js
-        });
+            state.folders = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            if (typeof renderFolders === 'function') renderFolders();
+        }, err => console.error("Ошибка загрузки папок:", err));
 }
 
-async function saveFolder() {
-    const nameInput = document.getElementById('folder-name-input');
-    const colorInput = document.getElementById('folder-color-input');
-    
-    if (!nameInput.value.trim()) return;
-
-    await db.collection('users').doc(state.user.uid).collection('folders').add({
-        name: nameInput.value.trim(),
-        color: colorInput.value,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    nameInput.value = '';
-    closeFolderModal();
-}
-
-// =========================================
-// 3. РАБОТА С ЗАМЕТКАМИ
-// =========================================
+// Загрузка заметок
 function loadNotes() {
     db.collection('users').doc(state.user.uid).collection('notes')
         .orderBy('createdAt', 'desc')
         .onSnapshot(snapshot => {
-            state.notes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            filterAndRenderNotes(); 
-        });
+            state.notes = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            filterAndRender();
+        }, err => console.error("Ошибка загрузки заметок:", err));
 }
 
-// Глобальный фильтр (Поиск + Теги + Папки + Архив)
-function filterAndRenderNotes() {
+// Фильтрация и запуск отрисовки
+function filterAndRender() {
     let filtered = state.notes;
 
-    // 1. Фильтр по виду (Заметки / Архив)
+    // Сортировка по виду (Архив / Обычные)
     if (state.currentView === 'archive') {
         filtered = filtered.filter(n => n.isArchived);
     } else if (state.currentView === 'folder') {
@@ -59,35 +51,36 @@ function filterAndRenderNotes() {
         filtered = filtered.filter(n => !n.isArchived);
     }
 
-    // 2. Поиск (по заголовку, тексту или #тегам)
-    const query = state.searchQuery.toLowerCase();
-    if (query) {
+    // Поиск
+    const q = state.searchQuery.toLowerCase().trim();
+    if (q) {
         filtered = filtered.filter(n => {
-            const inTitle = n.title?.toLowerCase().includes(query);
-            const inContent = n.content?.toLowerCase().includes(query);
-            const inTags = n.tags?.some(t => t.toLowerCase().includes(query.replace('#', '')));
-            return inTitle || inContent || inTags;
+            const inTitle = (n.title || "").toLowerCase().includes(q);
+            const inText = (n.content || "").toLowerCase().includes(q);
+            const inTags = n.tags?.some(t => t.toLowerCase().includes(q.replace('#','')));
+            return inTitle || inText || inTags;
         });
     }
 
-    renderNotes(filtered); // Функция из ui.js
+    if (typeof renderNotes === 'function') renderNotes(filtered);
 }
 
-// =========================================
-// 4. ПОИСК
-// =========================================
+// Поиск
 function setupSearch() {
-    const searchInput = document.getElementById('search-input');
-    searchInput.addEventListener('input', (e) => {
-        state.searchQuery = e.target.value;
-        filterAndRenderNotes();
-    });
+    const input = document.getElementById('search-input');
+    if (input) {
+        input.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            filterAndRender();
+        });
+    }
 }
 
-// Удаление заметки
+// Удаление
 async function deleteNote(id) {
-    if (confirm("Удалить заметку безвозвратно?")) {
+    try {
         await db.collection('users').doc(state.user.uid).collection('notes').doc(id).delete();
-        closeEditor();
+    } catch (e) {
+        alert("Ошибка при удалении");
     }
 }
