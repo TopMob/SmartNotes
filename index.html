@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Notes | Next Gen</title>
+    <title>Smart Notes | Digital Sanctuary</title>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/stylessidebar.css">
@@ -16,201 +16,160 @@
 
     <div id="login-screen" class="modal active">
         <div class="auth-box">
-            <div class="brand-logo">
-                <div class="logo-icon">
-                    <span class="material-icons-round">auto_awesome</span>
-                </div>
-                <h1 class="logo-text">Smart Notes</h1>
+            <div class="brand-presentation">
+                <h1 class="hero-logo">Smart Notes</h1>
+                <p class="hero-subtitle">Твои мысли в идеальном порядке</p>
             </div>
-            <p class="auth-subtitle">Твой цифровой разум в стиле Glassmorphism</p>
-            <button onclick="login()" class="btn-google">
-                <span class="material-icons-round">account_circle</span>
-                Войти через Google
+            <button onclick="login()" class="btn-google-prime">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_Reference_Icon.svg" alt="G" width="20">
+                <span>Продолжить с Google</span>
             </button>
         </div>
     </div>
 
-    <div id="app" class="app-container">
+    <div id="app" class="app-layout">
         
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    <span class="material-icons-round">bolt</span>
-                    <span>Smart Notes</span>
+        <header class="glass-header">
+            <div class="header-left">
+                <div class="brand-logo-main">
+                    <span class="logo-text-gradient">Smart Notes</span>
                 </div>
-                <button class="menu-toggle-btn" onclick="toggleSidebar(false)">
-                    <span class="material-icons-round">chevron_left</span>
+            </div>
+
+            <div class="header-center">
+                <div class="search-engine">
+                    <div class="search-inner">
+                        <span class="material-icons-round search-icon">search</span>
+                        <input type="text" id="search-input" placeholder="Поиск по твоей вселенной..." oninput="state.searchQuery = this.value; filterAndRender()">
+                        <div class="search-shortcut">/</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <div class="header-actions">
+                    <button class="action-trigger" onclick="openSettings()" title="Настройки">
+                        <span class="material-icons-round">palette</span>
+                    </button>
+                    <button class="action-trigger" onclick="openEditor()" title="Новая заметка">
+                        <span class="material-icons-round">add_circle</span>
+                    </button>
+                </div>
+                <div class="user-pill" onclick="toggleUserMenu()">
+                    <div class="user-details">
+                        <span id="user-name">Загрузка...</span>
+                    </div>
+                    <div class="user-avatar-wrapper">
+                        <img src="" id="user-photo" alt="U">
+                        <div class="online-indicator"></div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <aside class="side-navigation" id="sidebar">
+            <div class="nav-group">
+                <div class="nav-label-caps">Главное</div>
+                <div class="nav-link active" onclick="state.currentView = 'notes'; filterAndRender()">
+                    <span class="material-icons-round">sticky_note_2</span>
+                    <span>Все заметки</span>
+                    <div class="active-blob"></div>
+                </div>
+                <div class="nav-link" onclick="state.currentView = 'archive'; filterAndRender()">
+                    <span class="material-icons-round">auto_delete</span>
+                    <span>Архив</span>
+                </div>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-label-caps">Пространства</div>
+                <div id="folders-list-container" class="folders-dynamic">
+                    </div>
+                <button class="btn-add-space" onclick="openFolderModal()">
+                    <span class="material-icons-round">add</span>
+                    <span>Создать папку</span>
                 </button>
             </div>
 
-            <nav class="sidebar-nav">
-                <div class="nav-section">
-                    <div class="nav-item active" onclick="state.currentView = 'notes'; filterAndRender()">
-                        <span class="material-icons-round">description</span>
-                        <span class="nav-label">Заметки</span>
-                        <div class="active-indicator"></div>
-                    </div>
-                    <div class="nav-item" onclick="state.currentView = 'archive'; filterAndRender()">
-                        <span class="material-icons-round">archive</span>
-                        <span class="nav-label">Архив</span>
-                    </div>
+            <div class="side-footer">
+                <div class="footer-links">
+                    <div class="f-link" onclick="openTeamModal()">Команда</div>
+                    <div class="f-link" onclick="confirmBotTransition()">Наш бот</div>
+                    <div class="f-link highlight" onclick="openFeedbackModal()">Оценить нас</div>
                 </div>
-
-                <div class="nav-section">
-                    <div class="section-title">Рабочее пространство</div>
-                    <div class="nav-item add-folder-btn" onclick="openFolderModal()">
-                        <span class="material-icons-round">create_new_folder</span>
-                        <span class="nav-label">Создать папку</span>
-                    </div>
-                    <div id="folders-list-container" class="dynamic-list">
-                        
-                    </div>
-                </div>
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="footer-nav">
-                    <div class="nav-item" onclick="openSettings()">
-                        <span class="material-icons-round">settings</span>
-                        <span class="nav-label">Настройки</span>
-                        <div class="settings-badge"></div>
-                    </div>
-                    <div class="nav-item" onclick="confirmBotTransition()">
-                        <span class="material-icons-round">smart_toy</span>
-                        <span class="nav-label">Наш бот</span>
-                    </div>
-                    <div class="nav-item" onclick="openTeamModal()">
-                        <span class="material-icons-round">groups</span>
-                        <span class="nav-label">Команда</span>
-                    </div>
-                    <div class="nav-item feedback-btn" onclick="openFeedbackModal()">
-                        <span class="material-icons-round">star_outline</span>
-                        <span class="nav-label">Оценить нас</span>
-                    </div>
-                </div>
-
-                <div class="user-profile-compact" onclick="toggleUserMenu()">
-                    <img src="" id="user-photo" alt="avatar">
-                    <div class="user-info">
-                        <span id="user-name" class="user-name">Загрузка...</span>
-                        <span class="user-status">Online</span>
-                    </div>
-                    <span class="material-icons-round">more_vert</span>
+                <div class="system-status">
+                    <span class="status-dot"></span>
+                    Smart Notes v2.0
                 </div>
             </div>
         </aside>
 
-        <main class="main-content">
-            <header class="top-bar">
-                <button class="mobile-menu-btn" onclick="toggleSidebar(true)">
-                    <span class="material-icons-round">menu</span>
-                </button>
-                
-                <div class="search-wrapper">
-                    <div class="search-bar">
-                        <span class="material-icons-round">search</span>
-                        <input type="text" id="search-input" placeholder="Поиск по мыслям..." oninput="state.searchQuery = this.value; filterAndRender()">
-                    </div>
-                </div>
-
-                <div class="actions-group">
-                    <button class="btn-icon theme-toggle" onclick="toggleTheme()">
-                        <span class="material-icons-round">palette</span>
-                    </button>
-                    <button class="btn-primary create-note-fab" onclick="openEditor()">
-                        <span class="material-icons-round">add</span>
-                        <span class="btn-text">Новая заметка</span>
-                    </button>
-                </div>
-            </header>
-
-            <div class="content-scroll-area">
-                <div id="notes-grid" class="notes-grid">
-                    
-                </div>
-            </div>
-        </main>
-
-        <div id="user-dropdown" class="user-dropdown">
-            <div class="dropdown-header">Аккаунт</div>
-            <div class="dropdown-item" onclick="switchAccount()">
-                <span class="material-icons-round">switch_account</span>
-                Сменить аккаунт
-            </div>
-            <div class="dropdown-item logout" onclick="logout()">
-                <span class="material-icons-round">logout</span>
-                Выйти
-            </div>
-        </div>
-
-    </div>
-
-    <div id="editor-modal" class="modal full-modal">
-        <div class="editor-container">
-            <div class="editor-header">
-                <button class="btn-editor close-btn" onclick="closeEditor()">
-                    <span class="material-icons-round">arrow_back</span>
-                </button>
-                <div class="editor-actions">
-                    <button class="btn-editor" id="priority-btn" onclick="togglePriority()">
-                        <span class="material-icons-round">priority_high</span>
-                    </button>
-                    <button class="btn-editor" onclick="insertCurrentTime()">
-                        <span class="material-icons-round">schedule</span>
-                    </button>
-                    <button class="btn-editor save-btn" onclick="closeEditor()">
-                        <span class="material-icons-round">done</span>
-                    </button>
+        <main class="viewport">
+            <div class="view-header">
+                <h2 id="view-title">Мои мысли</h2>
+                <div class="view-filters">
+                    <button class="filter-chip active">Все</button>
+                    <button class="filter-chip">Важные</button>
+                    <button class="filter-chip">Недавние</button>
                 </div>
             </div>
             
-            <div class="editor-body">
-                <input type="text" id="note-title" class="editor-title-input" placeholder="Заголовок">
-                <textarea id="note-content" class="editor-textarea" placeholder="Начни творить..."></textarea>
+            <div class="scroll-container">
+                <div id="notes-grid" class="dynamic-grid">
+                    </div>
             </div>
+        </main>
 
-            <div class="editor-footer">
-                <div id="note-tags-container" class="tags-row"></div>
-                <div class="tag-input-wrapper">
-                    <span class="material-icons-round">tag</span>
-                    <input type="text" id="note-tags-input" placeholder="теги через пробел">
+        <div id="user-dropdown" class="profile-dropdown">
+            <div class="dropdown-user-info">
+                <p class="drop-name" id="drop-user-name">User Name</p>
+                <p class="drop-email" id="drop-user-email">email@example.com</p>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-action" onclick="switchAccount()">
+                <span class="material-icons-round">sync</span>
+                <span>Сменить аккаунт</span>
+            </div>
+            <div class="dropdown-action logout" onclick="logout()">
+                <span class="material-icons-round">power_settings_new</span>
+                <span>Выйти из системы</span>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="editor-modal" class="modal-overlay">
+        <div class="editor-window">
+            <div class="editor-top-nav">
+                <button class="editor-close" onclick="closeEditor()">
+                    <span class="material-icons-round">close</span>
+                </button>
+                <div class="editor-controls">
+                    <div class="priority-selector" id="priority-btn" onclick="togglePriority()">
+                        <div class="priority-dot"></div>
+                        <span id="priority-label">Priority</span>
+                    </div>
+                    <button class="editor-save-btn" onclick="closeEditor()">Готово</button>
                 </div>
+            </div>
+            <div class="editor-content-area">
+                <input type="text" id="note-title" class="title-field" placeholder="Заголовок">
+                <textarea id="note-content" class="content-field" placeholder="Пиши здесь..."></textarea>
+            </div>
+            <div class="editor-tags-bar">
+                <div id="note-tags-container" class="tags-list"></div>
+                <input type="text" id="note-tags-input" placeholder="Добавить тег...">
             </div>
         </div>
     </div>
 
-    <div id="settings-modal" class="modal">
-        <div class="modal-content glass-card">
-            <div class="modal-header">
-                <h3>Настройки интерфейса</h3>
-                <button class="btn-icon" onclick="closeSettings()"><span class="material-icons-round">close</span></button>
-            </div>
-            <div class="settings-grid">
-                <div class="setting-item">
-                    <label>Внешний вид (Тема)</label>
-                    <div id="theme-picker-root"></div>
-                </div>
-                <div class="setting-item">
-                    <label>Язык приложения</label>
-                    <select id="lang-select" class="custom-select">
-                        <option value="ru">Русский</option>
-                        <option value="en">English</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="confirm-modal" class="modal">
-        <div class="modal-content sm glass-card">
-            <div class="confirm-box">
-                <div class="confirm-icon"><span class="material-icons-round" id="confirm-icon-type">help_outline</span></div>
-                <h3 id="confirm-title">Подтверждение</h3>
-                <p id="confirm-text"></p>
-                <div class="confirm-btns">
-                    <button id="confirm-action-btn" class="btn-primary glow">Да, уверен</button>
-                    <button onclick="closeConfirm()" class="btn-ghost">Отмена</button>
-                </div>
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="confirm-card">
+            <h3 id="confirm-title">Уверен?</h3>
+            <p id="confirm-text"></p>
+            <div class="confirm-footer">
+                <button onclick="closeConfirm()" class="btn-cancel">Отмена</button>
+                <button id="confirm-action-btn" class="btn-confirm">Подтверждаю</button>
             </div>
         </div>
     </div>
