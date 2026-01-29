@@ -1,10 +1,10 @@
 const firebaseConfig = {
-    apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
-    authDomain: "smartnotes-f5733.firebaseapp.com",
-    projectId: "smartnotes-f5733",
-    storageBucket: "smartnotes-f5733.firebasestorage.app",
-    messagingSenderId: "523799066979",
-    appId: "1:523799066979:web:abc13814f34864230cbb56"
+    apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
+    authDomain: "smartnotes-f5733.firebaseapp.com",
+    projectId: "smartnotes-f5733",
+    storageBucket: "smartnotes-f5733.firebasestorage.app",
+    messagingSenderId: "523799066979",
+    appId: "1:523799066979:web:abc13814f34864230cbb56"
 };
 
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -15,86 +15,86 @@ const provider = new firebase.auth.GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
 const i18n = {
-    ru: {
-        app_title: "Smart Notes",
-        settings_title: "Настройки",
-        tab_general: "Общие",
-        tab_appearance: "Стиль",
-        lang_label: "Язык интерфейса",
-        target_label: "Что красим?",
-        target_accent: "Акцент",
-        target_bg: "Фон",
-        target_text: "Текст",
-        spectrum_label: "Выбери цвет",
-        btn_reset: "Сброс",
-        btn_apply: "ОК",
-        search_ph: "Поиск заметок...",
-        sort_newest: "Сначала новые",
-        sort_priority: "По важности",
-        sort_title: "По названию",
-        view_active: "Заметки",
-        view_archive: "Архив",
-        save_btn: "СОХРАНИТЬ",
-        update_btn: "ОБНОВИТЬ",
-        editor_title_ph: "Заголовок",
-        editor_text_ph: "Начните писать...",
-        tag_ph: "теги через пробел",
-        label_time: "Время",
-        p_low: "Низкий",
-        p_norm: "Средний",
-        p_high: "Высокий 🔥",
-        confirm_del: "Удалить заметку?",
-        stat_notes: "записей",
-        login: "ВОЙТИ ЧЕРЕЗ GOOGLE"
-    },
-    en: {
-        app_title: "Smart Notes",
-        settings_title: "Settings",
-        tab_general: "General",
-        tab_appearance: "Style",
-        lang_label: "Language",
-        target_label: "Target Element",
-        target_accent: "Accent",
-        target_bg: "Background",
-        target_text: "Text",
-        spectrum_label: "Pick Color",
-        btn_reset: "Reset",
-        btn_apply: "OK",
-        search_ph: "Search notes...",
-        sort_newest: "Newest first",
-        sort_priority: "By Priority",
-        sort_title: "By Title",
-        view_active: "Notes",
-        view_archive: "Archive",
-        save_btn: "SAVE",
-        update_btn: "UPDATE",
-        editor_title_ph: "Title",
-        editor_text_ph: "Start writing...",
-        tag_ph: "tags by space",
-        label_time: "Time",
-        p_low: "Low",
-        p_norm: "Medium",
-        p_high: "High 🔥",
-        confirm_del: "Delete note?",
-        stat_notes: "records",
-        login: "LOGIN WITH GOOGLE"
-    }
+    ru: {
+        app_title: "Smart Notes",
+        settings_title: "Настройки",
+        tab_general: "Общие",
+        tab_appearance: "Стиль",
+        lang_label: "Язык интерфейса",
+        target_label: "Что красим?",
+        target_accent: "Акцент",
+        target_bg: "Фон",
+        target_text: "Текст",
+        spectrum_label: "Выбери цвет",
+        btn_reset: "Сброс",
+        btn_apply: "ОК",
+        search_ph: "Поиск заметок...",
+        sort_newest: "Сначала новые",
+        sort_priority: "По важности",
+        sort_title: "По названию",
+        view_active: "Заметки",
+        view_archive: "Архив",
+        save_btn: "СОХРАНИТЬ",
+        update_btn: "ОБНОВИТЬ",
+        editor_title_ph: "Заголовок",
+        editor_text_ph: "Начните писать...",
+        tag_ph: "теги через пробел",
+        label_time: "Время",
+        p_low: "Низкий",
+        p_norm: "Средний",
+        p_high: "Высокий 🔥",
+        confirm_del: "Удалить заметку?",
+        stat_notes: "записей",
+        login: "ВОЙТИ ЧЕРЕЗ GOOGLE"
+    },
+    en: {
+        app_title: "Smart Notes",
+        settings_title: "Settings",
+        tab_general: "General",
+        tab_appearance: "Style",
+        lang_label: "Language",
+        target_label: "Target Element",
+        target_accent: "Accent",
+        target_bg: "Background",
+        target_text: "Text",
+        spectrum_label: "Pick Color",
+        btn_reset: "Reset",
+        btn_apply: "OK",
+        search_ph: "Search notes...",
+        sort_newest: "Newest first",
+        sort_priority: "By Priority",
+        sort_title: "By Title",
+        view_active: "Notes",
+        view_archive: "Archive",
+        save_btn: "SAVE",
+        update_btn: "UPDATE",
+        editor_title_ph: "Title",
+        editor_text_ph: "Start writing...",
+        tag_ph: "tags by space",
+        label_time: "Time",
+        p_low: "Low",
+        p_norm: "Medium",
+        p_high: "High 🔥",
+        confirm_del: "Delete note?",
+        stat_notes: "records",
+        login: "LOGIN WITH GOOGLE"
+    }
 };
 
 let state = {
-    user: null,
-    notes: [],
-    view: 'active',
-    editingId: null,
-    editorPinned: false,
-    colorTarget: 'accent',
-    tempConfig: {},
-    config: {
-        lang: localStorage.getItem('sn_lang') || 'ru',
-        accent: localStorage.getItem('sn_accent') || '#00ffcc',
-        bg: localStorage.getItem('sn_bg') || '#000000',
-        text: localStorage.getItem('sn_text') || '#ffffff'
-    }
+    user: null,
+    notes: [],
+    view: 'active',
+    editingId: null,
+    editorPinned: false,
+    colorTarget: 'accent',
+    tempConfig: {},
+    config: {
+        lang: localStorage.getItem('sn_lang') || 'ru',
+        accent: localStorage.getItem('sn_accent') || '#00ffcc',
+        bg: localStorage.getItem('sn_bg') || '#000000',
+        text: localStorage.getItem('sn_text') || '#ffffff'
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -211,7 +211,6 @@ const openEditor = (id = null) => {
     updatePinBtnUI();
     m?.classList.add('active');
 };
-
 const closeEditor = () => {
     const m = document.getElementById('editor-modal');
     if (m) m.classList.remove('active');
