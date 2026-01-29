@@ -1,657 +1,790 @@
-/* --- ПЕРЕМЕННЫЕ --- */
+/* --- БАЗОВЫЕ ПЕРЕМЕННЫЕ (Управляются через JS) --- */
 :root {
     --accent: #00ffcc;
     --accent-glow: rgba(0, 255, 204, 0.25);
-    --bg: #000000;
+    --bg: #0a0a0a;
+    --card-bg: #161616;
     --text: #ffffff;
-    --card-bg: rgba(255, 255, 255, 0.06);
-    --border: rgba(255, 255, 255, 0.1);
-    --radius-lg: 24px;
-    --radius-sm: 12px;
+    --text-dim: #b0b0b0;
+    --danger: #ff4444;
+    --radius: 16px;
     --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    
-    /* Безопасные отступы для iPhone (челки и нижнего бара) */
-    --safe-top: env(safe-area-inset-top, 20px);
-    --safe-bottom: env(safe-area-inset-bottom, 20px);
-    
 }
 
-/* --- БАЗОВЫЕ СТИЛИ --- */
+/* --- ОБНУЛЕНИЕ --- */
 * {
-    box-sizing: border-box;
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
 }
-
-/* Красивый скроллбар для Webkit (Chrome, Safari, Edge) */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
 
 body {
     background-color: var(--bg);
     color: var(--text);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.5;
     overflow-x: hidden;
-    min-height: 100vh;
-    min-height: 100dvh; /* Фикс для мобильных браузеров */
-    transition: background-color 0.4s ease;
+    transition: background-color var(--transition);
 }
 
-button, input, textarea, select {
-    color: inherit;
-    font-family: inherit;
-    border: none;
-    outline: none;
-    background: none;
-    /* Фикс масштабирования на iPhone */
-    font-size: 16px; 
-}
-
-/* Убираем стандартные стили кнопок iOS */
-button {
-    appearance: none;
-    -webkit-appearance: none;
-    touch-action: manipulation;
-}
-
+/* --- ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ --- */
 .hidden { display: none !important; }
 
-/* --- ХЕДЕР --- */
-.header {
-    padding-top: max(15px, var(--safe-top));
-    position: sticky;
-    top: 0;
-    z-index: 50; /* Должен быть меньше, чем у модалок (1000) */
+.full-center {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    padding: 15px 20px;
-    background: rgba(0, 0, 0, 0.8); /* Чуть темнее для читаемости */
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    border-bottom: 1px solid var(--border);
+    height: 100vh;
 }
 
-.header__logo {
-    font-weight: 900;
-    font-size: 1.3rem;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    text-shadow: 0 0 10px var(--accent-glow);
-}
-
-.header__actions {
+/* --- АВТОРИЗАЦИЯ --- */
+.auth-container {
     display: flex;
-    gap: 12px;
+    justify-content: center;
     align-items: center;
-}
-
-/* --- КОНТЕЙНЕР И СЕТКА --- */
-.container {
+    height: 100vh;
     padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
+    background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
 }
 
-.notes-grid {
-    display: grid;
-    /* Улучшенная логика для мобильных экранов */
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
-    padding-bottom: 120px; /* Отступ под кнопку FAB */
-}
-
-/* --- УПРАВЛЕНИЕ (ПОИСК И ФИЛЬТРЫ) --- */
-.controls-wrapper {
-    margin-bottom: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.search-input {
-    width: 100%;
+.auth-box {
+    text-align: center;
     background: var(--card-bg);
-    border: 1px solid var(--border);
-    padding: 16px 20px;
-    border-radius: var(--radius-lg);
-    font-size: 1rem;
-    transition: var(--transition);
+    padding: 40px;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
 }
 
-.search-input:focus {
-    border-color: var(--accent);
-    background: rgba(255, 255, 255, 0.08);
+.auth-box h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    color: var(--accent);
+    text-shadow: 0 0 15px var(--accent-glow);
 }
 
-.view-filters {
+.btn-login-google {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.filter-select {
-    background: var(--card-bg);
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    font-size: 0.9rem;
-    cursor: pointer;
-}
-
-.toggle-group {
-    display: flex;
-    background: var(--card-bg);
-    padding: 4px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-}
-
-.toggle-btn {
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 0.85rem;
+    gap: 12px;
+    margin-top: 30px;
+    padding: 12px 24px;
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: var(--transition);
-    opacity: 0.5;
 }
 
-.toggle-btn.active {
+.btn-login-google:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(255,255,255,0.2);
+}
+
+/* --- ХЕДЕР (MAIN HEADER) --- */
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 5%;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.header-info h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.stats {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.search-bar input {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 10px 15px;
+    border-radius: 10px;
+    color: #fff;
+    outline: none;
+    transition: var(--transition);
+}
+
+.search-bar input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.sort-dropdown {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #fff;
+    padding: 9px;
+    border-radius: 10px;
+    outline: none;
+    cursor: pointer;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    cursor: pointer;
+    transition: var(--transition);
+    object-fit: cover;
+}
+
+.user-avatar:hover {
+    transform: scale(1.1);
+}
+
+/* --- ТАБЫ НАВИГАЦИИ --- */
+.view-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.view-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 8px 20px;
+    font-weight: 600;
+    cursor: pointer;
+    position: relative;
+    transition: var(--transition);
+}
+
+.view-tab.active {
+    color: var(--accent);
+}
+
+.view-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 20%;
+    width: 60%;
+    height: 2px;
     background: var(--accent);
-    color: #000;
-    opacity: 1;
+    box-shadow: 0 0 10px var(--accent);
+}
+
+/* --- СЕТКА ЗАМЕТОК --- */
+.notes-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 20px 5%;
+    max-width: 1400px;
+    margin: 0 auto;
 }
 
 /* --- КАРТОЧКА ЗАМЕТКИ --- */
-.note {
+.note-card {
     background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--radius);
     padding: 20px;
     position: relative;
-    transition: var(--transition);
+    cursor: pointer;
+    transition: all var(--transition);
     display: flex;
     flex-direction: column;
-    cursor: pointer;
-    height: 100%; /* Чтобы карточки были одной высоты в ряду */
+    gap: 10px;
+    overflow: hidden;
 }
 
-.note:hover {
-    transform: translateY(-4px);
+.note-card:hover {
+    transform: translateY(-5px);
     border-color: var(--accent);
-    background: rgba(255, 255, 255, 0.09);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
 
-.note[data-priority="high"] { border-left: 5px solid #ff4444; }
-.note[data-priority="low"] { border-left: 5px solid #44ff88; }
-/* Normal priority - transparent border to keep alignment */
-.note:not([data-priority="high"]):not([data-priority="low"]) { border-left: 5px solid transparent; }
-
-
-.pin-icon {
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    font-size: 14px;
+.note-card.pinned {
+    border-left: 4px solid var(--accent);
 }
 
-.note-title {
-    font-weight: 800;
-    font-size: 1.15rem;
-    margin-bottom: 8px;
-    color: var(--accent);
-    padding-right: 40px;
-    word-break: break-word;
+.note-card__title {
+    font-weight: 700;
+    font-size: 1.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.note-text {
+.note-card__text {
+    color: var(--text-dim);
     font-size: 0.95rem;
-    opacity: 0.8;
-    white-space: pre-wrap;
     display: -webkit-box;
-    -webkit-line-clamp: 6;
+    -webkit-line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    margin-bottom: 16px;
-    word-break: break-word;
 }
 
-.note-meta {
+.note-card__footer {
     margin-top: auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.75rem;
-    opacity: 0.6;
 }
 
-.tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.tag { color: var(--accent); font-weight: 700; }
-
-.note-actions {
-    position: absolute;
-    top: 12px;
-    right: 12px;
+.tags {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
-    opacity: 0;
-    transition: 0.2s;
 }
 
-/* На мобильных кнопки действий видны всегда, на ПК - при наведении */
-@media (hover: hover) {
-    .note-actions { opacity: 0; }
-    .note:hover .note-actions { opacity: 1; }
-}
-@media (hover: none) {
-    .note-actions { opacity: 1; }
+.tag {
+    font-size: 0.75rem;
+    background: rgba(255,255,255,0.05);
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: var(--accent);
 }
 
-.note-actions button {
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(5px);
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    transition: 0.2s;
+.pin-tag {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.8rem;
 }
-.note-actions button:hover { background: var(--accent); border-color: var(--accent); }
 
-/* --- FAB (Кнопка добавить) --- */
-.fab {
+/* --- ПЛАВАЮЩАЯ КНОПКА (FAB) --- */
+.btn-fab-add {
     position: fixed;
-    bottom: max(30px, var(--safe-bottom));
-    right: 20px;
+    bottom: 30px;
+    right: 30px;
     width: 60px;
     height: 60px;
     border-radius: 50%;
     background: var(--accent);
     color: #000;
-    box-shadow: 0 8px 24px var(--accent-glow);
-    z-index: 90;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
+    border: none;
+    font-size: 30px;
+    font-weight: bold;
     cursor: pointer;
-    transition: transform 0.2s;
+    box-shadow: 0 5px 20px var(--accent-glow);
+    transition: var(--transition);
+    z-index: 99;
 }
 
-.fab:hover { transform: scale(1.1) rotate(90deg); }
+.btn-fab-add:hover {
+    transform: scale(1.1) rotate(90deg);
+}
 
-/* --- МОДАЛЬНЫЕ ОКНА --- */
-.modal {
+/* --- ОБЩИЕ СТИЛИ МОДАЛОК --- */
+.modal-overlay {
     position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.8);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
     backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
     display: none;
-    align-items: center;
     justify-content: center;
+    align-items: center;
     z-index: 1000;
     padding: 20px;
-    overscroll-behavior: contain;
 }
 
-.modal.active { display: flex; }
-
-.modal-card {
-    background: #0a0a0a; /* Чуть плотнее фон для настроек */
-    border: 1px solid var(--border);
-    width: 100%;
-    max-width: 440px;
-    padding: 28px;
-    border-radius: 32px;
-    position: relative;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-    animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-@keyframes modalPop {
-    from { transform: scale(0.9); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-
-/* --- НАСТРОЙКИ --- */
-.settings-tabs {
+.modal-overlay.active {
     display: flex;
-    gap: 12px;
-    margin: 20px 0;
-    border-bottom: 1px solid var(--border);
+    animation: fadeIn 0.2s ease-out;
 }
 
-.tab-btn {
-    padding: 8px 12px;
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 500px;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.1);
+    position: relative;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+}
+
+.modal-close-x {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 24px;
     cursor: pointer;
-    font-size: 0.9rem;
-    opacity: 0.5;
-    border-bottom: 2px solid transparent;
-    transition: 0.2s;
+}
+/* --- МОДАЛКА ПРОФИЛЯ --- */
+.profile-modal-box {
+    padding: 30px;
+    text-align: center;
 }
 
-.tab-btn.active {
-    opacity: 1;
-    color: var(--accent);
+.profile-header {
+    margin-bottom: 25px;
+}
+
+.avatar-big {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 3px solid var(--accent);
+    margin-bottom: 15px;
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.profile-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.menu-btn {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 14px 20px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+}
+
+.menu-btn:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: var(--accent);
+    transform: translateX(5px);
+}
+
+.menu-btn.btn-danger {
+    color: var(--danger);
+}
+
+.menu-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 10px 0;
+}
+
+/* --- ОКНО РЕДАКТОРА --- */
+.editor-window {
+    max-width: 650px;
+    padding: 25px;
+}
+
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.tool-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.tool-btn.active {
+    background: var(--accent);
+    color: #000;
     border-color: var(--accent);
 }
 
-.tab-content { display: none; animation: fadeIn 0.3s; }
-.tab-content.active { display: block; }
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; }}
-
-.setting-group { margin-bottom: 20px; }
-.setting-group label { display: block; font-size: 0.8rem; opacity: 0.6; margin-bottom: 10px; }
-
-.target-selector { display: flex; gap: 8px; flex-wrap: wrap; }
-.target-btn {
-    flex: 1;
-    min-width: 80px;
-    padding: 10px;
-    font-size: 0.75rem;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    background: var(--card-bg);
-    cursor: pointer;
-}
-
-.target-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
-
-.spectrum-slider-container {
-    height: 16px;
-    border-radius: 8px;
-    background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
-    margin: 15px 0;
-    position: relative;
-}
-
-.hue-slider {
-    width: 100%;
-    height: 100%;
-    -webkit-appearance: none;
-    background: transparent;
-    position: absolute;
-    top: 0;
-    left: 0;
-    cursor: pointer;
-}
-
-.hue-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: #fff;
-    border: 4px solid rgba(0,0,0,0.2);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    margin-top: -4px; /* Центрирование */
-}
-
-.quick-colors { display: flex; gap: 8px; margin-top: 12px; }
-.q-color-btn {
-    flex: 1;
-    padding: 10px;
-    font-size: 0.75rem;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-}
-
-.q-color-btn.black { background: #000; color: #fff; }
-.q-color-btn.white { background: #fff; color: #000; }
-
-.settings-footer {
+.priority-badge {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 24px;
-    padding-top: 15px;
-    border-top: 1px solid var(--border);
-}
-
-.settings-footer .btn--text { margin-right: auto; }
-
-/* --- РЕДАКТОР (ШТОРКА) --- */
-.modal--full {
-    padding: 0;
-    align-items: flex-end;
-    z-index: 2000; /* Редактор выше всего */
-}
-
-.editor-card {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-    /* Использование dvh предотвращает прыжки при появлении клавиатуры */
-    height: 95dvh; 
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    border-radius: 32px 32px 0 0;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    animation: slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-}
-
-@keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-}
-
-.editor-header {
-    padding: calc(16px + var(--safe-top)) 16px 12px;
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-    border-radius: 32px 32px 0 0;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    gap: 10px;
+    background: rgba(255,255,255,0.05);
+    padding: 5px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.priority-badge:hover {
+    border-color: rgba(255,255,255,0.2);
+}
+
+#priority-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
 }
 
 .editor-body {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    /* Чтобы прокрутка на iOS была плавной */
-    -webkit-overflow-scrolling: touch; 
+    gap: 15px;
 }
 
-.editor-title {
-    font-size: 1.6rem;
-    font-weight: 800;
-    margin-bottom: 16px;
-    color: var(--accent);
-    background: transparent;
-    width: 100%;
+.input-title {
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    font-size: 1.5rem;
+    font-weight: 700;
+    padding: 10px 0;
+    outline: none;
 }
-.editor-title::placeholder { opacity: 0.4; }
 
-.editor-textarea {
-    flex: 1;
+.input-text {
+    background: none;
+    border: none;
+    color: var(--text);
     font-size: 1.1rem;
-    line-height: 1.6;
+    min-height: 200px;
     resize: none;
-    background: transparent;
-    width: 100%;
-    min-height: 150px;
+    outline: none;
+    line-height: 1.6;
 }
-.editor-textarea::placeholder { opacity: 0.3; }
+
+.input-tags {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--accent);
+    font-family: monospace;
+    outline: none;
+}
 
 .editor-footer {
-    padding: 16px 20px;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    /* Учет безопасной зоны снизу (полоска Home на iPhone) */
-    padding-bottom: max(16px, var(--safe-bottom)); 
-}
-
-.editor-options {
+    margin-top: 25px;
     display: flex;
-    gap: 16px;
-    margin-bottom: 16px;
-    overflow-x: auto;
-    padding-bottom: 4px; /* Место для скроллбара если опций много */
-}
-/* Скрываем скроллбар в опциях для красоты */
-.editor-options::-webkit-scrollbar { display: none; }
-
-.toggle-switch {
-    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 8px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    white-space: nowrap;
-    background: var(--card-bg);
-    padding: 6px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
 }
-.toggle-switch input { margin: 0; width: 16px; height: 16px; accent-color: var(--accent); }
 
-.tag-input-wrapper {
-    background: var(--card-bg);
-    padding: 10px 14px;
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border: 1px solid var(--border);
-    margin-bottom: 16px;
-}
-.tag-input-wrapper input { width: 100%; }
-
-.btn-send-lg {
-    width: 100%;
+.btn-save {
     background: var(--accent);
     color: #000;
-    padding: 16px;
-    border-radius: 16px;
-    font-weight: 800;
-    font-size: 1.1rem;
-    cursor: pointer;
-    box-shadow: 0 4px 12px var(--accent-glow);
-    transition: 0.2s;
-}
-.btn-send-lg:active { transform: scale(0.98); }
-
-/* --- КНОПКИ --- */
-.btn {
-    padding: 10px 20px;
+    border: none;
+    padding: 12px 30px;
     border-radius: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: 0.2s;
-    text-align: center;
-    font-size: 0.9rem;
-}
-
-.btn--primary { background: var(--accent); color: #000; }
-.btn--secondary { background: transparent; border: 1px solid var(--border); }
-.btn--secondary:hover { background: var(--card-bg); }
-.btn--danger { color: #ff4444; background: rgba(255, 68, 68, 0.1); }
-.btn--text { background: none; opacity: 0.7; }
-.btn--text:hover { opacity: 1; text-decoration: underline; }
-
-.btn--feedback {
-    display: block;
-    background: #0088cc;
-    color: #fff;
-    padding: 14px;
-    border-radius: 16px;
-    text-decoration: none;
     font-weight: 700;
-    text-align: center;
-    margin-top: 10px;
-}
-
-.icon-btn {
     cursor: pointer;
-    opacity: 0.7;
-    transition: 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    -webkit-tap-highlight-color: transparent;
+    transition: var(--transition);
 }
 
-.icon-btn:hover, .icon-btn.active { opacity: 1; color: var(--accent); background: rgba(255,255,255,0.05); }
+.btn-save:hover {
+    box-shadow: 0 0 20px var(--accent-glow);
+    transform: scale(1.05);
+}
 
-.avatar { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--accent); cursor: pointer; object-fit: cover; }
-.avatar--lg { width: 80px; height: 80px; margin: 0 auto 15px; display: block; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent); }
+.btn-delete {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 10px;
+    opacity: 0.6;
+    transition: var(--transition);
+}
 
-/* --- ПРОФИЛЬ --- */
-.user-name { text-align: center; font-weight: 800; font-size: 1.2rem; margin-bottom: 5px; }
-.profile-stats { text-align: center; font-size: 0.9rem; opacity: 0.6; margin-bottom: 25px; }
+.btn-delete:hover {
+    opacity: 1;
+    transform: rotate(10deg);
+}
 
-/* --- АДАПТИВНОСТЬ --- */
-@media (max-width: 600px) {
-    .container { padding: 16px; }
-    
-    .notes-grid {
-        grid-template-columns: 1fr; /* Одна колонка строго */
-    }
+/* --- НАСТРОЙКИ: ВКЛАДКИ --- */
+.settings-window {
+    padding: 30px;
+}
 
-    .header__logo { font-size: 1.1rem; }
+.settings-tabs {
+    display: flex;
+    gap: 5px;
+    background: rgba(0,0,0,0.2);
+    padding: 5px;
+    border-radius: 12px;
+    margin: 20px 0;
+}
 
-    .modal-card {
-        max-width: 100%;
-        border-radius: 24px 24px 0 0;
-        margin: 0;
-        /* Если модалка настроек, прибиваем к низу на мобильных */
-        position: absolute;
-        bottom: 0;
-        border-bottom: none;
-        max-height: 85vh;
-    }
-    
-    .modal {
-        align-items: flex-end; /* Модалки выезжают снизу */
-        padding: 0;
-    }
+.tab-trigger {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+}
 
-    /* Адаптация редактора */
-    .editor-card {
-        height: 100dvh; /* Полная высота экрана без скачков */
-        border-radius: 0;
-        border: none;
-    }
+.tab-trigger.active {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
+}
 
-    .editor-footer {
-        /* Фикс для старых iPhone, чтобы кнопка не прилипала */
-        padding-bottom: calc(16px + env(safe-area-inset-bottom));
-    }
-    
-    .view-filters {
+.tab-pane {
+    display: none;
+    padding-top: 10px;
+}
+
+.tab-pane.active {
+    display: block;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- ЭЛЕМЕНТЫ НАСТРОЕК --- */
+.setting-item {
+    margin-bottom: 25px;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 10px;
+}
+
+.toggle-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.toggle-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+/* --- ВЫБОР ЦВЕТА (SETTINGS CONTINUED) --- */
+.target-selectors {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.target-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-dim);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.target-btn.active {
+    background: var(--text);
+    color: #000;
+    border-color: var(--text);
+}
+
+.color-slider {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 8px;
+    border-radius: 5px;
+    background: linear-gradient(to right, 
+        #ff0000 0%, #ffff00 17%, #00ff00 33%, 
+        #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+    outline: none;
+    margin: 20px 0;
+}
+
+.color-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+    border: 2px solid #000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.preset-colors {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.color-dot {
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.color-dot:hover {
+    transform: scale(1.15);
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 30px;
+}
+
+/* --- ОБРАТНАЯ СВЯЗЬ (FEEDBACK) --- */
+.feedback-window {
+    padding: 30px;
+}
+
+.feedback-input {
+    width: 100%;
+    min-height: 120px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 15px;
+    margin: 15px 0;
+    resize: none;
+    outline: none;
+}
+
+.feedback-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+}
+
+/* --- КНОПКИ (УНИВЕРСАЛЬНЫЕ) --- */
+.btn-text {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 10px;
+    font-weight: 600;
+}
+
+.btn-apply {
+    background: var(--text);
+    color: #000;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* --- АДАПТИВНОСТЬ (RESPONSIVE) --- */
+@media (max-width: 768px) {
+    .main-header {
         flex-direction: column;
-        align-items: stretch;
+        gap: 15px;
+        padding: 15px;
     }
-    
-    .filter-select, .toggle-group { width: 100%; justify-content: center; }
+
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .search-bar {
+        flex-grow: 1;
+    }
+
+    .search-bar input {
+        width: 100%;
+    }
+
+    .notes-container {
+        grid-template-columns: 1fr; /* Одна колонка на телефонах */
+        padding: 10px;
+    }
+
+    .modal-content {
+        max-width: 100%;
+        margin: 10px;
+        border-radius: 20px;
+    }
+
+    .editor-window {
+        padding: 15px;
+        height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .input-text {
+        flex-grow: 1;
+    }
+
+    .btn-fab-add {
+        bottom: 20px;
+        right: 20px;
+        width: 55px;
+        height: 55px;
+    }
+}
+
+/* --- КАСТОМНЫЙ СКРОЛЛБАР --- */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
 }

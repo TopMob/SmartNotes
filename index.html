@@ -2,164 +2,181 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Smart Notes</title>
-    
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Notes Pro</title>
     <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
-    <div id="login-btn" class="container" style="text-align: center; margin-top: 40vh;">
-        <h1 style="margin-bottom: 20px; color: var(--accent);">SMART NOTES</h1>
-        <button class="btn btn--primary" onclick="login()">
-            <span id="lang-login">ВОЙТИ ЧЕРЕЗ GOOGLE</span>
-        </button>
+    <div id="login-screen" class="auth-container">
+        <div class="auth-box">
+            <h1 id="lang-login-title">Smart Notes</h1>
+            <p>Твои мысли в безопасности</p>
+            <button id="login-btn" onclick="login()" class="btn-login-google">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="">
+                <span id="lang-login">ВОЙТИ ЧЕРЕЗ GOOGLE</span>
+            </button>
+        </div>
     </div>
 
     <div id="app-content" class="hidden">
         
-        <header class="header">
-            <div class="header__logo">Smart Notes</div>
-            <div class="header__actions" id="user-ui">
-                <img id="user-pic" class="avatar" src="" alt="User" onclick="openSettings()">
+        <header class="main-header">
+            <div class="header-info">
+                <h1 id="lang-app-title">Smart Notes</h1>
+                <div class="stats">
+                    <span id="note-count">0</span>
+                    <span id="lang-stat-notes">записей</span>
+                </div>
+            </div>
+            
+            <div class="header-controls">
+                <div class="search-bar">
+                    <input type="text" id="search-input" oninput="renderNotes()" placeholder="Поиск заметки...">
+                </div>
+                <select id="sort-select" onchange="renderNotes()" class="sort-dropdown">
+                    <option value="newest" id="lang-sort-newest">Сначала новые</option>
+                    <option value="priority" id="lang-sort-priority">По важности</option>
+                    <option value="title" id="lang-sort-title">По названию</option>
+                </select>
+                <div class="user-profile-trigger" onclick="document.getElementById('profile-modal').classList.add('active')">
+                    <img id="user-pic" class="user-avatar" src="" alt="User">
+                </div>
             </div>
         </header>
 
-        <div class="container">
-            <div class="controls-wrapper">
-                <input type="text" id="search-input" class="search-input" placeholder="Поиск заметок..." oninput="renderNotes()">
-                
-                <div class="view-filters">
-                    <div class="toggle-group">
-                        <div class="toggle-btn active" onclick="switchView('active')" id="lang-view-active">Заметки</div>
-                        <div class="toggle-btn" onclick="switchView('archive')" id="lang-view-archive">Архив</div>
-                    </div>
-                    
-                    <select id="sort-select" class="filter-select" onchange="renderNotes()">
-                        <option value="newest" id="lang-sort-newest">Сначала новые</option>
-                        <option value="priority" id="lang-sort-priority">По важности</option>
-                        <option value="title" id="lang-sort-title">По названию</option>
-                    </select>
-                </div>
-            </div>
+        <nav class="view-tabs">
+            <button id="lang-view-active" class="view-tab active" onclick="switchView('active')">Заметки</button>
+            <button id="lang-view-archive" class="view-tab" onclick="switchView('archive')">Архив</button>
+        </nav>
 
-            <div id="notes-grid" class="notes-grid">
-                </div>
-        </div>
+        <main id="notes-grid" class="notes-container">
+            </main>
 
-        <div class="fab" onclick="openEditor()">+</div>
+        <button class="btn-fab-add" onclick="openEditor()" aria-label="Add note">+</button>
     </div>
 
-    <div id="editor-modal" class="modal modal--full">
-        <div class="editor-card">
-            
-            <div class="editor-header">
-                <button class="icon-btn" onclick="closeEditor()">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    <div id="profile-modal" class="modal-overlay">
+        <div class="modal-content profile-modal-box">
+            <button class="modal-close-x" onclick="this.closest('.modal-overlay').classList.remove('active')">×</button>
+            <div class="profile-header">
+                <img id="modal-user-pic" class="avatar-big" src="">
+                <h2 id="user-name">Пользователь</h2>
+            </div>
+            <div class="profile-menu">
+                <button onclick="openSettings()" class="menu-btn">
+                    <i>⚙️</i> <span id="lang-settings-title">Настройки</span>
                 </button>
+                <button onclick="openFeedback()" class="menu-btn">
+                    <i>💬</i> <span>Обратная связь</span>
+                </button>
+                <button onclick="switchAccount()" class="menu-btn">
+                    <i>🔄</i> <span>Сменить аккаунт</span>
+                </button>
+                <div class="menu-divider"></div>
+                <button onclick="logout()" class="menu-btn btn-danger">
+                    <i>🚪</i> <span>Выйти из системы</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
-                <div style="display: flex; gap: 10px;">
-                    <button class="icon-btn" id="pin-btn" onclick="togglePin()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"></path></svg>
-                    </button>
-                    <button class="icon-btn" id="delete-btn" onclick="deleteNoteWrapper()" style="color: #ff4444; display: none;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+    <div id="editor-modal" class="modal-overlay">
+        <div class="modal-content editor-window">
+            <div class="editor-toolbar">
+                <button id="pin-btn" class="tool-btn" onclick="togglePin()" title="Закрепить">📌</button>
+                <div class="priority-badge" onclick="cyclePriority()">
+                    <div id="priority-indicator"></div>
+                    <span id="priority-label" data-priority="normal">Средний</span>
                 </div>
+                <button class="modal-close-x" onclick="closeEditor()">×</button>
             </div>
-
+            
             <div class="editor-body">
-                <input type="text" id="note-title" class="editor-title" placeholder="Заголовок">
-                <textarea id="note-text" class="editor-textarea" placeholder="Начните писать..."></textarea>
+                <input type="text" id="note-title" class="input-title" placeholder="Заголовок">
+                <textarea id="note-text" class="input-text" placeholder="Начните писать..."></textarea>
+                <input type="text" id="note-tags" class="input-tags" placeholder="теги через пробел">
             </div>
-
+            
             <div class="editor-footer">
-                <div class="editor-options">
-                    <div class="toggle-switch-priority" onclick="cyclePriority()" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                        <span id="priority-label">Средний</span>
-                        <div id="priority-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent);"></div>
-                    </div>
-                    
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="show-time" checked>
-                        <span id="lang-label-time">Время</span>
+                <div class="footer-left">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="show-time">
+                        <span class="checkmark"></span>
+                        <span id="lang-label-time">Показывать время</span>
                     </label>
                 </div>
-
-                <div class="tag-input-wrapper">
-                    <span style="opacity: 0.5;">#</span>
-                    <input type="text" id="note-tags" placeholder="теги через пробел">
+                <div class="footer-right">
+                    <button id="delete-btn" class="btn-delete" onclick="deleteNoteWrapper()" title="Удалить">🗑️</button>
+                    <button id="save-note-btn" class="btn-save" onclick="saveNote()">
+                        <span id="save-btn-text">СОХРАНИТЬ</span>
+                    </button>
                 </div>
-
-                <button class="btn-send-lg" onclick="saveNote()">
-                    <span id="save-btn-text">СОХРАНИТЬ</span>
-                </button>
             </div>
         </div>
     </div>
 
-    <div id="settings-modal" class="modal">
-        <div class="modal-card">
-            <h2 id="lang-settings-title" style="margin-bottom: 20px; text-align: center;">Настройки</h2>
-
-            <div style="text-align: center; margin-bottom: 20px;">
-                <img id="modal-user-pic" class="avatar--lg" src="" alt="">
-                <div id="user-name" class="user-name">User</div>
-                <div class="profile-stats">
-                    <span id="note-count">0</span> <span id="lang-stat-notes">записей</span>
-                </div>
-            </div>
-
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content settings-window">
+            <h2 id="lang-settings-title">Настройки</h2>
+            
             <div class="settings-tabs">
-                <div class="tab-btn active" onclick="switchTab('general')" id="lang-tab-general">Общие</div>
-                <div class="tab-btn" onclick="switchTab('appearance')" id="lang-tab-appearance">Стиль</div>
+                <button id="lang-tab-general" class="tab-trigger active" onclick="switchTab('general')">Общие</button>
+                <button id="lang-tab-appearance" class="tab-trigger" onclick="switchTab('appearance')">Оформление</button>
             </div>
 
-            <div id="tab-general" class="tab-content active">
-                <div class="setting-group">
-                    <label id="lang-lang-label">Язык / Language</label>
-                    <div class="target-selector">
-                        <div class="target-btn" id="lang-ru" onclick="setLanguage('ru')">RU</div>
-                        <div class="target-btn" id="lang-en" onclick="setLanguage('en')">EN</div>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <button class="btn btn--secondary" style="width: 100%;" onclick="logout()">ВЫЙТИ ИЗ АККАУНТА</button>
-                </div>
-            </div>
-
-            <div id="tab-appearance" class="tab-content">
-                <div class="setting-group">
-                    <label id="lang-target-label">Что красим?</label>
-                    <div class="target-selector">
-                        <div class="target-btn active" data-target="accent" onclick="setColorTarget('accent')" id="lang-target-accent">Акцент</div>
-                        <div class="target-btn" data-target="bg" onclick="setColorTarget('bg')" id="lang-target-bg">Фон</div>
-                        <div class="target-btn" data-target="text" onclick="setColorTarget('text')" id="lang-target-text">Текст</div>
-                    </div>
-                </div>
-
-                <div class="setting-group">
-                    <label id="lang-spectrum-label">Выбери цвет</label>
-                    <div class="spectrum-slider-container">
-                        <input type="range" min="0" max="360" value="160" class="hue-slider" id="hue-slider" oninput="updateColorPreview(this.value)">
-                    </div>
-                    
-                    <div class="quick-colors">
-                        <div class="q-color-btn" style="background: #000;" onclick="setQuickColor('#000000')"></div>
-                        <div class="q-color-btn" style="background: #fff;" onclick="setQuickColor('#ffffff')"></div>
-                        <div class="q-color-btn" style="background: #00ffcc;" onclick="setQuickColor('#00ffcc')"></div>
+            <div id="tab-general" class="tab-pane active">
+                <div class="setting-item">
+                    <label id="lang-lang-label">Язык интерфейса</label>
+                    <div class="toggle-group">
+                        <button id="lang-ru" class="toggle-btn" onclick="setLanguage('ru')">Русский</button>
+                        <button id="lang-en" class="toggle-btn" onclick="setLanguage('en')">English</button>
                     </div>
                 </div>
             </div>
 
-            <div class="settings-footer">
-                <button class="btn btn--text" onclick="resetSettings()" id="lang-btn-reset">Сброс</button>
-                <button class="btn btn--primary" onclick="applySettings()" id="lang-btn-apply">ОК</button>
+            <div id="tab-appearance" class="tab-pane">
+                <div class="setting-item">
+                    <label id="lang-target-label">Редактируемый элемент</label>
+                    <div class="target-selectors">
+                        <button class="target-btn active" data-target="accent" onclick="setColorTarget('accent')" id="lang-target-accent">Акцент</button>
+                        <button class="target-btn" data-target="bg" onclick="setColorTarget('bg')" id="lang-target-bg">Фон</button>
+                        <button class="target-btn" data-target="text" onclick="setColorTarget('text')" id="lang-target-text">Текст</button>
+                    </div>
+                </div>
+                
+                <div class="setting-item">
+                    <label id="lang-spectrum-label">Цветовая палитра</label>
+                    <input type="range" class="color-slider" min="0" max="360" oninput="updateColorPreview(this.value)">
+                    <div class="preset-colors">
+                        <div class="color-dot" onclick="setQuickColor('#00ffcc')" style="background:#00ffcc"></div>
+                        <div class="color-dot" onclick="setQuickColor('#ff4444')" style="background:#ff4444"></div>
+                        <div class="color-dot" onclick="setQuickColor('#ffaa00')" style="background:#ffaa00"></div>
+                        <div class="color-dot" onclick="setQuickColor('#9d4edd')" style="background:#9d4edd"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button onclick="resetSettings()" class="btn-text" id="lang-btn-reset">Сбросить всё</button>
+                <button onclick="applySettings()" class="btn-apply" id="lang-btn-apply">ПРИМЕНИТЬ</button>
+            </div>
+            <button class="modal-close-top" onclick="closeSettings()">×</button>
+        </div>
+    </div>
+
+    <div id="feedback-modal" class="modal-overlay">
+        <div class="modal-content feedback-window">
+            <h3>Обратная связь</h3>
+            <p>Ваше мнение помогает нам стать лучше</p>
+            <textarea id="feedback-text" class="feedback-input" placeholder="Опишите ошибку или предложите идею..."></textarea>
+            <div class="feedback-footer">
+                <button class="btn-text" onclick="closeFeedback()">Отмена</button>
+                <button class="btn-save" onclick="sendFeedback()">Отправить отзыв</button>
             </div>
         </div>
     </div>
