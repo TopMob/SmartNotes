@@ -204,5 +204,24 @@
     </div>
 
     <script src="script.js"></script>
+
+<div id="feedback-modal" class="modal">
+    <div class="modal-card">
+        <h2 class="user-name">Оцените сервис</h2>
+        <div class="setting-group">
+            <label>Ваша оценка (1-10):</label>
+            <input type="range" id="feedback-rating" min="1" max="10" step="1" class="hue-slider">
+            <div id="rating-value" style="text-align:center; font-weight:bold; color:var(--accent);">6</div>
+        </div>
+        <div class="setting-group">
+            <label>Что можно улучшить?</label>
+            <textarea id="feedback-text" class="search-input" style="height:100px; resize:none;" placeholder="Ваш отзыв..."></textarea>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn--secondary" onclick="closeFeedback()">Отмена</button>
+            <button class="btn btn--primary" style="flex:1;" onclick="sendFeedback()">Отправить</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

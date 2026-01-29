@@ -106,27 +106,52 @@ let state = {
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+// --- ОТЗЫВЫ (FEEDBACK) ---
+window.openFeedback = () => document.getElementById('feedback-modal').classList.add('active');
+window.closeFeedback = () => document.getElementById('feedback-modal').classList.remove('active');
+
+// --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
+document.addEventListener('DOMContentLoaded', async () => {
     state.tempConfig = { ...state.config };
     applyTheme(state.config);
     updateInterfaceText();
 
+    // 1. Сначала обрабатываем результат редиректа (важно для iOS/Android)
+    try {
+        const result = await auth.getRedirectResult();
+        if (result.user) {
+            console.log("Успешный вход через редирект:", result.user.displayName);
+        }
+    } catch (error) {
+        console.error("Ошибка редиректа:", error.message);
+    }
+
+    // 2. Единый слушатель состояния (ОСТАВЛЯЕМ ТОЛЬКО ЭТОТ ОДИН)
     auth.onAuthStateChanged(user => {
         state.user = user;
         updateAuthUI(user);
+        
         if (user) {
+            console.log("Авторизован:", user.uid);
             subscribeNotes(user.uid);
             updateProfile(user);
+            document.body.classList.add('logged-in');
         } else {
+            console.log("Сессия отсутствует");
             state.notes = [];
             renderNotes();
+            document.body.classList.remove('logged-in');
         }
     });
 
-    const colorPicker = document.getElementById('universal-color-picker');
-    if (colorPicker) colorPicker.value = state.config.accent;
+    // Слушатель для рейтинга в отзывах
+    document.getElementById('feedback-rating')?.addEventListener('input', (e) => {
+        const valEl = document.getElementById('rating-value');
+        if (valEl) valEl.innerText = e.target.value;
+    });
 });
 
+// --- FIREBASE ОПЕРАЦИИ ---
 function subscribeNotes(uid) {
     db.collection("notes").where("uid", "==", uid).onSnapshot(snap => {
         state.notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -135,24 +160,94 @@ function subscribeNotes(uid) {
     });
 }
 
-window.login = () => {
-    auth.signInWithRedirect(provider);
+// 1. Универсальная функция входа
+window.login = async () => {
+    try {
+        // Сначала пробуем всплывающее окно (самый удобный вариант для ПК и Android)
+        await auth.signInWithPopup(provider);
+        console.log("Вход через Popup выполнен");
+    } catch (error) {
+        // Если попап заблокирован (iOS, Safari, Telegram) — используем редирект
+        if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+            console.log("Попап заблокирован, переходим на редирект...");
+            auth.signInWithRedirect(provider);
+        } else {
+            console.error("Ошибка входа:", error.message);
+            alert("Ошибка при входе: " + error.message);
+        }
+    }
 };
 
+// 2. Вставь это ВНУТРЬ document.addEventListener('DOMContentLoaded', ...
+// Это критически важно для корректной работы редиректа на iPhone и в Linux/Windows браузерах
+auth.getRedirectResult()
+    .then((result) => {
+        if (result.user) {
+            console.log("Успешный возврат после редиректа:", result.user.displayName);
+            // Интерфейс обновится сам через onAuthStateChanged
+        }
+    })
+    .catch((error) => {
+        if (error.code !== 'auth/no-current-user') {
+            console.error("Ошибка при обработке редиректа:", error.message);
+        }
+    });
+
+// 3. Твой основной слушатель (оставь один, без дублей)
+auth.onAuthStateChanged(user => {
+    state.user = user;
+    updateAuthUI(user); // Эта функция ПРИНУДИТЕЛЬНО меняет видимость элементов
+    
+    if (user) {
+        subscribeNotes(user.uid);
+        updateProfile(user);
+        document.body.classList.add('logged-in');
+    } else {
+        state.notes = [];
+        renderNotes();
+        document.body.classList.remove('logged-in');
+    }
+});
 window.logout = () => auth.signOut();
 window.switchAccount = () => auth.signOut().then(window.login);
 
+window.sendFeedback = async () => {
+    const rating = document.getElementById('feedback-rating').value;
+    const text = document.getElementById('feedback-text').value;
+    const user = state.user;
+
+    if (!text.trim()) return alert("Напишите хоть что-нибудь");
+
+    try {
+        await db.collection("feedback").add({
+            rating: parseInt(rating),
+            comment: text,
+            userId: user ? user.uid : "anonymous",
+            userName: user ? user.displayName : "Аноним",
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert("Спасибо за отзыв!");
+        window.closeFeedback();
+        document.getElementById('feedback-text').value = "";
+    } catch (e) {
+        console.error("Ошибка фидбека:", e);
+    }
+};
+
+
 function updateAuthUI(user) {
     const loginBtn = document.getElementById('login-btn');
-    const userUi = document.getElementById('user-ui');
     const appContent = document.getElementById('app-content');
+    const userUi = document.getElementById('user-ui');
 
-    if (loginBtn) loginBtn.classList.toggle('hidden', !!user);
-    if (userUi) userUi.classList.toggle('hidden', !user);
-    if (appContent) appContent.classList.toggle('hidden', !user);
-    
-    if (user && document.getElementById('user-pic')) {
-        document.getElementById('user-pic').src = user.photoURL;
+    if (user) {
+        if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
+        if (appContent) appContent.classList.remove('hidden');
+        if (userUi) userUi.classList.remove('hidden');
+    } else {
+        if (loginBtn) loginBtn.style.setProperty('display', 'block', 'important');
+        if (appContent) appContent.classList.add('hidden');
+        if (userUi) userUi.classList.add('hidden');
     }
 }
 
@@ -170,6 +265,7 @@ function updateStats() {
     }
 }
 
+// --- ОТРИСОВКА ЗАМЕТОК ---
 window.renderNotes = () => {
     const list = document.getElementById('notesList');
     if (!list) return;
@@ -348,7 +444,6 @@ window.closeAll = (e) => {
         else e.target.classList.remove('active');
     }
 };
-
 window.switchTab = (tab) => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
