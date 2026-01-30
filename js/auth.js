@@ -1,27 +1,43 @@
 const Auth = {
-    // 1. Google
+    // 1. Google с принудительным выбором аккаунта
     async login() {
         const provider = new firebase.auth.GoogleAuthProvider();
-        try { await auth.signInWithPopup(provider); } 
-        catch (e) { UI.showToast("Ошибка Google"); }
+        
+        // Добавляем этот параметр, чтобы всегда всплывало окно выбора аккаунта
+        provider.setCustomParameters({
+            prompt: 'select_account'
+        });
+
+        try { 
+            await auth.signInWithPopup(provider); 
+        } catch (e) { 
+            console.error(e);
+            UI.showToast("Вход отменен"); 
+        }
     },
 
-    // 2. GitHub
+    // 2. Аналогично для GitHub (если нужно)
     async loginGithub() {
         const provider = new firebase.auth.GithubAuthProvider();
+        
+        provider.setCustomParameters({
+            allow_signup: 'true'
+        });
+
         try { await auth.signInWithPopup(provider); }
         catch (e) { UI.showToast("Ошибка GitHub"); }
     },
 
-    // 3. Почта: Вход
-    async loginEmail() {
-        const email = document.getElementById('auth-email').value;
-        const pass = document.getElementById('auth-pass').value;
-        if (!email || !pass) return UI.showToast("Введите данные");
-
-        try { await auth.signInWithEmailAndPassword(email, pass); }
-        catch (e) { UI.showToast("Неверный логин или пароль"); }
-    },
+    // 3. Функция выхода (обнови её, чтобы она просто разлогинивала)
+    async logout() {
+        try {
+            await auth.signOut();
+            // После выхода страница перезагрузится, и появится экран логина
+            window.location.reload(); 
+        } catch (e) {
+            UI.showToast("Ошибка при выходе");
+        }
+    }
 
     // 3. Почта: Регистрация
     async registerEmail() {
@@ -73,4 +89,5 @@ auth.onAuthStateChanged(user => {
         }
     }
 });
+
 
