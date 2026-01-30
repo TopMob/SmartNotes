@@ -1,20 +1,34 @@
-async function login() {
-    try {
-        await auth.signInWithPopup(provider);
-    } catch (error) {
-        console.error(error);
-    }
-}
+const Auth = {
+    async login() {
+        try {
+            await auth.signInWithPopup(provider);
+        } catch (error) {
+            console.error("Login Error:", error);
+            alert("Ошибка входа: " + error.message);
+        }
+    },
 
-async function logout() {
-    try {
-        await auth.signOut();
-        window.location.reload();
-    } catch (error) {
-        console.error(error);
-    }
-}
+    async logout() {
+        try {
+            await auth.signOut();
+            window.location.reload();
+        } catch (error) {
+            console.error(error);
+        }
+    },
 
+    async switchAccount() {
+        try {
+            await auth.signOut();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            await this.login();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+};
+
+// Listener changes
 auth.onAuthStateChanged(user => {
     const loginScreen = document.getElementById('login-screen');
     const appScreen = document.getElementById('app');
@@ -23,7 +37,6 @@ auth.onAuthStateChanged(user => {
 
     if (user) {
         state.user = user;
-
         if (userPhoto) userPhoto.src = user.photoURL || '';
         if (userName) userName.textContent = user.displayName || 'Пользователь';
 
@@ -43,13 +56,10 @@ auth.onAuthStateChanged(user => {
             }, 100);
         }
 
-        if (typeof initApp === 'function') {
-            initApp(); 
-        }
+        if (typeof initApp === 'function') initApp(); 
 
     } else {
         state.user = null;
-
         if (appScreen) {
             appScreen.style.opacity = '0';
             setTimeout(() => {
@@ -57,7 +67,6 @@ auth.onAuthStateChanged(user => {
                 appScreen.classList.remove('active');
             }, 500);
         }
-
         if (loginScreen) {
             loginScreen.style.display = 'flex';
             setTimeout(() => {
@@ -67,13 +76,3 @@ auth.onAuthStateChanged(user => {
         }
     }
 });
-
-async function switchAccount() {
-    try {
-        await auth.signOut();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        await login();
-    } catch (error) {
-        console.error(error);
-    }
-}
