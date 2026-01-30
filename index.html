@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>SmartNotes</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -38,7 +38,7 @@
         
         <aside id="sidebar" class="sidebar-glass">
             <div class="sidebar-header">
-                <span class="brand-text-gradient">SmartNotes</span>
+                <span class="brand-text-fixed">SmartNotes</span>
                 <button class="btn-icon mobile-only" onclick="UI.toggleSidebar(false)">
                     <i class="material-icons-round">close</i>
                 </button>
@@ -95,7 +95,7 @@
 
                 <div class="search-container">
                     <i class="material-icons-round search-icon">search</i>
-                    <input type="text" id="search-input" placeholder="Поиск..." oninput="filterAndRender(this.value)">
+                    <input type="text" id="search-input" placeholder="Поиск (текст, #теги)..." oninput="filterAndRender(this.value)">
                 </div>
 
                 <div class="header-right">
@@ -105,10 +105,10 @@
                             <div class="dropdown-header">
                                 <span id="user-name">Загрузка...</span>
                             </div>
-                            <button class="dropdown-item" onclick="UI.showConfirm('Смена аккаунта', 'Сменить пользователя?', () => switchAccount())">
+                            <button class="dropdown-item" onclick="UI.showConfirm('Смена аккаунта', 'Сменить пользователя?', () => Auth.switchAccount())">
                                 <i class="material-icons-round">switch_account</i> Сменить
                             </button>
-                            <button class="dropdown-item danger" onclick="UI.showConfirm('Выход', 'Выйти из системы?', () => logout())">
+                            <button class="dropdown-item danger" onclick="UI.showConfirm('Выход', 'Выйти из системы?', () => Auth.logout())">
                                 <i class="material-icons-round">logout</i> Выйти
                             </button>
                         </div>
@@ -138,34 +138,51 @@
 
     <div id="note-editor" class="editor-overlay">
         <div class="editor-container">
-            <div class="editor-header">
-                <button class="btn-icon" onclick="Editor.close()">
-                    <i class="material-icons-round">arrow_back</i>
+            <div class="editor-header-bar">
+                <button class="btn-icon close-editor-btn" onclick="Editor.close()">
+                    <i class="material-icons-round">close</i>
                 </button>
-                <div class="editor-actions">
-                    <button class="btn-icon" id="pin-btn" onclick="Editor.togglePin()">
+                
+                <div class="editor-tools">
+                    <button class="btn-icon" onclick="Editor.undo()" title="Назад (Ctrl+Z)">
+                        <i class="material-icons-round">undo</i>
+                    </button>
+                    <button class="btn-icon" onclick="Editor.redo()" title="Вперед (Ctrl+Y)">
+                        <i class="material-icons-round">redo</i>
+                    </button>
+                    <div class="divider-vertical"></div>
+                    <button class="btn-icon" id="important-btn" onclick="Editor.toggleImportant()" title="Важное">
+                        <i class="material-icons-round">priority_high</i>
+                    </button>
+                    <button class="btn-icon" id="pin-btn" onclick="Editor.togglePin()" title="Закрепить">
                         <i class="material-icons-round">push_pin</i>
                     </button>
-                    <button class="btn-icon" id="archive-btn" onclick="Editor.toggleArchive()">
+                    <button class="btn-icon" id="archive-btn" onclick="Editor.toggleArchive()" title="Архив">
                         <i class="material-icons-round">archive</i>
                     </button>
-                    <button class="btn-icon delete-icon" onclick="Editor.deleteCurrent()">
+                    <button class="btn-icon delete-icon" onclick="Editor.deleteCurrent()" title="Удалить">
                         <i class="material-icons-round">delete</i>
                     </button>
                 </div>
+                
+                <button class="btn-primary mobile-save-btn" onclick="Editor.close()">
+                    <i class="material-icons-round">check</i>
+                </button>
             </div>
-            <div class="editor-body scrollable">
+
+            <div class="editor-scroll-area">
                 <input type="text" id="note-title" placeholder="Заголовок" autocomplete="off">
-                <div class="meta-inputs">
-                    <div class="tag-input-wrapper">
-                        <input type="text" id="note-tags-input" placeholder="#тег (Enter)">
-                        <div id="note-tags-container" class="tags-list"></div>
-                    </div>
-                </div>
                 <textarea id="note-content" placeholder="Начните писать..." class="scrollable"></textarea>
             </div>
-            <div class="editor-footer">
-                <span id="last-edited">Сохранено</span>
+
+            <div class="editor-bottom-panel">
+                <div class="tags-section">
+                    <div id="note-tags-container" class="tags-list-editor"></div>
+                    <input type="text" id="note-tags-input" placeholder="Добавить #тег (Enter)">
+                </div>
+                <div class="editor-status">
+                    <span id="last-edited">Сохранено</span>
+                </div>
             </div>
         </div>
     </div>
@@ -226,13 +243,13 @@
             </div>
             <div class="modal-body">
                 <ul class="team-list" style="list-style: none; padding: 0;">
-                    <li style="margin-bottom: 10px;">👨‍💻 Alex - Lead Dev</li>
-                    <li style="margin-bottom: 10px;">🎨 Maria - Design</li>
-                    <li style="margin-bottom: 10px;">🔧 John - Backend</li>
-                    <li style="margin-bottom: 10px;">🚀 Kate - Manager</li>
+                    <li style="margin-bottom: 12px; font-weight:600;">👨‍💻 Александров Арсений</li>
+                    <li style="margin-bottom: 12px; font-weight:600;">👨‍💻 Копаев Иван</li>
+                    <li style="margin-bottom: 12px; font-weight:600;">👨‍💻 Малышев Егор</li>
+                    <li style="margin-bottom: 12px; font-weight:600;">👨‍💻 Миняев Иван</li>
                 </ul>
-                <a href="https://t.me/your_bot" target="_blank" class="btn-primary" style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; margin-top:20px;">
-                    <i class="material-icons-round">smart_toy</i> Наш Telegram Бот
+                <a href="https://t.me/SmartNotesInfo_bot" target="_blank" class="btn-primary telegram-btn">
+                    <i class="material-icons-round">smart_toy</i> @SmartNotesInfo_bot
                 </a>
             </div>
         </div>
