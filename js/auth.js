@@ -1,15 +1,43 @@
 const Auth = {
+    // 1. Google
     async login() {
+        const provider = new firebase.auth.GoogleAuthProvider();
         try { await auth.signInWithPopup(provider); } 
-        catch (error) { console.error(error); alert("Login Error"); }
+        catch (e) { UI.showToast("Ошибка Google"); }
     },
+
+    // 2. GitHub
+    async loginGithub() {
+        const provider = new firebase.auth.GithubAuthProvider();
+        try { await auth.signInWithPopup(provider); }
+        catch (e) { UI.showToast("Ошибка GitHub"); }
+    },
+
+    // 3. Почта: Вход
+    async loginEmail() {
+        const email = document.getElementById('auth-email').value;
+        const pass = document.getElementById('auth-pass').value;
+        if (!email || !pass) return UI.showToast("Введите данные");
+
+        try { await auth.signInWithEmailAndPassword(email, pass); }
+        catch (e) { UI.showToast("Неверный логин или пароль"); }
+    },
+
+    // 3. Почта: Регистрация
+    async registerEmail() {
+        const email = document.getElementById('auth-email').value;
+        const pass = document.getElementById('auth-pass').value;
+        if (pass.length < 6) return UI.showToast("Пароль от 6 символов");
+
+        try {
+            await auth.createUserWithEmailAndPassword(email, pass);
+            UI.showToast("Успешная регистрация!");
+        } catch (e) { UI.showToast("Ошибка регистрации"); }
+    },
+
     async logout() {
-        try { await auth.signOut(); window.location.reload(); } 
-        catch (error) { console.error(error); }
-    },
-    async switchAccount() {
-        try { await auth.signOut(); provider.setCustomParameters({ prompt: 'select_account' }); await this.login(); } 
-        catch (error) { console.error(error); }
+        await auth.signOut();
+        window.location.reload();
     }
 };
 
@@ -45,3 +73,4 @@ auth.onAuthStateChanged(user => {
         }
     }
 });
+
