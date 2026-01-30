@@ -191,3 +191,47 @@ window.switchView = (view, folderId = null) => {
     if (window.filterAndRender) filterAndRender(document.getElementById('search-input').value);
     UI.renderFolders(state.folders);
 };
+
+// Пасхалка: Копаев + Миняев = Ваня в квадрате
+let eggStep = 0;
+
+document.addEventListener('click', (e) => {
+    const target = e.target;
+    
+    if (target.classList.contains('name-kopaev')) {
+        eggStep = 1; // Первый шаг пройден
+    } 
+    else if (target.classList.contains('name-minyaev') && eggStep === 1) {
+        // Условие выполнено!
+        activateVanyaEgg();
+        eggStep = 0; // Сброс
+    } 
+    else {
+        eggStep = 0; // Нажали куда-то не туда — сброс прогресса
+    }
+});
+
+function activateVanyaEgg() {
+    const list = document.querySelector('.team-list');
+    if (!list) return;
+
+    // 1. Красиво скрываем всех
+    list.style.transition = 'all 0.5s ease';
+    list.style.opacity = '0';
+    list.style.transform = 'scale(0.8)';
+
+    setTimeout(() => {
+        // 2. Очищаем список и добавляем одного Ваню
+        list.innerHTML = `
+            <li class="team-member name-vanya-super" style="color: #00f2ff; text-shadow: 0 0 20px #00f2ff; font-size: 1.5rem;">
+                👑 Ваня² (Ultimate Edition)
+            </li>
+        `;
+        
+        // 3. Возвращаем видимость
+        list.style.opacity = '1';
+        list.style.transform = 'scale(1)';
+        
+        UI.showToast("Пасхалка активирована!");
+    }, 500);
+}
