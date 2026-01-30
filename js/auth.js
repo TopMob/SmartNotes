@@ -55,6 +55,10 @@ const Auth = {
             UI.showToast("Ошибка при выходе");
         }
     }
+    async switchAccount() {
+        // Просто вызываем уже существующий logout
+        await this.logout();
+    },
 };
 
 auth.onAuthStateChanged(user => {
@@ -107,3 +111,4 @@ if ('serviceWorker' in navigator) {
         .then(() => console.log('Service Worker Registered'))
         .catch(err => console.log('SW Registration Failed', err));
 }
+
