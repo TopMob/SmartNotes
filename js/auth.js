@@ -6,7 +6,7 @@ const Auth = {
             await auth.signInWithPopup(provider);
         } catch (e) {
             console.error(e);
-            UI.showToast("Вход через Google отменен");
+            UI.showToast("Вход отменен");
         }
     },
 
@@ -54,11 +54,27 @@ const Auth = {
             console.error(e);
             UI.showToast("Ошибка при выходе");
         }
-    }
-    async switchAccount() {
-        // Просто вызываем уже существующий logout
-        await this.logout();
     },
+
+    async switchAccount() {
+        const user = auth.currentUser;
+        if (user && user.providerData.some(p => p.providerId === 'google.com')) {
+            await auth.signOut();
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            try {
+                await auth.signInWithPopup(provider);
+            } catch (e) {
+                window.location.reload();
+            }
+        } else {
+            this.logout();
+        }
+    },
+
+    switchGoogleAccount() {
+        this.switchAccount();
+    }
 };
 
 auth.onAuthStateChanged(user => {
@@ -69,7 +85,7 @@ auth.onAuthStateChanged(user => {
 
     if (user) {
         state.user = user;
-        if (userPhoto) userPhoto.src = user.photoURL || 'assets/default-avatar.png';
+        if (userPhoto) userPhoto.src = user.photoURL || 'https://ui-avatars.com/api/?name=' + (user.email || 'U');
         if (userName) userName.textContent = user.displayName || user.email.split('@')[0];
 
         if (loginScreen) {
@@ -105,10 +121,3 @@ auth.onAuthStateChanged(user => {
         }
     }
 });
-
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
-        .then(() => console.log('Service Worker Registered'))
-        .catch(err => console.log('SW Registration Failed', err));
-}
-
