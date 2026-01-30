@@ -25,7 +25,7 @@ auth.onAuthStateChanged(user => {
         state.user = user;
 
         if (userPhoto) userPhoto.src = user.photoURL || '';
-        if (userName) userName.textContent = user.displayName || '';
+        if (userName) userName.textContent = user.displayName || 'Пользователь';
 
         if (loginScreen) {
             loginScreen.style.opacity = '0';
@@ -36,7 +36,7 @@ auth.onAuthStateChanged(user => {
         }
 
         if (appScreen) {
-            appScreen.style.display = 'grid';
+            appScreen.style.display = 'flex';
             setTimeout(() => {
                 appScreen.style.opacity = '1';
                 appScreen.classList.add('active');
@@ -45,9 +45,6 @@ auth.onAuthStateChanged(user => {
 
         if (typeof initApp === 'function') {
             initApp(); 
-        } else {
-            if (typeof syncFolders === 'function') syncFolders();
-            if (typeof syncNotes === 'function') syncNotes();
         }
 
     } else {
@@ -55,8 +52,10 @@ auth.onAuthStateChanged(user => {
 
         if (appScreen) {
             appScreen.style.opacity = '0';
-            appScreen.style.display = 'none';
-            appScreen.classList.remove('active');
+            setTimeout(() => {
+                appScreen.style.display = 'none';
+                appScreen.classList.remove('active');
+            }, 500);
         }
 
         if (loginScreen) {
