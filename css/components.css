@@ -82,6 +82,7 @@
     margin: 10px 0;
     font-weight: 600;
     transition: all 0.3s ease;
+    text-align: center;
 }
 .name-alexandrov { 
     color: #a3e635; 
@@ -103,6 +104,7 @@
     transform: scale(1.05);
     text-shadow: 0 0 15px currentColor;
 }
+
 
 
 
