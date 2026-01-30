@@ -89,7 +89,7 @@
 }
 .name-kopaev { 
     color: #d946ef; 
-    text-shadow: 0 0 10px rgb(26, 4, 224, 0.4); 
+    text-shadow: 0 0 10px rgba(11, 28, 138, 0.4);
 }
 .name-malyshev { 
     color: #2dd4bf; 
@@ -103,3 +103,4 @@
     transform: scale(1.05);
     text-shadow: 0 0 15px currentColor;
 }
+
