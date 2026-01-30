@@ -5,8 +5,7 @@ const Auth = {
         try {
             await auth.signInWithPopup(provider);
         } catch (e) {
-            console.error(e);
-            UI.showToast("Вход отменен");
+            this.handleAuthError(e);
         }
     },
 
@@ -15,8 +14,7 @@ const Auth = {
         try {
             await auth.signInWithPopup(provider);
         } catch (e) {
-            console.error(e);
-            UI.showToast("Ошибка GitHub");
+            this.handleAuthError(e);
         }
     },
 
@@ -27,8 +25,7 @@ const Auth = {
         try {
             await auth.signInWithEmailAndPassword(email, pass);
         } catch (e) {
-            console.error(e);
-            UI.showToast("Неверная почта или пароль");
+            this.handleAuthError(e);
         }
     },
 
@@ -41,8 +38,29 @@ const Auth = {
             await auth.createUserWithEmailAndPassword(email, pass);
             UI.showToast("Успешная регистрация!");
         } catch (e) {
-            console.error(e);
-            UI.showToast("Ошибка регистрации");
+            this.handleAuthError(e);
+        }
+    },
+
+    handleAuthError(e) {
+        console.error("Auth Error:", e.code, e.message);
+        switch (e.code) {
+            case 'auth/account-exists-with-different-credential':
+                UI.showToast("Эта почта уже привязана к другому способу входа");
+                break;
+            case 'auth/email-already-in-use':
+                UI.showToast("Пользователь с такой почтой уже существует");
+                break;
+            case 'auth/wrong-password':
+                UI.showToast("Неверный пароль");
+            case 'auth/user-not-found':
+                UI.showToast("Пользователь не найден");
+                break;
+            case 'auth/popup-closed-by-user':
+                UI.showToast("Окно входа было закрыто");
+                break;
+            default:
+                UI.showToast("Ошибка авторизации: " + e.message);
         }
     },
 
@@ -51,7 +69,6 @@ const Auth = {
             await auth.signOut();
             window.location.reload();
         } catch (e) {
-            console.error(e);
             UI.showToast("Ошибка при выходе");
         }
     },
@@ -85,39 +102,29 @@ auth.onAuthStateChanged(user => {
 
     if (user) {
         state.user = user;
-        if (userPhoto) userPhoto.src = user.photoURL || 'https://ui-avatars.com/api/?name=' + (user.email || 'U');
+        if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=random`;
         if (userName) userName.textContent = user.displayName || user.email.split('@')[0];
 
         if (loginScreen) {
-            loginScreen.style.opacity = '0';
-            setTimeout(() => { 
-                loginScreen.style.display = 'none'; 
-                loginScreen.classList.remove('active'); 
-            }, 500);
+            loginScreen.style.display = 'none';
+            loginScreen.classList.remove('active');
         }
         if (appScreen) {
             appScreen.style.display = 'flex';
-            setTimeout(() => { 
-                appScreen.style.opacity = '1'; 
-                appScreen.classList.add('active'); 
-            }, 100);
+            appScreen.classList.add('active');
+            appScreen.style.opacity = '1';
         }
         if (typeof initApp === 'function') initApp(); 
     } else {
         state.user = null;
         if (appScreen) {
-            appScreen.style.opacity = '0';
-            setTimeout(() => { 
-                appScreen.style.display = 'none'; 
-                appScreen.classList.remove('active'); 
-            }, 500);
+            appScreen.style.display = 'none';
+            appScreen.classList.remove('active');
         }
         if (loginScreen) {
             loginScreen.style.display = 'flex';
-            setTimeout(() => { 
-                loginScreen.style.opacity = '1'; 
-                loginScreen.classList.add('active'); 
-            }, 100);
+            loginScreen.classList.add('active');
+            loginScreen.style.opacity = '1';
         }
     }
 });
