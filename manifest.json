@@ -1,0 +1,15 @@
+{
+  "short_name": "SmartNotes",
+  "name": "SmartNotes - Умные заметки",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/564/564445.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#000000"
+}
