@@ -43,24 +43,25 @@ const Auth = {
     },
 
     handleAuthError(e) {
-        console.error("Auth Error:", e.code, e.message);
+        console.warn("Auth Code:", e.code);
         switch (e.code) {
             case 'auth/account-exists-with-different-credential':
-                UI.showToast("Эта почта уже привязана к другому способу входа");
+                UI.showToast("Войдите через Google (эта почта уже занята им)");
                 break;
             case 'auth/email-already-in-use':
-                UI.showToast("Пользователь с такой почтой уже существует");
+                UI.showToast("Почта занята. Попробуйте войти, а не регистрироваться");
                 break;
             case 'auth/wrong-password':
-                UI.showToast("Неверный пароль");
+                UI.showToast("Неверный пароль или вход через Google");
+                break;
             case 'auth/user-not-found':
                 UI.showToast("Пользователь не найден");
                 break;
             case 'auth/popup-closed-by-user':
-                UI.showToast("Окно входа было закрыто");
+                UI.showToast("Окно закрыто");
                 break;
             default:
-                UI.showToast("Ошибка авторизации: " + e.message);
+                UI.showToast("Ошибка: " + e.code);
         }
     },
 
@@ -74,18 +75,13 @@ const Auth = {
     },
 
     async switchAccount() {
-        const user = auth.currentUser;
-        if (user && user.providerData.some(p => p.providerId === 'google.com')) {
-            await auth.signOut();
-            const provider = new firebase.auth.GoogleAuthProvider();
-            provider.setCustomParameters({ prompt: 'select_account' });
-            try {
-                await auth.signInWithPopup(provider);
-            } catch (e) {
-                window.location.reload();
-            }
-        } else {
-            this.logout();
+        await auth.signOut();
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        try {
+            await auth.signInWithPopup(provider);
+        } catch (e) {
+            window.location.reload();
         }
     },
 
@@ -107,23 +103,17 @@ auth.onAuthStateChanged(user => {
 
         if (loginScreen) {
             loginScreen.style.display = 'none';
-            loginScreen.classList.remove('active');
         }
         if (appScreen) {
             appScreen.style.display = 'flex';
-            appScreen.classList.add('active');
             appScreen.style.opacity = '1';
         }
         if (typeof initApp === 'function') initApp(); 
     } else {
         state.user = null;
-        if (appScreen) {
-            appScreen.style.display = 'none';
-            appScreen.classList.remove('active');
-        }
+        if (appScreen) appScreen.style.display = 'none';
         if (loginScreen) {
             loginScreen.style.display = 'flex';
-            loginScreen.classList.add('active');
             loginScreen.style.opacity = '1';
         }
     }
