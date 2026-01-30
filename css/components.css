@@ -122,19 +122,15 @@
 }
 
 /* Кнопки соцсетей */
-.btn-auth {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 10px;
-    border: none;
-    font-weight: 600;
-    cursor: pointer;
-    transition: 0.3s;
+.btn-auth img {
+    width: 20px;          /* Фиксированная ширина */
+    height: 20px;         /* Фиксированная высота */
+    object-fit: contain;  /* Сохраняет пропорции, не растягивая */
+    flex-shrink: 0;       /* Запрещает кнопке сжимать иконку */
 }
-
+.github img {
+    filter: invert(1);    /* Твой текущий инверт цвета */
+}
 .google { background: white; color: black; }
 .github { background: #24292e; color: white; }
 .github img { filter: invert(1); }
@@ -169,3 +165,4 @@
 .auth-divider::before, .auth-divider::after {
     content: ""; flex: 1; height: 1px; background: var(--border); margin: 0 10px;
 }
+
