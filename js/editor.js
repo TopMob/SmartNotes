@@ -2,7 +2,7 @@ const Editor = {
     history: [],
     future: [],
     saveTimeout: null,
-    maxHistory: 50,
+    maxHistory: 30,
 
     init() {
         this.titleInp = document.getElementById('note-title');
@@ -19,45 +19,32 @@ const Editor = {
         
         this.tagsInp.onkeydown = (e) => {
             if (e.key === 'Enter' && e.target.value.trim()) {
-                this.addTag(e.target.value.trim());
+                let val = e.target.value.trim().replace('#', '');
+                this.addTag(val);
                 e.target.value = '';
                 this.handleAutoSave();
             }
         };
-
-        window.addEventListener('keydown', (e) => {
-            if (state.currentNote) {
-                if (e.ctrlKey && e.key === 'z') { e.preventDefault(); this.undo(); }
-                if (e.ctrlKey && e.key === 'y') { e.preventDefault(); this.redo(); }
-            }
-        });
     },
 
     open(note = null) {
-        const defaultFolder = state.view === 'folder' ? state.activeFolderId : null;
+        const defFolder = state.view === 'folder' ? state.activeFolderId : null;
         
         state.currentNote = note ? JSON.parse(JSON.stringify(note)) : {
-            id: this.generateId(),
-            title: '',
-            content: '',
-            tags: [],
-            isPinned: false,
-            isArchived: false,
-            folderId: defaultFolder,
+            id: Math.random().toString(36).substr(2, 9),
+            title: '', content: '', tags: [],
+            isPinned: false, isArchived: false, isImportant: false,
+            folderId: defFolder,
             authorId: state.user.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         this.history = [];
         this.future = [];
-        
         this.renderEditorState();
         document.getElementById('note-editor').classList.add('active');
-        this.contentInp.focus();
-    },
-
-    generateId() {
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        // Delay focus to prevent mobile keyboard glitches on open
+        setTimeout(() => this.contentInp.focus(), 100);
     },
 
     renderEditorState() {
@@ -65,10 +52,11 @@ const Editor = {
         this.titleInp.value = n.title;
         this.contentInp.value = n.content;
         this.renderTags();
-        this.updateToggleButtons();
+        this.updateButtons();
     },
 
     addTag(tag) {
+        if (!state.currentNote.tags) state.currentNote.tags = [];
         if (!state.currentNote.tags.includes(tag)) {
             state.currentNote.tags.push(tag);
             this.renderTags();
@@ -83,7 +71,7 @@ const Editor = {
 
     renderTags() {
         const container = document.getElementById('note-tags-container');
-        container.innerHTML = state.currentNote.tags.map(t => `
+        container.innerHTML = (state.currentNote.tags || []).map(t => `
             <span class="tag-chip">
                 #${t}
                 <i class="material-icons-round" onclick="Editor.removeTag('${t}')">close</i>
@@ -93,77 +81,83 @@ const Editor = {
 
     togglePin() {
         state.currentNote.isPinned = !state.currentNote.isPinned;
-        this.updateToggleButtons();
+        this.updateButtons();
         this.handleAutoSave();
         UI.showToast(state.currentNote.isPinned ? 'Закреплено' : 'Откреплено');
     },
 
+    toggleImportant() {
+        state.currentNote.isImportant = !state.currentNote.isImportant;
+        this.updateButtons();
+        this.handleAutoSave();
+        UI.showToast(state.currentNote.isImportant ? 'Помечено важным' : 'Снята важность');
+    },
+
     toggleArchive() {
         state.currentNote.isArchived = !state.currentNote.isArchived;
-        this.updateToggleButtons();
-        this.handleAutoSave();
-        if (state.currentNote.isArchived) {
-            UI.showToast('В архиве');
-            this.close();
+        if(state.currentNote.isArchived) {
+            this.save();
+            this.close(true);
+            UI.showToast('В архив');
         } else {
-            UI.showToast('Восстановлено');
+            this.updateButtons();
+            this.handleAutoSave();
         }
     },
 
-    updateToggleButtons() {
-        const pinBtn = document.getElementById('pin-btn');
-        const arcBtn = document.getElementById('archive-btn');
-        if (pinBtn) pinBtn.classList.toggle('active', state.currentNote.isPinned);
-        if (arcBtn) arcBtn.classList.toggle('active', state.currentNote.isArchived);
+    updateButtons() {
+        document.getElementById('pin-btn').classList.toggle('active', state.currentNote.isPinned);
+        document.getElementById('archive-btn').classList.toggle('active', state.currentNote.isArchived);
+        document.getElementById('important-btn').classList.toggle('active', state.currentNote.isImportant);
+        document.getElementById('important-btn').style.color = state.currentNote.isImportant ? '#ff9100' : 'var(--text)';
     },
 
     deleteCurrent() {
-        UI.showConfirm("Удалить", "Заметка будет удалена безвозвратно.", async () => {
+        UI.showConfirm("Удалить?", "Необратимо.", async () => {
             if (state.currentNote.id) {
                 await db.collection('users').doc(state.user.uid).collection('notes').doc(state.currentNote.id).delete();
             }
-            this.close(true); 
+            this.close(true);
         });
     },
 
     pushHistory() {
-        const currentData = {
-            title: this.titleInp.value,
-            content: this.contentInp.value
-        };
-        if (this.history.length > 0) {
-            const last = this.history[this.history.length - 1];
-            if (last.title === currentData.title && last.content === currentData.content) return;
-        }
-        this.history.push(currentData);
+        const data = { t: this.titleInp.value, c: this.contentInp.value };
+        const last = this.history[this.history.length - 1];
+        if (last && last.t === data.t && last.c === data.c) return;
+        
+        this.history.push(data);
         if (this.history.length > this.maxHistory) this.history.shift();
         this.future = [];
     },
 
     undo() {
-        if (this.history.length <= 1) return;
-        this.future.push(this.history.pop());
-        const prev = this.history[this.history.length - 1];
-        this.applyHistoryState(prev);
+        if (this.history.length === 0) return;
+        const current = { t: this.titleInp.value, c: this.contentInp.value };
+        this.future.push(current);
+        const prev = this.history.pop();
+        this.applyState(prev);
     },
 
     redo() {
         if (this.future.length === 0) return;
+        const current = { t: this.titleInp.value, c: this.contentInp.value };
+        this.history.push(current);
         const next = this.future.pop();
-        this.history.push(next);
-        this.applyHistoryState(next);
+        this.applyState(next);
     },
 
-    applyHistoryState(data) {
-        this.titleInp.value = data.title;
-        this.contentInp.value = data.content;
+    applyState(data) {
+        if(!data) return;
+        this.titleInp.value = data.t;
+        this.contentInp.value = data.c;
         this.handleAutoSave();
     },
 
     handleAutoSave() {
         clearTimeout(this.saveTimeout);
-        this.saveTimeout = setTimeout(() => this.save(), 1000);
         document.getElementById('last-edited').innerText = 'Сохранение...';
+        this.saveTimeout = setTimeout(() => this.save(), 800);
     },
 
     async save() {
@@ -178,9 +172,7 @@ const Editor = {
                     .collection('notes').doc(state.currentNote.id)
                     .set(state.currentNote, { merge: true });
             document.getElementById('last-edited').innerText = 'Сохранено';
-        } catch (e) {
-            console.error("Save error:", e);
-        }
+        } catch (e) { console.error(e); }
     },
 
     async close(skipSave = false) {
