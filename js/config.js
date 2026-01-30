@@ -25,7 +25,5 @@ let state = {
     searchQuery: '',
     currentNote: null,
     tempRating: 0,
-    config: {
-        lang: 'ru'
-    }
+    config: { lang: 'ru' }
 };
