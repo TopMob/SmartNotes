@@ -1,5 +1,5 @@
 // Вставь сюда URL, который ты скопировал на Шаге 1
-const GOOGLE_SHEET_APP_URL = "https://script.google.com/macros/s/AKfycbwlkUDV6h6R6uhnqlDoIu4losqPbntkeK_SUtHuNS0PhpTnNBy4vTxSr0B_AhZziH4/exec";
+const GOOGLE_SHEET_APP_URL = "https://script.google.com/macros/s/AKfycbzvIACyu84_Ue4hUsH_icuoRhfJBVP8Zw3qkXPWtEYhX4Mun_kMqYmoF0-2A4BOBJc/exec";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
@@ -33,3 +33,4 @@ let state = {
     }
 
 };
+
