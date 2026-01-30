@@ -20,12 +20,12 @@ let state = {
     user: null,
     notes: [],
     folders: [],
-    currentView: 'notes',
+    view: 'notes',
     activeFolderId: null,
     searchQuery: '',
+    currentNote: null,
+    tempRating: 0,
     config: {
-        lang: 'ru',
-        accentColor: '#00ffcc',
-        bgColor: '#0a0a0a'
+        lang: 'ru'
     }
 };
