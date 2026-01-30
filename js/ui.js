@@ -224,7 +224,7 @@ function activateVanyaEgg() {
         // 2. Очищаем список и добавляем одного Ваню
         list.innerHTML = `
             <li class="team-member name-vanya-super" style="color: #00f2ff; text-shadow: 0 0 20px #00f2ff; font-size: 1.5rem;">
-                👑 Ваня² (Ultimate Edition)
+                Тайлер²
             </li>
         `;
         
@@ -235,3 +235,4 @@ function activateVanyaEgg() {
         UI.showToast("Пасхалка активирована!");
     }, 500);
 }
+
