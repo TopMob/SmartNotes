@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzARH6BBomq_AKtOD9H-khGfj01ml8DGD4Z9gh9zkBtkK5m-yTJh-X-JD-CrJvJStM5/exec'; 
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxbhZFdBGpdbX0kJgzZulXjHbT9Z88sctgLGx1oRHThhNVMCIDintVh6tpzA7OlAhWA/exec'; 
 
 (function() {
     let syncTimeout;
