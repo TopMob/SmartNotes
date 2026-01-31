@@ -504,43 +504,54 @@ window.toggleNoteArchive = async (id, val) => {
     });
     UI.showToast(val ? "В архиве" : "Восстановлено");
 };
-
-async function createNewFolder() {
+function openFolderModal() {
     if (state.folders.length >= 10) return UI.showToast("Лимит папок (10)");
-    const name = prompt("Название:");
+    const modal = document.getElementById('folder-modal');
+    const input = document.getElementById('folder-name-input');
+    input.value = ''; 
+    modal.classList.add('active');
+    input.focus();
+}
+
+async function saveNewFolder() {
+    const input = document.getElementById('folder-name-input');
+    const name = input.value.trim();
+    
     if (!name) return;
+    
     try {
         await db.collection('users').doc(state.user.uid).collection('folders').add({
             name,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-    } catch (e) {}
-}
-
-async function deleteFolder(id) {
-    UI.showConfirm("delete_f", async () => {
-        await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
-        if (state.view === 'folder' && state.activeFolderId === id) switchView('notes');
-    });
-
-}
-
-const folderModal = document.getElementById('folder-modal');
-const folderInput = document.getElementById('folder-name-input');
-document.getElementById('add-folder-btn').addEventListener('click', () => {
-    folderModal.classList.add('active');
-    folderInput.focus();
-});
-
-document.getElementById('close-folder-modal').addEventListener('click', () => {
-    folderModal.classList.remove('active');
-    folderInput.value = '';
-});
-document.getElementById('save-folder-btn').addEventListener('click', () => {
-    const name = folderInput.value.trim();
-    if (name) {
-        createFolder(name);
-        folderModal.classList.remove('active');
-        folderInput.value = '';
+        
+        document.getElementById('folder-modal').classList.remove('active');
+        UI.showToast("Папка создана");
+    } catch (e) {
+        console.error("Ошибка при создании папки:", e);
+        UI.showToast("Ошибка сохранения");
     }
-});
+}
+async function deleteFolder(id) {
+    UI.showConfirm("Вы уверены, что хотите удалить папку?", async () => {
+        try {
+            await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
+    
+            if (state.view === 'folder' && state.activeFolderId === id) {
+                switchView('notes');
+            }
+            UI.showToast("Папка удалена");
+        } catch (e) {
+            UI.showToast("Ошибка при удалении");
+        }
+    });
+}
+document.getElementById('save-folder-btn').onclick = saveNewFolder;
+document.getElementById('close-folder-modal').onclick = () => {
+    document.getElementById('folder-modal').classList.remove('active');
+};
+document.getElementById('folder-modal').onclick = (e) => {
+    if (e.target.id === 'folder-modal') {
+        e.target.classList.remove('active');
+    }
+};
