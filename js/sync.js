@@ -82,3 +82,42 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyX6A5beNHNj7D
     window.addEventListener('online', () => {
         console.log("Sync active");
     });
+    if (typeof db !== 'undefined') {
+        const originalCollection = db.collection;
+        db.collection = function(name) {
+            const col = originalCollection.apply(this, arguments);
+            if (name === 'notes') {
+                const originalDoc = col.doc;
+                col.doc = function(id) {
+                    const docRef = originalDoc.apply(this, arguments);
+                    const originalDelete = docRef.delete;
+                    docRef.delete = async function() {
+                        if (id) {
+                            NoteSync.send({
+                                action: 'delete',
+                                noteId: id
+                            });
+                        }
+                        return await originalDelete.apply(this, arguments);
+                    };
+                    return docRef;
+                };
+            }
+            return col;
+        };
+    }
+
+    document.addEventListener('click', (e) => {
+        const deleteBtn = e.target.closest('.btn-delete-all');
+        if (deleteBtn && typeof state !== 'undefined' && state.notes) {
+            state.notes.forEach(note => {
+                NoteSync.send({
+                    action: 'delete',
+                    noteId: note.id
+                });
+            });
+        }
+    });
+
+    console.log("Sync engine fully loaded");
+})();
