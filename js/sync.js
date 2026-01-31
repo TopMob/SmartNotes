@@ -1,57 +1,57 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxbhZFdBGpdbX0kJgzZulXjHbT9Z88sctgLGx1oRHThhNVMCIDintVh6tpzA7OlAhWA/exec'; 
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxbhZFdBGpdbX0kJgzZulXjHbT9Z88sctgLGx1oRHThhNVMCIDintVh6tpzA7OlAhWA/exec';
 
 (function() {
-    let syncTimeout;
+    let syncQueue = null;
 
-    function send(payload) {
-        clearTimeout(syncTimeout);
-        // Ждем 5 секунд затишья перед отправкой, чтобы сберечь лимиты RPD
-        syncTimeout = setTimeout(() => {
+    const dispatch = (data) => {
+        if (syncQueue) clearTimeout(syncQueue);
+        syncQueue = setTimeout(() => {
             fetch(GOOGLE_SHEET_URL, {
                 method: 'POST',
-                mode: 'cors',
+                mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify(payload)
-            }).catch(e => console.error('Sync error:', e));
-        }, 5000); 
-    }
+                body: JSON.stringify(data)
+            }).catch(console.error);
+        }, 3000);
+    };
 
-    function process(id, d, user, type) {
-        let folder = "Общее";
-        if (window.state && window.state.folders && d.folderId) {
-            const f = window.state.folders.find(fol => fol.id === d.folderId);
-            if (f) folder = f.name;
+    const formatNote = (id, data, user, action) => {
+        let folderName = "Общее";
+        if (window.state?.folders && data.folderId) {
+            folderName = window.state.folders.find(f => f.id === data.folderId)?.name || "Общее";
         }
 
         return {
-            action: type,
+            action,
             noteId: id,
-            uid: user ? user.uid : '',
+            uid: user?.uid || '',
             date: new Date().toLocaleString('ru-RU'),
-            user: user ? user.email : 'Anonymous',
-            title: d.title || '',
-            content: d.content || '',
-            folder: folder,
-            isPinned: d.isPinned ? "Да" : "Нет",
-            isImportant: d.isImportant ? "Да" : "Нет",
-            isArchived: d.isArchived ? "Да" : "Нет",
-            tags: Array.isArray(d.tags) ? d.tags.join(', ') : ""
+            user: user?.email || 'Anonymous',
+            title: data.title || '',
+            content: data.content || '',
+            folder: folderName,
+            isPinned: data.isPinned ? "Да" : "Нет",
+            isImportant: data.isImportant ? "Да" : "Нет",
+            isArchived: data.isArchived ? "Да" : "Нет",
+            tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.tags || "")
         };
-    }
+    };
 
     auth.onAuthStateChanged(user => {
         if (!user) return;
+
         db.collection('users').doc(user.uid).collection('notes')
-            .onSnapshot(snap => {
-                snap.docChanges().forEach(change => {
+            .onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
-                    
+                    const id = change.doc.id;
+
                     if (change.type === 'removed') {
-                        send({ action: 'delete', noteId: change.doc.id });
+                        dispatch({ action: 'delete', noteId: id });
                     } else {
-                        // Отправляем только если есть текст и это не техническое обновление
-                        if ((data.title || data.content) && (data.title.length > 3 || data.content.length > 5) && !data._isAiUpdating) {
-                            send(process(change.doc.id, data, user, 'save'));
+                        const isValid = (data.title?.length > 2 || data.content?.length > 5);
+                        if (isValid && !data._isAiUpdating) {
+                            dispatch(formatNote(id, data, user, 'save'));
                         }
                     }
                 });
