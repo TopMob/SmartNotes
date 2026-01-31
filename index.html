@@ -22,23 +22,19 @@
     <div class="bg-wrapper"></div>
 
     <div id="login-screen" class="modal-overlay active">
-    <div class="login-box">
-        <h1 class="brand-text-fixed">SmartNotes</h1>
-        <p class="subtext">Вход в систему</p>
-
-        <div class="auth-buttons-group">
-            <button class="btn-auth google" onclick="Auth.login()">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G">
-                Войти через Google
-            </button>
-                </div>
+        <div class="login-box">
+            <h1 class="brand-text-fixed">SmartNotes</h1>
+            <p class="subtext">Вход в систему</p>
+            <div class="auth-buttons-group">
+                <button class="btn-auth google" onclick="Auth.login()">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G">
+                    Войти через Google
+                </button>
             </div>
         </div>
     </div>
-</div>
 
     <div id="app" class="app-layout">
-        
         <aside id="sidebar" class="sidebar-glass">
             <div class="sidebar-header">
                 <span class="brand-text-fixed">SmartNotes</span>
@@ -144,7 +140,6 @@
                 <button class="btn-icon" onclick="Editor.close()">
                     <i class="material-icons-round">arrow_back</i>
                 </button>
-                
                 <div class="editor-tools">
                     <button class="btn-icon" onclick="Editor.undo()">
                         <i class="material-icons-round">undo</i>
@@ -203,10 +198,8 @@
 
                 <div class="settings-group">
                     <h3 data-lang="appearance">Внешний вид</h3>
-                    
                     <p class="subtext" data-lang="presets">Пресеты</p>
                     <div id="theme-picker-root" class="theme-grid"></div>
-                    
                     <p class="subtext" style="margin-top:20px;" data-lang="manual">Ручная настройка</p>
                     <div class="color-pickers-grid">
                         <div class="color-picker-item">
@@ -297,9 +290,4 @@
     <script src="js/sync.js"></script>
     <script src="js/app.js"></script>
 </body>
-</body>
 </html>
-
-
-
-
