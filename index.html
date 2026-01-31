@@ -67,7 +67,7 @@
 
                 <div class="folders-header">
                     <span data-lang="folders">ПАПКИ</span>
-                    <button class="btn-icon-small" onclick="createNewFolder()">
+                    <button class="btn-icon-small" id="add-folder-btn">
                         <i class="material-icons-round">add</i>
                     </button>
                 </div>
@@ -293,23 +293,13 @@
         </div>
     </div>
 
-    <div id="toast-container"></div>
-    <div id="folder-modal" class="modal-overlay">
-    <div class="modal-content">
-        <h2 data-lang="addFolder">Новая папка</h2>
-        <input type="text" id="folder-name-input" placeholder="Введите название..." maxlength="20">
-        <div class="modal-buttons">
-            <button class="btn-secondary" id="close-folder-modal" data-lang="cancel">Отмена</button>
-            <button class="btn-primary" id="save-folder-btn" data-lang="save">Создать</button>
-        </div>
-    </div>
-</div>
     <script src="js/core.js"></script>
     <script src="js/sync.js"></script>
     <script src="js/app.js"></script>
 </body>
 </body>
 </html>
+
 
 
 
