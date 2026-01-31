@@ -1,10 +1,11 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrYnteGJIee7HLn1Pdpx5RGgiIAGJMldL2B75In1k9vuU299X3hDZUyCfP83AnUPSJ/exec'; 
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzARH6BBomq_AKtOD9H-khGfj01ml8DGD4Z9gh9zkBtkK5m-yTJh-X-JD-CrJvJStM5/exec'; 
 
 (function() {
     let syncTimeout;
 
     function send(payload) {
         clearTimeout(syncTimeout);
+        // Ждем 5 секунд затишья перед отправкой, чтобы сберечь лимиты RPD
         syncTimeout = setTimeout(() => {
             fetch(GOOGLE_SHEET_URL, {
                 method: 'POST',
@@ -12,7 +13,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrYnteGJIee7H
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
             }).catch(e => console.error('Sync error:', e));
-        }, 2000);
+        }, 5000); 
     }
 
     function process(id, d, user, type) {
@@ -20,11 +21,6 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrYnteGJIee7H
         if (window.state && window.state.folders && d.folderId) {
             const f = window.state.folders.find(fol => fol.id === d.folderId);
             if (f) folder = f.name;
-        }
-
-        let tagsData = "";
-        if (Array.isArray(d.tags) && d.tags.length > 0) {
-            tagsData = d.tags.join(', ');
         }
 
         return {
@@ -39,7 +35,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrYnteGJIee7H
             isPinned: d.isPinned ? "Да" : "Нет",
             isImportant: d.isImportant ? "Да" : "Нет",
             isArchived: d.isArchived ? "Да" : "Нет",
-            tags: tagsData
+            tags: Array.isArray(d.tags) ? d.tags.join(', ') : ""
         };
     }
 
@@ -53,7 +49,8 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrYnteGJIee7H
                     if (change.type === 'removed') {
                         send({ action: 'delete', noteId: change.doc.id });
                     } else {
-                        if ((data.title || data.content) && !data._isAiUpdating) {
+                        // Отправляем только если есть текст и это не техническое обновление
+                        if ((data.title || data.content) && (data.title.length > 3 || data.content.length > 5) && !data._isAiUpdating) {
                             send(process(change.doc.id, data, user, 'save'));
                         }
                     }
@@ -61,6 +58,3 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrYnteGJIee7H
             });
     });
 })();
-
-
-
