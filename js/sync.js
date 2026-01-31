@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbymp2WmXpcDIulaHsqATBHtBJS32bxndBKuqtjYng-OCOxD0EsEriDwFpV8hoNACrY/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxqkzmp9BpKNP1apCCjgpVT5xy4IXCv-ky2TFQ8fu900NWU-DaurwWV2qA533TcI_0/exec'; 
 
 (function() {
     let syncTimeout;
@@ -8,11 +8,11 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbymp2WmXpcDIul
         syncTimeout = setTimeout(() => {
             fetch(GOOGLE_SHEET_URL, {
                 method: 'POST',
-                mode: 'no-cors',
+                mode: 'no-cors', // Это важно для обхода CORS
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
-            }).catch(e => {});
-        }, 500);
+            }).catch(e => console.error('Sync error:', e));
+        }, 1000); // Увеличил до 1 сек, чтобы ИИ успевал обрабатывать
     }
 
     function process(id, d, user, type) {
@@ -25,17 +25,12 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbymp2WmXpcDIul
         let tagsData = "";
         if (Array.isArray(d.tags) && d.tags.length > 0) {
             tagsData = d.tags.join(', ');
-        } else {
-            const tagElements = document.querySelectorAll('.tag span');
-            if (tagElements.length > 0) {
-                tagsData = Array.from(tagElements).map(el => el.textContent).join(', ');
-            }
         }
 
         return {
             action: type,
             noteId: id,
-            uid: user ? user.uid : '', // Передаем UID для связи с Firebase
+            uid: user ? user.uid : '', // ОБЯЗАТЕЛЬНО для записи Rating в Firestore
             date: new Date().toLocaleString('ru-RU'),
             user: user ? user.email : 'Anonymous',
             title: d.title || '',
@@ -50,14 +45,18 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbymp2WmXpcDIul
 
     auth.onAuthStateChanged(user => {
         if (!user) return;
+        // Слушаем изменения в коллекции пользователя
         db.collection('users').doc(user.uid).collection('notes')
             .onSnapshot(snap => {
                 snap.docChanges().forEach(change => {
+                    const data = change.doc.data();
+                    
                     if (change.type === 'removed') {
                         send({ action: 'delete', noteId: change.doc.id });
                     } else {
-                        const data = change.doc.data();
-                        if (data.title || data.content) {
+                        // Важно: не отправляем, если изменение пришло от самого ИИ (поле Rating)
+                        // Чтобы не было бесконечного цикла обновлений
+                        if ((data.title || data.content) && !data._isAiUpdating) {
                             send(process(change.doc.id, data, user, 'save'));
                         }
                     }
@@ -65,5 +64,3 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbymp2WmXpcDIul
             });
     });
 })();
-
-
