@@ -1,123 +1,71 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx53OdiUUZXzPfSVpIuzQBl4aPHCok2V0H0hU0gnLRXFlLwWeRY-W4AnyLQw7BxlzI/exec';
+const SYNC_URL = 'https://script.google.com/macros/s/AKfycbyfD1l8-87X6K1p5qYk1h6q8W9S7_4W6F1/exec';
 
-(function() {
-    const NoteSync = {
-        async send(payload) {
-            try {
-                await fetch(GOOGLE_SHEET_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            } catch (e) {
-                console.error("Sync error:", e);
-            }
-        },
+class NoteSync {
+    constructor() {
+        this.queue = [];
+        this.isSyncing = false;
+        this.init();
+    }
 
-        getFolderName(folderId) {
-            if (typeof state !== 'undefined' && state.folders && folderId) {
-                const folder = state.folders.find(f => f.id === folderId);
-                return folder ? folder.name : 'Общее';
-            }
-            return 'Общее';
-        },
-
-        getUserIdentifier() {
-            if (typeof state !== 'undefined' && state.user) {
-                return state.user.email || state.user.displayName || 'User';
-            }
-            return 'Anonymous';
+    init() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.hookState());
+        } else {
+            this.hookState();
         }
-    };
+    }
 
-    if (typeof Editor !== 'undefined') {
-        const originalSave = Editor.save;
-        Editor.save = async function() {
-            const result = await originalSave.apply(this, arguments);
-            const note = state.currentNote;
-            
-            if (note && note.id) {
-                NoteSync.send({
-                    action: 'save',
-                    noteId: note.id,
-                    title: note.title || 'Без названия',
-                    content: note.content || '',
-                    folder: NoteSync.getFolderName(note.folderId),
-                    tags: Array.isArray(note.tags) ? note.tags.join(', ') : '',
-                    author: NoteSync.getUserIdentifier()
-                });
+    hookState() {
+        const checkState = setInterval(() => {
+            if (window.state) {
+                clearInterval(checkState);
+                this.applyHooks();
             }
-            return result;
+        }, 100);
+    }
+
+    applyHooks() {
+        const originalSave = window.state.saveNote;
+        window.state.saveNote = (note) => {
+            originalSave.call(window.state, note);
+            this.push('save', note);
         };
 
-        const originalDelete = Editor.deleteCurrent;
-        Editor.deleteCurrent = async function() {
-            const noteIdToDelete = state.currentNote ? state.currentNote.id : null;
-            
-            if (noteIdToDelete) {
-                NoteSync.send({
-                    action: 'delete',
-                    noteId: noteIdToDelete
-                });
-            }
-
-            return await originalDelete.apply(this, arguments);
+        const originalDelete = window.state.deleteNote;
+        window.state.deleteNote = (id) => {
+            originalDelete.call(window.state, id);
+            this.push('delete', { id });
         };
     }
 
-    if (typeof UI !== 'undefined' && UI.deleteNote) {
-        const originalUIDelete = UI.deleteNote;
-        UI.deleteNote = async function(noteId) {
-            if (noteId) {
-                NoteSync.send({
-                    action: 'delete',
-                    noteId: noteId
-                });
-            }
-            return await originalUIDelete.apply(this, arguments);
-        };
+    push(action, data) {
+        this.queue.push({ action, data });
+        this.sync();
     }
 
-    window.addEventListener('online', () => {
-        console.log("Sync active");
-    });
-    if (typeof db !== 'undefined') {
-        const originalCollection = db.collection;
-        db.collection = function(name) {
-            const col = originalCollection.apply(this, arguments);
-            if (name === 'notes') {
-                const originalDoc = col.doc;
-                col.doc = function(id) {
-                    const docRef = originalDoc.apply(this, arguments);
-                    const originalDelete = docRef.delete;
-                    docRef.delete = async function() {
-                        if (id) {
-                            NoteSync.send({
-                                action: 'delete',
-                                noteId: id
-                            });
-                        }
-                        return await originalDelete.apply(this, arguments);
-                    };
-                    return docRef;
-                };
-            }
-            return col;
-        };
-    }
+    async sync() {
+        if (this.isSyncing || !this.queue.length) return;
+        this.isSyncing = true;
+        
+        const payload = this.queue[0];
 
-    document.addEventListener('click', (e) => {
-        const deleteBtn = e.target.closest('.btn-delete-all');
-        if (deleteBtn && typeof state !== 'undefined' && state.notes) {
-            state.notes.forEach(note => {
-                NoteSync.send({
-                    action: 'delete',
-                    noteId: note.id
-                });
+        try {
+            await fetch(SYNC_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
             });
+            this.queue.shift();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.isSyncing = false;
+            if (this.queue.length) {
+                setTimeout(() => this.sync(), 1000);
+            }
         }
-    });
+    }
+}
 
-    console.log("Sync engine fully loaded");
-})();
+new NoteSync();
