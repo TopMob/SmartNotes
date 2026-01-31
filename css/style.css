@@ -72,6 +72,8 @@ body {
     z-index: 5000;
     background: var(--bg);
     transition: opacity 0.5s ease;
+    justify-content: center;
+    align-items: center;
 }
 
 .login-card {
@@ -103,6 +105,7 @@ body {
     max-width: 360px;
     text-align: center;
     backdrop-filter: blur(15px);
+    margin: 0 auto;
 }
 
 .auth-buttons-group {
@@ -1167,4 +1170,5 @@ body {
     .sidebar-glass {
         width: 85%;
     }
+
 }
