@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbz9ZP6_TctHJmPDkfcDLYBkIoNSDSMiRcQcpIE0UN_-QqyIMLQONpwbKh4zQykN0H8/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx_rnVCDkkaxsBJxEotOhIHA9ooGOGMDfSerNx3fMFPGtnJg5Ngb8YEAFW1OKFpZhQ/exec';
 
 (function() {
     let syncTimeout;
@@ -35,6 +35,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbz9ZP6_TctHJmP
         return {
             action: type,
             noteId: id,
+            uid: user ? user.uid : '', // Передаем UID для связи с Firebase
             date: new Date().toLocaleString('ru-RU'),
             user: user ? user.email : 'Anonymous',
             title: d.title || '',
@@ -64,5 +65,3 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbz9ZP6_TctHJmP
             });
     });
 })();
-
-
