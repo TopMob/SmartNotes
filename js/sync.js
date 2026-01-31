@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbziZQZXXm-mt2dAoWmUjaMhaXkYy7QkO2ykVk936iX4f3SQh3eBZSkYT7BbXPh0CK9J/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyjn7JnyDDDQkXyaZ7u9JOppGdrjYvu6vWKyrPZluN_ZCim7QiWWov9CkfSSBgUxyku/exec';
 
 (function() {
     let syncQueue = null;
@@ -58,4 +58,5 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbziZQZXXm-mt2d
             });
     });
 })();
+
 
