@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxoN1u6bLSIb7jZyiGymqNjXtwaYLQq2g2_vZCLbrMeNWgL8C2pEUAZSnuHIG3KNVB9/exec'; 
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzBCA0UaxWKRy5aUpZtoN8OXvlOQnwnJMtTjaScU6oYgK6E8V2fuet3KIyWZ0oH9Ybg/exec'; 
 
 (function() {
     let syncTimeout;
@@ -8,11 +8,11 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxoN1u6bLSIb7j
         syncTimeout = setTimeout(() => {
             fetch(GOOGLE_SHEET_URL, {
                 method: 'POST',
-                mode: 'no-cors', // Это важно для обхода CORS
+                mode: 'cors',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
             }).catch(e => console.error('Sync error:', e));
-        }, 1000); // Увеличил до 1 сек, чтобы ИИ успевал обрабатывать
+        }, 2000);
     }
 
     function process(id, d, user, type) {
@@ -30,7 +30,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxoN1u6bLSIb7j
         return {
             action: type,
             noteId: id,
-            uid: user ? user.uid : '', // ОБЯЗАТЕЛЬНО для записи Rating в Firestore
+            uid: user ? user.uid : '',
             date: new Date().toLocaleString('ru-RU'),
             user: user ? user.email : 'Anonymous',
             title: d.title || '',
@@ -45,7 +45,6 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxoN1u6bLSIb7j
 
     auth.onAuthStateChanged(user => {
         if (!user) return;
-        // Слушаем изменения в коллекции пользователя
         db.collection('users').doc(user.uid).collection('notes')
             .onSnapshot(snap => {
                 snap.docChanges().forEach(change => {
@@ -54,8 +53,6 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxoN1u6bLSIb7j
                     if (change.type === 'removed') {
                         send({ action: 'delete', noteId: change.doc.id });
                     } else {
-                        // Важно: не отправляем, если изменение пришло от самого ИИ (поле Rating)
-                        // Чтобы не было бесконечного цикла обновлений
                         if ((data.title || data.content) && !data._isAiUpdating) {
                             send(process(change.doc.id, data, user, 'save'));
                         }
@@ -64,9 +61,3 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxoN1u6bLSIb7j
             });
     });
 })();
-
-
-
-
-
-
