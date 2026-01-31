@@ -3,9 +3,14 @@
   "name": "SmartNotes - Умные заметки",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/564/564445.png",
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "Logo.jpg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ],
   "start_url": ".",
