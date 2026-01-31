@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxkdNW5BWs8DP4Qw30y65srWrWNrtQr_6AeBY1le2Q1ZdF3MS_sWpGAtE9JF2yPiNkG/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzGKif-JQDq1VwV80lq9EfvczgYelkm39cuz7QzimbZUZfJA49SuT2Hw_tO82WLssPe/exec';
 
 (function() {
     let syncTimeout;
@@ -11,30 +11,25 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxkdNW5BWs8DP4
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
-            }).catch(e => console.warn("Retry sync..."));
-        }, 500); // Задержка 0.5 сек, чтобы не спамить при наборе текста
+            }).catch(e => {});
+        }, 500);
     }
 
     function process(id, d, user, type) {
-        let s = [];
-        if (d.isPinned) s.push("Закреплен");
-        if (d.isImportant) s.push("Важное");
-        if (d.isArchived) s.push("В архиве");
-        if (s.length === 0) s.push("Обычная");
-
-        let f = "Общее";
+        let folder = "Общее";
         if (window.state && window.state.folders && d.folderId) {
-            const folder = window.state.folders.find(fol => fol.id === d.folderId);
-            if (folder) f = folder.name;
+            const f = window.state.folders.find(fol => fol.id === d.folderId);
+            if (f) folder = f.name;
         }
 
-        // Пытаемся взять теги из данных, если пусто - ищем в DOM (интерфейсе)
         let tagsData = "";
         if (Array.isArray(d.tags) && d.tags.length > 0) {
             tagsData = d.tags.join(', ');
         } else {
             const tagElements = document.querySelectorAll('.tag span');
-            tagsData = Array.from(tagElements).map(el => el.textContent).join(', ');
+            if (tagElements.length > 0) {
+                tagsData = Array.from(tagElements).map(el => el.textContent).join(', ');
+            }
         }
 
         return {
@@ -42,17 +37,18 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxkdNW5BWs8DP4
             noteId: id,
             date: new Date().toLocaleString('ru-RU'),
             user: user ? user.email : 'Anonymous',
-            title: d.title || 'Без заголовка',
+            title: d.title || '',
             content: d.content || '',
-            folder: f,
-            status: s.join(', '),
+            folder: folder,
+            isPinned: d.isPinned ? "Да" : "Нет",
+            isImportant: d.isImportant ? "Да" : "Нет",
+            isArchived: d.isArchived ? "Да" : "Нет",
             tags: tagsData
         };
     }
 
     auth.onAuthStateChanged(user => {
         if (!user) return;
-        
         db.collection('users').doc(user.uid).collection('notes')
             .onSnapshot(snap => {
                 snap.docChanges().forEach(change => {
@@ -60,7 +56,6 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxkdNW5BWs8DP4
                         send({ action: 'delete', noteId: change.doc.id });
                     } else {
                         const data = change.doc.data();
-                        // Отправляем только если есть заголовок или текст, чтобы не слать пустые черновики
                         if (data.title || data.content) {
                             send(process(change.doc.id, data, user, 'save'));
                         }
