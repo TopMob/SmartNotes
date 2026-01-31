@@ -87,21 +87,23 @@ const UI = {
         });
     },
 
-    async submitFeedback() {
-        const text = document.getElementById('feedback-text').value;
-        if (!state.tempRating) return this.showToast('Поставьте оценку');
-        try {
-            await db.collection('feedback').add({
-                uid: state.user.uid,
-                userName: state.user.displayName,
-                rating: state.tempRating,
-                text,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            this.showToast('Спасибо!');
-            this.closeModal('rate-modal');
-        } catch(e) { this.showToast('Ошибка'); }
-    },
+async submitFeedback() {
+    const text = document.getElementById('feedback-text').value;
+    if (!state.tempRating) return this.showToast('Поставьте оценку');
+    
+    // Мы НЕ пишем await перед добавлением, чтобы код шел дальше
+    db.collection('feedback').add({
+        uid: state.user.uid,
+        userName: state.user.displayName,
+        rating: state.tempRating,
+        text,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(e => console.error("Офлайн-ошибка (это норм):", e));
+
+    // Эти строки сработают МГНОВЕННО, не дожидаясь интернета
+    this.showToast('Сохранено локально!'); 
+    this.closeModal('rate-modal');
+},
 
     renderFolders(folders) {
         const root = document.getElementById('folder-list-root');
@@ -235,4 +237,5 @@ function activateVanyaEgg() {
         UI.showToast("Пасхалка активирована!");
     }, 500);
 }
+
 
