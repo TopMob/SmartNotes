@@ -23,11 +23,11 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx53OdiUUZXzPf
             return 'Общее';
         },
 
-        getUserIdentifier() {
-            if (typeof state !== 'undefined' && state.user) {
-                return state.user.email || state.user.displayName || 'User';
-            }
-            return 'Anonymous';
+        isEmpty(note) {
+            if (!note) return true;
+            const title = (note.title || '').trim();
+            const content = (note.content || '').trim();
+            return title === '' && content === '';
         }
     };
 
@@ -38,34 +38,50 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx53OdiUUZXzPf
             const note = state.currentNote;
             
             if (note && note.id) {
-                NoteSync.send({
-                    action: 'save',
-                    noteId: note.id,
-                    title: note.title || 'Без названия',
-                    content: note.content || '',
-                    folder: NoteSync.getFolderName(note.folderId),
-                    tags: Array.isArray(note.tags) ? note.tags.join(', ') : '',
-                    author: NoteSync.getUserIdentifier()
-                });
+                if (NoteSync.isEmpty(note)) {
+                    NoteSync.send({
+                        action: 'delete',
+                        noteId: note.id
+                    });
+                } else {
+                    NoteSync.send({
+                        action: 'save',
+                        noteId: note.id,
+                        title: note.title || '',
+                        content: note.content || '',
+                        folder: NoteSync.getFolderName(note.folderId),
+                        tags: Array.isArray(note.tags) ? note.tags.join(', ') : '',
+                        author: state.user ? (state.user.email || state.user.displayName) : 'User'
+                    });
+                }
             }
             return result;
         };
 
-        const originalDelete = Editor.deleteCurrent;
-        Editor.deleteCurrent = async function() {
-            const noteIdToDelete = state.currentNote ? state.currentNote.id : null;
-            
-            if (noteIdToDelete) {
+        const originalClose = Editor.close;
+        Editor.close = async function() {
+            const note = state.currentNote;
+            if (note && note.id && NoteSync.isEmpty(note)) {
                 NoteSync.send({
                     action: 'delete',
-                    noteId: noteIdToDelete
+                    noteId: note.id
                 });
             }
+            return await originalClose.apply(this, arguments);
+        };
 
+        const originalDelete = Editor.deleteCurrent;
+        Editor.deleteCurrent = async function() {
+            const noteId = state.currentNote ? state.currentNote.id : null;
+            if (noteId) {
+                NoteSync.send({
+                    action: 'delete',
+                    noteId: noteId
+                });
+            }
             return await originalDelete.apply(this, arguments);
         };
     }
-
     if (typeof UI !== 'undefined' && UI.deleteNote) {
         const originalUIDelete = UI.deleteNote;
         UI.deleteNote = async function(noteId) {
@@ -79,9 +95,6 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx53OdiUUZXzPf
         };
     }
 
-    window.addEventListener('online', () => {
-        console.log("Sync active");
-    });
     if (typeof db !== 'undefined') {
         const originalCollection = db.collection;
         db.collection = function(name) {
@@ -107,17 +120,15 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx53OdiUUZXzPf
         };
     }
 
-    document.addEventListener('click', (e) => {
-        const deleteBtn = e.target.closest('.btn-delete-all');
-        if (deleteBtn && typeof state !== 'undefined' && state.notes) {
-            state.notes.forEach(note => {
-                NoteSync.send({
-                    action: 'delete',
-                    noteId: note.id
-                });
+    window.addEventListener('beforeunload', () => {
+        const note = (typeof state !== 'undefined') ? state.currentNote : null;
+        if (note && note.id && NoteSync.isEmpty(note)) {
+            NoteSync.send({
+                action: 'delete',
+                noteId: note.id
             });
         }
     });
 
-    console.log("Sync engine fully loaded");
+    console.log("Sync engine with empty-note-cleanup active");
 })();
