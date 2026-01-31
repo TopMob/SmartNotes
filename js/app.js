@@ -558,3 +558,25 @@ document.getElementById('save-folder-btn').onclick = saveNewFolder;
 document.getElementById('close-folder-modal').onclick = () => {
     document.getElementById('folder-modal').classList.remove('active');
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    UI.init();
+    Editor.init();
+    
+    // Слушатели папок
+    const addFolderBtn = document.getElementById('add-folder-btn');
+    const saveFolderBtn = document.getElementById('save-folder-btn');
+    const closeFolderBtn = document.getElementById('close-folder-modal');
+    
+    if (addFolderBtn) addFolderBtn.onclick = openFolderModal;
+    if (saveFolderBtn) saveFolderBtn.onclick = saveNewFolder;
+    if (closeFolderBtn) closeFolderBtn.onclick = () => UI.closeModal('folder-modal');
+
+    // Закрытие модалки папок по клику на оверлей
+    const folderModal = document.getElementById('folder-modal');
+    if (folderModal) {
+        folderModal.onclick = (e) => {
+            if (e.target.id === 'folder-modal') UI.closeModal('folder-modal');
+        };
+    }
+});
