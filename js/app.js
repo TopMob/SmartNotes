@@ -522,4 +522,25 @@ async function deleteFolder(id) {
         await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
         if (state.view === 'folder' && state.activeFolderId === id) switchView('notes');
     });
+
 }
+
+const folderModal = document.getElementById('folder-modal');
+const folderInput = document.getElementById('folder-name-input');
+document.getElementById('add-folder-btn').addEventListener('click', () => {
+    folderModal.classList.add('active');
+    folderInput.focus();
+});
+
+document.getElementById('close-folder-modal').addEventListener('click', () => {
+    folderModal.classList.remove('active');
+    folderInput.value = '';
+});
+document.getElementById('save-folder-btn').addEventListener('click', () => {
+    const name = folderInput.value.trim();
+    if (name) {
+        createFolder(name);
+        folderModal.classList.remove('active');
+        folderInput.value = '';
+    }
+});
