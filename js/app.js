@@ -13,20 +13,18 @@ const Editor = {
             this.pushHistory();
             this.handleAutoSave();
         };
-        if (this.titleInp) this.titleInp.oninput = inputHandler;
-        if (this.contentInp) this.contentInp.oninput = inputHandler;
+        this.titleInp.oninput = inputHandler;
+        this.contentInp.oninput = inputHandler;
 
-        if (this.tagsInp) {
-            this.tagsInp.onkeydown = (e) => {
-                if (e.key === 'Enter' && e.target.value.trim()) {
-                    let val = e.target.value.trim().replace('#', '');
-                    this.addTag(val);
-                    e.target.value = '';
-                    this.pushHistory();
-                    this.handleAutoSave();
-                }
-            };
-        }
+        this.tagsInp.onkeydown = (e) => {
+            if (e.key === 'Enter' && e.target.value.trim()) {
+                let val = e.target.value.trim().replace('#', '');
+                this.addTag(val);
+                e.target.value = '';
+                this.pushHistory();
+                this.handleAutoSave();
+            }
+        };
     },
 
     open(note = null) {
@@ -74,7 +72,6 @@ const Editor = {
 
     renderTags() {
         const container = document.getElementById('note-tags-container');
-        if (!container) return;
         container.innerHTML = (state.currentNote.tags || []).map(t => `
             <span class="tag-chip">
                 #${t}
@@ -140,8 +137,8 @@ const Editor = {
 
     handleAutoSave() {
         clearTimeout(this.saveTimeout);
-        const status = document.getElementById('last-edited');
-        if (status) status.innerText = '...';
+        const statusEl = document.getElementById('last-edited');
+        if (statusEl) statusEl.innerText = '...';
         this.saveTimeout = setTimeout(() => this.save(), 800);
     },
 
@@ -164,8 +161,8 @@ const Editor = {
                 .set(state.currentNote, {
                     merge: true
                 });
-            const status = document.getElementById('last-edited');
-            if (status) status.innerText = 'Сохранено';
+            const statusEl = document.getElementById('last-edited');
+            if (statusEl) statusEl.innerText = 'Сохранено';
         } catch (e) {
             console.error(e);
         }
@@ -226,7 +223,7 @@ const UI = {
     },
     closeSettings() {
         this.closeModal('settings-modal');
-        ThemeManager.revertToLastSaved();
+        if (typeof ThemeManager !== 'undefined') ThemeManager.revertToLastSaved();
     },
 
     loadSettingsToUI() {
@@ -243,8 +240,7 @@ const UI = {
         const text = document.getElementById('cp-text').value;
         const primary = document.getElementById('cp-primary').value;
         const bg = document.getElementById('cp-bg').value;
-
-        ThemeManager.setManual(primary, bg, text);
+        if (typeof ThemeManager !== 'undefined') ThemeManager.setManual(primary, bg, text);
         this.showToast('Настройки сохранены');
         this.closeModal('settings-modal');
     },
@@ -260,10 +256,11 @@ const UI = {
 
     updateLangUI() {
         const lang = state.config.lang;
+        if (typeof LANG === 'undefined') return;
         const dict = LANG[lang];
         document.querySelectorAll('[data-lang]').forEach(el => {
             const key = el.getAttribute('data-lang');
-            if (dict && dict[key]) el.textContent = dict[key];
+            if (dict[key]) el.textContent = dict[key];
         });
     },
 
@@ -307,7 +304,6 @@ const UI = {
             delBtn.style.fontSize = "16px";
             delBtn.style.opacity = "0.5";
             delBtn.textContent = "close";
-
             delBtn.onclick = (e) => {
                 e.stopPropagation();
                 deleteFolder(f.id);
@@ -319,14 +315,9 @@ const UI = {
     },
 
     renderNotes(notes) {
-        if (!this.notesGrid) return;
         this.notesGrid.innerHTML = '';
-        if (notes.length === 0) {
-            if (this.emptyState) this.emptyState.classList.remove('hidden');
-            return;
-        }
-        if (this.emptyState) this.emptyState.classList.add('hidden');
-
+        if (notes.length === 0) return this.emptyState.classList.remove('hidden');
+        this.emptyState.classList.add('hidden');
         notes.forEach(note => {
             const card = document.createElement('div');
             card.className = 'note-card';
@@ -357,20 +348,10 @@ const UI = {
 
     showConfirm(type, onOk) {
         const modal = document.getElementById('confirm-modal');
-        if (!modal) return;
-        const titles = {
-            account: "Смена аккаунта",
-            exit: "Выход",
-            delete: "Удалить?",
-            delete_f: "Удалить папку?"
-        };
-        const titleEl = document.getElementById('confirm-title');
-        if (titleEl) titleEl.textContent = titles[type] || "Подтвердите";
+        const titles = { account: "Смена аккаунта", exit: "Выход", delete: "Удалить?", delete_f: "Удалить папку?" };
+        document.getElementById('confirm-title').textContent = titles[type] || "Подтвердите";
         modal.classList.add('active');
-        document.getElementById('confirm-ok').onclick = () => {
-            onOk();
-            modal.classList.remove('active');
-        };
+        document.getElementById('confirm-ok').onclick = () => { onOk(); modal.classList.remove('active'); };
         document.getElementById('confirm-cancel').onclick = () => modal.classList.remove('active');
     },
 
@@ -396,31 +377,13 @@ window.switchView = (view, folderId = null) => {
         const btn = document.querySelector(`.nav-item[data-view="${view}"]`);
         if (btn) btn.classList.add('active');
     }
-    const titles = {
-        'notes': 'Все записи',
-        'favorites': 'Важное',
-        'archive': 'Архив',
-        'folder': 'Папка'
-    };
+    const titles = { 'notes': 'Все записи', 'favorites': 'Важное', 'archive': 'Архив', 'folder': 'Папка' };
     const titleEl = document.getElementById('current-view-title');
     if (titleEl) titleEl.textContent = titles[view] || 'SmartNotes';
     UI.toggleSidebar(false);
-    if (window.filterAndRender) filterAndRender(document.getElementById('search-input')?.value);
+    if (window.filterAndRender) filterAndRender(document.getElementById('search-input').value);
     UI.renderFolders(state.folders);
 };
-
-let eggStep = 0;
-document.addEventListener('click', (e) => {
-    const target = e.target;
-    if (target.classList.contains('name-kopaev')) {
-        eggStep = 1;
-    } else if (target.classList.contains('name-minyaev') && eggStep === 1) {
-        activateVanyaEgg();
-        eggStep = 0;
-    } else {
-        eggStep = 0;
-    }
-});
 
 function activateVanyaEgg() {
     const list = document.querySelector('.team-list');
@@ -429,31 +392,17 @@ function activateVanyaEgg() {
     list.style.opacity = '0';
     list.style.transform = 'scale(0.8)';
     setTimeout(() => {
-        list.innerHTML = `
-            <li class="team-member name-vanya-super" style="color: #00f2ff; text-shadow: 0 0 20px #00f2ff; font-size: 1.5rem;">
-                Тайлер²
-            </li>
-        `;
+        list.innerHTML = `<li class="team-member name-vanya-super" style="color: #00f2ff; text-shadow: 0 0 20px #00f2ff; font-size: 1.5rem;">Тайлер²</li>`;
         list.style.opacity = '1';
         list.style.transform = 'scale(1)';
         UI.showToast("Пасхалка активирована!");
     }, 500);
 }
 
-function initApp() {
-    syncFolders();
-    syncNotes();
-    const savedLang = localStorage.getItem('app-lang') || 'ru';
-    UI.setLang(savedLang);
-}
-
 function syncFolders() {
     db.collection('users').doc(state.user.uid).collection('folders')
         .orderBy('createdAt', 'asc').onSnapshot(snap => {
-            state.folders = snap.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            state.folders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             UI.renderFolders(state.folders);
         });
 }
@@ -461,10 +410,7 @@ function syncFolders() {
 function syncNotes() {
     db.collection('users').doc(state.user.uid).collection('notes')
         .onSnapshot(snap => {
-            state.notes = snap.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            state.notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             filterAndRender(document.getElementById('search-input')?.value || '');
         });
 }
@@ -491,22 +437,15 @@ window.filterAndRender = (query) => {
 };
 
 window.toggleNotePin = async (id, val) => {
-    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({
-        isPinned: val
-    });
+    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({ isPinned: val });
 };
 
 window.toggleNoteImportant = async (id, val) => {
-    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({
-        isImportant: val
-    });
+    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({ isImportant: val });
 };
 
 window.toggleNoteArchive = async (id, val) => {
-    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({
-        isArchived: val,
-        isPinned: false
-    });
+    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({ isArchived: val, isPinned: false });
     UI.showToast(val ? "В архиве" : "Восстановлено");
 };
 
@@ -514,16 +453,15 @@ function openFolderModal() {
     if (state.folders.length >= 10) return UI.showToast("Лимит папок (10)");
     const modal = document.getElementById('folder-modal');
     const input = document.getElementById('folder-name-input');
-    if (input) {
-        input.value = '';
-        modal.classList.add('active');
-        input.focus();
-    }
+    if (!modal || !input) return;
+    input.value = ''; 
+    modal.classList.add('active');
+    input.focus();
 }
 
 async function saveNewFolder() {
     const input = document.getElementById('folder-name-input');
-    const name = input.value.trim();
+    const name = input?.value.trim();
     if (!name) return;
     try {
         await db.collection('users').doc(state.user.uid).collection('folders').add({
@@ -533,7 +471,6 @@ async function saveNewFolder() {
         UI.closeModal('folder-modal');
         UI.showToast("Папка создана");
     } catch (e) {
-        console.error(e);
         UI.showToast("Ошибка сохранения");
     }
 }
@@ -542,9 +479,7 @@ async function deleteFolder(id) {
     UI.showConfirm("delete_f", async () => {
         try {
             await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
-            if (state.view === 'folder' && state.activeFolderId === id) {
-                switchView('notes');
-            }
+            if (state.view === 'folder' && state.activeFolderId === id) switchView('notes');
             UI.showToast("Папка удалена");
         } catch (e) {
             UI.showToast("Ошибка при удалении");
@@ -555,18 +490,10 @@ async function deleteFolder(id) {
 document.addEventListener('DOMContentLoaded', () => {
     UI.init();
     Editor.init();
-
     const addFolderBtn = document.getElementById('add-folder-btn');
     const saveFolderBtn = document.getElementById('save-folder-btn');
     const closeFolderBtn = document.getElementById('close-folder-modal');
-    const folderModal = document.getElementById('folder-modal');
-
     if (addFolderBtn) addFolderBtn.onclick = openFolderModal;
     if (saveFolderBtn) saveFolderBtn.onclick = saveNewFolder;
     if (closeFolderBtn) closeFolderBtn.onclick = () => UI.closeModal('folder-modal');
-    if (folderModal) {
-        folderModal.onclick = (e) => {
-            if (e.target.id === 'folder-modal') UI.closeModal('folder-modal');
-        };
-    }
 });
