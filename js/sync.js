@@ -1,38 +1,84 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxEOBP34Lf426I0FIMEfk4M41B91ChzB7vyCtWUuJ1SHjd5mvPzDlEl4-mhMyJ9jXo/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyX6A5beNHNj7Dy0tfn6wdRQIXGlXysbvVM0SFX6WNAGwd9KZSnT-3uWqo6nupMQNk/exec';
 
 (function() {
-    const originalSave = Editor.save;
-
-    Editor.save = async function() {
-        await originalSave.apply(this, arguments);
-
-        try {
-            const note = state.currentNote;
-            if (!note) return;
-
-            let folderName = 'Общее';
-            if (state.folders && note.folderId) {
-                const foundFolder = state.folders.find(f => f.id === note.folderId);
-                if (foundFolder) folderName = foundFolder.name;
+    const NoteSync = {
+        async send(payload) {
+            try {
+                await fetch(GOOGLE_SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (e) {
+                console.error("Sync error:", e);
             }
+        },
 
-            const payload = {
-                title: note.title || 'Без названия',
-                content: note.content || '',
-                folder: folderName,
-                tags: Array.isArray(note.tags) ? note.tags.join(', ') : '',
-                author: state.user ? (state.user.email || state.user.displayName) : 'Anonymous'
-            };
+        getFolderName(folderId) {
+            if (typeof state !== 'undefined' && state.folders && folderId) {
+                const folder = state.folders.find(f => f.id === folderId);
+                return folder ? folder.name : 'Общее';
+            }
+            return 'Общее';
+        },
 
-            fetch(GOOGLE_SHEET_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-        } catch (e) {
-            console.error(e);
+        getUserIdentifier() {
+            if (typeof state !== 'undefined' && state.user) {
+                return state.user.email || state.user.displayName || 'User';
+            }
+            return 'Anonymous';
         }
     };
-})();
+
+    if (typeof Editor !== 'undefined') {
+        const originalSave = Editor.save;
+        Editor.save = async function() {
+            const result = await originalSave.apply(this, arguments);
+            const note = state.currentNote;
+            
+            if (note && note.id) {
+                NoteSync.send({
+                    action: 'save',
+                    noteId: note.id,
+                    title: note.title || 'Без названия',
+                    content: note.content || '',
+                    folder: NoteSync.getFolderName(note.folderId),
+                    tags: Array.isArray(note.tags) ? note.tags.join(', ') : '',
+                    author: NoteSync.getUserIdentifier()
+                });
+            }
+            return result;
+        };
+
+        const originalDelete = Editor.deleteCurrent;
+        Editor.deleteCurrent = async function() {
+            const noteIdToDelete = state.currentNote ? state.currentNote.id : null;
+            
+            if (noteIdToDelete) {
+                NoteSync.send({
+                    action: 'delete',
+                    noteId: noteIdToDelete
+                });
+            }
+
+            return await originalDelete.apply(this, arguments);
+        };
+    }
+
+    if (typeof UI !== 'undefined' && UI.deleteNote) {
+        const originalUIDelete = UI.deleteNote;
+        UI.deleteNote = async function(noteId) {
+            if (noteId) {
+                NoteSync.send({
+                    action: 'delete',
+                    noteId: noteId
+                });
+            }
+            return await originalUIDelete.apply(this, arguments);
+        };
+    }
+
+    window.addEventListener('online', () => {
+        console.log("Sync active");
+    });
