@@ -1,17 +1,18 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby3v6HgSOk92HuWoc3D3hRB8urMH5sIkb38Q8JizUZycDTKEkiI2oHXqAdsgp9WCj5r/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbz8_TXhJpfSp63KO83pYprMDPDdhMk_R_8o1DBrPZu8Yg-6C1fooeDBJfdn5htA8O3c/exec';
 
 (function() {
     let syncQueue = null;
 
     const dispatch = (data) => {
         if (syncQueue) clearTimeout(syncQueue);
+        // Задержка 3 секунды, чтобы не спамить запросами при печати
         syncQueue = setTimeout(() => {
             fetch(GOOGLE_SHEET_URL, {
                 method: 'POST',
-                mode: 'no-cors',
+                mode: 'no-cors', // Оставляем no-cors для обхода ограничений Google Script
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(data)
-            }).catch(console.error);
+            }).catch(e => console.error('DeepSeek Sync Error:', e));
         }, 3000);
     };
 
@@ -22,9 +23,10 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby3v6HgSOk92Hu
         }
 
         return {
-            action,
+            action: action,
             noteId: id,
             uid: user?.uid || '',
+            // Передаем дату просто для лога, основную дату теперь ставит сервер Google
             date: new Date().toLocaleString('ru-RU'),
             user: user?.email || 'Anonymous',
             title: data.title || '',
@@ -33,6 +35,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby3v6HgSOk92Hu
             isPinned: data.isPinned ? "Да" : "Нет",
             isImportant: data.isImportant ? "Да" : "Нет",
             isArchived: data.isArchived ? "Да" : "Нет",
+            // Превращаем массив тегов в строку для таблицы
             tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.tags || "")
         };
     };
@@ -40,6 +43,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby3v6HgSOk92Hu
     auth.onAuthStateChanged(user => {
         if (!user) return;
 
+        // Следим за изменениями в Firestore
         db.collection('users').doc(user.uid).collection('notes')
             .onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
@@ -49,7 +53,9 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby3v6HgSOk92Hu
                     if (change.type === 'removed') {
                         dispatch({ action: 'delete', noteId: id });
                     } else {
-                        const isValid = (data.title?.length > 2 || data.content?.length > 5);
+                        // Валидация: не отправляем пустые или слишком короткие заметки
+                        const isValid = (data.title?.length > 1 || data.content?.length > 2);
+                        // Проверка на флаг _isAiUpdating, чтобы избежать бесконечного цикла обновлений
                         if (isValid && !data._isAiUpdating) {
                             dispatch(formatNote(id, data, user, 'save'));
                         }
@@ -58,6 +64,3 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby3v6HgSOk92Hu
             });
     });
 })();
-
-
-
