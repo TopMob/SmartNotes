@@ -504,6 +504,8 @@ window.toggleNoteArchive = async (id, val) => {
     });
     UI.showToast(val ? "В архиве" : "Восстановлено");
 };
+
+// Открытие модального окна создания папки
 function openFolderModal() {
     if (state.folders.length >= 10) return UI.showToast("Лимит папок (10)");
     const modal = document.getElementById('folder-modal');
@@ -513,6 +515,7 @@ function openFolderModal() {
     input.focus();
 }
 
+// Сохранение новой папки в Firebase
 async function saveNewFolder() {
     const input = document.getElementById('folder-name-input');
     const name = input.value.trim();
@@ -532,8 +535,11 @@ async function saveNewFolder() {
         UI.showToast("Ошибка сохранения");
     }
 }
+
+// Удаление папки с исправленным вызовом confirm
 async function deleteFolder(id) {
-    UI.showConfirm("Вы уверены, что хотите удалить папку?", async () => {
+    // Передаем ключ 'delete_f' для корректного заголовка в UI.showConfirm
+    UI.showConfirm("delete_f", async () => {
         try {
             await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
     
@@ -546,12 +552,9 @@ async function deleteFolder(id) {
         }
     });
 }
+
+document.getElementById('add-folder-btn').onclick = openFolderModal;
 document.getElementById('save-folder-btn').onclick = saveNewFolder;
 document.getElementById('close-folder-modal').onclick = () => {
     document.getElementById('folder-modal').classList.remove('active');
-};
-document.getElementById('folder-modal').onclick = (e) => {
-    if (e.target.id === 'folder-modal') {
-        e.target.classList.remove('active');
-    }
 };
