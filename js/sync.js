@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyX6A5beNHNj7Dy0tfn6wdRQIXGlXysbvVM0SFX6WNAGwd9KZSnT-3uWqo6nupMQNk/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycby5QRaW_e6SoM0cdqwpR-01UhD-E_iKgkXqfv8m-1isBK9bJKOmJkNWc45KHDZ0TVw/exec';
 
 (function() {
     const NoteSync = {
