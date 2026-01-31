@@ -1,4 +1,4 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyamvkbjLWrU_rEfmujdzXGJDMtkLVDM4swJjbQ3SYGJPM5YYn0tHp8K9Zq1i-K3lMV/exec';
+const GOOGLE_SHEET_URL = 'АПИСЮДА';
 
 (function() {
     let syncQueue = null;
@@ -64,6 +64,7 @@ const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyamvkbjLWrU_r
             });
     });
 })();
+
 
 
 
