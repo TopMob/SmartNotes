@@ -13,18 +13,20 @@ const Editor = {
             this.pushHistory();
             this.handleAutoSave();
         };
-        this.titleInp.oninput = inputHandler;
-        this.contentInp.oninput = inputHandler;
+        if (this.titleInp) this.titleInp.oninput = inputHandler;
+        if (this.contentInp) this.contentInp.oninput = inputHandler;
 
-        this.tagsInp.onkeydown = (e) => {
-            if (e.key === 'Enter' && e.target.value.trim()) {
-                let val = e.target.value.trim().replace('#', '');
-                this.addTag(val);
-                e.target.value = '';
-                this.pushHistory();
-                this.handleAutoSave();
-            }
-        };
+        if (this.tagsInp) {
+            this.tagsInp.onkeydown = (e) => {
+                if (e.key === 'Enter' && e.target.value.trim()) {
+                    let val = e.target.value.trim().replace('#', '');
+                    this.addTag(val);
+                    e.target.value = '';
+                    this.pushHistory();
+                    this.handleAutoSave();
+                }
+            };
+        }
     },
 
     open(note = null) {
@@ -72,6 +74,7 @@ const Editor = {
 
     renderTags() {
         const container = document.getElementById('note-tags-container');
+        if (!container) return;
         container.innerHTML = (state.currentNote.tags || []).map(t => `
             <span class="tag-chip">
                 #${t}
@@ -137,7 +140,8 @@ const Editor = {
 
     handleAutoSave() {
         clearTimeout(this.saveTimeout);
-        document.getElementById('last-edited').innerText = '...';
+        const status = document.getElementById('last-edited');
+        if (status) status.innerText = '...';
         this.saveTimeout = setTimeout(() => this.save(), 800);
     },
 
@@ -160,7 +164,8 @@ const Editor = {
                 .set(state.currentNote, {
                     merge: true
                 });
-            document.getElementById('last-edited').innerText = 'Сохранено';
+            const status = document.getElementById('last-edited');
+            if (status) status.innerText = 'Сохранено';
         } catch (e) {
             console.error(e);
         }
@@ -172,8 +177,6 @@ const Editor = {
         state.currentNote = null;
     }
 };
-
-document.addEventListener('DOMContentLoaded', () => Editor.init());
 
 const UI = {
     init() {
@@ -193,7 +196,6 @@ const UI = {
                 const isMenuBtn = e.target.closest('#menu-toggle');
                 const isSidebar = this.sidebar.contains(e.target);
                 if (!isSidebar && !isMenuBtn) this.toggleSidebar(false);
-
             }
             if (this.userDropdown && this.userDropdown.classList.contains('active')) {
                 if (!e.target.closest('.user-avatar-wrapper')) this.toggleUserMenu(false);
@@ -252,7 +254,8 @@ const UI = {
         localStorage.setItem('app-lang', lang);
         this.updateLangUI();
         document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector(`.lang-btn[onclick*="${lang}"]`).classList.add('active');
+        const activeBtn = document.querySelector(`.lang-btn[onclick*="${lang}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
     },
 
     updateLangUI() {
@@ -260,7 +263,7 @@ const UI = {
         const dict = LANG[lang];
         document.querySelectorAll('[data-lang]').forEach(el => {
             const key = el.getAttribute('data-lang');
-            if (dict[key]) el.textContent = dict[key];
+            if (dict && dict[key]) el.textContent = dict[key];
         });
     },
 
@@ -285,7 +288,7 @@ const UI = {
             rating: state.tempRating,
             text,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        }).catch(e => console.error("Офлайн-ошибка (это норм):", e));
+        }).catch(e => console.error(e));
         this.showToast('Сохранено локально!');
         this.closeModal('rate-modal');
     },
@@ -316,17 +319,19 @@ const UI = {
     },
 
     renderNotes(notes) {
+        if (!this.notesGrid) return;
         this.notesGrid.innerHTML = '';
-        if (notes.length === 0) return this.emptyState.classList.remove('hidden');
-        this.emptyState.classList.add('hidden');
+        if (notes.length === 0) {
+            if (this.emptyState) this.emptyState.classList.remove('hidden');
+            return;
+        }
+        if (this.emptyState) this.emptyState.classList.add('hidden');
 
         notes.forEach(note => {
             const card = document.createElement('div');
             card.className = 'note-card';
-
             const pinnedClass = note.isPinned ? 'active' : '';
             const impClass = note.isImportant ? 'active' : '';
-
             card.innerHTML = `
                 <div class="card-actions">
                     <button class="action-btn ${pinnedClass}" onclick="event.stopPropagation(); toggleNotePin('${note.id}', ${!note.isPinned})">
@@ -352,13 +357,15 @@ const UI = {
 
     showConfirm(type, onOk) {
         const modal = document.getElementById('confirm-modal');
+        if (!modal) return;
         const titles = {
             account: "Смена аккаунта",
             exit: "Выход",
             delete: "Удалить?",
             delete_f: "Удалить папку?"
         };
-        document.getElementById('confirm-title').textContent = titles[type] || "Подтвердите";
+        const titleEl = document.getElementById('confirm-title');
+        if (titleEl) titleEl.textContent = titles[type] || "Подтвердите";
         modal.classList.add('active');
         document.getElementById('confirm-ok').onclick = () => {
             onOk();
@@ -369,6 +376,7 @@ const UI = {
 
     showToast(msg) {
         const container = document.getElementById('toast-container');
+        if (!container) return;
         const t = document.createElement('div');
         t.className = 'toast show';
         t.textContent = msg;
@@ -379,8 +387,6 @@ const UI = {
         }, 2500);
     }
 };
-
-document.addEventListener('DOMContentLoaded', () => UI.init());
 
 window.switchView = (view, folderId = null) => {
     state.view = view;
@@ -396,16 +402,16 @@ window.switchView = (view, folderId = null) => {
         'archive': 'Архив',
         'folder': 'Папка'
     };
-    document.getElementById('current-view-title').textContent = titles[view] || 'SmartNotes';
+    const titleEl = document.getElementById('current-view-title');
+    if (titleEl) titleEl.textContent = titles[view] || 'SmartNotes';
     UI.toggleSidebar(false);
-    if (window.filterAndRender) filterAndRender(document.getElementById('search-input').value);
+    if (window.filterAndRender) filterAndRender(document.getElementById('search-input')?.value);
     UI.renderFolders(state.folders);
 };
 
 let eggStep = 0;
 document.addEventListener('click', (e) => {
     const target = e.target;
-
     if (target.classList.contains('name-kopaev')) {
         eggStep = 1;
     } else if (target.classList.contains('name-minyaev') && eggStep === 1) {
@@ -430,7 +436,6 @@ function activateVanyaEgg() {
         `;
         list.style.opacity = '1';
         list.style.transform = 'scale(1)';
-
         UI.showToast("Пасхалка активирована!");
     }, 500);
 }
@@ -505,44 +510,38 @@ window.toggleNoteArchive = async (id, val) => {
     UI.showToast(val ? "В архиве" : "Восстановлено");
 };
 
-// Открытие модального окна создания папки
 function openFolderModal() {
     if (state.folders.length >= 10) return UI.showToast("Лимит папок (10)");
     const modal = document.getElementById('folder-modal');
     const input = document.getElementById('folder-name-input');
-    input.value = ''; 
-    modal.classList.add('active');
-    input.focus();
+    if (input) {
+        input.value = '';
+        modal.classList.add('active');
+        input.focus();
+    }
 }
 
-// Сохранение новой папки в Firebase
 async function saveNewFolder() {
     const input = document.getElementById('folder-name-input');
     const name = input.value.trim();
-    
     if (!name) return;
-    
     try {
         await db.collection('users').doc(state.user.uid).collection('folders').add({
             name,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        
-        document.getElementById('folder-modal').classList.remove('active');
+        UI.closeModal('folder-modal');
         UI.showToast("Папка создана");
     } catch (e) {
-        console.error("Ошибка при создании папки:", e);
+        console.error(e);
         UI.showToast("Ошибка сохранения");
     }
 }
 
-// Удаление папки с исправленным вызовом confirm
 async function deleteFolder(id) {
-    // Передаем ключ 'delete_f' для корректного заголовка в UI.showConfirm
     UI.showConfirm("delete_f", async () => {
         try {
             await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
-    
             if (state.view === 'folder' && state.activeFolderId === id) {
                 switchView('notes');
             }
@@ -553,27 +552,18 @@ async function deleteFolder(id) {
     });
 }
 
-document.getElementById('add-folder-btn').onclick = openFolderModal;
-document.getElementById('save-folder-btn').onclick = saveNewFolder;
-document.getElementById('close-folder-modal').onclick = () => {
-    document.getElementById('folder-modal').classList.remove('active');
-};
-
 document.addEventListener('DOMContentLoaded', () => {
     UI.init();
     Editor.init();
-    
-    // Слушатели папок
+
     const addFolderBtn = document.getElementById('add-folder-btn');
     const saveFolderBtn = document.getElementById('save-folder-btn');
     const closeFolderBtn = document.getElementById('close-folder-modal');
-    
+    const folderModal = document.getElementById('folder-modal');
+
     if (addFolderBtn) addFolderBtn.onclick = openFolderModal;
     if (saveFolderBtn) saveFolderBtn.onclick = saveNewFolder;
     if (closeFolderBtn) closeFolderBtn.onclick = () => UI.closeModal('folder-modal');
-
-    // Закрытие модалки папок по клику на оверлей
-    const folderModal = document.getElementById('folder-modal');
     if (folderModal) {
         folderModal.onclick = (e) => {
             if (e.target.id === 'folder-modal') UI.closeModal('folder-modal');
