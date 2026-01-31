@@ -4,27 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>SmartNotes</title>
-    <link rel="manifest" href="manifest.json">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/stylessidebar.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="Logo.png">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
+
     <div class="bg-wrapper"></div>
+
     <div id="login-screen" class="modal-overlay active">
-        <div class="login-box">
-            <h1 class="brand-text">SmartNotes</h1>
-            <p class="subtext">Вход в систему</p>
-            <div class="auth-buttons">
-                <button class="btn-auth google" onclick="Auth.login()">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G"> Google
-                </button>
-                <div class="divider"><span>или Email</span></div>
+    <div class="login-box">
+        <h1 class="brand-text-fixed">SmartNotes</h1>
+        <p class="subtext">Вход в систему</p>
+
+        <div class="auth-buttons-group">
+            <button class="btn-auth google" onclick="Auth.login()">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G">
+                Войти через Google
+            </button>
+
+            <button class="btn-auth github" onclick="Auth.loginGithub()">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg" alt="GH">
+                Войти через GitHub
+            </button>
+
+            <div class="auth-divider"><span>или по почте</span></div>
+
+            <div class="email-form">
                 <input type="email" id="auth-email" placeholder="Email" class="input-field">
                 <input type="password" id="auth-pass" placeholder="Пароль" class="input-field">
                 <div class="email-actions">
@@ -34,116 +52,272 @@
             </div>
         </div>
     </div>
+</div>
 
     <div id="app" class="app-layout">
+        
         <aside id="sidebar" class="sidebar-glass">
             <div class="sidebar-header">
-                <span class="brand-text">SmartNotes</span>
-                <button class="btn-icon mobile-only" onclick="UI.toggleSidebar(false)"><i class="material-icons-round">close</i></button>
+                <span class="brand-text-fixed">SmartNotes</span>
+                <button class="btn-icon mobile-only" onclick="UI.toggleSidebar(false)">
+                    <i class="material-icons-round">close</i>
+                </button>
             </div>
-            <nav class="sidebar-nav">
-                <button class="nav-item active" onclick="switchView('notes')" data-view="notes"><i class="material-icons-round">description</i><span data-lang="all_notes">Все записи</span></button>
-                <button class="nav-item" onclick="switchView('favorites')" data-view="favorites"><i class="material-icons-round">star</i><span data-lang="favorites">Важное</span></button>
-                <button class="nav-item" onclick="switchView('archive')" data-view="archive"><i class="material-icons-round">archive</i><span data-lang="archive">Архив</span></button>
+
+            <nav class="sidebar-nav scrollable">
+                <div class="nav-group">
+                    <button class="nav-item active" onclick="switchView('notes')" data-view="notes">
+                        <i class="material-icons-round">description</i>
+                        <span data-lang="all_notes">Все записи</span>
+                    </button>
+                    <button class="nav-item" onclick="switchView('favorites')" data-view="favorites">
+                        <i class="material-icons-round">star</i>
+                        <span data-lang="favorites">Важное</span>
+                    </button>
+                    <button class="nav-item" onclick="switchView('archive')" data-view="archive">
+                        <i class="material-icons-round">archive</i>
+                        <span data-lang="archive">Архив</span>
+                    </button>
+                </div>
+
                 <div class="nav-divider"></div>
-                <div class="folders-header"><span data-lang="folders">ПАПКИ</span><button onclick="createNewFolder()"><i class="material-icons-round">add</i></button></div>
-                <div id="folder-list-root"></div>
+
+                <div class="folders-header">
+                    <span data-lang="folders">ПАПКИ</span>
+                    <button class="btn-icon-small" onclick="createNewFolder()">
+                        <i class="material-icons-round">add</i>
+                    </button>
+                </div>
+                <div id="folder-list-root" class="folder-list"></div>
             </nav>
+
             <div class="sidebar-footer">
-                <button class="footer-link" onclick="UI.openModal('about-modal')"><i class="material-icons-round">info</i><span data-lang="about">О нас</span></button>
-                <button class="footer-link" onclick="UI.openModal('rate-modal')"><i class="material-icons-round">thumb_up</i><span data-lang="rate">Оценить</span></button>
+                <button class="footer-link" onclick="UI.openModal('about-modal')">
+                    <i class="material-icons-round">info</i> <span data-lang="about">О нас</span>
+                </button>
+                <button class="footer-link" onclick="UI.openModal('rate-modal')">
+                    <i class="material-icons-round">thumb_up</i> <span data-lang="rate">Оценить</span>
+                </button>
+                <button class="footer-link" onclick="UI.openSettings()">
+                    <i class="material-icons-round">settings</i> <span data-lang="settings">Настройки</span>
+                </button>
             </div>
         </aside>
 
         <main class="main-content">
             <header class="top-bar">
-                <button class="btn-icon" id="menu-toggle" onclick="UI.toggleSidebar()"><i class="material-icons-round">menu</i></button>
-                <div class="search-container"><i class="material-icons-round">search</i><input type="text" id="search-input" oninput="filterAndRender(this.value)"></div>
+                <div class="header-left">
+                    <button id="menu-toggle" class="btn-icon" onclick="UI.toggleSidebar()">
+                        <i class="material-icons-round">menu</i>
+                    </button>
+                    <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
+                </div>
+
+                <div class="search-container">
+                    <i class="material-icons-round search-icon">search</i>
+                    <input type="text" id="search-input" placeholder="Поиск..." oninput="filterAndRender(this.value)">
+                </div>
+
                 <div class="header-right">
-                    <button class="btn-icon" onclick="UI.toggleSortMenu()"><i class="material-icons-round">sort</i></button>
-                    <div id="sort-menu" class="dropdown-menu">
-                        <button class="dropdown-item" onclick="setSort('date')">По дате</button>
-                        <button class="dropdown-item" onclick="setSort('created')">По созданию</button>
-                        <button class="dropdown-item" onclick="setSort('alpha')">А-Я</button>
-                    </div>
-                    <img id="user-photo" class="avatar" onclick="UI.toggleUserMenu()">
-                    <div id="user-dropdown" class="dropdown-menu right">
-                        <span id="user-name" class="dropdown-header">User</span>
-                        <button class="dropdown-item" onclick="UI.openSettings()"><i class="material-icons-round">settings</i><span data-lang="settings">Настройки</span></button>
-                        <button class="dropdown-item danger" onclick="Auth.logout()"><i class="material-icons-round">logout</i><span data-lang="logout">Выйти</span></button>
+                    <div class="user-avatar-wrapper">
+                        <img id="user-photo" src="" alt="User" class="header-avatar" onclick="UI.toggleUserMenu()">
+                        <div id="user-dropdown" class="dropdown-menu">
+                            <div class="dropdown-header">
+                                <span id="user-name">...</span>
+                            </div>
+                            <button class="dropdown-item" onclick="UI.showConfirm('account', () => Auth.switchAccount())">
+                                <i class="material-icons-round">switch_account</i> <span data-lang="switch_acc">Сменить</span>
+                            </button>
+                            <button class="dropdown-item danger" onclick="UI.showConfirm('exit', () => Auth.logout())">
+                                <i class="material-icons-round">logout</i> <span data-lang="logout">Выйти</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
-            <div id="notes-container" class="notes-grid scrollable"></div>
-            <button class="btn-fab" onclick="Editor.open()"><i class="material-icons-round">add</i></button>
+
+            <div id="notes-content-area" class="content-scrollable scrollable">
+                <div id="app-loader" class="loader-container hidden">
+                    <div class="spinner"></div>
+                </div>
+
+                <div id="empty-state" class="empty-placeholder hidden">
+                    <i class="material-icons-round">note_add</i>
+                    <p data-lang="empty">Здесь пока пусто</p>
+                </div>
+
+                <div id="notes-container" class="notes-grid"></div>
+            </div>
+
+            <button class="btn-fab" onclick="Editor.open()">
+                <i class="material-icons-round">add</i>
+            </button>
         </main>
     </div>
 
     <div id="note-editor" class="editor-overlay">
         <div class="editor-container">
-            <div class="editor-header">
-                <button class="btn-icon" onclick="Editor.close()"><i class="material-icons-round">arrow_back</i></button>
+            <div class="editor-header-bar">
+                <button class="btn-icon" onclick="Editor.close()">
+                    <i class="material-icons-round">arrow_back</i>
+                </button>
+                
                 <div class="editor-tools">
-                    <button class="btn-icon" onclick="Editor.undo()"><i class="material-icons-round">undo</i></button>
-                    <button class="btn-icon" onclick="Editor.redo()"><i class="material-icons-round">redo</i></button>
-                    <button class="btn-icon danger" onclick="Editor.deleteCurrent()"><i class="material-icons-round">delete</i></button>
-                    <button class="btn-primary" onclick="Editor.manualSave()"><i class="material-icons-round">check</i></button>
+                    <button class="btn-icon" onclick="Editor.undo()">
+                        <i class="material-icons-round">undo</i>
+                    </button>
+                    <button class="btn-icon" onclick="Editor.redo()">
+                        <i class="material-icons-round">redo</i>
+                    </button>
+                    <div class="divider-vertical"></div>
+                    <button class="btn-icon" onclick="Editor.deleteCurrent()">
+                        <i class="material-icons-round">delete</i>
+                    </button>
                 </div>
             </div>
-            <div class="editor-body">
-                <input type="text" id="note-title" placeholder="Заголовок">
-                <textarea id="note-content" placeholder="Начните писать..."></textarea>
+
+            <div class="editor-scroll-area">
+                <input type="text" id="note-title" placeholder="Заголовок" autocomplete="off">
+                <textarea id="note-content" placeholder="Начните писать..." class="scrollable"></textarea>
             </div>
-            <div class="editor-footer">
-                <div id="note-tags-container" class="tags-list"></div>
-                <input type="text" id="note-tags-input" placeholder="#тег">
-                <span id="last-edited">Сохранено</span>
+
+            <div class="editor-bottom-panel">
+                <div class="tags-section">
+                    <div id="note-tags-container" class="tags-list-editor"></div>
+                    <input type="text" id="note-tags-input" placeholder="#тег (Enter)">
+                </div>
+                <div class="editor-footer-row">
+                    <div class="save-status-wrapper">
+                         <button class="btn-icon active" onclick="Editor.manualSave()" style="color:var(--primary)">
+                            <i class="material-icons-round">check</i>
+                        </button>
+                        <span id="last-edited">Сохранено</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-card">
-            <div class="modal-header"><h2 data-lang="settings">Настройки</h2><button class="btn-icon" onclick="UI.closeSettings()"><i class="material-icons-round">close</i></button></div>
-            <div class="modal-body">
-                <h3 data-lang="general">Общие</h3>
-                <div class="row"><span data-lang="language">Язык</span><div><button onclick="UI.setLang('ru')">RU</button><button onclick="UI.setLang('en')">EN</button></div></div>
-                <h3 data-lang="appearance">Внешний вид</h3>
-                <div id="theme-picker-root" class="theme-grid"></div>
-                <h3 data-lang="manual">Ручная настройка</h3>
-                <div class="color-row"><input type="color" id="cp-text"><input type="color" id="cp-primary"><input type="color" id="cp-bg"></div>
+            <div class="modal-header">
+                <h2 data-lang="settings">Настройки</h2>
+                <button class="btn-icon" onclick="UI.closeSettings()">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </div>
+            <div class="modal-body scrollable">
+                <div class="settings-group">
+                    <h3 data-lang="general">Общие</h3>
+                    <div class="settings-row">
+                        <span data-lang="language">Язык</span>
+                        <div class="toggle-switch-lang">
+                            <button class="lang-btn active" onclick="UI.setLang('ru')">RU</button>
+                            <button class="lang-btn" onclick="UI.setLang('en')">EN</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3 data-lang="appearance">Внешний вид</h3>
+                    
+                    <p class="subtext" data-lang="presets">Пресеты</p>
+                    <div id="theme-picker-root" class="theme-grid"></div>
+                    
+                    <p class="subtext" style="margin-top:20px;" data-lang="manual">Ручная настройка</p>
+                    <div class="color-pickers-grid">
+                        <div class="color-picker-item">
+                            <span data-lang="c_text">Текст</span>
+                            <input type="color" id="cp-text" class="input-color-custom">
+                        </div>
+                        <div class="color-picker-item">
+                            <span data-lang="c_accent">Акцент</span>
+                            <input type="color" id="cp-primary" class="input-color-custom">
+                        </div>
+                        <div class="color-picker-item">
+                            <span data-lang="c_bg">Фон</span>
+                            <input type="color" id="cp-bg" class="input-color-custom">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn-secondary" onclick="ThemeManager.reset()" data-lang="reset">Сбросить</button>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
+                    <button class="btn-primary" onclick="UI.saveSettings()" data-lang="save">Сохранить</button>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="about-modal" class="modal-overlay">
         <div class="modal-card">
-            <div class="modal-header"><h2>Команда</h2><button class="btn-icon" onclick="UI.closeModal('about-modal')"><i class="material-icons-round">close</i></button></div>
-            <ul class="team-list">
-                <li class="name-alexandrov">Александров Арсений</li>
-                <li class="name-malyshev">Малышев Егор</li>
-                <li class="name-kopaev">Копаев Иван</li>
-                <li class="name-minyaev">Миняев Иван</li>
-            </ul>
+            <div class="modal-header">
+                <h2 data-lang="team">Команда</h2>
+                <button class="btn-icon" onclick="UI.closeModal('about-modal')">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <ul class="team-list">
+                    <li class="team-member name-alexandrov">Александров Арсений</li>
+                    <li class="team-member name-malyshev">Малышев Егор</li>
+                    <li class="team-member name-kopaev">Копаев Иван</li>
+                    <li class="team-member name-minyaev">Миняев Иван</li>
+                </ul>
+                <div class="bot-link-wrapper">
+                    <span style="color:var(--text-dim); font-size:0.9rem; margin-bottom:5px;" data-lang="contact_us">Связаться с нами:</span>
+                    <a href="https://t.me/SmartNotesInfo_bot" target="_blank" class="btn-primary telegram-btn">
+                        <i class="material-icons-round">smart_toy</i> @SmartNotesInfo_bot
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 
     <div id="rate-modal" class="modal-overlay">
         <div class="modal-card">
-            <div class="modal-header"><h2 data-lang="rate">Оценить</h2><button class="btn-icon" onclick="UI.closeModal('rate-modal')"><i class="material-icons-round">close</i></button></div>
-            <div class="star-rating"><i class="material-icons-round star" data-val="1">star_border</i><i class="material-icons-round star" data-val="2">star_border</i><i class="material-icons-round star" data-val="3">star_border</i><i class="material-icons-round star" data-val="4">star_border</i><i class="material-icons-round star" data-val="5">star_border</i></div>
-            <textarea id="feedback-text" class="input-area"></textarea>
-            <button class="btn-primary full" onclick="UI.submitFeedback()">Отправить</button>
+            <div class="modal-header">
+                <h2 data-lang="rate">Оценить</h2>
+                <button class="btn-icon" onclick="UI.closeModal('rate-modal')">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="star-rating" style="margin-bottom: 20px;">
+                    <i class="material-icons-round star" data-val="1">star_border</i>
+                    <i class="material-icons-round star" data-val="2">star_border</i>
+                    <i class="material-icons-round star" data-val="3">star_border</i>
+                    <i class="material-icons-round star" data-val="4">star_border</i>
+                    <i class="material-icons-round star" data-val="5">star_border</i>
+                </div>
+                <textarea id="feedback-text" placeholder="..." rows="4" class="input-area"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" onclick="UI.submitFeedback()" data-lang="send">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-overlay confirm-layer">
+        <div class="confirm-box">
+            <h3 id="confirm-title">Подтвердите</h3>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
+                <button class="btn-secondary" id="confirm-cancel" data-lang="cancel">Отмена</button>
+                <button class="btn-danger" id="confirm-ok" data-lang="yes">Да</button>
+            </div>
         </div>
     </div>
 
     <div id="toast-container"></div>
 
-    <script src="core/core.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/theme.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/ab.js"></script>
     <script src="js/editor.js"></script>
     <script src="js/sync.js"></script>
-    <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 </body>
 </html>
