@@ -11,6 +11,19 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
 const db = firebase.firestore();
+
+// Включаем поддержку офлайн-режима
+db.enablePersistence()
+  .catch((err) => {
+    if (err.code == 'failed-precondition') {
+      // Вероятно, открыто много вкладок в браузере
+      console.warn('Офлайн режим не включен: открыто много вкладок');
+    } else if (err.code == 'unimplemented') {
+      // Браузер не поддерживает (редко)
+      console.warn('Офлайн режим не поддерживается вашим браузером');
+    }
+  });
+
 const provider = new firebase.auth.GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -46,3 +59,4 @@ const LANG = {
         contact_us: "Contact us:", send: "Send", cancel: "Cancel", yes: "Yes"
     }
 };
+
