@@ -477,9 +477,12 @@ body {
 }
 
 .folder-list {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+    padding: 10px 0;
+    min-height: 20px;
+    width: 100%;
 }
 
 .sidebar-footer {
@@ -1172,3 +1175,4 @@ body {
     }
 
 }
+
