@@ -18,9 +18,7 @@
     <script async defer src="https://accounts.google.com/gsi/client"></script>
 </head>
 <body>
-
     <div class="bg-wrapper"></div>
-
     <div id="login-screen" class="modal-overlay active">
         <div class="login-box">
             <h1 class="brand-text-fixed">SmartNotes</h1>
@@ -33,7 +31,6 @@
             </div>
         </div>
     </div>
-
     <div id="app" class="app-layout">
         <aside id="sidebar" class="sidebar-glass">
             <div class="sidebar-header">
@@ -42,7 +39,6 @@
                     <i class="material-icons-round">close</i>
                 </button>
             </div>
-
             <nav class="sidebar-nav scrollable">
                 <div class="nav-group">
                     <button class="nav-item active" onclick="switchView('notes')" data-view="notes">
@@ -58,9 +54,7 @@
                         <span data-lang="archive">Архив</span>
                     </button>
                 </div>
-
                 <div class="nav-divider"></div>
-
                 <div class="folders-header">
                     <span data-lang="folders">ПАПКИ</span>
                     <button class="btn-icon-small" id="add-folder-btn">
@@ -69,7 +63,6 @@
                 </div>
                 <div id="folder-list-root" class="folder-list"></div>
             </nav>
-
             <div class="sidebar-footer">
                 <button class="footer-link" onclick="UI.openModal('about-modal')">
                     <i class="material-icons-round">info</i> <span data-lang="about">О нас</span>
@@ -82,7 +75,6 @@
                 </button>
             </div>
         </aside>
-
         <main class="main-content">
             <header class="top-bar">
                 <div class="header-left">
@@ -91,12 +83,10 @@
                     </button>
                     <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
                 </div>
-
                 <div class="search-container">
                     <i class="material-icons-round search-icon">search</i>
                     <input type="text" id="search-input" placeholder="Поиск..." oninput="filterAndRender(this.value)">
                 </div>
-
                 <div class="header-right">
                     <div class="user-avatar-wrapper">
                         <img id="user-photo" src="" alt="User" class="header-avatar" onclick="UI.toggleUserMenu()">
@@ -114,26 +104,21 @@
                     </div>
                 </div>
             </header>
-
             <div id="notes-content-area" class="content-scrollable scrollable">
                 <div id="app-loader" class="loader-container hidden">
                     <div class="spinner"></div>
                 </div>
-
                 <div id="empty-state" class="empty-placeholder hidden">
                     <i class="material-icons-round">note_add</i>
                     <p data-lang="empty">Здесь пока пусто</p>
                 </div>
-
                 <div id="notes-container" class="notes-grid"></div>
             </div>
-
             <button class="btn-fab" onclick="Editor.open()">
                 <i class="material-icons-round">add</i>
             </button>
         </main>
     </div>
-
     <div id="note-editor" class="editor-overlay">
         <div class="editor-container">
             <div class="editor-header-bar">
@@ -153,12 +138,10 @@
                     </button>
                 </div>
             </div>
-
             <div class="editor-scroll-area">
                 <input type="text" id="note-title" placeholder="Заголовок" autocomplete="off">
                 <textarea id="note-content" placeholder="Начните писать..." class="scrollable"></textarea>
             </div>
-
             <div class="editor-bottom-panel">
                 <div class="tags-section">
                     <div id="note-tags-container" class="tags-list-editor"></div>
@@ -175,7 +158,6 @@
             </div>
         </div>
     </div>
-
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -195,7 +177,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="settings-group">
                     <h3 data-lang="appearance">Внешний вид</h3>
                     <p class="subtext" data-lang="presets">Пресеты</p>
@@ -226,7 +207,6 @@
             </div>
         </div>
     </div>
-
     <div id="about-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -251,7 +231,6 @@
             </div>
         </div>
     </div>
-
     <div id="rate-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -275,7 +254,6 @@
             </div>
         </div>
     </div>
-
     <div id="confirm-modal" class="modal-overlay confirm-layer">
         <div class="confirm-box">
             <h3 id="confirm-title">Подтвердите</h3>
@@ -285,7 +263,23 @@
             </div>
         </div>
     </div>
-
+    <div id="folder-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Новая папка</h2>
+                <button class="btn-icon" id="close-folder-modal">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="folder-name-input" placeholder="Название папки" class="input-area">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="save-folder-btn">Создать</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast-container" class="toast-container"></div>
     <script src="js/core.js"></script>
     <script src="js/sync.js"></script>
     <script src="js/app.js"></script>
