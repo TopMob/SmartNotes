@@ -1,71 +1,54 @@
 const SYNC_URL = 'https://script.google.com/macros/s/AKfycbyfD1l8-87X6K1p5qYk1h6q8W9S7_4W6F1/exec';
 
-class NoteSync {
-    constructor() {
-        this.queue = [];
-        this.isSyncing = false;
-        this.init();
-    }
+(function() {
+    function initFirebaseSync() {
+        // Ждем, пока пользователь авторизуется
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                console.log("Sync: Начинаю отслеживание Firestore для", user.email);
+                
+                // Слушаем изменения во всей коллекции заметок пользователя
+                db.collection('users').doc(user.uid).collection('notes')
+                    .onSnapshot(snapshot => {
+                        snapshot.docChanges().forEach(change => {
+                            const noteData = change.doc.data();
+                            const payload = {
+                                action: change.type === 'removed' ? 'delete' : 'save',
+                                user: user.email,
+                                noteId: change.doc.id,
+                                title: noteData.title || '',
+                                content: noteData.content || '',
+                                timestamp: new Date().toISOString()
+                            };
 
-    init() {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.hookState());
-        } else {
-            this.hookState();
-        }
-    }
-
-    hookState() {
-        const checkState = setInterval(() => {
-            if (window.state) {
-                clearInterval(checkState);
-                this.applyHooks();
+                            if (change.type !== 'removed' || change.type === 'added' || change.type === 'modified') {
+                                sendToSheets(payload);
+                            }
+                        });
+                    });
             }
-        }, 100);
+        });
     }
 
-    applyHooks() {
-        const originalSave = window.state.saveNote;
-        window.state.saveNote = (note) => {
-            originalSave.call(window.state, note);
-            this.push('save', note);
-        };
-
-        const originalDelete = window.state.deleteNote;
-        window.state.deleteNote = (id) => {
-            originalDelete.call(window.state, id);
-            this.push('delete', { id });
-        };
-    }
-
-    push(action, data) {
-        this.queue.push({ action, data });
-        this.sync();
-    }
-
-    async sync() {
-        if (this.isSyncing || !this.queue.length) return;
-        this.isSyncing = true;
-        
-        const payload = this.queue[0];
-
+    async function sendToSheets(payload) {
         try {
+            // Используем текстовый формат, так как Apps Script лучше его переваривает при no-cors
             await fetch(SYNC_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(payload)
             });
-            this.queue.shift();
+            console.log("Sync: Данные отправлены в очередь Google");
         } catch (e) {
-            console.error(e);
-        } finally {
-            this.isSyncing = false;
-            if (this.queue.length) {
-                setTimeout(() => this.sync(), 1000);
-            }
+            console.error("Sync Error:", e);
         }
     }
-}
 
-new NoteSync();
+    // Запуск после загрузки страницы
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFirebaseSync);
+    } else {
+        initFirebaseSync();
+    }
+})();
