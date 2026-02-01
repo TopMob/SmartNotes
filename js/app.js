@@ -72,18 +72,19 @@ const DriveService = {
 const VoiceService = {
     recorder: null,
     chunks: [],
+    stream: null,
 
     async toggle() {
         state.recording ? this.stop() : await this.start();
     },
 
     async start() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
             return UI.showToast("Микрофон не поддерживается");
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.recorder = new MediaRecorder(stream);
+            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.recorder = new MediaRecorder(this.stream);
             this.chunks = [];
 
             this.recorder.ondataavailable = e => this.chunks.push(e.data);
@@ -102,6 +103,10 @@ const VoiceService = {
     stop() {
         if (!this.recorder) return;
         this.recorder.stop();
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+            this.stream = null;
+        }
         state.recording = false;
         document.getElementById('voice-indicator').classList.remove('active');
     },
@@ -181,14 +186,26 @@ const SketchService = {
         this.canvas.onmouseup = end;
         this.canvas.onmouseout = end;
 
-        this.canvas.ontouchstart = start;
-        this.canvas.ontouchmove = move;
-        this.canvas.ontouchend = end;
+        this.canvas.addEventListener('touchstart', start, { passive: true });
+        this.canvas.addEventListener('touchmove', move, { passive: false });
+        this.canvas.addEventListener('touchend', end, { passive: true });
+
+        window.addEventListener('resize', Utils.debounce(() => this.resizeCanvas(), 150));
     },
 
     saveState() {
         if (this.history.length > 10) this.history.shift();
         this.history.push(this.canvas.toDataURL());
+    },
+
+    resizeCanvas() {
+        if (!this.canvas) return;
+        const prev = new Image();
+        prev.src = this.canvas.toDataURL();
+        prev.onload = () => {
+            this.setupCanvas();
+            this.ctx.drawImage(prev, 0, 0, this.canvas.width, this.canvas.height);
+        };
     },
 
     undo() {
@@ -216,17 +233,141 @@ const SketchService = {
     }
 };
 
+const PhotoEditor = {
+    canvas: null,
+    ctx: null,
+    drawing: false,
+    history: [],
+    targetImg: null,
+    els: {},
+
+    open() {
+        if (!Editor.selectedMedia) {
+            UI.showToast("Выберите изображение");
+            return;
+        }
+        this.targetImg = Editor.selectedMedia.querySelector('img');
+        if (!this.targetImg) {
+            UI.showToast("Изображение не найдено");
+            return;
+        }
+        UI.openModal('photo-editor-modal');
+        this.init();
+    },
+
+    init() {
+        this.canvas = document.getElementById('photo-editor-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.els = {
+            color: document.getElementById('photo-color-picker'),
+            width: document.getElementById('photo-width-picker')
+        };
+        this.loadImage();
+        this.bindEvents();
+    },
+
+    loadImage() {
+        const img = new Image();
+        img.onload = () => {
+            this.canvas.width = img.naturalWidth || img.width;
+            this.canvas.height = img.naturalHeight || img.height;
+            this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.lineCap = 'round';
+            this.ctx.lineJoin = 'round';
+            this.saveState();
+        };
+        img.src = this.targetImg.src;
+    },
+
+    bindEvents() {
+        const getPos = (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const scaleX = this.canvas.width / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+        };
+
+        const start = (e) => {
+            this.drawing = true;
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = this.els.color.value;
+            this.ctx.lineWidth = this.els.width.value;
+            const pos = getPos(e);
+            this.ctx.moveTo(pos.x, pos.y);
+        };
+
+        const move = (e) => {
+            if (!this.drawing) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            this.ctx.lineTo(pos.x, pos.y);
+            this.ctx.stroke();
+        };
+
+        const end = () => {
+            if (!this.drawing) return;
+            this.drawing = false;
+            this.ctx.closePath();
+            this.saveState();
+        };
+
+        this.canvas.onmousedown = start;
+        this.canvas.onmousemove = move;
+        this.canvas.onmouseup = end;
+        this.canvas.onmouseout = end;
+
+        this.canvas.addEventListener('touchstart', start, { passive: true });
+        this.canvas.addEventListener('touchmove', move, { passive: false });
+        this.canvas.addEventListener('touchend', end, { passive: true });
+    },
+
+    saveState() {
+        if (this.history.length > 10) this.history.shift();
+        this.history.push(this.canvas.toDataURL());
+    },
+
+    undo() {
+        if (this.history.length <= 1) return this.clear();
+        this.history.pop();
+        const img = new Image();
+        img.src = this.history[this.history.length - 1];
+        img.onload = () => {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.drawImage(img, 0, 0);
+        };
+    },
+
+    clear() {
+        this.history = [];
+        this.loadImage();
+    },
+
+    save() {
+        if (!this.targetImg) return;
+        this.targetImg.src = this.canvas.toDataURL('image/png');
+        UI.closeModal('photo-editor-modal');
+        Editor.snapshot();
+    }
+};
+
 const ReminderService = {
     init() {
-        if (Notification.permission !== "granted") Notification.requestPermission();
+        if (!('Notification' in window)) return;
+        if (Notification.permission !== "granted") {
+            Notification.requestPermission().catch(() => null);
+        }
         setInterval(() => this.check(), 60000);
     },
 
     check() {
+        if (!('Notification' in window) || Notification.permission !== "granted") return;
         const now = new Date();
         state.notes.forEach(note => {
             if (note.reminder && new Date(note.reminder) <= now && !note.reminderSent) {
-                new Notification("SmartNotes", { body: note.title });
+                const title = note.title || "SmartNotes";
+                new Notification("SmartNotes", { body: title });
                 this.markAsSent(note.id);
             }
         });
@@ -258,18 +399,21 @@ const Editor = {
     els: {},
 
     configDefault: [
-        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider' },
-        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true },
-        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true },
-        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true },
-        { id: 'task', icon: 'check_circle', cmd: 'task', active: true },
-        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true },
-        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true },
-        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true },
-        { id: 'voice', icon: 'mic', cmd: 'voice', active: true },
-        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true },
-        { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true },
-        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true }
+        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider', labelKey: 't_size' },
+        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true, labelKey: 't_bold' },
+        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true, labelKey: 't_italic' },
+        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true, labelKey: 't_list' },
+        { id: 'task', icon: 'check_circle', cmd: 'task', active: true, labelKey: 't_check' },
+        { id: 'align_left', icon: 'format_align_left', cmd: 'align_left', active: true, labelKey: 't_align_left' },
+        { id: 'align_center', icon: 'format_align_center', cmd: 'align_center', active: true, labelKey: 't_align_center' },
+        { id: 'align_right', icon: 'format_align_right', cmd: 'align_right', active: true, labelKey: 't_align_right' },
+        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true, labelKey: 't_color' },
+        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true, labelKey: 't_highlight' },
+        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true, labelKey: 't_image' },
+        { id: 'voice', icon: 'mic', cmd: 'voice', active: true, labelKey: 't_mic' },
+        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true, labelKey: 't_sketch' },
+        { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true, labelKey: 't_drive' },
+        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true, labelKey: 't_clear' }
     ],
 
     init() {
@@ -277,12 +421,15 @@ const Editor = {
             title: document.getElementById('note-title'),
             content: document.getElementById('note-content-editable'),
             tags: document.getElementById('note-tags-input'),
+            tagsContainer: document.getElementById('note-tags-container'),
             toolbar: document.getElementById('editor-toolbar'),
             wrapper: document.getElementById('note-editor'),
             sizePopup: document.getElementById('text-size-popup'),
             sizeRange: document.getElementById('font-size-range'),
             ctxMenu: document.getElementById('media-context-menu')
         };
+        this.savedRange = null;
+        this.draggedMedia = null;
 
         this.loadConfig();
         this.renderToolbar();
@@ -291,7 +438,15 @@ const Editor = {
 
     loadConfig() {
         const saved = localStorage.getItem('editor-tools');
-        this.config = saved ? JSON.parse(saved) : this.configDefault;
+        if (!saved) {
+            this.config = this.configDefault;
+            return;
+        }
+        const parsed = JSON.parse(saved);
+        this.config = this.configDefault.map(tool => {
+            const existing = parsed.find(item => item.id === tool.id);
+            return { ...tool, ...existing };
+        });
     },
 
     bindEvents() {
@@ -312,6 +467,13 @@ const Editor = {
             }
         };
 
+        this.els.tagsContainer.addEventListener('click', (e) => {
+            const chip = e.target.closest('.tag-chip');
+            if (!chip || !chip.dataset.tag) return;
+            const tag = decodeURIComponent(chip.dataset.tag);
+            this.removeTag(tag);
+        });
+
         // Editor Interactivity (Tasks, Media)
         this.els.content.addEventListener('click', e => {
             if (e.target.classList.contains('task-checkbox')) {
@@ -326,6 +488,32 @@ const Editor = {
             }
         });
 
+        this.els.content.addEventListener('dragstart', (e) => {
+            const mediaWrapper = e.target.closest('.media-wrapper');
+            if (!mediaWrapper) return;
+            this.draggedMedia = mediaWrapper;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'media');
+        });
+
+        this.els.content.addEventListener('dragover', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+        });
+
+        this.els.content.addEventListener('drop', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+            const range = this.getRangeFromPoint(e.clientX, e.clientY);
+            if (range) {
+                range.insertNode(this.draggedMedia);
+            } else {
+                this.els.content.appendChild(this.draggedMedia);
+            }
+            this.draggedMedia = null;
+            this.snapshot();
+        });
+
         // Global Clicks (Context Menus)
         document.addEventListener('click', e => {
             if (!e.target.closest('.media-wrapper') && !e.target.closest('#media-context-menu')) {
@@ -338,6 +526,7 @@ const Editor = {
 
         // Font Size
         this.els.sizeRange.oninput = (e) => {
+            this.restoreSelection();
             document.execCommand('fontSize', false, e.target.value);
             this.snapshot();
         };
@@ -374,6 +563,7 @@ const Editor = {
         this.els.title.value = n.title || '';
         this.els.content.innerHTML = n.content || '';
         this.renderTags();
+        this.makeMediaDraggable();
     },
 
     // Media Logic
@@ -381,10 +571,11 @@ const Editor = {
         const id = Utils.generateId();
         let html = '';
         if (type === 'image') {
-            html = `<div class="media-wrapper" id="${id}" contenteditable="false"><img src="${src}"></div><br>`;
+            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true"><img src="${src}" alt=""></div><br>`;
         }
         document.execCommand('insertHTML', false, html);
         this.snapshot();
+        this.makeMediaDraggable();
     },
 
     selectMedia(el) {
@@ -422,22 +613,85 @@ const Editor = {
         }
     },
 
+    alignMediaOrText(align) {
+        if (this.selectedMedia) {
+            this.alignMedia(align);
+            return;
+        }
+        const commands = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
+        const cmd = commands[align];
+        if (cmd) {
+            document.execCommand(cmd, false, null);
+        }
+    },
+
+    getRangeFromPoint(x, y) {
+        if (document.caretRangeFromPoint) {
+            return document.caretRangeFromPoint(x, y);
+        }
+        if (document.caretPositionFromPoint) {
+            const position = document.caretPositionFromPoint(x, y);
+            const range = document.createRange();
+            range.setStart(position.offsetNode, position.offset);
+            range.collapse(true);
+            return range;
+        }
+        return null;
+    },
+
+    makeMediaDraggable() {
+        this.els.content.querySelectorAll('.media-wrapper').forEach(wrapper => {
+            wrapper.setAttribute('draggable', 'true');
+        });
+    },
+
+    saveSelection() {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        this.savedRange = selection.getRangeAt(0).cloneRange();
+    },
+
+    restoreSelection() {
+        if (!this.savedRange) return;
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(this.savedRange);
+    },
+
     // Exec Commands
     exec(cmd, val = null) {
         this.els.content.focus();
 
         const actions = {
             toggleSizeSlider: () => {
-                const rect = document.querySelector('[data-action="toggleSizeSlider"]').getBoundingClientRect();
+                const target = document.querySelector('[data-action="toggleSizeSlider"]');
+                if (!target) return;
+                const rect = target.getBoundingClientRect();
                 this.els.sizePopup.style.bottom = '60px';
                 this.els.sizePopup.style.left = `${rect.left + rect.width / 2}px`;
                 this.els.sizePopup.classList.toggle('hidden');
+                if (!this.els.sizePopup.classList.contains('hidden')) {
+                    this.saveSelection();
+                }
             },
             task: () => {
                 const id = Utils.generateId();
-                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">Задача</span></div><br>`;
+                const label = LANG[state.config.lang]?.task_item || 'Задача';
+                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">${Utils.escapeHtml(label)}</span></div>`;
                 document.execCommand('insertHTML', false, html);
+                const taskText = this.els.content.querySelector(`#${id} .task-text`);
+                if (taskText) {
+                    const range = document.createRange();
+                    range.selectNodeContents(taskText);
+                    range.collapse(false);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
             },
+            align_left: () => this.alignMediaOrText('left'),
+            align_center: () => this.alignMediaOrText('center'),
+            align_right: () => this.alignMediaOrText('right'),
             voice: () => VoiceService.toggle(),
             image: () => document.getElementById('img-upload').click(),
             sketch: () => { UI.openModal('sketch-modal'); SketchService.init(); },
@@ -552,10 +806,10 @@ const Editor = {
             if (t.color) return `
                 <div class="tool-wrapper">
                     <label class="tool-btn"><i class="material-icons-round" style="color:var(--text)">${t.icon}</i>
-                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)">
+                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(LANG[state.config.lang]?.[t.labelKey] || t.id)}">
                     </label>
                 </div>`;
-            return `<button class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')"><i class="material-icons-round">${t.icon}</i></button>`;
+            return `<button class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(LANG[state.config.lang]?.[t.labelKey] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
         }).join('');
     },
 
@@ -574,9 +828,12 @@ const Editor = {
     },
 
     renderTags() {
-        document.getElementById('note-tags-container').innerHTML = (state.currentNote.tags || []).map(t =>
-            `<span class="tag-chip">#${t}<i class="material-icons-round" onclick="Editor.removeTag('${t}')">close</i></span>`
-        ).join('');
+        const tags = state.currentNote.tags || [];
+        this.els.tagsContainer.innerHTML = tags.map(t => {
+            const escaped = Utils.escapeHtml(t);
+            const encoded = encodeURIComponent(t);
+            return `<button type="button" class="tag-chip" data-tag="${encoded}">#${escaped}<i class="material-icons-round" aria-hidden="true">close</i></button>`;
+        }).join('');
     },
 
     toggleTask(el) {
@@ -602,7 +859,7 @@ const UI = {
             promptModal: document.getElementById('prompt-modal')
         };
         this.bindEvents();
-        this.loadSettings();
+        this.applyAppearanceSettings();
     },
 
     bindEvents() {
@@ -641,6 +898,27 @@ const UI = {
                 if (note) Editor.open(note);
             }
         });
+
+        this.els.grid.addEventListener('click', (e) => {
+            const card = e.target.closest('.note-card');
+            if (!card || e.target.closest('.action-btn')) return;
+            if (card.dataset.folderId) {
+                const folderId = decodeURIComponent(card.dataset.folderId);
+                switchView('folder', folderId);
+                return;
+            }
+            const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null;
+            const note = state.notes.find(n => n.id === id);
+            if (note) Editor.open(note);
+        });
+
+        document.getElementById('toggle-glass')?.addEventListener('change', (e) => {
+            this.updateAppearanceSetting('glass', e.target.checked);
+        });
+
+        document.getElementById('toggle-contrast')?.addEventListener('change', (e) => {
+            this.updateAppearanceSetting('contrast', e.target.checked);
+        });
     },
 
     toggleSidebar(force) { this.els.sidebar.classList.toggle('active', force); },
@@ -650,12 +928,16 @@ const UI = {
     openModal(id) {
         document.getElementById(id).classList.add('active');
         this.toggleSidebar(false);
-        if (id === 'settings-modal') this.loadSettings();
+        if (id === 'appearance-modal' || id === 'editor-settings-modal') {
+            document.getElementById('settings-modal')?.classList.remove('active');
+        }
+        if (id === 'appearance-modal') this.loadAppearanceSettings();
+        if (id === 'editor-settings-modal') this.loadEditorSettings();
     },
 
     closeModal(id) {
         document.getElementById(id).classList.remove('active');
-        if (id === 'settings-modal') ThemeManager.revertToLastSaved();
+        if (id === 'appearance-modal') ThemeManager.revertToLastSaved();
 
         // Reset Easter Egg on Close
         if (id === 'about-modal') {
@@ -724,7 +1006,7 @@ const UI = {
         root.innerHTML = state.folders.map(f => `
             <button class="nav-item ${state.activeFolderId === f.id ? 'active' : ''}" onclick="switchView('folder', '${f.id}')">
                 <i class="material-icons-round">folder</i>
-                <span>${f.name}</span>
+                <span>${Utils.escapeHtml(f.name)}</span>
                 <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" 
                    onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
             </button>
@@ -734,7 +1016,7 @@ const UI = {
     renderNotes(notes) {
         this.els.empty.classList.toggle('hidden', notes.length > 0);
         this.els.grid.innerHTML = notes.map(n => `
-            <div class="note-card" onclick='Editor.open(${JSON.stringify(n).replace(/'/g, "&#39;")})'>
+            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}">
                 <div class="card-actions">
                     <button class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})">
                         <i class="material-icons-round">push_pin</i>
@@ -746,13 +1028,33 @@ const UI = {
                         <i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i>
                     </button>
                 </div>
-                <h3>${n.title || 'Без названия'}</h3>
-                <p>${Utils.stripHtml(n.content) || 'Нет содержимого'}</p>
+                <h3>${Utils.escapeHtml(n.title || 'Без названия')}</h3>
+                <p>${Utils.escapeHtml(Utils.stripHtml(n.content) || 'Нет содержимого')}</p>
                 <div class="tags-list">
-                    ${(n.tags || []).map(t => `<span class="tag-chip">#${t}</span>`).join('')}
+                    ${(n.tags || []).map(t => `<span class="tag-chip">#${Utils.escapeHtml(t)}</span>`).join('')}
                 </div>
             </div>
         `).join('');
+    },
+
+    renderFolderCards() {
+        const folders = state.folders || [];
+        this.els.empty.classList.toggle('hidden', folders.length > 0);
+        this.els.grid.innerHTML = folders.map(folder => {
+            const notes = state.notes
+                .filter(n => n.folderId === folder.id && !n.isArchived)
+                .slice(0, 3);
+            const emptyLabel = LANG[state.config.lang]?.empty_folder || 'Пусто';
+            const preview = notes.map(n => `<span>${Utils.escapeHtml(n.title || 'Без названия')}</span>`).join('');
+            return `
+                <div class="note-card folder-card" data-folder-id="${encodeURIComponent(folder.id)}">
+                    <h3>${Utils.escapeHtml(folder.name)}</h3>
+                    <div class="folder-preview">
+                        ${preview || `<span>${Utils.escapeHtml(emptyLabel)}</span>`}
+                    </div>
+                </div>
+            `;
+        }).join('');
     },
 
     showToast(msg) {
@@ -764,13 +1066,13 @@ const UI = {
     },
 
     // Settings & Feedback
-    loadSettings() {
+    loadAppearanceSettings() {
         const style = getComputedStyle(document.documentElement);
         ['text', 'primary', 'bg'].forEach(k => {
             const el = document.getElementById(`cp-${k}`);
             if (el) el.value = style.getPropertyValue(`--${k}`).trim();
         });
-        this.renderToolsConfig();
+        this.applyAppearanceSettings();
     },
 
     saveSettings() {
@@ -778,15 +1080,41 @@ const UI = {
         const bg = document.getElementById('cp-bg').value;
         const t = document.getElementById('cp-text').value;
         ThemeManager.setManual(p, bg, t);
-        this.closeModal('settings-modal');
+        this.closeModal('appearance-modal');
+    },
+
+    getAppearanceSettings() {
+        return JSON.parse(localStorage.getItem('app-effects')) || { glass: true, contrast: false };
+    },
+
+    updateAppearanceSetting(key, value) {
+        const settings = this.getAppearanceSettings();
+        settings[key] = value;
+        localStorage.setItem('app-effects', JSON.stringify(settings));
+        this.applyAppearanceSettings();
+    },
+
+    applyAppearanceSettings() {
+        const settings = this.getAppearanceSettings();
+        document.body.classList.toggle('glass-off', !settings.glass);
+        document.body.classList.toggle('high-contrast', settings.contrast);
+        const glassToggle = document.getElementById('toggle-glass');
+        const contrastToggle = document.getElementById('toggle-contrast');
+        if (glassToggle) glassToggle.checked = !!settings.glass;
+        if (contrastToggle) contrastToggle.checked = !!settings.contrast;
+    },
+
+    loadEditorSettings() {
+        this.renderToolsConfig();
     },
 
     renderToolsConfig() {
         const root = document.getElementById('tools-config-root');
         if (root) {
+            const dict = LANG[state.config.lang] || LANG.ru;
             root.innerHTML = Editor.config.map((t, i) => `
                 <div class="tool-toggle-item">
-                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${t.id}</span></div>
+                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[t.labelKey] || t.id}</span></div>
                     <button class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
                 </div>
             `).join('');
@@ -809,6 +1137,12 @@ const UI = {
             const k = el.getAttribute('data-lang');
             if (dict[k]) el.textContent = dict[k];
         });
+        document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+            const k = el.getAttribute('data-lang-placeholder');
+            if (dict[k]) el.setAttribute('placeholder', dict[k]);
+        });
+        this.renderToolsConfig();
+        switchView(state.view, state.activeFolderId);
     },
 
     async submitFeedback() {
@@ -835,6 +1169,11 @@ function initApp() {
     UI.init();
     UI.setLang(localStorage.getItem('app-lang') || 'ru');
 
+    if (!db || !state.user) {
+        console.error('Database not available.');
+        return;
+    }
+
     // Data Sync
     db.collection('users').doc(state.user.uid).collection('folders')
         .orderBy('createdAt', 'asc').onSnapshot(snap => {
@@ -857,7 +1196,14 @@ window.switchView = (view, folderId = null) => {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     if (!folderId) document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
 
-    const titles = { notes: 'Все записи', favorites: 'Важное', archive: 'Архив', folder: 'Папка' };
+    const dict = LANG[state.config.lang] || LANG.ru;
+    const titles = {
+        notes: dict.all_notes,
+        favorites: dict.favorites,
+        archive: dict.archive,
+        folder: dict.folders_overview,
+        folders: dict.folders_overview
+    };
     document.getElementById('current-view-title').textContent = titles[view] || 'SmartNotes';
 
     UI.toggleSidebar(false);
@@ -867,8 +1213,14 @@ window.switchView = (view, folderId = null) => {
 
 window.filterAndRender = (query = '') => {
     const q = query.toLowerCase().trim();
+    if (state.view === 'folders') {
+        UI.renderFolderCards();
+        return;
+    }
     let res = state.notes.filter(n => {
-        const match = (n.title + n.content).toLowerCase().includes(q) || (n.tags || []).some(t => t.includes(q));
+        const title = n.title || '';
+        const content = n.content || '';
+        const match = (title + content).toLowerCase().includes(q) || (n.tags || []).some(t => t.toLowerCase().includes(q));
         if (state.view === 'notes') return match && !n.isArchived;
         if (state.view === 'favorites') return match && !n.isArchived && n.isImportant;
         if (state.view === 'archive') return match && n.isArchived;
@@ -881,6 +1233,7 @@ window.filterAndRender = (query = '') => {
 };
 
 window.toggleProp = async (id, prop, val) => {
+    if (!db || !state.user) return;
     const update = { [prop]: val };
     if (prop === 'isArchived' && val) update.isPinned = false;
     await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update(update);

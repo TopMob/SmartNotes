@@ -559,8 +559,8 @@ body {
 }
 
 .tool-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -570,6 +570,10 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
+}
+
+.tool-btn i {
+    font-size: 20px;
 }
 
 .tool-btn:hover {
@@ -649,14 +653,14 @@ body {
 }
 
 .task-checkbox {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border: 2px solid var(--primary);
     border-radius: 6px;
     flex-shrink: 0;
     cursor: pointer;
     position: relative;
-    margin-top: 4px;
+    margin-top: 2px;
     transition: 0.2s;
 }
 
@@ -718,6 +722,7 @@ body {
 }
 
 .tag-chip {
+    appearance: none;
     font-size: 0.75rem;
     background: rgba(var(--primary-rgb), 0.1);
     color: var(--primary);
@@ -728,6 +733,17 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.tag-chip:focus-visible {
+    outline: 2px solid rgba(var(--primary-rgb), 0.5);
+    outline-offset: 2px;
+}
+
+.notes-grid .tag-chip {
+    cursor: default;
 }
 
 .tag-chip i {
@@ -880,6 +896,164 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 12px;
+}
+
+.toggle {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.toggle input {
+    display: none;
+}
+
+.toggle-track {
+    width: 44px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    position: relative;
+    transition: 0.2s ease;
+    border: 1px solid var(--border);
+}
+
+.toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: var(--text);
+    border-radius: 50%;
+    transition: 0.2s ease;
+}
+
+.toggle input:checked + .toggle-track {
+    background: rgba(var(--primary-rgb), 0.6);
+}
+
+.toggle input:checked + .toggle-track::after {
+    transform: translateX(20px);
+    background: #000;
+}
+.settings-link {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.settings-link:hover {
+    border-color: rgba(var(--primary-rgb), 0.4);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
+}
+
+.settings-link i {
+    opacity: 0.7;
+}
+
+.contact-label {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.folder-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.folder-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.folder-preview span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.telegram-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-weight: 700;
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--primary-rgb), 0.5));
+    border: 1px solid rgba(var(--primary-rgb), 0.4);
+    color: #000;
+    text-decoration: none;
+}
+
+#prompt-modal .confirm-box h3 {
+    text-align: center;
+}
+
+body.glass-off .sidebar-glass,
+body.glass-off .top-bar,
+body.glass-off .editor-toolbar {
+    backdrop-filter: none;
+    background: var(--surface);
+}
+
+body.high-contrast {
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.85);
+    --border: rgba(255, 255, 255, 0.35);
+}
+
+@media (max-width: 900px) {
+    .editor-scroll-area {
+        padding: 20px;
+        padding-bottom: 200px;
+    }
+
+    .tool-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .editor-toolbar {
+        gap: 4px;
+    }
+
+    .note-card {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 600px) {
+    .top-bar {
+        padding: 0 12px;
+    }
+
+    .editor-scroll-area {
+        padding: 16px;
+        padding-bottom: 180px;
+    }
+
+    #note-title {
+        font-size: 1.5rem;
+    }
 }
 
 .toggle-switch-lang {
@@ -1074,7 +1248,7 @@ body {
     background: transparent;
     border: none;
     color: var(--text);
-    padding: 8px;
+    padding: 10px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
@@ -1267,11 +1441,16 @@ body {
     border: 2px solid transparent;
     border-radius: 12px;
     transition: 0.2s;
+    cursor: grab;
 }
 
 .media-wrapper.selected {
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(0, 242, 255, 0.1);
+}
+
+.media-wrapper:active {
+    cursor: grabbing;
 }
 
 .media-wrapper img {
@@ -1298,7 +1477,7 @@ body {
     background: transparent;
     border: none;
     color: var(--text);
-    padding: 8px;
+    padding: 10px;
     border-radius: 8px;
     cursor: pointer;
     display: flex;

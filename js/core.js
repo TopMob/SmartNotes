@@ -7,7 +7,7 @@
    1. Utility Helpers (Must be defined first)
    ========================================================================== */
 const Utils = {
-    generateId: () => Math.random().toString(36).substr(2, 9),
+    generateId: () => Math.random().toString(36).slice(2, 11),
     
     debounce: (func, wait) => {
         let timeout;
@@ -41,6 +41,16 @@ const Utils = {
         const tmp = document.createElement("DIV");
         tmp.innerHTML = html;
         return tmp.textContent || tmp.innerText || "";
+    },
+
+    escapeHtml: (value) => {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     },
 
     // Color manipulation for theme generation
@@ -81,25 +91,27 @@ const firebaseConfig = {
 const DRIVE_CLIENT_ID = "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com";
 const DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.file";
 
-// Initialize Firebase
-if (typeof firebase !== 'undefined' && !firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-} else if (typeof firebase === 'undefined') {
+let auth = null;
+let db = null;
+
+if (typeof firebase !== 'undefined') {
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+
+    auth = firebase.auth();
+    db = firebase.firestore();
+
+    db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+        if (err.code === 'failed-precondition') {
+            console.warn('Persistence failed: Multiple tabs open.');
+        } else if (err.code === 'unimplemented') {
+            console.warn('Persistence failed: Browser not supported.');
+        }
+    });
+} else {
     console.error("Firebase SDK not loaded. Check index.html order.");
 }
-
-// Export Auth & DB to global scope for other scripts
-const auth = firebase.auth();
-const db = firebase.firestore();
-
-// Enable offline persistence
-db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-    if (err.code === 'failed-precondition') {
-        console.warn('Persistence failed: Multiple tabs open.');
-    } else if (err.code === 'unimplemented') {
-        console.warn('Persistence failed: Browser not supported.');
-    }
-});
 
 /* ==========================================================================
    3. Global State
@@ -134,30 +146,42 @@ window.state = state;
    ========================================================================== */
 const LANG = {
     ru: {
-        slogan: "Ваши мысли. В порядке.", login_google: "Войти через Google", all_notes: "Все записи",
+        slogan: "Ваши мысли. В порядке.", login: "Вход в систему", login_google: "Войти через Google", all_notes: "Все записи",
         favorites: "Важное", archive: "Архив", folders: "ПАПКИ", about: "О нас", rate: "Оценить",
         settings: "Настройки", switch_acc: "Сменить", logout: "Выйти", empty: "Здесь пока пусто",
-        general: "Общие", language: "Язык", appearance: "Внешний вид", presets: "Пресеты",
+        general: "Общие", language: "Язык", appearance: "Внешний вид", appearance_settings: "Настройки внешнего вида",
+        editor_settings: "Настройки редактора", editor_tools: "Инструменты редактора", presets: "Пресеты",
         manual: "Ручная настройка", c_text: "Текст", c_accent: "Акцент", c_bg: "Фон",
         reset: "Сбросить", close: "Закрыть", save: "Сохранить", team: "Команда",
         contact_us: "Связаться с нами:", send: "Отправить", cancel: "Отмена", yes: "Да",
-        tools: "Инструменты редактора",
+        tools: "Инструменты редактора", search: "Поиск...", note_title: "Заголовок", note_tags: "#тег (Enter)",
+        feedback_placeholder: "Ваш отзыв...",
         t_bold: "Жирный", t_italic: "Курсив", t_list: "Список", t_check: "Задачи",
         t_code: "Код", t_quote: "Цитата", t_image: "Изображение", t_mic: "Голос",
-        t_sketch: "Рисунок", t_clear: "Очистить"
+        t_sketch: "Рисунок", t_clear: "Очистить", t_size: "Размер текста", t_color: "Цвет текста",
+        t_highlight: "Подсветка", t_drive: "Сохранить в Drive", task_item: "Задача",
+        t_align_left: "Выравнивание слева", t_align_center: "Выравнивание по центру", t_align_right: "Выравнивание справа",
+        folders_overview: "Папки", effects: "Эффекты", glass_effect: "Эффект стекла",
+        high_contrast: "Режим для слабовидящих", photo_editor: "Редактор фото", empty_folder: "Пусто"
     },
     en: {
-        slogan: "Your thoughts. Organized.", login_google: "Sign in with Google", all_notes: "All Notes",
+        slogan: "Your thoughts. Organized.", login: "Sign in", login_google: "Sign in with Google", all_notes: "All Notes",
         favorites: "Important", archive: "Archive", folders: "FOLDERS", about: "About", rate: "Rate Us",
         settings: "Settings", switch_acc: "Switch", logout: "Logout", empty: "Nothing here yet",
-        general: "General", language: "Language", appearance: "Appearance", presets: "Presets",
+        general: "General", language: "Language", appearance: "Appearance", appearance_settings: "Appearance settings",
+        editor_settings: "Editor settings", editor_tools: "Editor tools", presets: "Presets",
         manual: "Manual Config", c_text: "Text", c_accent: "Accent", c_bg: "Background",
         reset: "Reset", close: "Close", save: "Save", team: "Team",
         contact_us: "Contact us:", send: "Send", cancel: "Cancel", yes: "Yes",
-        tools: "Editor Tools",
+        tools: "Editor Tools", search: "Search...", note_title: "Title", note_tags: "#tag (Enter)",
+        feedback_placeholder: "Your feedback...",
         t_bold: "Bold", t_italic: "Italic", t_list: "List", t_check: "Checklist",
         t_code: "Code", t_quote: "Quote", t_image: "Image", t_mic: "Voice",
-        t_sketch: "Sketch", t_clear: "Clear Formatting"
+        t_sketch: "Sketch", t_clear: "Clear Formatting", t_size: "Text size", t_color: "Text color",
+        t_highlight: "Highlight", t_drive: "Save to Drive", task_item: "Task",
+        t_align_left: "Align left", t_align_center: "Align center", t_align_right: "Align right",
+        folders_overview: "Folders", effects: "Effects", glass_effect: "Glass effect",
+        high_contrast: "High contrast mode", photo_editor: "Photo editor", empty_folder: "Empty"
     }
 };
 
@@ -260,6 +284,16 @@ const ThemeManager = {
         localStorage.setItem('app-theme-settings', JSON.stringify({ p: primary, bg: bg, t: text }));
     },
 
+    getSavedTheme() {
+        return JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
+    },
+
+    revertToLastSaved() {
+        const saved = this.getSavedTheme();
+        this.setManual(saved.p, saved.bg, saved.t);
+        this.renderPicker();
+    },
+
     applyCSS(p, bg, t) {
         const root = document.documentElement;
         root.style.setProperty('--primary', p);
@@ -331,7 +365,8 @@ const Auth = {
 /* ==========================================================================
    7. Bootstrap & Auth Listener
    ========================================================================== */
-auth.onAuthStateChanged(user => {
+if (auth) {
+    auth.onAuthStateChanged(user => {
     // 1. Update State
     state.user = user;
 
@@ -390,7 +425,8 @@ auth.onAuthStateChanged(user => {
             }, 50);
         }
     }
-});
+    });
+}
 
 // Initialize Theme Manager on Load
 document.addEventListener('DOMContentLoaded', () => {

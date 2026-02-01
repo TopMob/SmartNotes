@@ -33,13 +33,17 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).then((res) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, res.clone());
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, res.clone()));
+          }
           return res;
-        });
-      });
+        })
+        .catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
     })
   );
 });

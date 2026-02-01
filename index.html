@@ -51,11 +51,11 @@
     <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true">
         <div class="login-box">
             <h1 class="brand-text-fixed">SmartNotes</h1>
-            <p class="subtext">Вход в систему</p>
+            <p class="subtext" data-lang="login">Вход в систему</p>
             <div class="auth-buttons-group">
                 <button type="button" class="btn-auth google" onclick="Auth.login()">
                     <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="" width="20" height="20">
-                    <span>Войти через Google</span>
+                    <span data-lang="login_google">Войти через Google</span>
                 </button>
             </div>
         </div>
@@ -86,6 +86,10 @@
                     <button type="button" class="nav-item" onclick="switchView('archive')" data-view="archive">
                         <i class="material-icons-round">archive</i>
                         <span data-lang="archive">Архив</span>
+                    </button>
+                    <button type="button" class="nav-item" onclick="switchView('folders')" data-view="folders">
+                        <i class="material-icons-round">folder_open</i>
+                        <span data-lang="folders_overview">Папки</span>
                     </button>
                 </div>
 
@@ -125,7 +129,7 @@
 
                 <div class="search-container">
                     <i class="material-icons-round search-icon">search</i>
-                    <input type="text" id="search-input" placeholder="Поиск..." oninput="filterAndRender(this.value)" autocomplete="off" aria-label="Поиск заметок">
+                    <input type="text" id="search-input" placeholder="Поиск..." data-lang-placeholder="search" oninput="filterAndRender(this.value)" autocomplete="off" aria-label="Поиск заметок">
                 </div>
 
                 <div class="header-right">
@@ -186,14 +190,14 @@
 
             <div class="editor-scroll-area">
                 <div id="editor-toolbar" class="editor-toolbar"></div>
-                <input type="text" id="note-title" placeholder="Заголовок" autocomplete="off" aria-label="Заголовок заметки">
+                <input type="text" id="note-title" placeholder="Заголовок" data-lang-placeholder="note_title" autocomplete="off" aria-label="Заголовок заметки">
                 <div id="note-content-editable" class="rich-editor scrollable" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки"></div>
             </div>
 
             <div class="editor-bottom-panel">
                 <div class="tags-section">
                     <div id="note-tags-container" class="tags-list-editor"></div>
-                    <input type="text" id="note-tags-input" placeholder="#тег (Enter)" autocomplete="off" aria-label="Добавить тег">
+                    <input type="text" id="note-tags-input" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" autocomplete="off" aria-label="Добавить тег">
                 </div>
                 <div class="editor-footer-row">
                     <div class="save-status-wrapper">
@@ -231,12 +235,38 @@
                 </section>
 
                 <section class="settings-group">
-                    <h3 data-lang="tools">Инструменты редактора</h3>
-                    <div id="tools-config-root" class="tools-config-grid"></div>
+                    <h3 data-lang="appearance">Внешний вид</h3>
+                    <button type="button" class="settings-link" onclick="UI.openModal('appearance-modal')">
+                        <span data-lang="appearance_settings">Настройки внешнего вида</span>
+                        <i class="material-icons-round">chevron_right</i>
+                    </button>
                 </section>
 
                 <section class="settings-group">
-                    <h3 data-lang="appearance">Внешний вид</h3>
+                    <h3 data-lang="editor_settings">Настройки редактора</h3>
+                    <button type="button" class="settings-link" onclick="UI.openModal('editor-settings-modal')">
+                        <span data-lang="editor_tools">Инструменты редактора</span>
+                        <i class="material-icons-round">chevron_right</i>
+                    </button>
+                </section>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Appearance Settings -->
+    <div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="appearance">Внешний вид</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('appearance-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </header>
+            <div class="modal-body scrollable">
+                <section class="settings-group">
                     <p class="subtext" data-lang="presets">Пресеты</p>
                     <div id="theme-picker-root" class="theme-grid"></div>
                     <p class="subtext" style="margin-top:20px;" data-lang="manual">Ручная настройка</p>
@@ -255,13 +285,51 @@
                         </div>
                     </div>
                 </section>
+                <section class="settings-group">
+                    <h3 data-lang="effects">Эффекты</h3>
+                    <div class="settings-row">
+                        <span data-lang="glass_effect">Эффект стекла</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-glass">
+                            <span class="toggle-track"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <span data-lang="high_contrast">Режим для слабовидящих</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-contrast">
+                            <span class="toggle-track"></span>
+                        </label>
+                    </div>
+                </section>
             </div>
             <footer class="modal-footer" style="justify-content: space-between;">
                 <button type="button" class="btn-secondary" onclick="ThemeManager.reset()" data-lang="reset">Сбросить</button>
                 <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
+                    <button type="button" class="btn-secondary" onclick="UI.closeModal('appearance-modal')" data-lang="close">Закрыть</button>
                     <button type="button" class="btn-primary" onclick="UI.saveSettings()" data-lang="save">Сохранить</button>
                 </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Editor Settings -->
+    <div id="editor-settings-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="editor_settings">Настройки редактора</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('editor-settings-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </header>
+            <div class="modal-body scrollable">
+                <section class="settings-group">
+                    <h3 data-lang="editor_tools">Инструменты редактора</h3>
+                    <div id="tools-config-root" class="tools-config-grid"></div>
+                </section>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="UI.closeModal('editor-settings-modal')" data-lang="close">Закрыть</button>
             </footer>
         </div>
     </div>
@@ -283,7 +351,7 @@
                     <li class="team-member name-minyaev">Миняев Иван</li>
                 </ul>
                 <div class="bot-link-wrapper">
-                    <span style="color:var(--text-dim); font-size:0.9rem; margin-bottom:5px;" data-lang="contact_us">Связаться с нами:</span>
+                    <span class="contact-label" data-lang="contact_us">Связаться с нами:</span>
                     <a href="https://t.me/SmartNotesInfo_bot" target="_blank" rel="noopener noreferrer" class="btn-primary telegram-btn">
                         <i class="material-icons-round">smart_toy</i> @SmartNotesInfo_bot
                     </a>
@@ -309,7 +377,7 @@
                     <i class="material-icons-round star" data-val="4">star_border</i>
                     <i class="material-icons-round star" data-val="5">star_border</i>
                 </div>
-                <textarea id="feedback-text" placeholder="..." rows="4" class="input-area" aria-label="Ваш отзыв"></textarea>
+                <textarea id="feedback-text" placeholder="..." data-lang-placeholder="feedback_placeholder" rows="4" class="input-area" aria-label="Ваш отзыв"></textarea>
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-primary" onclick="UI.submitFeedback()" data-lang="send">Отправить</button>
@@ -379,7 +447,32 @@
         <button type="button" onclick="Editor.alignMedia('center')" aria-label="По центру"><i class="material-icons-round">format_align_center</i></button>
         <button type="button" onclick="Editor.alignMedia('right')" aria-label="По правому краю"><i class="material-icons-round">format_align_right</i></button>
         <div class="divider-vertical"></div>
+        <button type="button" onclick="PhotoEditor.open()" aria-label="Рисовать на фото"><i class="material-icons-round">brush</i></button>
         <button type="button" onclick="Editor.deleteSelectedMedia()" style="color:var(--danger)" aria-label="Удалить"><i class="material-icons-round">delete</i></button>
+    </div>
+
+    <!-- Photo Editor Modal -->
+    <div id="photo-editor-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card full-screen-modal">
+            <header class="modal-header" style="padding:10px 15px;">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <h2 style="font-size:1.1rem;" data-lang="photo_editor">Редактор фото</h2>
+                    <input type="color" id="photo-color-picker" value="#00f2ff" class="input-color-custom" style="width:30px; height:30px; border-radius:50%; border:2px solid var(--border);" aria-label="Цвет кисти">
+                    <input type="range" id="photo-width-picker" min="1" max="20" value="3" style="width:80px" aria-label="Толщина кисти">
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button type="button" class="btn-icon" onclick="PhotoEditor.undo()" aria-label="Отменить"><i class="material-icons-round">undo</i></button>
+                    <button type="button" class="btn-icon" onclick="PhotoEditor.clear()" aria-label="Очистить"><i class="material-icons-round">delete</i></button>
+                    <button type="button" class="btn-icon" onclick="UI.closeModal('photo-editor-modal')" aria-label="Закрыть"><i class="material-icons-round">close</i></button>
+                </div>
+            </header>
+            <div class="modal-body no-padding" style="background:#fff; position:relative; overflow:hidden;">
+                <canvas id="photo-editor-canvas" style="width:100%; height:100%; display:block; touch-action:none;"></canvas>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-primary" onclick="PhotoEditor.save()" data-lang="save">Сохранить</button>
+            </footer>
+        </div>
     </div>
 
     <div id="voice-indicator" class="voice-indicator" aria-hidden="true">
