@@ -1,67 +1,119 @@
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxUyXXRjxGjpCZzNJyPsnziKRHvOPxseU279Cf8r8mmLB0MyhsQuJDmIMOBkN4fKrHr/exec';
+/**
+ * SmartNotes - Synchronization Service
+ * Handles data transmission to Google Sheets via Web App
+ */
 
-(function() {
-    const syncTimers = {};
+const SYNC_CONFIG = {
+    ENDPOINT: 'https://script.google.com/macros/s/AKfycby8POnUpuN5y7gK_jxBZ7PnjzkDBMywHSXi4L-maGKlpMB-C5_sKyAXmNkClvFxEpUb/exec', // Вставьте ваш URL от Google Apps Script
+    DEBOUNCE_MS: 3000,
+    BATCH_LIMIT: 50000 // Лимит символов для ячейки Google Sheets (примерно)
+};
 
-    const sendToSheet = (data) => {
-        fetch(GOOGLE_SHEET_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(data)
-        }).catch(console.error);
-    };
+const SyncService = {
+    queue: new Map(),
 
-    const dispatch = (data) => {
-        const id = data.noteId;
-        if (syncTimers[id]) clearTimeout(syncTimers[id]);
+    init() {
+        // Wait for Auth to be ready
+        if (!auth) return;
+        auth.onAuthStateChanged(user => {
+            if (user) this.startListening(user);
+        });
+    },
 
-        syncTimers[id] = setTimeout(() => {
-            sendToSheet(data);
-            delete syncTimers[id];
-        }, 3000);
-    };
+    startListening(user) {
+        db.collection('users').doc(user.uid).collection('notes')
+            .onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    const data = change.doc.data();
+                    const id = change.doc.id;
 
-    const formatNote = (id, data, user, action) => {
-        let folderName = "Общее";
-        if (window.state && window.state.folders && data.folderId) {
-            const foundFolder = window.state.folders.find(f => f.id === data.folderId);
-            if (foundFolder) folderName = foundFolder.name;
+                    if (change.type === 'removed') {
+                        // Mark as in trash instead of hard delete in Sheet
+                        this.schedule(id, this.formatPayload(id, data, user, true));
+                    } else {
+                        // Skip system updates or empty notes
+                        if (data._isAiUpdating || (!data.title && !data.content)) return;
+                        this.schedule(id, this.formatPayload(id, data, user, false));
+                    }
+                });
+            });
+    },
+
+    schedule(id, payload) {
+        if (this.queue.has(id)) {
+            clearTimeout(this.queue.get(id));
         }
 
+        const timer = setTimeout(() => {
+            this.send(payload);
+            this.queue.delete(id);
+        }, SYNC_CONFIG.DEBOUNCE_MS);
+
+        this.queue.set(id, timer);
+    },
+
+    async send(payload) {
+        if (!SYNC_CONFIG.ENDPOINT || SYNC_CONFIG.ENDPOINT === 'АПИСЮДА') return;
+
+        try {
+            await fetch(SYNC_CONFIG.ENDPOINT, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.error('Sync Transmission Failed:', e);
+        }
+    },
+
+    formatPayload(id, data, user, isDeleted) {
+        // Folder Name Resolution
+        const folderId = data.folderId;
+        const folderName = window.state?.folders?.find(f => f.id === folderId)?.name || "Общее";
+
+        // Content Processing (Strip HTML for cleaner sheet view)
+        const plainText = this.stripHtml(data.content || "");
+        
+        // Attachment Detection (Count images/audio in HTML)
+        const attachments = this.detectAttachments(data.content || "");
+
         return {
-            action: action,
             noteId: id,
-            user: user.email || 'Anonymous',
-            title: data.title || '',
-            content: data.content || '',
+            uid: user.uid,
+            email: user.email || 'Anonymous',
+            title: data.title || "Без названия",
+            content: plainText.substring(0, SYNC_CONFIG.BATCH_LIMIT), // Prevent overflow
+            tags: Array.isArray(data.tags) ? data.tags.join(', ') : "",
             folder: folderName,
             isPinned: data.isPinned ? "Да" : "Нет",
             isImportant: data.isImportant ? "Да" : "Нет",
             isArchived: data.isArchived ? "Да" : "Нет",
-            tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.tags || "")
+            isTrash: isDeleted ? "Да" : "Нет",
+            attachments: attachments
         };
-    };
+    },
 
-    auth.onAuthStateChanged(user => {
-        if (!user) return;
+    stripHtml(html) {
+        const tmp = document.createElement("DIV");
+        tmp.innerHTML = html;
+        return (tmp.textContent || tmp.innerText || "").trim();
+    },
 
-        db.collection('users').doc(user.uid).collection('notes')
-            .onSnapshot(snapshot => {
-                snapshot.docChanges().forEach(change => {
-                    const id = change.doc.id;
-                    const data = change.doc.data();
+    detectAttachments(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const imgs = div.querySelectorAll('img').length;
+        const audio = div.querySelectorAll('audio').length;
+        
+        const types = [];
+        if (imgs > 0) types.push(`${imgs} фото`);
+        if (audio > 0) types.push(`${audio} аудио`);
+        
+        return types.length > 0 ? types.join(', ') : "Нет";
+    }
+};
 
-                    if (change.type === 'removed') {
-                        dispatch({ action: 'delete', noteId: id });
-                    } else {
-                        const hasContent = (data.title && data.title.length > 0) || (data.content && data.content.length > 0);
-                        
-                        if (hasContent) {
-                            dispatch(formatNote(id, data, user, 'save'));
-                        }
-                    }
-                });
-            });
-    });
-})();
+// Initialize
+SyncService.init();
+
