@@ -4,7 +4,7 @@
  */
 
 const SYNC_CONFIG = {
-    ENDPOINT: 'АПИСЮДА', // Вставьте ваш URL от Google Apps Script
+    ENDPOINT: 'https://script.google.com/macros/s/AKfycby8POnUpuN5y7gK_jxBZ7PnjzkDBMywHSXi4L-maGKlpMB-C5_sKyAXmNkClvFxEpUb/exec', // Вставьте ваш URL от Google Apps Script
     DEBOUNCE_MS: 3000,
     BATCH_LIMIT: 50000 // Лимит символов для ячейки Google Sheets (примерно)
 };
@@ -115,3 +115,4 @@ const SyncService = {
 
 // Initialize
 SyncService.init();
+
