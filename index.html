@@ -2,47 +2,60 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="description" content="SmartNotes - Ваши умные заметки">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="SmartNotes - Ваши умные заметки с синхронизацией и ИИ">
     <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <title>SmartNotes</title>
+
+    <!-- Manifest & Icons -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="Logo.png">
 
     <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com">
 
-    <!-- Fonts & Icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- PWA -->
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="Logo.png">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-
-    <!-- Firebase & Auth SDKs -->
+    <!-- Core Dependencies (Load Order Critical) -->
+    <!-- 1. Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js" defer></script>
-    <script src="https://apis.google.com/js/api.js" async defer></script>
+
+    <!-- 2. Google Identity & API -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+
+    <!-- 3. App Logic (Sequential Execution) -->
+    <script src="js/core.js" defer></script>
+    <script src="js/sync.js" defer></script>
+    <script src="js/app.js" defer></script>
 </head>
+
 <body>
+    <!-- Background Layer -->
     <div class="bg-wrapper" aria-hidden="true"></div>
 
     <!-- Login Screen -->
-    <div id="login-screen" class="modal-overlay active">
+    <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true">
         <div class="login-box">
             <h1 class="brand-text-fixed">SmartNotes</h1>
             <p class="subtext">Вход в систему</p>
             <div class="auth-buttons-group">
-                <button type="button" class="btn-auth google" onclick="Auth.login()" aria-label="Войти через Google">
+                <button type="button" class="btn-auth google" onclick="Auth.login()">
                     <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="" width="20" height="20">
-                    Войти через Google
+                    <span>Войти через Google</span>
                 </button>
             </div>
         </div>
@@ -50,7 +63,8 @@
 
     <!-- Main Layout -->
     <div id="app" class="app-layout">
-        <!-- Sidebar -->
+        
+        <!-- Sidebar Navigation -->
         <aside id="sidebar" class="sidebar-glass">
             <header class="sidebar-header">
                 <span class="brand-text-fixed">SmartNotes</span>
@@ -74,9 +88,9 @@
                         <span data-lang="archive">Архив</span>
                     </button>
                 </div>
-                
+
                 <div class="nav-divider"></div>
-                
+
                 <div class="folders-header">
                     <span data-lang="folders">ПАПКИ</span>
                     <button type="button" class="btn-icon-small" id="add-folder-btn" aria-label="Создать папку">
@@ -99,22 +113,24 @@
             </footer>
         </aside>
 
-        <!-- Main Content -->
+        <!-- Main Workspace -->
         <main class="main-content">
             <header class="top-bar">
                 <div class="header-left">
-                    <button type="button" id="menu-toggle" class="btn-icon" onclick="UI.toggleSidebar()" aria-label="Меню">
+                    <button type="button" id="menu-toggle" class="btn-icon" onclick="UI.toggleSidebar()" aria-label="Открыть меню">
                         <i class="material-icons-round">menu</i>
                     </button>
                     <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
                 </div>
+
                 <div class="search-container">
                     <i class="material-icons-round search-icon">search</i>
-                    <input type="text" id="search-input" placeholder="Поиск..." oninput="filterAndRender(this.value)" autocomplete="off">
+                    <input type="text" id="search-input" placeholder="Поиск..." oninput="filterAndRender(this.value)" autocomplete="off" aria-label="Поиск заметок">
                 </div>
+
                 <div class="header-right">
                     <div class="user-avatar-wrapper">
-                        <img id="user-photo" src="" alt="User" class="header-avatar" onclick="UI.toggleUserMenu()">
+                        <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" class="header-avatar" onclick="UI.toggleUserMenu()">
                         <div id="user-dropdown" class="dropdown-menu">
                             <div class="dropdown-header">
                                 <span id="user-name">...</span>
@@ -141,14 +157,14 @@
                 <div id="notes-container" class="notes-grid"></div>
             </section>
 
-            <button type="button" class="btn-fab" onclick="Editor.open()" aria-label="Новая заметка">
+            <button type="button" class="btn-fab" onclick="Editor.open()" aria-label="Создать заметку">
                 <i class="material-icons-round">add</i>
             </button>
         </main>
     </div>
 
-    <!-- Note Editor Overlay -->
-    <div id="note-editor" class="editor-overlay">
+    <!-- Editor Overlay -->
+    <div id="note-editor" class="editor-overlay" role="dialog" aria-modal="true" aria-label="Редактор">
         <div class="editor-container">
             <header class="editor-header-bar">
                 <button type="button" class="btn-icon" onclick="Editor.close()" aria-label="Назад">
@@ -162,26 +178,26 @@
                         <i class="material-icons-round">redo</i>
                     </button>
                     <div class="divider-vertical"></div>
-                    <button type="button" class="btn-icon" onclick="Editor.deleteCurrent()" aria-label="Удалить">
+                    <button type="button" class="btn-icon" onclick="Editor.deleteCurrent()" aria-label="Удалить заметку">
                         <i class="material-icons-round">delete</i>
                     </button>
                 </div>
             </header>
-            
+
             <div class="editor-scroll-area">
                 <div id="editor-toolbar" class="editor-toolbar"></div>
-                <input type="text" id="note-title" placeholder="Заголовок" autocomplete="off">
-                <div id="note-content-editable" class="rich-editor scrollable" contenteditable="true" role="textbox" aria-multiline="true"></div>
+                <input type="text" id="note-title" placeholder="Заголовок" autocomplete="off" aria-label="Заголовок заметки">
+                <div id="note-content-editable" class="rich-editor scrollable" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки"></div>
             </div>
 
             <div class="editor-bottom-panel">
                 <div class="tags-section">
                     <div id="note-tags-container" class="tags-list-editor"></div>
-                    <input type="text" id="note-tags-input" placeholder="#тег (Enter)" autocomplete="off">
+                    <input type="text" id="note-tags-input" placeholder="#тег (Enter)" autocomplete="off" aria-label="Добавить тег">
                 </div>
                 <div class="editor-footer-row">
                     <div class="save-status-wrapper">
-                        <button type="button" class="btn-icon active" onclick="Editor.manualSave()" style="color:var(--primary)">
+                        <button type="button" class="btn-icon active" onclick="Editor.manualSave()" style="color:var(--primary)" aria-label="Сохранить">
                             <i class="material-icons-round">check</i>
                         </button>
                         <span id="last-edited">Сохранено</span>
@@ -193,8 +209,8 @@
 
     <!-- Modals -->
 
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay">
+    <!-- Settings -->
+    <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
                 <h2 data-lang="settings">Настройки</h2>
@@ -213,7 +229,7 @@
                         </div>
                     </div>
                 </section>
-                
+
                 <section class="settings-group">
                     <h3 data-lang="tools">Инструменты редактора</h3>
                     <div id="tools-config-root" class="tools-config-grid"></div>
@@ -227,15 +243,15 @@
                     <div class="color-pickers-grid">
                         <div class="color-picker-item">
                             <span data-lang="c_text">Текст</span>
-                            <input type="color" id="cp-text" class="input-color-custom">
+                            <input type="color" id="cp-text" class="input-color-custom" aria-label="Цвет текста">
                         </div>
                         <div class="color-picker-item">
                             <span data-lang="c_accent">Акцент</span>
-                            <input type="color" id="cp-primary" class="input-color-custom">
+                            <input type="color" id="cp-primary" class="input-color-custom" aria-label="Акцентный цвет">
                         </div>
                         <div class="color-picker-item">
                             <span data-lang="c_bg">Фон</span>
-                            <input type="color" id="cp-bg" class="input-color-custom">
+                            <input type="color" id="cp-bg" class="input-color-custom" aria-label="Цвет фона">
                         </div>
                     </div>
                 </section>
@@ -250,12 +266,12 @@
         </div>
     </div>
 
-    <!-- About Modal -->
-    <div id="about-modal" class="modal-overlay">
+    <!-- About -->
+    <div id="about-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
                 <h2 data-lang="team">Команда</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeModal('about-modal')">
+                <button type="button" class="btn-icon" onclick="UI.closeModal('about-modal')" aria-label="Закрыть">
                     <i class="material-icons-round">close</i>
                 </button>
             </header>
@@ -276,12 +292,12 @@
         </div>
     </div>
 
-    <!-- Rate Modal -->
-    <div id="rate-modal" class="modal-overlay">
+    <!-- Rating -->
+    <div id="rate-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
                 <h2 data-lang="rate">Оценить</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeModal('rate-modal')">
+                <button type="button" class="btn-icon" onclick="UI.closeModal('rate-modal')" aria-label="Закрыть">
                     <i class="material-icons-round">close</i>
                 </button>
             </header>
@@ -293,7 +309,7 @@
                     <i class="material-icons-round star" data-val="4">star_border</i>
                     <i class="material-icons-round star" data-val="5">star_border</i>
                 </div>
-                <textarea id="feedback-text" placeholder="..." rows="4" class="input-area"></textarea>
+                <textarea id="feedback-text" placeholder="..." rows="4" class="input-area" aria-label="Ваш отзыв"></textarea>
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-primary" onclick="UI.submitFeedback()" data-lang="send">Отправить</button>
@@ -301,8 +317,8 @@
         </div>
     </div>
 
-    <!-- Confirm Modal -->
-    <div id="confirm-modal" class="modal-overlay confirm-layer">
+    <!-- Confirmation Dialog -->
+    <div id="confirm-modal" class="modal-overlay confirm-layer" role="dialog" aria-modal="true">
         <div class="confirm-box">
             <h3 id="confirm-title">Подтвердите</h3>
             <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
@@ -312,29 +328,11 @@
         </div>
     </div>
 
-    <!-- Create Folder Modal -->
-    <div id="folder-modal" class="modal-overlay">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2>Новая папка</h2>
-                <button type="button" class="btn-icon" id="close-folder-modal">
-                    <i class="material-icons-round">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <input type="text" id="folder-name-input" placeholder="Название папки" class="input-area" autocomplete="off">
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-primary" id="save-folder-btn">Создать</button>
-            </footer>
-        </div>
-    </div>
-
-    <!-- Prompt Modal (Generic Input) -->
-    <div id="prompt-modal" class="modal-overlay">
+    <!-- Input Prompt -->
+    <div id="prompt-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card confirm-box">
             <h3 id="prompt-title">Ввод</h3>
-            <input type="text" id="prompt-input" class="input-area" style="margin-top:15px; text-align:center;" autocomplete="off">
+            <input type="text" id="prompt-input" class="input-area" style="margin-top:15px; text-align:center;" autocomplete="off" aria-label="Поле ввода">
             <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
                 <button type="button" class="btn-secondary" id="prompt-cancel">Отмена</button>
                 <button type="button" class="btn-primary" id="prompt-ok">ОК</button>
@@ -342,8 +340,8 @@
         </div>
     </div>
 
-    <!-- Sketch Modal (Enhanced) -->
-    <div id="sketch-modal" class="modal-overlay">
+    <!-- Sketch Modal -->
+    <div id="sketch-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card full-screen-modal">
             <header class="modal-header" style="padding:10px 15px;">
                 <div style="display:flex; align-items:center; gap:15px;">
@@ -358,6 +356,7 @@
                 </div>
             </header>
             <div class="modal-body no-padding" style="background:#fff; position:relative; overflow:hidden;">
+                <!-- touch-action:none prevents page scrolling when drawing -->
                 <canvas id="sketch-canvas" style="width:100%; height:100%; display:block; touch-action:none;"></canvas>
             </div>
             <footer class="modal-footer">
@@ -366,9 +365,7 @@
         </div>
     </div>
 
-    <!-- Popups & Tools (Hidden) -->
-    
-    <!-- Text Size Slider -->
+    <!-- UI Helpers -->
     <div id="text-size-popup" class="popup-tool hidden">
         <div class="slider-wrapper">
             <span style="font-size:12px">A</span>
@@ -377,31 +374,32 @@
         </div>
     </div>
 
-    <!-- Media Context Menu -->
     <div id="media-context-menu" class="context-menu hidden">
-        <button type="button" onclick="Editor.alignMedia('left')"><i class="material-icons-round">format_align_left</i></button>
-        <button type="button" onclick="Editor.alignMedia('center')"><i class="material-icons-round">format_align_center</i></button>
-        <button type="button" onclick="Editor.alignMedia('right')"><i class="material-icons-round">format_align_right</i></button>
+        <button type="button" onclick="Editor.alignMedia('left')" aria-label="По левому краю"><i class="material-icons-round">format_align_left</i></button>
+        <button type="button" onclick="Editor.alignMedia('center')" aria-label="По центру"><i class="material-icons-round">format_align_center</i></button>
+        <button type="button" onclick="Editor.alignMedia('right')" aria-label="По правому краю"><i class="material-icons-round">format_align_right</i></button>
         <div class="divider-vertical"></div>
-        <button type="button" onclick="Editor.deleteSelectedMedia()" style="color:var(--danger)"><i class="material-icons-round">delete</i></button>
+        <button type="button" onclick="Editor.deleteSelectedMedia()" style="color:var(--danger)" aria-label="Удалить"><i class="material-icons-round">delete</i></button>
     </div>
 
-    <!-- Voice Indicator -->
     <div id="voice-indicator" class="voice-indicator" aria-hidden="true">
         <div class="pulse-ring"></div>
         <i class="material-icons-round">mic</i>
         <span>Запись...</span>
     </div>
 
-    <!-- Toast Notifications -->
-    <div id="toast-container" class="toast-container"></div>
-
-    <!-- Hidden File Input -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
 
-    <!-- Application Logic -->
-    <script src="js/core.js"></script>
-    <script src="js/sync.js"></script>
-    <script src="js/app.js"></script>
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW Registered'))
+                    .catch(err => console.log('SW Failed', err));
+            });
+        }
+    </script>
 </body>
 </html>
