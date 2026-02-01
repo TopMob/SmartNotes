@@ -1,51 +1,117 @@
-const SYNC_API_URL = 'https://script.google.com/macros/s/AKfycbx_YOUR_SCRIPT_ID/exec'; // Замените на актуальный URL
+/**
+ * SmartNotes - Synchronization Service
+ * Handles data transmission to Google Sheets via Web App
+ */
 
-(() => {
-    let timer = null;
+const SYNC_CONFIG = {
+    ENDPOINT: 'АПИСЮДА', // Вставьте ваш URL от Google Apps Script
+    DEBOUNCE_MS: 3000,
+    BATCH_LIMIT: 50000 // Лимит символов для ячейки Google Sheets (примерно)
+};
 
-    const dispatch = async (data) => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-            fetch(SYNC_API_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            }).catch(console.error);
-        }, 3000);
-    };
+const SyncService = {
+    queue: new Map(),
 
-    const transform = (id, data, user, action) => ({
-        action,
-        noteId: id,
-        uid: user.uid,
-        date: new Date().toLocaleString('ru-RU'),
-        user: user.email,
-        title: data.title || '',
-        content: data.content || '',
-        folder: window.state?.folders?.find(f => f.id === data.folderId)?.name || "Общее",
-        isPinned: data.isPinned ? "Да" : "Нет",
-        isImportant: data.isImportant ? "Да" : "Нет",
-        isArchived: data.isArchived ? "Да" : "Нет",
-        tags: Array.isArray(data.tags) ? data.tags.join(', ') : ""
-    });
+    init() {
+        // Wait for Auth to be ready
+        auth.onAuthStateChanged(user => {
+            if (user) this.startListening(user);
+        });
+    },
 
-    auth.onAuthStateChanged(user => {
-        if (!user) return;
-
+    startListening(user) {
         db.collection('users').doc(user.uid).collection('notes')
-            .onSnapshot(snap => {
-                snap.docChanges().forEach(change => {
-                    const { doc, type } = change;
-                    if (type === 'removed') {
-                        dispatch({ action: 'delete', noteId: doc.id });
+            .onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    const data = change.doc.data();
+                    const id = change.doc.id;
+
+                    if (change.type === 'removed') {
+                        // Mark as in trash instead of hard delete in Sheet
+                        this.schedule(id, this.formatPayload(id, data, user, true));
                     } else {
-                        const data = doc.data();
-                        if ((data.title || data.content) && !data._ai) {
-                            dispatch(transform(doc.id, data, user, 'save'));
-                        }
+                        // Skip system updates or empty notes
+                        if (data._isAiUpdating || (!data.title && !data.content)) return;
+                        this.schedule(id, this.formatPayload(id, data, user, false));
                     }
                 });
             });
-    });
-})();
+    },
+
+    schedule(id, payload) {
+        if (this.queue.has(id)) {
+            clearTimeout(this.queue.get(id));
+        }
+
+        const timer = setTimeout(() => {
+            this.send(payload);
+            this.queue.delete(id);
+        }, SYNC_CONFIG.DEBOUNCE_MS);
+
+        this.queue.set(id, timer);
+    },
+
+    async send(payload) {
+        if (!SYNC_CONFIG.ENDPOINT || SYNC_CONFIG.ENDPOINT === 'АПИСЮДА') return;
+
+        try {
+            await fetch(SYNC_CONFIG.ENDPOINT, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.error('Sync Transmission Failed:', e);
+        }
+    },
+
+    formatPayload(id, data, user, isDeleted) {
+        // Folder Name Resolution
+        const folderId = data.folderId;
+        const folderName = window.state?.folders?.find(f => f.id === folderId)?.name || "Общее";
+
+        // Content Processing (Strip HTML for cleaner sheet view)
+        const plainText = this.stripHtml(data.content || "");
+        
+        // Attachment Detection (Count images/audio in HTML)
+        const attachments = this.detectAttachments(data.content || "");
+
+        return {
+            noteId: id,
+            uid: user.uid,
+            email: user.email || 'Anonymous',
+            title: data.title || "Без названия",
+            content: plainText.substring(0, SYNC_CONFIG.BATCH_LIMIT), // Prevent overflow
+            tags: Array.isArray(data.tags) ? data.tags.join(', ') : "",
+            folder: folderName,
+            isPinned: data.isPinned ? "Да" : "Нет",
+            isImportant: data.isImportant ? "Да" : "Нет",
+            isArchived: data.isArchived ? "Да" : "Нет",
+            isTrash: isDeleted ? "Да" : "Нет",
+            attachments: attachments
+        };
+    },
+
+    stripHtml(html) {
+        const tmp = document.createElement("DIV");
+        tmp.innerHTML = html;
+        return (tmp.textContent || tmp.innerText || "").trim();
+    },
+
+    detectAttachments(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        const imgs = div.querySelectorAll('img').length;
+        const audio = div.querySelectorAll('audio').length;
+        
+        const types = [];
+        if (imgs > 0) types.push(`${imgs} фото`);
+        if (audio > 0) types.push(`${audio} аудио`);
+        
+        return types.length > 0 ? types.join(', ') : "Нет";
+    }
+};
+
+// Initialize
+SyncService.init();
