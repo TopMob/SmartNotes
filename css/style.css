@@ -27,6 +27,9 @@
     --radius-md: 12px;
     --radius-lg: 20px;
     --radius-xl: 32px;
+
+    --font-base: 16px;
+    --hit-size: 40px;
     
     --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
     --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -60,6 +63,7 @@ body {
     width: 100vw;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    font-size: var(--font-base);
 }
 
 ::-webkit-scrollbar {
@@ -468,6 +472,44 @@ body {
     transition: 0.2s;
     border: 1px solid rgba(255,255,255,0.1);
     backdrop-filter: blur(4px);
+    min-width: var(--hit-size);
+    min-height: var(--hit-size);
+}
+
+.note-card.dragging {
+    opacity: 0.5;
+}
+
+.note-card.drop-target {
+    outline: 2px dashed rgba(var(--primary-rgb), 0.6);
+    outline-offset: 4px;
+}
+
+@media (hover: none) {
+    .card-actions {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (pointer: coarse) {
+    .tool-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .action-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .btn-icon {
+        padding: 12px;
+    }
+
+    .btn-icon-small {
+        padding: 10px;
+    }
 }
 
 .action-btn:hover {
@@ -559,8 +601,8 @@ body {
 }
 
 .tool-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -570,6 +612,12 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
+    min-width: var(--hit-size);
+    min-height: var(--hit-size);
+}
+
+.tool-btn i {
+    font-size: 20px;
 }
 
 .tool-btn:hover {
@@ -630,11 +678,19 @@ body {
     font-size: 0.9em;
 }
 
-.task-line {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
+.task-list {
+    list-style: none;
     margin: 8px 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.02);
     border-radius: 8px;
@@ -643,36 +699,36 @@ body {
     border: 1px solid transparent;
 }
 
-.task-line:hover {
+.task-item:hover {
     background: rgba(255, 255, 255, 0.05);
     border-color: var(--border);
 }
 
 .task-checkbox {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border: 2px solid var(--primary);
     border-radius: 6px;
     flex-shrink: 0;
     cursor: pointer;
+    appearance: none;
+    background: transparent;
     position: relative;
-    margin-top: 4px;
-    transition: 0.2s;
 }
 
-.task-line.checked .task-checkbox {
+.task-item.checked .task-checkbox {
     background: var(--primary);
     box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.4);
 }
 
-.task-line.checked .task-checkbox::after {
+.task-checkbox:checked::after {
     content: '';
     position: absolute;
     top: 45%;
     left: 50%;
-    width: 5px;
-    height: 9px;
-    border: solid black;
+    width: 6px;
+    height: 10px;
+    border: solid #000;
     border-width: 0 2px 2px 0;
     transform: translate(-50%, -60%) rotate(45deg);
 }
@@ -682,7 +738,7 @@ body {
     transition: 0.2s;
 }
 
-.task-line.checked .task-text {
+.task-item.checked .task-text {
     text-decoration: line-through;
     color: var(--text-dim);
     opacity: 0.6;
@@ -718,6 +774,7 @@ body {
 }
 
 .tag-chip {
+    appearance: none;
     font-size: 0.75rem;
     background: rgba(var(--primary-rgb), 0.1);
     color: var(--primary);
@@ -728,6 +785,17 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.tag-chip:focus-visible {
+    outline: 2px solid rgba(var(--primary-rgb), 0.5);
+    outline-offset: 2px;
+}
+
+.notes-grid .tag-chip {
+    cursor: default;
 }
 
 .tag-chip i {
@@ -882,6 +950,164 @@ body {
     margin-bottom: 12px;
 }
 
+.toggle {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.toggle input {
+    display: none;
+}
+
+.toggle-track {
+    width: 44px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    position: relative;
+    transition: 0.2s ease;
+    border: 1px solid var(--border);
+}
+
+.toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: var(--text);
+    border-radius: 50%;
+    transition: 0.2s ease;
+}
+
+.toggle input:checked + .toggle-track {
+    background: rgba(var(--primary-rgb), 0.6);
+}
+
+.toggle input:checked + .toggle-track::after {
+    transform: translateX(20px);
+    background: #000;
+}
+.settings-link {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.settings-link:hover {
+    border-color: rgba(var(--primary-rgb), 0.4);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
+}
+
+.settings-link i {
+    opacity: 0.7;
+}
+
+.contact-label {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.folder-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.folder-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.folder-preview span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.telegram-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-weight: 700;
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--primary-rgb), 0.5));
+    border: 1px solid rgba(var(--primary-rgb), 0.4);
+    color: #000;
+    text-decoration: none;
+}
+
+#prompt-modal .confirm-box h3 {
+    text-align: center;
+}
+
+body.glass-off .sidebar-glass,
+body.glass-off .top-bar,
+body.glass-off .editor-toolbar {
+    backdrop-filter: none;
+    background: var(--surface);
+}
+
+body.high-contrast {
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.85);
+    --border: rgba(255, 255, 255, 0.35);
+}
+
+@media (max-width: 900px) {
+    .editor-scroll-area {
+        padding: 20px;
+        padding-bottom: 200px;
+    }
+
+    .tool-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .editor-toolbar {
+        gap: 4px;
+    }
+
+    .note-card {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 600px) {
+    .top-bar {
+        padding: 0 12px;
+    }
+
+    .editor-scroll-area {
+        padding: 16px;
+        padding-bottom: 180px;
+    }
+
+    #note-title {
+        font-size: 1.5rem;
+    }
+}
+
 .toggle-switch-lang {
     display: flex;
     background: rgba(255, 255, 255, 0.05);
@@ -1009,7 +1235,7 @@ body {
     background: var(--primary);
     color: #000;
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: none;
     font-weight: 600;
     cursor: pointer;
@@ -1024,7 +1250,7 @@ body {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text);
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     cursor: pointer;
     transition: background 0.2s;
@@ -1038,7 +1264,7 @@ body {
     background: var(--danger-bg);
     color: var(--danger);
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(255, 68, 68, 0.3);
     cursor: pointer;
 }
@@ -1074,13 +1300,15 @@ body {
     background: transparent;
     border: none;
     color: var(--text);
-    padding: 8px;
+    padding: 10px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: 0.2s;
+    min-width: var(--hit-size);
+    min-height: var(--hit-size);
 }
 
 .btn-icon:hover {
@@ -1267,11 +1495,16 @@ body {
     border: 2px solid transparent;
     border-radius: 12px;
     transition: 0.2s;
+    cursor: grab;
 }
 
 .media-wrapper.selected {
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(0, 242, 255, 0.1);
+}
+
+.media-wrapper:active {
+    cursor: grabbing;
 }
 
 .media-wrapper img {
@@ -1298,7 +1531,7 @@ body {
     background: transparent;
     border: none;
     color: var(--text);
-    padding: 8px;
+    padding: 10px;
     border-radius: 8px;
     cursor: pointer;
     display: flex;

@@ -14,6 +14,7 @@ const SyncService = {
 
     init() {
         // Wait for Auth to be ready
+        if (!auth) return;
         auth.onAuthStateChanged(user => {
             if (user) this.startListening(user);
         });
