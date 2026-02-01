@@ -72,18 +72,19 @@ const DriveService = {
 const VoiceService = {
     recorder: null,
     chunks: [],
+    stream: null,
 
     async toggle() {
         state.recording ? this.stop() : await this.start();
     },
 
     async start() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
             return UI.showToast("Микрофон не поддерживается");
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.recorder = new MediaRecorder(stream);
+            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.recorder = new MediaRecorder(this.stream);
             this.chunks = [];
 
             this.recorder.ondataavailable = e => this.chunks.push(e.data);
@@ -102,6 +103,10 @@ const VoiceService = {
     stop() {
         if (!this.recorder) return;
         this.recorder.stop();
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+            this.stream = null;
+        }
         state.recording = false;
         document.getElementById('voice-indicator').classList.remove('active');
     },
@@ -181,14 +186,26 @@ const SketchService = {
         this.canvas.onmouseup = end;
         this.canvas.onmouseout = end;
 
-        this.canvas.ontouchstart = start;
-        this.canvas.ontouchmove = move;
-        this.canvas.ontouchend = end;
+        this.canvas.addEventListener('touchstart', start, { passive: true });
+        this.canvas.addEventListener('touchmove', move, { passive: false });
+        this.canvas.addEventListener('touchend', end, { passive: true });
+
+        window.addEventListener('resize', Utils.debounce(() => this.resizeCanvas(), 150));
     },
 
     saveState() {
         if (this.history.length > 10) this.history.shift();
         this.history.push(this.canvas.toDataURL());
+    },
+
+    resizeCanvas() {
+        if (!this.canvas) return;
+        const prev = new Image();
+        prev.src = this.canvas.toDataURL();
+        prev.onload = () => {
+            this.setupCanvas();
+            this.ctx.drawImage(prev, 0, 0, this.canvas.width, this.canvas.height);
+        };
     },
 
     undo() {
@@ -218,15 +235,20 @@ const SketchService = {
 
 const ReminderService = {
     init() {
-        if (Notification.permission !== "granted") Notification.requestPermission();
+        if (!('Notification' in window)) return;
+        if (Notification.permission !== "granted") {
+            Notification.requestPermission().catch(() => null);
+        }
         setInterval(() => this.check(), 60000);
     },
 
     check() {
+        if (!('Notification' in window) || Notification.permission !== "granted") return;
         const now = new Date();
         state.notes.forEach(note => {
             if (note.reminder && new Date(note.reminder) <= now && !note.reminderSent) {
-                new Notification("SmartNotes", { body: note.title });
+                const title = note.title || "SmartNotes";
+                new Notification("SmartNotes", { body: title });
                 this.markAsSent(note.id);
             }
         });
@@ -277,6 +299,7 @@ const Editor = {
             title: document.getElementById('note-title'),
             content: document.getElementById('note-content-editable'),
             tags: document.getElementById('note-tags-input'),
+            tagsContainer: document.getElementById('note-tags-container'),
             toolbar: document.getElementById('editor-toolbar'),
             wrapper: document.getElementById('note-editor'),
             sizePopup: document.getElementById('text-size-popup'),
@@ -311,6 +334,13 @@ const Editor = {
                 this.snapshot();
             }
         };
+
+        this.els.tagsContainer.addEventListener('click', (e) => {
+            const chip = e.target.closest('.tag-chip');
+            if (!chip || !chip.dataset.tag) return;
+            const tag = decodeURIComponent(chip.dataset.tag);
+            this.removeTag(tag);
+        });
 
         // Editor Interactivity (Tasks, Media)
         this.els.content.addEventListener('click', e => {
@@ -574,9 +604,12 @@ const Editor = {
     },
 
     renderTags() {
-        document.getElementById('note-tags-container').innerHTML = (state.currentNote.tags || []).map(t =>
-            `<span class="tag-chip">#${t}<i class="material-icons-round" onclick="Editor.removeTag('${t}')">close</i></span>`
-        ).join('');
+        const tags = state.currentNote.tags || [];
+        this.els.tagsContainer.innerHTML = tags.map(t => {
+            const escaped = Utils.escapeHtml(t);
+            const encoded = encodeURIComponent(t);
+            return `<button type="button" class="tag-chip" data-tag="${encoded}">#${escaped}<i class="material-icons-round" aria-hidden="true">close</i></button>`;
+        }).join('');
     },
 
     toggleTask(el) {
@@ -641,6 +674,14 @@ const UI = {
                 if (note) Editor.open(note);
             }
         });
+
+        this.els.grid.addEventListener('click', (e) => {
+            const card = e.target.closest('.note-card');
+            if (!card || e.target.closest('.action-btn')) return;
+            const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null;
+            const note = state.notes.find(n => n.id === id);
+            if (note) Editor.open(note);
+        });
     },
 
     toggleSidebar(force) { this.els.sidebar.classList.toggle('active', force); },
@@ -650,12 +691,14 @@ const UI = {
     openModal(id) {
         document.getElementById(id).classList.add('active');
         this.toggleSidebar(false);
-        if (id === 'settings-modal') this.loadSettings();
+        if (id === 'settings-modal' || id === 'appearance-modal' || id === 'editor-settings-modal') {
+            this.loadSettings();
+        }
     },
 
     closeModal(id) {
         document.getElementById(id).classList.remove('active');
-        if (id === 'settings-modal') ThemeManager.revertToLastSaved();
+        if (id === 'appearance-modal') ThemeManager.revertToLastSaved();
 
         // Reset Easter Egg on Close
         if (id === 'about-modal') {
@@ -724,7 +767,7 @@ const UI = {
         root.innerHTML = state.folders.map(f => `
             <button class="nav-item ${state.activeFolderId === f.id ? 'active' : ''}" onclick="switchView('folder', '${f.id}')">
                 <i class="material-icons-round">folder</i>
-                <span>${f.name}</span>
+                <span>${Utils.escapeHtml(f.name)}</span>
                 <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" 
                    onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
             </button>
@@ -734,7 +777,7 @@ const UI = {
     renderNotes(notes) {
         this.els.empty.classList.toggle('hidden', notes.length > 0);
         this.els.grid.innerHTML = notes.map(n => `
-            <div class="note-card" onclick='Editor.open(${JSON.stringify(n).replace(/'/g, "&#39;")})'>
+            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}">
                 <div class="card-actions">
                     <button class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})">
                         <i class="material-icons-round">push_pin</i>
@@ -746,10 +789,10 @@ const UI = {
                         <i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i>
                     </button>
                 </div>
-                <h3>${n.title || 'Без названия'}</h3>
-                <p>${Utils.stripHtml(n.content) || 'Нет содержимого'}</p>
+                <h3>${Utils.escapeHtml(n.title || 'Без названия')}</h3>
+                <p>${Utils.escapeHtml(Utils.stripHtml(n.content) || 'Нет содержимого')}</p>
                 <div class="tags-list">
-                    ${(n.tags || []).map(t => `<span class="tag-chip">#${t}</span>`).join('')}
+                    ${(n.tags || []).map(t => `<span class="tag-chip">#${Utils.escapeHtml(t)}</span>`).join('')}
                 </div>
             </div>
         `).join('');
@@ -773,20 +816,21 @@ const UI = {
         this.renderToolsConfig();
     },
 
-    saveSettings() {
+    saveAppearance() {
         const p = document.getElementById('cp-primary').value;
         const bg = document.getElementById('cp-bg').value;
         const t = document.getElementById('cp-text').value;
         ThemeManager.setManual(p, bg, t);
-        this.closeModal('settings-modal');
+        this.closeModal('appearance-modal');
     },
 
     renderToolsConfig() {
         const root = document.getElementById('tools-config-root');
         if (root) {
+            const dict = LANG[state.config.lang] || LANG.ru;
             root.innerHTML = Editor.config.map((t, i) => `
                 <div class="tool-toggle-item">
-                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${t.id}</span></div>
+                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[`tool_${t.id}`] || t.id}</span></div>
                     <button class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
                 </div>
             `).join('');
@@ -835,6 +879,11 @@ function initApp() {
     UI.init();
     UI.setLang(localStorage.getItem('app-lang') || 'ru');
 
+    if (!db || !state.user) {
+        console.error('Database not available.');
+        return;
+    }
+
     // Data Sync
     db.collection('users').doc(state.user.uid).collection('folders')
         .orderBy('createdAt', 'asc').onSnapshot(snap => {
@@ -868,7 +917,9 @@ window.switchView = (view, folderId = null) => {
 window.filterAndRender = (query = '') => {
     const q = query.toLowerCase().trim();
     let res = state.notes.filter(n => {
-        const match = (n.title + n.content).toLowerCase().includes(q) || (n.tags || []).some(t => t.includes(q));
+        const title = n.title || '';
+        const content = n.content || '';
+        const match = (title + content).toLowerCase().includes(q) || (n.tags || []).some(t => t.toLowerCase().includes(q));
         if (state.view === 'notes') return match && !n.isArchived;
         if (state.view === 'favorites') return match && !n.isArchived && n.isImportant;
         if (state.view === 'archive') return match && n.isArchived;
@@ -881,6 +932,7 @@ window.filterAndRender = (query = '') => {
 };
 
 window.toggleProp = async (id, prop, val) => {
+    if (!db || !state.user) return;
     const update = { [prop]: val };
     if (prop === 'isArchived' && val) update.isPinned = false;
     await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update(update);
