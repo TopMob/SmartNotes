@@ -572,6 +572,13 @@ body {
     transition: all 0.2s;
 }
 
+.hidden-color-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
 .tool-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text);
@@ -718,6 +725,7 @@ body {
 }
 
 .tag-chip {
+    appearance: none;
     font-size: 0.75rem;
     background: rgba(var(--primary-rgb), 0.1);
     color: var(--primary);
@@ -728,6 +736,17 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.tag-chip:focus-visible {
+    outline: 2px solid rgba(var(--primary-rgb), 0.5);
+    outline-offset: 2px;
+}
+
+.notes-grid .tag-chip {
+    cursor: default;
 }
 
 .tag-chip i {
@@ -882,6 +901,35 @@ body {
     margin-bottom: 12px;
 }
 
+.settings-link {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 12px;
+}
+
+.settings-link:last-child {
+    margin-bottom: 0;
+}
+
+.settings-link:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-link-title {
+    font-size: 0.95rem;
+}
+
 .toggle-switch-lang {
     display: flex;
     background: rgba(255, 255, 255, 0.05);
@@ -913,6 +961,10 @@ body {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 12px;
+}
+
+.manual-spacing {
+    margin-top: 20px;
 }
 
 .theme-item-wrapper {
@@ -971,6 +1023,13 @@ body {
     border-radius: 12px;
     border: 1px solid var(--border);
     transition: border-color 0.2s;
+}
+
+.bot-link-label {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    display: inline-block;
 }
 
 .tool-toggle-item:hover {

@@ -7,7 +7,7 @@
    1. Utility Helpers (Must be defined first)
    ========================================================================== */
 const Utils = {
-    generateId: () => Math.random().toString(36).substr(2, 9),
+    generateId: () => Math.random().toString(36).slice(2, 11),
     
     debounce: (func, wait) => {
         let timeout;
@@ -41,6 +41,16 @@ const Utils = {
         const tmp = document.createElement("DIV");
         tmp.innerHTML = html;
         return tmp.textContent || tmp.innerText || "";
+    },
+
+    escapeHtml: (value) => {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     },
 
     // Color manipulation for theme generation
@@ -81,25 +91,27 @@ const firebaseConfig = {
 const DRIVE_CLIENT_ID = "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com";
 const DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.file";
 
-// Initialize Firebase
-if (typeof firebase !== 'undefined' && !firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-} else if (typeof firebase === 'undefined') {
+let auth = null;
+let db = null;
+
+if (typeof firebase !== 'undefined') {
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+
+    auth = firebase.auth();
+    db = firebase.firestore();
+
+    db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+        if (err.code === 'failed-precondition') {
+            console.warn('Persistence failed: Multiple tabs open.');
+        } else if (err.code === 'unimplemented') {
+            console.warn('Persistence failed: Browser not supported.');
+        }
+    });
+} else {
     console.error("Firebase SDK not loaded. Check index.html order.");
 }
-
-// Export Auth & DB to global scope for other scripts
-const auth = firebase.auth();
-const db = firebase.firestore();
-
-// Enable offline persistence
-db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-    if (err.code === 'failed-precondition') {
-        console.warn('Persistence failed: Multiple tabs open.');
-    } else if (err.code === 'unimplemented') {
-        console.warn('Persistence failed: Browser not supported.');
-    }
-});
 
 /* ==========================================================================
    3. Global State
@@ -142,6 +154,21 @@ const LANG = {
         reset: "Сбросить", close: "Закрыть", save: "Сохранить", team: "Команда",
         contact_us: "Связаться с нами:", send: "Отправить", cancel: "Отмена", yes: "Да",
         tools: "Инструменты редактора",
+        sections: "Разделы",
+        appearance_settings: "Внешний вид",
+        editor_settings: "Настройки редактора",
+        tool_size: "Размер текста",
+        tool_bold: "Жирный",
+        tool_italic: "Курсив",
+        tool_list_ul: "Список",
+        tool_task: "Чек-лист",
+        tool_color: "Цвет текста",
+        tool_highlight: "Подсветка",
+        tool_image: "Изображение",
+        tool_voice: "Голос",
+        tool_sketch: "Рисунок",
+        tool_drive: "Google Drive",
+        tool_clear: "Очистка форматирования",
         t_bold: "Жирный", t_italic: "Курсив", t_list: "Список", t_check: "Задачи",
         t_code: "Код", t_quote: "Цитата", t_image: "Изображение", t_mic: "Голос",
         t_sketch: "Рисунок", t_clear: "Очистить"
@@ -155,6 +182,21 @@ const LANG = {
         reset: "Reset", close: "Close", save: "Save", team: "Team",
         contact_us: "Contact us:", send: "Send", cancel: "Cancel", yes: "Yes",
         tools: "Editor Tools",
+        sections: "Sections",
+        appearance_settings: "Appearance",
+        editor_settings: "Editor Settings",
+        tool_size: "Text size",
+        tool_bold: "Bold",
+        tool_italic: "Italic",
+        tool_list_ul: "List",
+        tool_task: "Checklist",
+        tool_color: "Text color",
+        tool_highlight: "Highlight",
+        tool_image: "Image",
+        tool_voice: "Voice",
+        tool_sketch: "Sketch",
+        tool_drive: "Google Drive",
+        tool_clear: "Clear formatting",
         t_bold: "Bold", t_italic: "Italic", t_list: "List", t_check: "Checklist",
         t_code: "Code", t_quote: "Quote", t_image: "Image", t_mic: "Voice",
         t_sketch: "Sketch", t_clear: "Clear Formatting"
@@ -279,6 +321,12 @@ const ThemeManager = {
         const def = this.themes.neon;
         this.setManual(def.p, def.bg, def.t);
         this.renderPicker();
+    },
+
+    revertToLastSaved() {
+        const saved = JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
+        this.applyCSS(saved.p, saved.bg, saved.t);
+        this.syncInputs(saved.p, saved.bg, saved.t);
     }
 };
 
@@ -331,7 +379,8 @@ const Auth = {
 /* ==========================================================================
    7. Bootstrap & Auth Listener
    ========================================================================== */
-auth.onAuthStateChanged(user => {
+if (auth) {
+    auth.onAuthStateChanged(user => {
     // 1. Update State
     state.user = user;
 
@@ -390,7 +439,8 @@ auth.onAuthStateChanged(user => {
             }, 50);
         }
     }
-});
+    });
+}
 
 // Initialize Theme Manager on Load
 document.addEventListener('DOMContentLoaded', () => {

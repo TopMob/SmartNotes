@@ -231,15 +231,59 @@
                 </section>
 
                 <section class="settings-group">
+                    <h3 data-lang="sections">Разделы</h3>
+                    <button type="button" class="settings-link" onclick="UI.openModal('editor-settings-modal')">
+                        <span class="settings-link-title" data-lang="editor_settings">Настройки редактора</span>
+                        <i class="material-icons-round">chevron_right</i>
+                    </button>
+                    <button type="button" class="settings-link" onclick="UI.openModal('appearance-modal')">
+                        <span class="settings-link-title" data-lang="appearance_settings">Внешний вид</span>
+                        <i class="material-icons-round">chevron_right</i>
+                    </button>
+                </section>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Editor Settings -->
+    <div id="editor-settings-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="editor_settings">Настройки редактора</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('editor-settings-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </header>
+            <div class="modal-body scrollable">
+                <section class="settings-group">
                     <h3 data-lang="tools">Инструменты редактора</h3>
                     <div id="tools-config-root" class="tools-config-grid"></div>
                 </section>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="UI.closeModal('editor-settings-modal')" data-lang="close">Закрыть</button>
+            </footer>
+        </div>
+    </div>
 
+    <!-- Appearance -->
+    <div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="appearance_settings">Внешний вид</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('appearance-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </header>
+            <div class="modal-body scrollable">
                 <section class="settings-group">
                     <h3 data-lang="appearance">Внешний вид</h3>
                     <p class="subtext" data-lang="presets">Пресеты</p>
                     <div id="theme-picker-root" class="theme-grid"></div>
-                    <p class="subtext" style="margin-top:20px;" data-lang="manual">Ручная настройка</p>
+                    <p class="subtext manual-spacing" data-lang="manual">Ручная настройка</p>
                     <div class="color-pickers-grid">
                         <div class="color-picker-item">
                             <span data-lang="c_text">Текст</span>
@@ -259,8 +303,8 @@
             <footer class="modal-footer" style="justify-content: space-between;">
                 <button type="button" class="btn-secondary" onclick="ThemeManager.reset()" data-lang="reset">Сбросить</button>
                 <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
-                    <button type="button" class="btn-primary" onclick="UI.saveSettings()" data-lang="save">Сохранить</button>
+                    <button type="button" class="btn-secondary" onclick="UI.closeModal('appearance-modal')" data-lang="close">Закрыть</button>
+                    <button type="button" class="btn-primary" onclick="UI.saveAppearance()" data-lang="save">Сохранить</button>
                 </div>
             </footer>
         </div>
@@ -283,7 +327,7 @@
                     <li class="team-member name-minyaev">Миняев Иван</li>
                 </ul>
                 <div class="bot-link-wrapper">
-                    <span style="color:var(--text-dim); font-size:0.9rem; margin-bottom:5px;" data-lang="contact_us">Связаться с нами:</span>
+                    <span class="bot-link-label" data-lang="contact_us">Связаться с нами:</span>
                     <a href="https://t.me/SmartNotesInfo_bot" target="_blank" rel="noopener noreferrer" class="btn-primary telegram-btn">
                         <i class="material-icons-round">smart_toy</i> @SmartNotesInfo_bot
                     </a>
