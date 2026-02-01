@@ -19,6 +19,7 @@
 </head>
 <body>
     <div class="bg-wrapper"></div>
+    
     <div id="login-screen" class="modal-overlay active">
         <div class="login-box">
             <h1 class="brand-text-fixed">SmartNotes</h1>
@@ -31,6 +32,7 @@
             </div>
         </div>
     </div>
+
     <div id="app" class="app-layout">
         <aside id="sidebar" class="sidebar-glass">
             <div class="sidebar-header">
@@ -75,6 +77,7 @@
                 </button>
             </div>
         </aside>
+
         <main class="main-content">
             <header class="top-bar">
                 <div class="header-left">
@@ -104,6 +107,7 @@
                     </div>
                 </div>
             </header>
+
             <div id="notes-content-area" class="content-scrollable scrollable">
                 <div id="app-loader" class="loader-container hidden">
                     <div class="spinner"></div>
@@ -114,11 +118,13 @@
                 </div>
                 <div id="notes-container" class="notes-grid"></div>
             </div>
+
             <button class="btn-fab" onclick="Editor.open()">
                 <i class="material-icons-round">add</i>
             </button>
         </main>
     </div>
+
     <div id="note-editor" class="editor-overlay">
         <div class="editor-container">
             <div class="editor-header-bar">
@@ -158,6 +164,7 @@
             </div>
         </div>
     </div>
+
     <div id="settings-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -207,6 +214,7 @@
             </div>
         </div>
     </div>
+
     <div id="about-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -231,6 +239,7 @@
             </div>
         </div>
     </div>
+
     <div id="rate-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -254,6 +263,7 @@
             </div>
         </div>
     </div>
+
     <div id="confirm-modal" class="modal-overlay confirm-layer">
         <div class="confirm-box">
             <h3 id="confirm-title">Подтвердите</h3>
@@ -263,6 +273,7 @@
             </div>
         </div>
     </div>
+
     <div id="folder-modal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
@@ -279,7 +290,9 @@
             </div>
         </div>
     </div>
+
     <div id="toast-container" class="toast-container"></div>
+
     <script src="js/core.js"></script>
     <script src="js/sync.js"></script>
     <script src="js/app.js"></script>
