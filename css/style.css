@@ -27,6 +27,9 @@
     --radius-md: 12px;
     --radius-lg: 20px;
     --radius-xl: 32px;
+
+    --font-base: 16px;
+    --hit-size: 40px;
     
     --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
     --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -60,6 +63,7 @@ body {
     width: 100vw;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    font-size: var(--font-base);
 }
 
 ::-webkit-scrollbar {
@@ -468,6 +472,44 @@ body {
     transition: 0.2s;
     border: 1px solid rgba(255,255,255,0.1);
     backdrop-filter: blur(4px);
+    min-width: var(--hit-size);
+    min-height: var(--hit-size);
+}
+
+.note-card.dragging {
+    opacity: 0.5;
+}
+
+.note-card.drop-target {
+    outline: 2px dashed rgba(var(--primary-rgb), 0.6);
+    outline-offset: 4px;
+}
+
+@media (hover: none) {
+    .card-actions {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (pointer: coarse) {
+    .tool-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .action-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .btn-icon {
+        padding: 12px;
+    }
+
+    .btn-icon-small {
+        padding: 10px;
+    }
 }
 
 .action-btn:hover {
@@ -559,8 +601,8 @@ body {
 }
 
 .tool-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -570,6 +612,12 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
+    min-width: var(--hit-size);
+    min-height: var(--hit-size);
+}
+
+.tool-btn i {
+    font-size: 20px;
 }
 
 .hidden-color-input {
@@ -1068,7 +1116,7 @@ body {
     background: var(--primary);
     color: #000;
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: none;
     font-weight: 600;
     cursor: pointer;
@@ -1083,7 +1131,7 @@ body {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text);
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     cursor: pointer;
     transition: background 0.2s;
@@ -1097,7 +1145,7 @@ body {
     background: var(--danger-bg);
     color: var(--danger);
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(255, 68, 68, 0.3);
     cursor: pointer;
 }

@@ -161,7 +161,7 @@
                 <div id="notes-container" class="notes-grid"></div>
             </section>
 
-            <button type="button" class="btn-fab" onclick="Editor.open()" aria-label="Создать заметку">
+            <button type="button" class="btn-fab" onclick="UI.primaryAction()" aria-label="Создать заметку">
                 <i class="material-icons-round">add</i>
             </button>
         </main>
@@ -388,6 +388,21 @@
         </div>
     </div>
 
+    <div id="note-actions-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="note_actions">Действия</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('note-actions-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <button type="button" class="btn-primary" onclick="UI.downloadCurrentNote()" data-lang="download_note">Скачать файл</button>
+                <button type="button" class="btn-secondary" onclick="UI.uploadCurrentNote()" data-lang="upload_note">Отправить в облако</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sketch Modal -->
     <div id="sketch-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card full-screen-modal">
@@ -463,6 +478,7 @@
 
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
+    <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
     <!-- Service Worker Registration -->
     <script>

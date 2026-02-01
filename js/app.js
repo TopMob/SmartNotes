@@ -10,6 +10,7 @@
 const DriveService = {
     client: null,
     token: null,
+    pendingNote: null,
 
     async init() {
         if (typeof gapi === 'undefined' || typeof google === 'undefined') return;
@@ -350,6 +351,13 @@ const Editor = {
             this.removeTag(tag);
         });
 
+        this.els.tagsContainer.addEventListener('click', (e) => {
+            const chip = e.target.closest('.tag-chip');
+            if (!chip || !chip.dataset.tag) return;
+            const tag = decodeURIComponent(chip.dataset.tag);
+            this.removeTag(tag);
+        });
+
         // Editor Interactivity (Tasks, Media)
         this.els.content.addEventListener('click', e => {
             if (e.target.classList.contains('task-checkbox')) {
@@ -362,6 +370,32 @@ const Editor = {
             } else {
                 this.deselectMedia();
             }
+        });
+
+        this.els.content.addEventListener('dragstart', (e) => {
+            const mediaWrapper = e.target.closest('.media-wrapper');
+            if (!mediaWrapper) return;
+            this.draggedMedia = mediaWrapper;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'media');
+        });
+
+        this.els.content.addEventListener('dragover', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+        });
+
+        this.els.content.addEventListener('drop', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+            const range = this.getRangeFromPoint(e.clientX, e.clientY);
+            if (range) {
+                range.insertNode(this.draggedMedia);
+            } else {
+                this.els.content.appendChild(this.draggedMedia);
+            }
+            this.draggedMedia = null;
+            this.snapshot();
         });
 
         this.els.content.addEventListener('dragstart', (e) => {
@@ -534,6 +568,79 @@ const Editor = {
         selection.addRange(this.savedRange);
     },
 
+    insertTaskItem(label) {
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+        const list = range ? range.startContainer.closest?.('.task-list') : null;
+        const itemHtml = `<li class="task-item"><input type="checkbox" class="task-checkbox" contenteditable="false"><span class="task-text">${Utils.escapeHtml(label)}</span></li>`;
+        if (list) {
+            list.insertAdjacentHTML('beforeend', itemHtml);
+        } else {
+            document.execCommand('insertHTML', false, `<ul class="task-list">${itemHtml}</ul>`);
+        }
+        const target = this.els.content.querySelector('.task-item:last-child .task-text');
+        if (target) {
+            const newRange = document.createRange();
+            newRange.selectNodeContents(target);
+            newRange.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+        }
+        this.snapshot();
+    },
+
+    syncTaskStates() {
+        this.els.content.querySelectorAll('.task-item').forEach(item => {
+            const checkbox = item.querySelector('.task-checkbox');
+            if (checkbox) item.classList.toggle('checked', checkbox.checked);
+        });
+    },
+
+    alignMediaOrText(align) {
+        if (this.selectedMedia) {
+            this.alignMedia(align);
+            return;
+        }
+        const commands = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
+        const cmd = commands[align];
+        if (cmd) {
+            document.execCommand(cmd, false, null);
+        }
+    },
+
+    getRangeFromPoint(x, y) {
+        if (document.caretRangeFromPoint) {
+            return document.caretRangeFromPoint(x, y);
+        }
+        if (document.caretPositionFromPoint) {
+            const position = document.caretPositionFromPoint(x, y);
+            const range = document.createRange();
+            range.setStart(position.offsetNode, position.offset);
+            range.collapse(true);
+            return range;
+        }
+        return null;
+    },
+
+    makeMediaDraggable() {
+        this.els.content.querySelectorAll('.media-wrapper').forEach(wrapper => {
+            wrapper.setAttribute('draggable', 'true');
+        });
+    },
+
+    saveSelection() {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        this.savedRange = selection.getRangeAt(0).cloneRange();
+    },
+
+    restoreSelection() {
+        if (!this.savedRange) return;
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(this.savedRange);
+    },
+
     // Exec Commands
     exec(cmd, val = null) {
         this.els.content.focus();
@@ -597,7 +704,7 @@ const Editor = {
         if (last && last.t === current.t && last.c === current.c && JSON.stringify(last.tags) === JSON.stringify(current.tags)) return;
 
         this.history.push(current);
-        if (this.history.length > 30) this.history.shift();
+        if (this.history.length > 60) this.history.shift();
         this.future = [];
         this.triggerSave();
     },
@@ -724,6 +831,7 @@ const Editor = {
 
 const UI = {
     els: {},
+    currentNoteActionId: null,
 
     init() {
         this.els = {
@@ -732,10 +840,11 @@ const UI = {
             empty: document.getElementById('empty-state'),
             userMenu: document.getElementById('user-dropdown'),
             confirmModal: document.getElementById('confirm-modal'),
-            promptModal: document.getElementById('prompt-modal')
+            promptModal: document.getElementById('prompt-modal'),
+            fab: document.querySelector('.btn-fab')
         };
         this.bindEvents();
-        this.loadSettings();
+        this.applyAppearanceSettings();
     },
 
     bindEvents() {

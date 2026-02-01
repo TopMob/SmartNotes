@@ -53,6 +53,16 @@ const Utils = {
             .replace(/'/g, '&#39;');
     },
 
+    escapeHtml: (value) => {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+
     // Color manipulation for theme generation
     adjustColor: (col, amt) => {
         let usePound = false;
@@ -208,22 +218,38 @@ const LANG = {
    ========================================================================== */
 const ThemeManager = {
     themes: {
-        neon: { p: '#00f2ff', bg: '#050505', t: '#ffffff' },
-        cyber: { p: '#ff007a', bg: '#0a0005', t: '#ffccdd' },
-        gold: { p: '#ffcc00', bg: '#0a0000', t: '#ffffcc' },
-        emerald: { p: '#00ff88', bg: '#001a0a', t: '#ccffdd' },
-        lava: { p: '#ff4d00', bg: '#1a0500', t: '#ffcccc' },
-        midnight: { p: '#4e54c8', bg: '#050510', t: '#ccccff' },
-        forest: { p: '#a3e635', bg: '#0a1500', t: '#eeffcc' },
-        space: { p: '#e879f9', bg: '#100015', t: '#ffccff' }
+        light: { p: '#2563eb', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.1)', radius: 14, fontBase: 16, hitSize: 44, shadow: '0 10px 30px rgba(15, 23, 42, 0.1)' },
+        dark: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' },
+        system: { p: '#6366f1', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' },
+        high_contrast: { p: '#ffffff', bg: '#000000', t: '#ffffff', surface: '#000000', surfaceLight: '#141414', border: 'rgba(255, 255, 255, 0.5)', radius: 12, fontBase: 18, hitSize: 48, shadow: 'none' },
+        oled: { p: '#22c55e', bg: '#000000', t: '#ffffff', surface: '#050505', surfaceLight: '#0f0f0f', border: 'rgba(255, 255, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 40, shadow: 'none' },
+        monochrome: { p: '#6b7280', bg: '#0b0b0b', t: '#f5f5f5', surface: '#111111', surfaceLight: '#1a1a1a', border: 'rgba(255, 255, 255, 0.15)', radius: 10, fontBase: 16, hitSize: 40, shadow: '0 16px 30px rgba(0, 0, 0, 0.45)' },
+        pastel: { p: '#8b5cf6', bg: '#f8f5ff', t: '#2e1065', surface: '#ffffff', surfaceLight: '#f1ecff', border: 'rgba(46, 16, 101, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 12px 24px rgba(76, 29, 149, 0.12)' },
+        warm: { p: '#f97316', bg: '#fff7ed', t: '#7c2d12', surface: '#ffffff', surfaceLight: '#ffedd5', border: 'rgba(124, 45, 18, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 12px 24px rgba(124, 45, 18, 0.15)' },
+        cool: { p: '#06b6d4', bg: '#ecfeff', t: '#0e7490', surface: '#ffffff', surfaceLight: '#cffafe', border: 'rgba(14, 116, 144, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 12px 24px rgba(14, 116, 144, 0.15)' },
+        minimal: { p: '#0f172a', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.08)', radius: 8, fontBase: 15, hitSize: 40, shadow: 'none' },
+        compact: { p: '#3b82f6', bg: '#0b1220', t: '#e2e8f0', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(226, 232, 240, 0.1)', radius: 10, fontBase: 14, hitSize: 36, shadow: '0 12px 24px rgba(0, 0, 0, 0.4)' },
+        spacious: { p: '#22c55e', bg: '#0f172a', t: '#f8fafc', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(248, 250, 252, 0.1)', radius: 18, fontBase: 17, hitSize: 48, shadow: '0 24px 40px rgba(0, 0, 0, 0.5)' },
+        low_vision: { p: '#facc15', bg: '#0a0a0a', t: '#ffffff', surface: '#111111', surfaceLight: '#1f1f1f', border: 'rgba(255, 255, 255, 0.35)', radius: 16, fontBase: 20, hitSize: 52, shadow: 'none' },
+        glass: { p: '#00f2ff', bg: '#06080f', t: '#ffffff', surface: 'rgba(15, 23, 42, 0.65)', surfaceLight: 'rgba(30, 41, 59, 0.7)', border: 'rgba(255, 255, 255, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 25px 50px rgba(0, 0, 0, 0.5)' },
+        matte: { p: '#4ade80', bg: '#111827', t: '#f1f5f9', surface: '#1f2937', surfaceLight: '#374151', border: 'rgba(241, 245, 249, 0.12)', radius: 14, fontBase: 16, hitSize: 42, shadow: '0 16px 26px rgba(0, 0, 0, 0.4)' },
+        neon: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' },
+        paper: { p: '#2563eb', bg: '#f8f1e7', t: '#1f2937', surface: '#fffaf3', surfaceLight: '#f3e8d6', border: 'rgba(31, 41, 55, 0.15)', radius: 10, fontBase: 16, hitSize: 42, shadow: '0 12px 20px rgba(31, 41, 55, 0.1)' },
+        sunrise: { p: '#ef4444', bg: '#1f0a0a', t: '#fee2e2', surface: '#2a0f0f', surfaceLight: '#3a1515', border: 'rgba(254, 226, 226, 0.15)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)' },
+        ocean: { p: '#38bdf8', bg: '#04121f', t: '#e2f2ff', surface: '#0b1d2a', surfaceLight: '#12283a', border: 'rgba(226, 242, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)' }
     },
 
     init() {
         const saved = JSON.parse(localStorage.getItem('app-theme-settings'));
         if (saved) {
-            this.setManual(saved.p, saved.bg, saved.t);
+            const preset = saved.preset && this.themes[saved.preset] ? saved.preset : null;
+            if (preset) {
+                this.applyPreset(preset);
+            } else {
+                this.setManual(saved.p, saved.bg, saved.t);
+            }
         } else {
-            this.reset();
+            this.applyPreset('dark');
         }
         
         // Observer for lazy-loaded DOM elements (Theme Picker)
@@ -248,7 +274,7 @@ const ThemeManager = {
     },
 
     updateManual(type, val) {
-        const current = JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
+        const current = JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.dark;
         current[type] = val;
         this.setManual(current.p, current.bg, current.t);
     },
@@ -268,7 +294,8 @@ const ThemeManager = {
             dot.style.background = t.p;
             
             const current = localStorage.getItem('app-theme-settings');
-            const isActive = current ? JSON.parse(current).p === t.p : key === 'neon';
+            const parsed = current ? JSON.parse(current) : null;
+            const isActive = parsed ? (parsed.preset ? parsed.preset === key : parsed.p === t.p) : key === 'dark';
             if (isActive) dot.classList.add('active');
 
             const label = document.createElement('span');
@@ -276,7 +303,7 @@ const ThemeManager = {
             label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
 
             dot.onclick = () => {
-                this.setManual(t.p, t.bg, t.t);
+                this.applyPreset(key);
                 document.querySelectorAll('.theme-dot').forEach(d => d.classList.remove('active'));
                 dot.classList.add('active');
             };
