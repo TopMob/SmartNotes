@@ -232,87 +232,22 @@
                             <button type="button" class="lang-btn" onclick="UI.setLang('en')">EN</button>
                         </div>
                     </div>
-                    <button type="button" class="settings-link" onclick="UI.triggerImport()">
-                        <span data-lang="import_note">Импорт заметки</span>
-                        <i class="material-icons-round">upload_file</i>
-                    </button>
                 </section>
 
                 <section class="settings-group">
-                    <h3 data-lang="appearance">Внешний вид</h3>
-                    <button type="button" class="settings-link" onclick="UI.openModal('appearance-modal')">
-                        <span data-lang="appearance_settings">Настройки внешнего вида</span>
+                    <h3 data-lang="sections">Разделы</h3>
+                    <button type="button" class="settings-link" onclick="UI.openModal('editor-settings-modal')">
+                        <span class="settings-link-title" data-lang="editor_settings">Настройки редактора</span>
                         <i class="material-icons-round">chevron_right</i>
                     </button>
-                </section>
-
-                <section class="settings-group">
-                    <h3 data-lang="editor_settings">Настройки редактора</h3>
-                    <button type="button" class="settings-link" onclick="UI.openModal('editor-settings-modal')">
-                        <span data-lang="editor_tools">Инструменты редактора</span>
+                    <button type="button" class="settings-link" onclick="UI.openModal('appearance-modal')">
+                        <span class="settings-link-title" data-lang="appearance_settings">Внешний вид</span>
                         <i class="material-icons-round">chevron_right</i>
                     </button>
                 </section>
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
-            </footer>
-        </div>
-    </div>
-
-    <!-- Appearance Settings -->
-    <div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="appearance">Внешний вид</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeModal('appearance-modal')" aria-label="Закрыть">
-                    <i class="material-icons-round">close</i>
-                </button>
-            </header>
-            <div class="modal-body scrollable">
-                <section class="settings-group">
-                    <p class="subtext" data-lang="presets">Пресеты</p>
-                    <div id="theme-picker-root" class="theme-grid"></div>
-                    <p class="subtext" style="margin-top:20px;" data-lang="manual">Ручная настройка</p>
-                    <div class="color-pickers-grid">
-                        <div class="color-picker-item">
-                            <span data-lang="c_text">Текст</span>
-                            <input type="color" id="cp-text" class="input-color-custom" aria-label="Цвет текста">
-                        </div>
-                        <div class="color-picker-item">
-                            <span data-lang="c_accent">Акцент</span>
-                            <input type="color" id="cp-primary" class="input-color-custom" aria-label="Акцентный цвет">
-                        </div>
-                        <div class="color-picker-item">
-                            <span data-lang="c_bg">Фон</span>
-                            <input type="color" id="cp-bg" class="input-color-custom" aria-label="Цвет фона">
-                        </div>
-                    </div>
-                </section>
-                <section class="settings-group">
-                    <h3 data-lang="effects">Эффекты</h3>
-                    <div class="settings-row">
-                        <span data-lang="glass_effect">Эффект стекла</span>
-                        <label class="toggle">
-                            <input type="checkbox" id="toggle-glass">
-                            <span class="toggle-track"></span>
-                        </label>
-                    </div>
-                    <div class="settings-row">
-                        <span data-lang="high_contrast">Режим для слабовидящих</span>
-                        <label class="toggle">
-                            <input type="checkbox" id="toggle-contrast">
-                            <span class="toggle-track"></span>
-                        </label>
-                    </div>
-                </section>
-            </div>
-            <footer class="modal-footer" style="justify-content: space-between;">
-                <button type="button" class="btn-secondary" onclick="ThemeManager.reset()" data-lang="reset">Сбросить</button>
-                <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-secondary" onclick="UI.closeModal('appearance-modal')" data-lang="close">Закрыть</button>
-                    <button type="button" class="btn-primary" onclick="UI.saveSettings()" data-lang="save">Сохранить</button>
-                </div>
             </footer>
         </div>
     </div>
@@ -328,12 +263,53 @@
             </header>
             <div class="modal-body scrollable">
                 <section class="settings-group">
-                    <h3 data-lang="editor_tools">Инструменты редактора</h3>
+                    <h3 data-lang="tools">Инструменты редактора</h3>
                     <div id="tools-config-root" class="tools-config-grid"></div>
                 </section>
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-secondary" onclick="UI.closeModal('editor-settings-modal')" data-lang="close">Закрыть</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Appearance -->
+    <div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="appearance_settings">Внешний вид</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('appearance-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round">close</i>
+                </button>
+            </header>
+            <div class="modal-body scrollable">
+                <section class="settings-group">
+                    <h3 data-lang="appearance">Внешний вид</h3>
+                    <p class="subtext" data-lang="presets">Пресеты</p>
+                    <div id="theme-picker-root" class="theme-grid"></div>
+                    <p class="subtext manual-spacing" data-lang="manual">Ручная настройка</p>
+                    <div class="color-pickers-grid">
+                        <div class="color-picker-item">
+                            <span data-lang="c_text">Текст</span>
+                            <input type="color" id="cp-text" class="input-color-custom" aria-label="Цвет текста">
+                        </div>
+                        <div class="color-picker-item">
+                            <span data-lang="c_accent">Акцент</span>
+                            <input type="color" id="cp-primary" class="input-color-custom" aria-label="Акцентный цвет">
+                        </div>
+                        <div class="color-picker-item">
+                            <span data-lang="c_bg">Фон</span>
+                            <input type="color" id="cp-bg" class="input-color-custom" aria-label="Цвет фона">
+                        </div>
+                    </div>
+                </section>
+            </div>
+            <footer class="modal-footer" style="justify-content: space-between;">
+                <button type="button" class="btn-secondary" onclick="ThemeManager.reset()" data-lang="reset">Сбросить</button>
+                <div style="display:flex; gap:10px;">
+                    <button type="button" class="btn-secondary" onclick="UI.closeModal('appearance-modal')" data-lang="close">Закрыть</button>
+                    <button type="button" class="btn-primary" onclick="UI.saveAppearance()" data-lang="save">Сохранить</button>
+                </div>
             </footer>
         </div>
     </div>
@@ -355,7 +331,7 @@
                     <li class="team-member name-minyaev">Миняев Иван</li>
                 </ul>
                 <div class="bot-link-wrapper">
-                    <span class="contact-label" data-lang="contact_us">Связаться с нами:</span>
+                    <span class="bot-link-label" data-lang="contact_us">Связаться с нами:</span>
                     <a href="https://t.me/SmartNotesInfo_bot" target="_blank" rel="noopener noreferrer" class="btn-primary telegram-btn">
                         <i class="material-icons-round">smart_toy</i> @SmartNotesInfo_bot
                     </a>

@@ -37,43 +37,24 @@ const DriveService = {
         this.token = resp.access_token;
         state.driveToken = resp.access_token;
         UI.showToast("Google Drive подключен");
-        if (this.pendingNote) {
-            this.uploadNote(this.pendingNote);
-            this.pendingNote = null;
-        } else {
-            this.syncCurrentNote();
-        }
+        this.syncCurrentNote();
     },
 
     connect() {
         this.client ? this.client.requestAccessToken({ prompt: 'consent' }) : UI.showToast("Сервис Drive недоступен");
     },
 
-    async uploadNote(note) {
-        if (!note) return;
-        if (!this.token) {
-            this.pendingNote = note;
-            this.connect();
-            return;
-        }
-        await this.uploadPayload(note);
-    },
-
     async syncCurrentNote() {
         if (!state.currentNote || !this.token) return;
-        await this.uploadPayload(state.currentNote);
-    },
-
-    async uploadPayload(note) {
 
         const metadata = {
-            name: `SmartNote_${note.title || 'Untitled'}.json`,
+            name: `SmartNote_${state.currentNote.title || 'Untitled'}.json`,
             mimeType: 'application/json',
         };
 
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(note)], { type: 'application/json' }));
+        form.append('file', new Blob([JSON.stringify(state.currentNote)], { type: 'application/json' }));
 
         try {
             await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
@@ -253,125 +234,6 @@ const SketchService = {
     }
 };
 
-const PhotoEditor = {
-    canvas: null,
-    ctx: null,
-    drawing: false,
-    history: [],
-    targetImg: null,
-    els: {},
-
-    open() {
-        if (!Editor.selectedMedia) {
-            UI.showToast("Выберите изображение");
-            return;
-        }
-        this.targetImg = Editor.selectedMedia.querySelector('img');
-        if (!this.targetImg) {
-            UI.showToast("Изображение не найдено");
-            return;
-        }
-        UI.openModal('photo-editor-modal');
-        this.init();
-    },
-
-    init() {
-        this.canvas = document.getElementById('photo-editor-canvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.els = {
-            color: document.getElementById('photo-color-picker'),
-            width: document.getElementById('photo-width-picker')
-        };
-        this.loadImage();
-        this.bindEvents();
-    },
-
-    loadImage() {
-        const img = new Image();
-        img.onload = () => {
-            this.canvas.width = img.naturalWidth || img.width;
-            this.canvas.height = img.naturalHeight || img.height;
-            this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.lineCap = 'round';
-            this.ctx.lineJoin = 'round';
-            this.saveState();
-        };
-        img.src = this.targetImg.src;
-    },
-
-    bindEvents() {
-        const getPos = (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-            return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-        };
-
-        const start = (e) => {
-            this.drawing = true;
-            this.ctx.beginPath();
-            this.ctx.strokeStyle = this.els.color.value;
-            this.ctx.lineWidth = this.els.width.value;
-            const pos = getPos(e);
-            this.ctx.moveTo(pos.x, pos.y);
-        };
-
-        const move = (e) => {
-            if (!this.drawing) return;
-            e.preventDefault();
-            const pos = getPos(e);
-            this.ctx.lineTo(pos.x, pos.y);
-            this.ctx.stroke();
-        };
-
-        const end = () => {
-            if (!this.drawing) return;
-            this.drawing = false;
-            this.ctx.closePath();
-            this.saveState();
-        };
-
-        this.canvas.onmousedown = start;
-        this.canvas.onmousemove = move;
-        this.canvas.onmouseup = end;
-        this.canvas.onmouseout = end;
-
-        this.canvas.addEventListener('touchstart', start, { passive: true });
-        this.canvas.addEventListener('touchmove', move, { passive: false });
-        this.canvas.addEventListener('touchend', end, { passive: true });
-    },
-
-    saveState() {
-        if (this.history.length > 10) this.history.shift();
-        this.history.push(this.canvas.toDataURL());
-    },
-
-    undo() {
-        if (this.history.length <= 1) return this.clear();
-        this.history.pop();
-        const img = new Image();
-        img.src = this.history[this.history.length - 1];
-        img.onload = () => {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.drawImage(img, 0, 0);
-        };
-    },
-
-    clear() {
-        this.history = [];
-        this.loadImage();
-    },
-
-    save() {
-        if (!this.targetImg) return;
-        this.targetImg.src = this.canvas.toDataURL('image/png');
-        UI.closeModal('photo-editor-modal');
-        Editor.snapshot();
-    }
-};
-
 const ReminderService = {
     init() {
         if (!('Notification' in window)) return;
@@ -419,20 +281,18 @@ const Editor = {
     els: {},
 
     configDefault: [
-        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider', labelKey: 't_size' },
-        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true, labelKey: 't_bold' },
-        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true, labelKey: 't_italic' },
-        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true, labelKey: 't_list' },
-        { id: 'task', icon: 'check_circle', cmd: 'task', active: true, labelKey: 't_check' },
-        { id: 'align_left', icon: 'format_align_left', cmd: 'align_left', active: true, labelKey: 't_align_left' },
-        { id: 'align_center', icon: 'format_align_center', cmd: 'align_center', active: true, labelKey: 't_align_center' },
-        { id: 'align_right', icon: 'format_align_right', cmd: 'align_right', active: true, labelKey: 't_align_right' },
-        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true, labelKey: 't_color' },
-        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true, labelKey: 't_highlight' },
-        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true, labelKey: 't_image' },
-        { id: 'voice', icon: 'mic', cmd: 'voice', active: true, labelKey: 't_mic' },
-        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true, labelKey: 't_sketch' },
-        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true, labelKey: 't_clear' }
+        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider' },
+        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true },
+        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true },
+        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true },
+        { id: 'task', icon: 'check_circle', cmd: 'task', active: true },
+        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true },
+        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true },
+        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true },
+        { id: 'voice', icon: 'mic', cmd: 'voice', active: true },
+        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true },
+        { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true },
+        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true }
     ],
 
     init() {
@@ -447,8 +307,6 @@ const Editor = {
             sizeRange: document.getElementById('font-size-range'),
             ctxMenu: document.getElementById('media-context-menu')
         };
-        this.savedRange = null;
-        this.draggedMedia = null;
 
         this.loadConfig();
         this.renderToolbar();
@@ -493,6 +351,13 @@ const Editor = {
             this.removeTag(tag);
         });
 
+        this.els.tagsContainer.addEventListener('click', (e) => {
+            const chip = e.target.closest('.tag-chip');
+            if (!chip || !chip.dataset.tag) return;
+            const tag = decodeURIComponent(chip.dataset.tag);
+            this.removeTag(tag);
+        });
+
         // Editor Interactivity (Tasks, Media)
         this.els.content.addEventListener('click', e => {
             if (e.target.classList.contains('task-checkbox')) {
@@ -505,6 +370,32 @@ const Editor = {
             } else {
                 this.deselectMedia();
             }
+        });
+
+        this.els.content.addEventListener('dragstart', (e) => {
+            const mediaWrapper = e.target.closest('.media-wrapper');
+            if (!mediaWrapper) return;
+            this.draggedMedia = mediaWrapper;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'media');
+        });
+
+        this.els.content.addEventListener('dragover', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+        });
+
+        this.els.content.addEventListener('drop', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+            const range = this.getRangeFromPoint(e.clientX, e.clientY);
+            if (range) {
+                range.insertNode(this.draggedMedia);
+            } else {
+                this.els.content.appendChild(this.draggedMedia);
+            }
+            this.draggedMedia = null;
+            this.snapshot();
         });
 
         this.els.content.addEventListener('dragstart', (e) => {
@@ -583,7 +474,6 @@ const Editor = {
         this.els.content.innerHTML = n.content || '';
         this.renderTags();
         this.makeMediaDraggable();
-        this.syncTaskStates();
     },
 
     // Media Logic
@@ -706,6 +596,51 @@ const Editor = {
         });
     },
 
+    alignMediaOrText(align) {
+        if (this.selectedMedia) {
+            this.alignMedia(align);
+            return;
+        }
+        const commands = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
+        const cmd = commands[align];
+        if (cmd) {
+            document.execCommand(cmd, false, null);
+        }
+    },
+
+    getRangeFromPoint(x, y) {
+        if (document.caretRangeFromPoint) {
+            return document.caretRangeFromPoint(x, y);
+        }
+        if (document.caretPositionFromPoint) {
+            const position = document.caretPositionFromPoint(x, y);
+            const range = document.createRange();
+            range.setStart(position.offsetNode, position.offset);
+            range.collapse(true);
+            return range;
+        }
+        return null;
+    },
+
+    makeMediaDraggable() {
+        this.els.content.querySelectorAll('.media-wrapper').forEach(wrapper => {
+            wrapper.setAttribute('draggable', 'true');
+        });
+    },
+
+    saveSelection() {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        this.savedRange = selection.getRangeAt(0).cloneRange();
+    },
+
+    restoreSelection() {
+        if (!this.savedRange) return;
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(this.savedRange);
+    },
+
     // Exec Commands
     exec(cmd, val = null) {
         this.els.content.focus();
@@ -723,8 +658,19 @@ const Editor = {
                 }
             },
             task: () => {
+                const id = Utils.generateId();
                 const label = LANG[state.config.lang]?.task_item || 'Задача';
-                this.insertTaskItem(label);
+                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">${Utils.escapeHtml(label)}</span></div>`;
+                document.execCommand('insertHTML', false, html);
+                const taskText = this.els.content.querySelector(`#${id} .task-text`);
+                if (taskText) {
+                    const range = document.createRange();
+                    range.selectNodeContents(taskText);
+                    range.collapse(false);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
             },
             align_left: () => this.alignMediaOrText('left'),
             align_center: () => this.alignMediaOrText('center'),
@@ -732,6 +678,7 @@ const Editor = {
             voice: () => VoiceService.toggle(),
             image: () => document.getElementById('img-upload').click(),
             sketch: () => { UI.openModal('sketch-modal'); SketchService.init(); },
+            drive: () => DriveService.connect(),
             clear: () => document.execCommand('removeFormat')
         };
 
@@ -873,8 +820,7 @@ const Editor = {
     },
 
     toggleTask(el) {
-        const item = el.closest('.task-item');
-        if (item) item.classList.toggle('checked', el.checked);
+        el.closest('.task-line').classList.toggle('checked');
         this.snapshot();
     }
 };
@@ -941,85 +887,22 @@ const UI = {
         this.els.grid.addEventListener('click', (e) => {
             const card = e.target.closest('.note-card');
             if (!card || e.target.closest('.action-btn')) return;
-            if (card.dataset.folderId) {
-                const folderId = decodeURIComponent(card.dataset.folderId);
-                switchView('folder', folderId);
-                return;
-            }
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null;
             const note = state.notes.find(n => n.id === id);
             if (note) Editor.open(note);
-        });
-
-        this.els.grid.addEventListener('dragstart', (e) => {
-            const card = e.target.closest('.note-card');
-            if (!card || card.dataset.folderId) return;
-            this.dragNoteId = card.dataset.noteId;
-            card.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', 'note');
-        });
-
-        this.els.grid.addEventListener('dragover', (e) => {
-            if (!this.dragNoteId) return;
-            e.preventDefault();
-            const card = e.target.closest('.note-card');
-            if (!card || card.dataset.noteId === this.dragNoteId) return;
-            this.clearDropTargets();
-            card.classList.add('drop-target');
-        });
-
-        this.els.grid.addEventListener('drop', (e) => {
-            if (!this.dragNoteId) return;
-            e.preventDefault();
-            const target = e.target.closest('.note-card');
-            if (target && target.dataset.noteId && target.dataset.noteId !== this.dragNoteId) {
-                this.reorderNotes(this.dragNoteId, target.dataset.noteId);
-            }
-            this.clearDropTargets();
-            this.dragNoteId = null;
-        });
-
-        this.els.grid.addEventListener('dragend', () => {
-            this.clearDropTargets();
-            this.dragNoteId = null;
-        });
-
-        document.getElementById('toggle-glass')?.addEventListener('change', (e) => {
-            this.updateAppearanceSetting('glass', e.target.checked);
-        });
-
-        document.getElementById('toggle-contrast')?.addEventListener('change', (e) => {
-            this.updateAppearanceSetting('contrast', e.target.checked);
-        });
-
-        document.getElementById('note-import')?.addEventListener('change', (e) => {
-            const file = e.target.files && e.target.files[0];
-            if (file) this.importNoteFile(file);
-            e.target.value = '';
         });
     },
 
     toggleSidebar(force) { this.els.sidebar.classList.toggle('active', force); },
     toggleUserMenu(force) { this.els.userMenu.classList.toggle('active', force); },
 
-    primaryAction() {
-        if (state.view === 'folders') {
-            document.getElementById('add-folder-btn')?.click();
-            return;
-        }
-        Editor.open();
-    },
-
     // Modals
     openModal(id) {
         document.getElementById(id).classList.add('active');
         this.toggleSidebar(false);
-        if (id === 'appearance-modal' || id === 'editor-settings-modal') {
-            document.getElementById('settings-modal')?.classList.remove('active');
+        if (id === 'settings-modal' || id === 'appearance-modal' || id === 'editor-settings-modal') {
+            this.loadSettings();
         }
-        if (id === 'appearance-modal') this.loadAppearanceSettings();
-        if (id === 'editor-settings-modal') this.loadEditorSettings();
     },
 
     closeModal(id) {
@@ -1103,7 +986,7 @@ const UI = {
     renderNotes(notes) {
         this.els.empty.classList.toggle('hidden', notes.length > 0);
         this.els.grid.innerHTML = notes.map(n => `
-            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}" draggable="true">
+            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}">
                 <div class="card-actions">
                     <button class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})">
                         <i class="material-icons-round">push_pin</i>
@@ -1113,9 +996,6 @@ const UI = {
                     </button>
                     <button class="action-btn" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isArchived', ${!n.isArchived})">
                         <i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i>
-                    </button>
-                    <button class="action-btn" onclick="event.stopPropagation(); UI.openNoteActions('${n.id}')">
-                        <i class="material-icons-round">cloud</i>
                     </button>
                 </div>
                 <h3>${Utils.escapeHtml(n.title || 'Без названия')}</h3>
@@ -1127,26 +1007,6 @@ const UI = {
         `).join('');
     },
 
-    renderFolderCards() {
-        const folders = state.folders || [];
-        this.els.empty.classList.toggle('hidden', folders.length > 0);
-        this.els.grid.innerHTML = folders.map(folder => {
-            const notes = state.notes
-                .filter(n => n.folderId === folder.id && !n.isArchived)
-                .slice(0, 3);
-            const emptyLabel = LANG[state.config.lang]?.empty_folder || 'Пусто';
-            const preview = notes.map(n => `<span>${Utils.escapeHtml(n.title || 'Без названия')}</span>`).join('');
-            return `
-                <div class="note-card folder-card" data-folder-id="${encodeURIComponent(folder.id)}">
-                    <h3>${Utils.escapeHtml(folder.name)}</h3>
-                    <div class="folder-preview">
-                        ${preview || `<span>${Utils.escapeHtml(emptyLabel)}</span>`}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    },
-
     showToast(msg) {
         const div = document.createElement('div');
         div.className = 'toast show';
@@ -1156,85 +1016,21 @@ const UI = {
     },
 
     // Settings & Feedback
-    loadAppearanceSettings() {
+    loadSettings() {
         const style = getComputedStyle(document.documentElement);
         ['text', 'primary', 'bg'].forEach(k => {
             const el = document.getElementById(`cp-${k}`);
             if (el) el.value = style.getPropertyValue(`--${k}`).trim();
         });
-        this.applyAppearanceSettings();
+        this.renderToolsConfig();
     },
 
-    saveSettings() {
+    saveAppearance() {
         const p = document.getElementById('cp-primary').value;
         const bg = document.getElementById('cp-bg').value;
         const t = document.getElementById('cp-text').value;
         ThemeManager.setManual(p, bg, t);
         this.closeModal('appearance-modal');
-    },
-
-    getAppearanceSettings() {
-        return JSON.parse(localStorage.getItem('app-effects')) || { glass: true, contrast: false };
-    },
-
-    updateAppearanceSetting(key, value) {
-        const settings = this.getAppearanceSettings();
-        settings[key] = value;
-        localStorage.setItem('app-effects', JSON.stringify(settings));
-        this.applyAppearanceSettings();
-    },
-
-    applyAppearanceSettings() {
-        const settings = this.getAppearanceSettings();
-        document.body.classList.toggle('glass-off', !settings.glass);
-        document.body.classList.toggle('high-contrast', settings.contrast);
-        const glassToggle = document.getElementById('toggle-glass');
-        const contrastToggle = document.getElementById('toggle-contrast');
-        if (glassToggle) glassToggle.checked = !!settings.glass;
-        if (contrastToggle) contrastToggle.checked = !!settings.contrast;
-    },
-
-    clearDropTargets() {
-        this.els.grid.querySelectorAll('.note-card.dragging, .note-card.drop-target').forEach(el => {
-            el.classList.remove('dragging', 'drop-target');
-        });
-    },
-
-    async reorderNotes(dragId, targetId) {
-        if (!db || !state.user) return;
-        const visible = this.getVisibleNotes();
-        const fromIndex = visible.findIndex(n => n.id === decodeURIComponent(dragId));
-        const toIndex = visible.findIndex(n => n.id === decodeURIComponent(targetId));
-        if (fromIndex === -1 || toIndex === -1) return;
-        const [moved] = visible.splice(fromIndex, 1);
-        visible.splice(toIndex, 0, moved);
-        const batch = db.batch();
-        visible.forEach((note, index) => {
-            const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(note.id);
-            batch.update(ref, { order: index + 1 });
-            note.order = index + 1;
-        });
-        await batch.commit();
-        filterAndRender(document.getElementById('search-input')?.value);
-    },
-
-    getVisibleNotes() {
-        const q = state.searchQuery || '';
-        const query = q.toLowerCase().trim();
-        return state.notes.filter(n => {
-            const title = n.title || '';
-            const content = n.content || '';
-            const match = (title + content).toLowerCase().includes(query) || (n.tags || []).some(t => t.toLowerCase().includes(query));
-            if (state.view === 'notes') return match && !n.isArchived;
-            if (state.view === 'favorites') return match && !n.isArchived && n.isImportant;
-            if (state.view === 'archive') return match && n.isArchived;
-            if (state.view === 'folder') return match && !n.isArchived && n.folderId === state.activeFolderId;
-            return false;
-        });
-    },
-
-    loadEditorSettings() {
-        this.renderToolsConfig();
     },
 
     renderToolsConfig() {
@@ -1243,18 +1039,11 @@ const UI = {
             const dict = LANG[state.config.lang] || LANG.ru;
             root.innerHTML = Editor.config.map((t, i) => `
                 <div class="tool-toggle-item">
-                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[t.labelKey] || t.id}</span></div>
+                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[`tool_${t.id}`] || t.id}</span></div>
                     <button class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
                 </div>
             `).join('');
         }
-    },
-
-    updatePrimaryActionLabel() {
-        if (!this.els.fab) return;
-        const dict = LANG[state.config.lang] || LANG.ru;
-        const label = state.view === 'folders' ? dict.add_folder : dict.add_note;
-        this.els.fab.setAttribute('aria-label', label || 'Создать');
     },
 
     toggleTool(idx) {
@@ -1278,77 +1067,7 @@ const UI = {
             if (dict[k]) el.setAttribute('placeholder', dict[k]);
         });
         this.renderToolsConfig();
-        this.updatePrimaryActionLabel();
         switchView(state.view, state.activeFolderId);
-    },
-
-    openNoteActions(id) {
-        this.currentNoteActionId = id;
-        this.openModal('note-actions-modal');
-    },
-
-    downloadCurrentNote() {
-        const note = state.notes.find(n => n.id === this.currentNoteActionId);
-        if (!note) return;
-        const payload = {
-            version: 1,
-            exportedAt: new Date().toISOString(),
-            note
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        const safeTitle = (note.title || 'SmartNote').replace(/[^\w\d-_]+/g, '_');
-        link.href = url;
-        link.download = `${safeTitle}.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
-        this.closeModal('note-actions-modal');
-    },
-
-    async uploadCurrentNote() {
-        const note = state.notes.find(n => n.id === this.currentNoteActionId);
-        if (!note) return;
-        await DriveService.uploadNote(note);
-        this.closeModal('note-actions-modal');
-    },
-
-    triggerImport() {
-        document.getElementById('note-import')?.click();
-    },
-
-    async importNoteFile(file) {
-        try {
-            if (!state.user) {
-                this.showToast('Требуется вход');
-                return;
-            }
-            const text = await file.text();
-            const data = JSON.parse(text);
-            if (!data || typeof data !== 'object') throw new Error('invalid');
-            if (data.version !== 1 || !data.note) throw new Error('version');
-            const note = data.note;
-            if (!note.title && !note.content) throw new Error('empty');
-            const id = Utils.generateId();
-            const payload = {
-                id,
-                title: note.title || '',
-                content: note.content || '',
-                tags: Array.isArray(note.tags) ? note.tags : [],
-                folderId: note.folderId || null,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                authorId: state.user.uid
-            };
-            await db.collection('users').doc(state.user.uid)
-                .collection('notes').doc(id)
-                .set(payload, { merge: true });
-            this.showToast('Импортировано');
-        } catch (e) {
-            this.showToast('Ошибка импорта');
-        }
     },
 
     async submitFeedback() {
@@ -1402,29 +1121,16 @@ window.switchView = (view, folderId = null) => {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     if (!folderId) document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
 
-    const dict = LANG[state.config.lang] || LANG.ru;
-    const titles = {
-        notes: dict.all_notes,
-        favorites: dict.favorites,
-        archive: dict.archive,
-        folder: dict.folders_overview,
-        folders: dict.folders_overview
-    };
+    const titles = { notes: 'Все записи', favorites: 'Важное', archive: 'Архив', folder: 'Папка' };
     document.getElementById('current-view-title').textContent = titles[view] || 'SmartNotes';
 
     UI.toggleSidebar(false);
     filterAndRender(document.getElementById('search-input').value);
     UI.renderFolders();
-    UI.updatePrimaryActionLabel();
 };
 
 window.filterAndRender = (query = '') => {
     const q = query.toLowerCase().trim();
-    state.searchQuery = q;
-    if (state.view === 'folders') {
-        UI.renderFolderCards();
-        return;
-    }
     let res = state.notes.filter(n => {
         const title = n.title || '';
         const content = n.content || '';
@@ -1436,14 +1142,7 @@ window.filterAndRender = (query = '') => {
         return false;
     });
 
-    res.sort((a, b) => {
-        const orderA = typeof a.order === 'number' ? a.order : null;
-        const orderB = typeof b.order === 'number' ? b.order : null;
-        if (orderA !== null || orderB !== null) {
-            return (orderA ?? Number.MAX_SAFE_INTEGER) - (orderB ?? Number.MAX_SAFE_INTEGER);
-        }
-        return (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
-    });
+    res.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
     UI.renderNotes(res);
 };
 
