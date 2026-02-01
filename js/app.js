@@ -1,5 +1,6 @@
 /* ==========================================================================
-   Services
+   Services & Integrations
+   Production-Ready, Refactored Code
    ========================================================================== */
 
 const DriveService = {
@@ -7,7 +8,10 @@ const DriveService = {
     token: null,
 
     async init() {
-        if (typeof gapi === 'undefined' || typeof google === 'undefined') return;
+        if (typeof gapi === 'undefined' || typeof google === 'undefined') {
+            console.warn('Google API scripts are not available.');
+            return;
+        }
         
         await new Promise(resolve => gapi.load('client', resolve));
         await gapi.client.init({
@@ -16,14 +20,18 @@ const DriveService = {
         });
 
         this.client = google.accounts.oauth2.initTokenClient({
-            client_id: "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com",
-            scope: "https://www.googleapis.com/auth/drive.file",
+            client_id: firebaseConfig.clientId,
+            scope: DRIVE_SCOPES,
             callback: (resp) => this.handleTokenResponse(resp),
         });
     },
 
     handleTokenResponse(resp) {
-        if (resp.error) return console.error(resp);
+        if (resp.error) {
+            UI.showToast("Ошибка подключения Google Drive");
+            console.error('Google Drive Token Error:', resp);
+            return;
+        }
         this.token = resp.access_token;
         state.driveToken = resp.access_token;
         UI.showToast("Google Drive подключен");
@@ -31,7 +39,10 @@ const DriveService = {
     },
 
     connect() {
-        if (!this.client) return UI.showToast("Сервис Drive не доступен");
+        if (!this.client) {
+            UI.showToast("Сервис Google Drive не инициализирован");
+            return;
+        }
         this.client.requestAccessToken({ prompt: 'consent' });
     },
 
@@ -48,15 +59,18 @@ const DriveService = {
         form.append('file', new Blob([JSON.stringify(state.currentNote)], { type: 'application/json' }));
 
         try {
-            await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${this.token}` },
                 body: form
             });
-            UI.showToast("Сохранено в Drive");
+            if (!response.ok) {
+                 throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            UI.showToast("Заметка сохранена в Google Drive");
         } catch (e) {
-            console.error(e);
-            UI.showToast("Ошибка синхронизации");
+            console.error("Drive Sync Error:", e);
+            UI.showToast("Ошибка синхронизации с Drive");
         }
     }
 };
@@ -70,40 +84,43 @@ const VoiceService = {
     },
 
     async start() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            UI.showToast("API для записи аудио не поддерживается");
+            return;
+        }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             this.recorder = new MediaRecorder(stream);
             this.chunks = [];
             
             this.recorder.ondataavailable = e => this.chunks.push(e.data);
-            this.recorder.onstop = () => this.processAudio();
+            this.recorder.onstop = () => this.processAudio(stream);
             
             this.recorder.start();
             state.recording = true;
             
-            UI.showToast("Запись...");
             document.getElementById('voice-indicator').classList.add('active');
         } catch (e) {
-            UI.showToast("Нет доступа к микрофону");
+            console.error("VoiceService Start Error:", e);
+            UI.showToast("Нет доступа к микрофону или произошла ошибка");
         }
     },
 
     stop() {
-        if (!this.recorder) return;
+        if (!this.recorder || this.recorder.state === "inactive") return;
         this.recorder.stop();
         state.recording = false;
         document.getElementById('voice-indicator').classList.remove('active');
     },
 
-    processAudio() {
+    processAudio(stream) {
+        stream.getTracks().forEach(track => track.stop());
+        const audioBlob = new Blob(this.chunks, { type: 'audio/mp3' });
         const reader = new FileReader();
         reader.onloadend = () => {
-            const id = Utils.generateId();
-            const html = `<div class="media-wrapper" id="${id}" contenteditable="false" style="padding:10px; background:rgba(255,255,255,0.05); border-radius:10px;"><audio controls src="${reader.result}"></audio></div><br>`;
-            document.execCommand('insertHTML', false, html);
-            Editor.snapshot();
+            Editor.insertMedia(reader.result, 'audio');
         };
-        reader.readAsDataURL(new Blob(this.chunks, { type: 'audio/mp3' }));
+        reader.readAsDataURL(audioBlob);
     }
 };
 
@@ -112,6 +129,8 @@ const SketchService = {
     ctx: null,
     drawing: false,
     history: [],
+    colorPicker: null,
+    widthPicker: null,
 
     init() {
         this.canvas = document.getElementById('sketch-canvas');
@@ -121,6 +140,7 @@ const SketchService = {
         
         this.setupCanvas();
         this.bindEvents();
+        this.clear();
     },
 
     setupCanvas() {
@@ -129,7 +149,6 @@ const SketchService = {
         this.canvas.height = rect.height;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
-        this.saveState();
     },
 
     bindEvents() {
@@ -151,7 +170,7 @@ const SketchService = {
 
         const move = (e) => {
             if (!this.drawing) return;
-            e.preventDefault();
+            e.preventDefault(); // Prevent scrolling on touch devices
             const pos = getPos(e);
             this.ctx.lineTo(pos.x, pos.y);
             this.ctx.stroke();
@@ -176,18 +195,19 @@ const SketchService = {
     },
 
     saveState() {
-        if (this.history.length > 10) this.history.shift();
+        if (this.history.length > 20) this.history.shift();
         this.history.push(this.canvas.toDataURL());
     },
 
     undo() {
         if (this.history.length <= 1) {
-            this.clear();
+            this.clear(false); // don't save state again
             return;
         }
         this.history.pop();
+        const lastState = this.history[this.history.length - 1];
         const img = new Image();
-        img.src = this.history[this.history.length - 1];
+        img.src = lastState;
         img.onload = () => {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             this.ctx.drawImage(img, 0, 0);
@@ -195,30 +215,31 @@ const SketchService = {
     },
 
     save() {
-        const html = `<div class="media-wrapper"><img src="${this.canvas.toDataURL('image/png')}" style="max-width:100%; border-radius:12px;"></div><br>`;
-        document.execCommand('insertHTML', false, html);
+        Editor.insertMedia(this.canvas.toDataURL('image/png'), 'image');
         UI.closeModal('sketch-modal');
-        Editor.snapshot();
     },
 
-    clear() {
+    clear(save = true) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.history = [];
-        this.saveState();
+        if (save) this.saveState();
     }
 };
 
 const ReminderService = {
     init() {
-        if (Notification.permission !== "granted") Notification.requestPermission();
+        if ('Notification' in window && Notification.permission !== "granted") {
+            Notification.requestPermission();
+        }
         setInterval(() => this.check(), 60000);
     },
 
     check() {
+        if (!state.notes || state.notes.length === 0) return;
         const now = new Date();
         state.notes.forEach(note => {
             if (note.reminder && new Date(note.reminder) <= now && !note.reminderSent) {
-                new Notification("SmartNotes", { body: note.title });
+                new Notification("SmartNotes Reminder", { body: note.title || "Без названия" });
                 this.markAsSent(note.id);
             }
         });
@@ -229,7 +250,7 @@ const ReminderService = {
         state.currentNote.reminder = dateStr;
         state.currentNote.reminderSent = false;
         Editor.save();
-        UI.showToast(`Напоминание: ${new Date(dateStr).toLocaleString()}`);
+        UI.showToast(`Напоминание установлено: ${new Date(dateStr).toLocaleString()}`);
     },
 
     async markAsSent(id) {
@@ -252,14 +273,21 @@ const Editor = {
         { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider' },
         { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true },
         { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true },
+        { id: 'underline', icon: 'format_underlined', cmd: 'underline', active: true },
+        { id: 'strike', icon: 'strikethrough_s', cmd: 'strikeThrough', active: true },
+        { id: 'h1', icon: 'looks_one', cmd: 'formatBlock', val: 'H1', active: true },
+        { id: 'h2', icon: 'looks_two', cmd: 'formatBlock', val: 'H2', active: true },
         { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true },
+        { id: 'list_ol', icon: 'format_list_numbered', cmd: 'insertOrderedList', active: true },
         { id: 'task', icon: 'check_circle', cmd: 'task', active: true },
+        { id: 'link', icon: 'link', cmd: 'link', active: true },
         { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true },
         { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true },
-        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true },
+        { id: 'image', icon: 'image', cmd: 'image', active: true },
         { id: 'voice', icon: 'mic', cmd: 'voice', active: true },
         { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true },
         { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true },
+        { id: 'alarm', icon: 'alarm', cmd: 'alarm', active: true },
         { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true }
     ],
 
@@ -286,15 +314,14 @@ const Editor = {
     },
 
     bindEvents() {
-        const change = () => {
-            this.snapshot();
-        };
+        const change = () => this.snapshot();
         
-        this.els.title.oninput = () => { this.snapshot(); this.triggerSave(); };
+        this.els.title.oninput = change;
         this.els.content.oninput = change;
         
         this.els.tags.onkeydown = e => {
             if (e.key === 'Enter' && e.target.value.trim()) {
+                e.preventDefault();
                 this.addTag(e.target.value.trim().replace(/^#/, ''));
                 e.target.value = '';
                 this.snapshot();
@@ -302,9 +329,7 @@ const Editor = {
         };
 
         this.els.content.addEventListener('click', e => {
-            if (e.target.classList.contains('task-checkbox')) {
-                this.toggleTask(e.target);
-            }
+            if (e.target.classList.contains('task-checkbox')) this.toggleTask(e.target);
             
             const mediaWrapper = e.target.closest('.media-wrapper');
             if (mediaWrapper) {
@@ -316,12 +341,8 @@ const Editor = {
         });
 
         document.addEventListener('click', e => {
-            if (!e.target.closest('.media-wrapper') && !e.target.closest('#media-context-menu')) {
-                this.deselectMedia();
-            }
-            if (!e.target.closest('#text-size-popup') && !e.target.closest('[data-action="toggleSizeSlider"]')) {
-                this.els.sizePopup.classList.add('hidden');
-            }
+            if (!e.target.closest('.media-wrapper') && !e.target.closest('#media-context-menu')) this.deselectMedia();
+            if (!e.target.closest('#text-size-popup') && !e.target.closest('[data-action="toggleSizeSlider"]')) this.els.sizePopup.classList.add('hidden');
         });
 
         this.els.sizeRange.oninput = (e) => {
@@ -361,34 +382,17 @@ const Editor = {
         this.els.content.innerHTML = n.content || '';
         this.renderTags();
     },
-
-    renderTags() {
-        const container = document.getElementById('note-tags-container');
-        container.innerHTML = (state.currentNote.tags || []).map(t => `
-            <span class="tag-chip">#${t}<i class="material-icons-round" onclick="Editor.removeTag('${t}')">close</i></span>
-        `).join('');
-    },
-
-    addTag(tag) {
-        if (!state.currentNote.tags) state.currentNote.tags = [];
-        if (!state.currentNote.tags.includes(tag)) {
-            state.currentNote.tags.push(tag);
-            this.renderTags();
-        }
-    },
-
-    removeTag(tag) {
-        state.currentNote.tags = state.currentNote.tags.filter(t => t !== tag);
-        this.renderTags();
-        this.snapshot();
-    },
-
+    
     insertMedia(src, type) {
         const id = Utils.generateId();
         let html = '';
+        
         if (type === 'image') {
             html = `<div class="media-wrapper" id="${id}" contenteditable="false"><img src="${src}"></div><br>`;
+        } else if (type === 'audio') {
+            html = `<div class="media-wrapper" id="${id}" contenteditable="false" style="padding:10px; background:rgba(255,255,255,0.05); border-radius:10px;"><audio controls src="${src}"></audio></div><br>`;
         }
+        
         document.execCommand('insertHTML', false, html);
         this.snapshot();
     },
@@ -422,8 +426,7 @@ const Editor = {
     alignMedia(align) {
         if (this.selectedMedia) {
             this.selectedMedia.style.display = 'block';
-            this.selectedMedia.style.textAlign = align;
-            this.selectedMedia.style.margin = align === 'center' ? '10px auto' : (align === 'right' ? '10px 0 10px auto' : '10px 0');
+            this.selectedMedia.style.margin = align === 'center' ? '10px auto' : (align === 'right' ? '10px 0 10px auto' : '10px auto 10px 0');
             this.snapshot();
         }
     },
@@ -440,21 +443,14 @@ const Editor = {
             },
             task: () => {
                 const id = Utils.generateId();
-                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">Задача</span></div><br>`;
-                document.execCommand('insertHTML', false, html);
+                document.execCommand('insertHTML', false, `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">Задача</span></div><br>`);
             },
             voice: () => VoiceService.toggle(),
             image: () => document.getElementById('img-upload').click(),
             sketch: () => { UI.openModal('sketch-modal'); SketchService.init(); },
             drive: () => DriveService.connect(),
-            alarm: () => {
-                const d = prompt("Дата (YYYY-MM-DDTHH:MM)");
-                if (d) ReminderService.set(d);
-            },
-            link: () => {
-                const url = prompt("URL или ID:");
-                if (url) document.execCommand('insertHTML', false, `<a href="${url.startsWith('http') ? url : '#note/'+url}" class="internal-link" contenteditable="false">Ссылка</a>`);
-            },
+            alarm: () => UI.showPrompt("Напоминание", "Дата (YYYY-MM-DDTHH:MM)", d => { if (d) ReminderService.set(d); }),
+            link: () => UI.showPrompt("Вставить ссылку", "URL или ID заметки", url => { if (url) document.execCommand('insertHTML', false, `<a href="${url.startsWith('http') ? url : '#note/'+url}" class="internal-link" contenteditable="false">Ссылка</a>`); }),
             clear: () => document.execCommand('removeFormat')
         };
 
@@ -462,7 +458,6 @@ const Editor = {
         else document.execCommand(cmd, false, val);
         
         this.snapshot();
-        this.updateToolbarState();
     },
 
     toggleTask(el) {
@@ -481,13 +476,13 @@ const Editor = {
         if (last && last.t === current.t && last.c === current.c && JSON.stringify(last.tags) === JSON.stringify(current.tags)) return;
 
         this.history.push(current);
-        if (this.history.length > 30) this.history.shift();
+        if (this.history.length > 50) this.history.shift();
         this.future = [];
         this.triggerSave();
     },
 
     undo() {
-        if (!this.history.length) return;
+        if (this.history.length <= 1) return;
         this.future.push(this.getCurrentState());
         this.applyState(this.history.pop());
     },
@@ -502,7 +497,7 @@ const Editor = {
         return {
             t: this.els.title.value,
             c: this.els.content.innerHTML,
-            tags: [...state.currentNote.tags]
+            tags: [...(state.currentNote.tags || [])]
         };
     },
 
@@ -515,14 +510,14 @@ const Editor = {
         this.triggerSave();
     },
 
-    triggerSave() {
-        clearTimeout(this.timer);
-        document.getElementById('last-edited').innerText = '...';
-        this.timer = setTimeout(() => this.save(), 1000);
-    },
+    triggerSave: Utils.debounce(function() { this.save(); }, 1000),
 
     async save() {
         if (!state.user || !state.currentNote) return;
+        
+        const statusEl = document.getElementById('last-edited');
+        if (statusEl) statusEl.innerText = '...';
+
         state.currentNote.title = this.els.title.value;
         state.currentNote.content = this.els.content.innerHTML;
         state.currentNote.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -530,25 +525,29 @@ const Editor = {
 
         try {
             await db.collection('users').doc(state.user.uid).collection('notes').doc(state.currentNote.id).set(state.currentNote, { merge: true });
-            document.getElementById('last-edited').innerText = 'Сохранено';
+            if (statusEl) statusEl.innerText = 'Сохранено';
         } catch (e) {
-            console.error(e);
+            console.error("Save Error:", e);
+            if (statusEl) statusEl.innerText = 'Ошибка';
         }
     },
 
-    async manualSave() { await this.save(); this.close(); },
+    async manualSave() { 
+        await this.save(); 
+        this.close(true);
+    },
 
     deleteCurrent() {
         UI.confirm('delete', async () => {
-            if (state.currentNote.id) {
+            if (state.currentNote && state.currentNote.id) {
                 await db.collection('users').doc(state.user.uid).collection('notes').doc(state.currentNote.id).delete();
             }
             this.close(true);
         });
     },
 
-    close(skip = false) {
-        if (!skip) this.save();
+    close(skipSave = false) {
+        if (!skipSave) this.save();
         this.els.wrapper.classList.remove('active');
         state.currentNote = null;
     },
@@ -556,18 +555,35 @@ const Editor = {
     renderToolbar() {
         this.els.toolbar.innerHTML = this.config.map(t => {
             if (!t.active) return '';
+            const action = t.action || t.cmd;
             if (t.color) return `
                 <div class="tool-wrapper">
-                    <label class="tool-btn"><i class="material-icons-round" style="color:var(--text)">${t.icon}</i>
+                    <label class="tool-btn"><i class="material-icons-round">${t.icon}</i>
                     <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)">
                     </label>
                 </div>`;
-            return `<button class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')"><i class="material-icons-round">${t.icon}</i></button>`;
+            return `<button class="tool-btn" data-action="${action}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')"><i class="material-icons-round">${t.icon}</i></button>`;
         }).join('');
     },
 
-    updateToolbarState() {
-        // Implementation for active button states can be added here
+    addTag(tag) {
+        if (!state.currentNote.tags) state.currentNote.tags = [];
+        if (!state.currentNote.tags.includes(tag) && state.currentNote.tags.length < 10) {
+            state.currentNote.tags.push(tag);
+            this.renderTags();
+        }
+    },
+
+    removeTag(tag) {
+        state.currentNote.tags = state.currentNote.tags.filter(t => t !== tag);
+        this.renderTags();
+        this.snapshot();
+    },
+
+    renderTags() {
+        document.getElementById('note-tags-container').innerHTML = (state.currentNote.tags || []).map(t => 
+            `<span class="tag-chip">#${t}<i class="material-icons-round" onclick="Editor.removeTag('${t}')">close</i></span>`
+        ).join('');
     }
 };
 
@@ -615,9 +631,10 @@ const UI = {
         });
         
         document.body.addEventListener('click', e => {
-            if (e.target.tagName === 'A' && e.target.getAttribute('href').startsWith('#note/')) {
+            const link = e.target.closest('a');
+            if (link && link.getAttribute('href')?.startsWith('#note/')) {
                 e.preventDefault();
-                const id = e.target.getAttribute('href').replace('#note/', '');
+                const id = link.getAttribute('href').replace('#note/', '');
                 const note = state.notes.find(n => n.id === id);
                 if (note) Editor.open(note);
             }
@@ -628,14 +645,14 @@ const UI = {
     toggleUserMenu(force) { this.els.userMenu.classList.toggle('active', force); },
 
     openModal(id) {
-        document.getElementById(id).classList.add('active');
+        document.getElementById(id)?.classList.add('active');
         this.toggleSidebar(false);
         if (id === 'settings-modal') this.loadSettings();
     },
 
     closeModal(id) {
-        document.getElementById(id).classList.remove('active');
-        if (id === 'settings-modal') ThemeManager.revertToLastSaved();
+        document.getElementById(id)?.classList.remove('active');
+        if (id === 'settings-modal' && typeof ThemeManager.revertToLastSaved === 'function') ThemeManager.revertToLastSaved();
         
         if (id === 'about-modal') {
              const list = document.querySelector('.team-list');
@@ -653,11 +670,11 @@ const UI = {
     showConfirm(type, cb) { this.confirm(type, cb); },
 
     confirm(type, cb) {
-        const titles = { delete: 'Удалить?', exit: 'Выйти?', account: 'Сменить аккаунт?', delete_f: 'Удалить папку?' };
+        const titles = { delete: 'Удалить заметку?', exit: 'Выйти из аккаунта?', account: 'Сменить аккаунт?', delete_f: 'Удалить папку и все заметки в ней?' };
         document.getElementById('confirm-title').textContent = titles[type] || 'Подтвердите';
         
         const okBtn = document.getElementById('confirm-ok');
-        const newBtn = okBtn.cloneNode(true);
+        const newBtn = okBtn.cloneNode(true); // Dereference event listeners
         okBtn.parentNode.replaceChild(newBtn, okBtn);
         
         newBtn.onclick = () => {
@@ -682,7 +699,6 @@ const UI = {
         const finish = (val) => {
             if (val) cb(val);
             modal.classList.remove('active');
-            input.onkeydown = null; 
         };
 
         const okClone = ok.cloneNode(true);
@@ -710,26 +726,20 @@ const UI = {
 
     renderNotes(notes) {
         this.els.empty.classList.toggle('hidden', notes.length > 0);
-        this.els.grid.innerHTML = notes.map(n => `
-            <div class="note-card" onclick='Editor.open(${JSON.stringify(n).replace(/'/g, "&#39;")})'>
+        this.els.grid.innerHTML = notes.map(n => {
+            const safeNote = JSON.stringify(n).replace(/'/g, "&#39;");
+            return `
+            <div class="note-card" onclick='Editor.open(${safeNote})'>
                 <div class="card-actions">
-                    <button class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})">
-                        <i class="material-icons-round">push_pin</i>
-                    </button>
-                    <button class="action-btn ${n.isImportant ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isImportant', ${!n.isImportant})">
-                        <i class="material-icons-round">star</i>
-                    </button>
-                    <button class="action-btn" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isArchived', ${!n.isArchived})">
-                        <i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i>
-                    </button>
+                    <button class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})"><i class="material-icons-round">push_pin</i></button>
+                    <button class="action-btn ${n.isImportant ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isImportant', ${!n.isImportant})"><i class="material-icons-round">star</i></button>
+                    <button class="action-btn" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isArchived', ${!n.isArchived})"><i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i></button>
                 </div>
                 <h3>${n.title || 'Без названия'}</h3>
                 <p>${Utils.stripHtml(n.content) || 'Нет содержимого'}</p>
-                <div class="tags-list">
-                    ${(n.tags || []).map(t => `<span class="tag-chip">#${t}</span>`).join('')}
-                </div>
+                <div class="tags-list">${(n.tags || []).map(t => `<span class="tag-chip">#${t}</span>`).join('')}</div>
             </div>
-        `).join('');
+        `}).join('');
     },
 
     showToast(msg) {
@@ -737,7 +747,7 @@ const UI = {
         div.className = 'toast show';
         div.textContent = msg;
         document.getElementById('toast-container').appendChild(div);
-        setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 300); }, 2000);
+        setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 300); }, 2500);
     },
 
     loadSettings() {
@@ -746,7 +756,7 @@ const UI = {
             const el = document.getElementById(`cp-${k}`);
             if(el) el.value = style.getPropertyValue(`--${k}`).trim();
         });
-        UI.renderToolsConfig();
+        this.renderToolsConfig();
     },
 
     saveSettings() {
@@ -792,13 +802,13 @@ const UI = {
         await db.collection('feedback').add({
             uid: state.user.uid, rating: state.tempRating, text, ts: firebase.firestore.FieldValue.serverTimestamp()
         });
-        this.showToast('Спасибо!');
+        this.showToast('Спасибо за обратную связь!');
         this.closeModal('rate-modal');
     }
 };
 
 /* ==========================================================================
-   Global App Logic
+   Global App Logic & Event Listeners
    ========================================================================== */
 
 function initApp() {
@@ -818,7 +828,7 @@ function initApp() {
         .onSnapshot(snap => {
             state.notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             filterAndRender(document.getElementById('search-input')?.value);
-        });
+        }, err => console.error("Firestore notes listener error:", err));
 }
 
 window.switchView = (view, folderId = null) => {
@@ -826,20 +836,29 @@ window.switchView = (view, folderId = null) => {
     state.activeFolderId = folderId;
     
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    if(!folderId) document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
+    if(!folderId) {
+        document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
+    } else {
+        // If it's a folder view, the renderFolders function will handle the active state
+    }
     
-    const titles = { notes: 'Все записи', favorites: 'Важное', archive: 'Архив', folder: 'Папка' };
+    const folder = state.folders.find(f => f.id === folderId);
+    const titles = { notes: 'Все записи', favorites: 'Важное', archive: 'Архив', folder: folder?.name || "Папка" };
     document.getElementById('current-view-title').textContent = titles[view] || 'SmartNotes';
     
     UI.toggleSidebar(false);
-    filterAndRender(document.getElementById('search-input').value);
+    filterAndRender(document.getElementById('search-input')?.value);
     UI.renderFolders();
 };
 
 window.filterAndRender = (query = '') => {
     const q = query.toLowerCase().trim();
     let res = state.notes.filter(n => {
-        const match = (n.title+n.content).toLowerCase().includes(q) || (n.tags||[]).some(t => t.includes(q));
+        const titleMatch = (n.title || '').toLowerCase().includes(q);
+        const contentMatch = (n.content || '').toLowerCase().includes(q);
+        const tagsMatch = (n.tags||[]).some(t => t.toLowerCase().includes(q));
+        const match = titleMatch || contentMatch || tagsMatch;
+
         if (state.view === 'notes') return match && !n.isArchived;
         if (state.view === 'favorites') return match && !n.isArchived && n.isImportant;
         if (state.view === 'archive') return match && n.isArchived;
@@ -855,23 +874,23 @@ window.toggleProp = async (id, prop, val) => {
     const update = { [prop]: val };
     if (prop === 'isArchived' && val) update.isPinned = false;
     await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update(update);
-    if(prop === 'isArchived') UI.showToast(val ? "В архиве" : "Восстановлено");
-};
-
-window.openNoteById = (id) => {
-    const note = state.notes.find(n => n.id === id);
-    if(note) Editor.open(note);
+    if(prop === 'isArchived') UI.showToast(val ? "Заметка в архиве" : "Заметка восстановлена");
 };
 
 window.deleteFolder = (id) => {
     UI.confirm('delete_f', async () => {
         await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
+        // Optional: Also delete notes within this folder
+        // const notesToDelete = await db.collection('users').doc(state.user.uid).collection('notes').where('folderId', '==', id).get();
+        // const batch = db.batch();
+        // notesToDelete.docs.forEach(doc => batch.delete(doc.ref));
+        // await batch.commit();
         if(state.view === 'folder' && state.activeFolderId === id) switchView('notes');
     });
 };
 
 document.getElementById('add-folder-btn').onclick = () => {
-    if (state.folders.length >= 10) return UI.showToast("Лимит папок (10)");
+    if (state.folders.length >= 10) return UI.showToast("Достигнут лимит папок (10)");
     
     UI.showPrompt("Новая папка", "Название...", async (name) => {
         await db.collection('users').doc(state.user.uid).collection('folders').add({
@@ -880,13 +899,17 @@ document.getElementById('add-folder-btn').onclick = () => {
     });
 };
 
+// Easter Egg
 let eggSeq = 0;
 document.addEventListener('click', e => {
-    if(e.target.classList.contains('name-kopaev')) eggSeq = 1;
-    else if(e.target.classList.contains('name-minyaev') && eggSeq === 1) {
+    if(e.target.classList.contains('name-kopaev')) {
+        eggSeq = 1;
+    } else if(e.target.classList.contains('name-minyaev') && eggSeq === 1) {
         const list = document.querySelector('.team-list');
         list.innerHTML = `<li class="team-member" style="color:#00f2ff;font-size:1.5rem;text-shadow:0 0 20px #00f2ff">Тайлер²</li>`;
         UI.showToast("System Override");
         eggSeq = 0;
-    } else eggSeq = 0;
+    } else {
+        eggSeq = 0;
+    }
 });
