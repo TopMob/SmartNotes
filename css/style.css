@@ -656,14 +656,14 @@ body {
 }
 
 .task-checkbox {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border: 2px solid var(--primary);
     border-radius: 6px;
     flex-shrink: 0;
     cursor: pointer;
     position: relative;
-    margin-top: 4px;
+    margin-top: 2px;
     transition: 0.2s;
 }
 
@@ -1133,7 +1133,7 @@ body {
     background: transparent;
     border: none;
     color: var(--text);
-    padding: 8px;
+    padding: 10px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
@@ -1326,11 +1326,16 @@ body {
     border: 2px solid transparent;
     border-radius: 12px;
     transition: 0.2s;
+    cursor: grab;
 }
 
 .media-wrapper.selected {
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(0, 242, 255, 0.1);
+}
+
+.media-wrapper:active {
+    cursor: grabbing;
 }
 
 .media-wrapper img {
@@ -1357,7 +1362,7 @@ body {
     background: transparent;
     border: none;
     color: var(--text);
-    padding: 8px;
+    padding: 10px;
     border-radius: 8px;
     cursor: pointer;
     display: flex;

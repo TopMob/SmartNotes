@@ -302,6 +302,16 @@ const ThemeManager = {
         localStorage.setItem('app-theme-settings', JSON.stringify({ p: primary, bg: bg, t: text }));
     },
 
+    getSavedTheme() {
+        return JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
+    },
+
+    revertToLastSaved() {
+        const saved = this.getSavedTheme();
+        this.setManual(saved.p, saved.bg, saved.t);
+        this.renderPicker();
+    },
+
     applyCSS(p, bg, t) {
         const root = document.documentElement;
         root.style.setProperty('--primary', p);

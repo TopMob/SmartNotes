@@ -314,7 +314,15 @@ const Editor = {
 
     loadConfig() {
         const saved = localStorage.getItem('editor-tools');
-        this.config = saved ? JSON.parse(saved) : this.configDefault;
+        if (!saved) {
+            this.config = this.configDefault;
+            return;
+        }
+        const parsed = JSON.parse(saved);
+        this.config = this.configDefault.map(tool => {
+            const existing = parsed.find(item => item.id === tool.id);
+            return { ...tool, ...existing };
+        });
     },
 
     bindEvents() {
@@ -356,6 +364,32 @@ const Editor = {
             }
         });
 
+        this.els.content.addEventListener('dragstart', (e) => {
+            const mediaWrapper = e.target.closest('.media-wrapper');
+            if (!mediaWrapper) return;
+            this.draggedMedia = mediaWrapper;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'media');
+        });
+
+        this.els.content.addEventListener('dragover', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+        });
+
+        this.els.content.addEventListener('drop', (e) => {
+            if (!this.draggedMedia) return;
+            e.preventDefault();
+            const range = this.getRangeFromPoint(e.clientX, e.clientY);
+            if (range) {
+                range.insertNode(this.draggedMedia);
+            } else {
+                this.els.content.appendChild(this.draggedMedia);
+            }
+            this.draggedMedia = null;
+            this.snapshot();
+        });
+
         // Global Clicks (Context Menus)
         document.addEventListener('click', e => {
             if (!e.target.closest('.media-wrapper') && !e.target.closest('#media-context-menu')) {
@@ -368,6 +402,7 @@ const Editor = {
 
         // Font Size
         this.els.sizeRange.oninput = (e) => {
+            this.restoreSelection();
             document.execCommand('fontSize', false, e.target.value);
             this.snapshot();
         };
@@ -404,6 +439,7 @@ const Editor = {
         this.els.title.value = n.title || '';
         this.els.content.innerHTML = n.content || '';
         this.renderTags();
+        this.makeMediaDraggable();
     },
 
     // Media Logic
@@ -411,10 +447,11 @@ const Editor = {
         const id = Utils.generateId();
         let html = '';
         if (type === 'image') {
-            html = `<div class="media-wrapper" id="${id}" contenteditable="false"><img src="${src}"></div><br>`;
+            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true"><img src="${src}" alt=""></div><br>`;
         }
         document.execCommand('insertHTML', false, html);
         this.snapshot();
+        this.makeMediaDraggable();
     },
 
     selectMedia(el) {
@@ -452,22 +489,85 @@ const Editor = {
         }
     },
 
+    alignMediaOrText(align) {
+        if (this.selectedMedia) {
+            this.alignMedia(align);
+            return;
+        }
+        const commands = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
+        const cmd = commands[align];
+        if (cmd) {
+            document.execCommand(cmd, false, null);
+        }
+    },
+
+    getRangeFromPoint(x, y) {
+        if (document.caretRangeFromPoint) {
+            return document.caretRangeFromPoint(x, y);
+        }
+        if (document.caretPositionFromPoint) {
+            const position = document.caretPositionFromPoint(x, y);
+            const range = document.createRange();
+            range.setStart(position.offsetNode, position.offset);
+            range.collapse(true);
+            return range;
+        }
+        return null;
+    },
+
+    makeMediaDraggable() {
+        this.els.content.querySelectorAll('.media-wrapper').forEach(wrapper => {
+            wrapper.setAttribute('draggable', 'true');
+        });
+    },
+
+    saveSelection() {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        this.savedRange = selection.getRangeAt(0).cloneRange();
+    },
+
+    restoreSelection() {
+        if (!this.savedRange) return;
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(this.savedRange);
+    },
+
     // Exec Commands
     exec(cmd, val = null) {
         this.els.content.focus();
 
         const actions = {
             toggleSizeSlider: () => {
-                const rect = document.querySelector('[data-action="toggleSizeSlider"]').getBoundingClientRect();
+                const target = document.querySelector('[data-action="toggleSizeSlider"]');
+                if (!target) return;
+                const rect = target.getBoundingClientRect();
                 this.els.sizePopup.style.bottom = '60px';
                 this.els.sizePopup.style.left = `${rect.left + rect.width / 2}px`;
                 this.els.sizePopup.classList.toggle('hidden');
+                if (!this.els.sizePopup.classList.contains('hidden')) {
+                    this.saveSelection();
+                }
             },
             task: () => {
                 const id = Utils.generateId();
-                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">Задача</span></div><br>`;
+                const label = LANG[state.config.lang]?.task_item || 'Задача';
+                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">${Utils.escapeHtml(label)}</span></div>`;
                 document.execCommand('insertHTML', false, html);
+                const taskText = this.els.content.querySelector(`#${id} .task-text`);
+                if (taskText) {
+                    const range = document.createRange();
+                    range.selectNodeContents(taskText);
+                    range.collapse(false);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
             },
+            align_left: () => this.alignMediaOrText('left'),
+            align_center: () => this.alignMediaOrText('center'),
+            align_right: () => this.alignMediaOrText('right'),
             voice: () => VoiceService.toggle(),
             image: () => document.getElementById('img-upload').click(),
             sketch: () => { UI.openModal('sketch-modal'); SketchService.init(); },
@@ -582,10 +682,10 @@ const Editor = {
             if (t.color) return `
                 <div class="tool-wrapper">
                     <label class="tool-btn"><i class="material-icons-round" style="color:var(--text)">${t.icon}</i>
-                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)">
+                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(LANG[state.config.lang]?.[t.labelKey] || t.id)}">
                     </label>
                 </div>`;
-            return `<button class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')"><i class="material-icons-round">${t.icon}</i></button>`;
+            return `<button class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(LANG[state.config.lang]?.[t.labelKey] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
         }).join('');
     },
 
@@ -853,6 +953,12 @@ const UI = {
             const k = el.getAttribute('data-lang');
             if (dict[k]) el.textContent = dict[k];
         });
+        document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+            const k = el.getAttribute('data-lang-placeholder');
+            if (dict[k]) el.setAttribute('placeholder', dict[k]);
+        });
+        this.renderToolsConfig();
+        switchView(state.view, state.activeFolderId);
     },
 
     async submitFeedback() {
