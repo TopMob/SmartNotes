@@ -233,125 +233,6 @@ const SketchService = {
     }
 };
 
-const PhotoEditor = {
-    canvas: null,
-    ctx: null,
-    drawing: false,
-    history: [],
-    targetImg: null,
-    els: {},
-
-    open() {
-        if (!Editor.selectedMedia) {
-            UI.showToast("Выберите изображение");
-            return;
-        }
-        this.targetImg = Editor.selectedMedia.querySelector('img');
-        if (!this.targetImg) {
-            UI.showToast("Изображение не найдено");
-            return;
-        }
-        UI.openModal('photo-editor-modal');
-        this.init();
-    },
-
-    init() {
-        this.canvas = document.getElementById('photo-editor-canvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.els = {
-            color: document.getElementById('photo-color-picker'),
-            width: document.getElementById('photo-width-picker')
-        };
-        this.loadImage();
-        this.bindEvents();
-    },
-
-    loadImage() {
-        const img = new Image();
-        img.onload = () => {
-            this.canvas.width = img.naturalWidth || img.width;
-            this.canvas.height = img.naturalHeight || img.height;
-            this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.lineCap = 'round';
-            this.ctx.lineJoin = 'round';
-            this.saveState();
-        };
-        img.src = this.targetImg.src;
-    },
-
-    bindEvents() {
-        const getPos = (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-            return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-        };
-
-        const start = (e) => {
-            this.drawing = true;
-            this.ctx.beginPath();
-            this.ctx.strokeStyle = this.els.color.value;
-            this.ctx.lineWidth = this.els.width.value;
-            const pos = getPos(e);
-            this.ctx.moveTo(pos.x, pos.y);
-        };
-
-        const move = (e) => {
-            if (!this.drawing) return;
-            e.preventDefault();
-            const pos = getPos(e);
-            this.ctx.lineTo(pos.x, pos.y);
-            this.ctx.stroke();
-        };
-
-        const end = () => {
-            if (!this.drawing) return;
-            this.drawing = false;
-            this.ctx.closePath();
-            this.saveState();
-        };
-
-        this.canvas.onmousedown = start;
-        this.canvas.onmousemove = move;
-        this.canvas.onmouseup = end;
-        this.canvas.onmouseout = end;
-
-        this.canvas.addEventListener('touchstart', start, { passive: true });
-        this.canvas.addEventListener('touchmove', move, { passive: false });
-        this.canvas.addEventListener('touchend', end, { passive: true });
-    },
-
-    saveState() {
-        if (this.history.length > 10) this.history.shift();
-        this.history.push(this.canvas.toDataURL());
-    },
-
-    undo() {
-        if (this.history.length <= 1) return this.clear();
-        this.history.pop();
-        const img = new Image();
-        img.src = this.history[this.history.length - 1];
-        img.onload = () => {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.drawImage(img, 0, 0);
-        };
-    },
-
-    clear() {
-        this.history = [];
-        this.loadImage();
-    },
-
-    save() {
-        if (!this.targetImg) return;
-        this.targetImg.src = this.canvas.toDataURL('image/png');
-        UI.closeModal('photo-editor-modal');
-        Editor.snapshot();
-    }
-};
-
 const ReminderService = {
     init() {
         if (!('Notification' in window)) return;
@@ -399,21 +280,18 @@ const Editor = {
     els: {},
 
     configDefault: [
-        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider', labelKey: 't_size' },
-        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true, labelKey: 't_bold' },
-        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true, labelKey: 't_italic' },
-        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true, labelKey: 't_list' },
-        { id: 'task', icon: 'check_circle', cmd: 'task', active: true, labelKey: 't_check' },
-        { id: 'align_left', icon: 'format_align_left', cmd: 'align_left', active: true, labelKey: 't_align_left' },
-        { id: 'align_center', icon: 'format_align_center', cmd: 'align_center', active: true, labelKey: 't_align_center' },
-        { id: 'align_right', icon: 'format_align_right', cmd: 'align_right', active: true, labelKey: 't_align_right' },
-        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true, labelKey: 't_color' },
-        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true, labelKey: 't_highlight' },
-        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true, labelKey: 't_image' },
-        { id: 'voice', icon: 'mic', cmd: 'voice', active: true, labelKey: 't_mic' },
-        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true, labelKey: 't_sketch' },
-        { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true, labelKey: 't_drive' },
-        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true, labelKey: 't_clear' }
+        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider' },
+        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true },
+        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true },
+        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true },
+        { id: 'task', icon: 'check_circle', cmd: 'task', active: true },
+        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true },
+        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true },
+        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true },
+        { id: 'voice', icon: 'mic', cmd: 'voice', active: true },
+        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true },
+        { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true },
+        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true }
     ],
 
     init() {
@@ -428,8 +306,6 @@ const Editor = {
             sizeRange: document.getElementById('font-size-range'),
             ctxMenu: document.getElementById('media-context-menu')
         };
-        this.savedRange = null;
-        this.draggedMedia = null;
 
         this.loadConfig();
         this.renderToolbar();
@@ -859,7 +735,7 @@ const UI = {
             promptModal: document.getElementById('prompt-modal')
         };
         this.bindEvents();
-        this.applyAppearanceSettings();
+        this.loadSettings();
     },
 
     bindEvents() {
@@ -902,22 +778,9 @@ const UI = {
         this.els.grid.addEventListener('click', (e) => {
             const card = e.target.closest('.note-card');
             if (!card || e.target.closest('.action-btn')) return;
-            if (card.dataset.folderId) {
-                const folderId = decodeURIComponent(card.dataset.folderId);
-                switchView('folder', folderId);
-                return;
-            }
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null;
             const note = state.notes.find(n => n.id === id);
             if (note) Editor.open(note);
-        });
-
-        document.getElementById('toggle-glass')?.addEventListener('change', (e) => {
-            this.updateAppearanceSetting('glass', e.target.checked);
-        });
-
-        document.getElementById('toggle-contrast')?.addEventListener('change', (e) => {
-            this.updateAppearanceSetting('contrast', e.target.checked);
         });
     },
 
@@ -928,11 +791,9 @@ const UI = {
     openModal(id) {
         document.getElementById(id).classList.add('active');
         this.toggleSidebar(false);
-        if (id === 'appearance-modal' || id === 'editor-settings-modal') {
-            document.getElementById('settings-modal')?.classList.remove('active');
+        if (id === 'settings-modal' || id === 'appearance-modal' || id === 'editor-settings-modal') {
+            this.loadSettings();
         }
-        if (id === 'appearance-modal') this.loadAppearanceSettings();
-        if (id === 'editor-settings-modal') this.loadEditorSettings();
     },
 
     closeModal(id) {
@@ -1037,26 +898,6 @@ const UI = {
         `).join('');
     },
 
-    renderFolderCards() {
-        const folders = state.folders || [];
-        this.els.empty.classList.toggle('hidden', folders.length > 0);
-        this.els.grid.innerHTML = folders.map(folder => {
-            const notes = state.notes
-                .filter(n => n.folderId === folder.id && !n.isArchived)
-                .slice(0, 3);
-            const emptyLabel = LANG[state.config.lang]?.empty_folder || 'Пусто';
-            const preview = notes.map(n => `<span>${Utils.escapeHtml(n.title || 'Без названия')}</span>`).join('');
-            return `
-                <div class="note-card folder-card" data-folder-id="${encodeURIComponent(folder.id)}">
-                    <h3>${Utils.escapeHtml(folder.name)}</h3>
-                    <div class="folder-preview">
-                        ${preview || `<span>${Utils.escapeHtml(emptyLabel)}</span>`}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    },
-
     showToast(msg) {
         const div = document.createElement('div');
         div.className = 'toast show';
@@ -1066,46 +907,21 @@ const UI = {
     },
 
     // Settings & Feedback
-    loadAppearanceSettings() {
+    loadSettings() {
         const style = getComputedStyle(document.documentElement);
         ['text', 'primary', 'bg'].forEach(k => {
             const el = document.getElementById(`cp-${k}`);
             if (el) el.value = style.getPropertyValue(`--${k}`).trim();
         });
-        this.applyAppearanceSettings();
+        this.renderToolsConfig();
     },
 
-    saveSettings() {
+    saveAppearance() {
         const p = document.getElementById('cp-primary').value;
         const bg = document.getElementById('cp-bg').value;
         const t = document.getElementById('cp-text').value;
         ThemeManager.setManual(p, bg, t);
         this.closeModal('appearance-modal');
-    },
-
-    getAppearanceSettings() {
-        return JSON.parse(localStorage.getItem('app-effects')) || { glass: true, contrast: false };
-    },
-
-    updateAppearanceSetting(key, value) {
-        const settings = this.getAppearanceSettings();
-        settings[key] = value;
-        localStorage.setItem('app-effects', JSON.stringify(settings));
-        this.applyAppearanceSettings();
-    },
-
-    applyAppearanceSettings() {
-        const settings = this.getAppearanceSettings();
-        document.body.classList.toggle('glass-off', !settings.glass);
-        document.body.classList.toggle('high-contrast', settings.contrast);
-        const glassToggle = document.getElementById('toggle-glass');
-        const contrastToggle = document.getElementById('toggle-contrast');
-        if (glassToggle) glassToggle.checked = !!settings.glass;
-        if (contrastToggle) contrastToggle.checked = !!settings.contrast;
-    },
-
-    loadEditorSettings() {
-        this.renderToolsConfig();
     },
 
     renderToolsConfig() {
@@ -1114,7 +930,7 @@ const UI = {
             const dict = LANG[state.config.lang] || LANG.ru;
             root.innerHTML = Editor.config.map((t, i) => `
                 <div class="tool-toggle-item">
-                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[t.labelKey] || t.id}</span></div>
+                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[`tool_${t.id}`] || t.id}</span></div>
                     <button class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
                 </div>
             `).join('');
@@ -1196,14 +1012,7 @@ window.switchView = (view, folderId = null) => {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     if (!folderId) document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
 
-    const dict = LANG[state.config.lang] || LANG.ru;
-    const titles = {
-        notes: dict.all_notes,
-        favorites: dict.favorites,
-        archive: dict.archive,
-        folder: dict.folders_overview,
-        folders: dict.folders_overview
-    };
+    const titles = { notes: 'Все записи', favorites: 'Важное', archive: 'Архив', folder: 'Папка' };
     document.getElementById('current-view-title').textContent = titles[view] || 'SmartNotes';
 
     UI.toggleSidebar(false);
@@ -1213,10 +1022,6 @@ window.switchView = (view, folderId = null) => {
 
 window.filterAndRender = (query = '') => {
     const q = query.toLowerCase().trim();
-    if (state.view === 'folders') {
-        UI.renderFolderCards();
-        return;
-    }
     let res = state.notes.filter(n => {
         const title = n.title || '';
         const content = n.content || '';

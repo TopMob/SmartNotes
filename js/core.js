@@ -146,42 +146,60 @@ window.state = state;
    ========================================================================== */
 const LANG = {
     ru: {
-        slogan: "Ваши мысли. В порядке.", login: "Вход в систему", login_google: "Войти через Google", all_notes: "Все записи",
+        slogan: "Ваши мысли. В порядке.", login_google: "Войти через Google", all_notes: "Все записи",
         favorites: "Важное", archive: "Архив", folders: "ПАПКИ", about: "О нас", rate: "Оценить",
         settings: "Настройки", switch_acc: "Сменить", logout: "Выйти", empty: "Здесь пока пусто",
-        general: "Общие", language: "Язык", appearance: "Внешний вид", appearance_settings: "Настройки внешнего вида",
-        editor_settings: "Настройки редактора", editor_tools: "Инструменты редактора", presets: "Пресеты",
+        general: "Общие", language: "Язык", appearance: "Внешний вид", presets: "Пресеты",
         manual: "Ручная настройка", c_text: "Текст", c_accent: "Акцент", c_bg: "Фон",
         reset: "Сбросить", close: "Закрыть", save: "Сохранить", team: "Команда",
         contact_us: "Связаться с нами:", send: "Отправить", cancel: "Отмена", yes: "Да",
-        tools: "Инструменты редактора", search: "Поиск...", note_title: "Заголовок", note_tags: "#тег (Enter)",
-        feedback_placeholder: "Ваш отзыв...",
+        tools: "Инструменты редактора",
+        sections: "Разделы",
+        appearance_settings: "Внешний вид",
+        editor_settings: "Настройки редактора",
+        tool_size: "Размер текста",
+        tool_bold: "Жирный",
+        tool_italic: "Курсив",
+        tool_list_ul: "Список",
+        tool_task: "Чек-лист",
+        tool_color: "Цвет текста",
+        tool_highlight: "Подсветка",
+        tool_image: "Изображение",
+        tool_voice: "Голос",
+        tool_sketch: "Рисунок",
+        tool_drive: "Google Drive",
+        tool_clear: "Очистка форматирования",
         t_bold: "Жирный", t_italic: "Курсив", t_list: "Список", t_check: "Задачи",
         t_code: "Код", t_quote: "Цитата", t_image: "Изображение", t_mic: "Голос",
-        t_sketch: "Рисунок", t_clear: "Очистить", t_size: "Размер текста", t_color: "Цвет текста",
-        t_highlight: "Подсветка", t_drive: "Сохранить в Drive", task_item: "Задача",
-        t_align_left: "Выравнивание слева", t_align_center: "Выравнивание по центру", t_align_right: "Выравнивание справа",
-        folders_overview: "Папки", effects: "Эффекты", glass_effect: "Эффект стекла",
-        high_contrast: "Режим для слабовидящих", photo_editor: "Редактор фото", empty_folder: "Пусто"
+        t_sketch: "Рисунок", t_clear: "Очистить"
     },
     en: {
-        slogan: "Your thoughts. Organized.", login: "Sign in", login_google: "Sign in with Google", all_notes: "All Notes",
+        slogan: "Your thoughts. Organized.", login_google: "Sign in with Google", all_notes: "All Notes",
         favorites: "Important", archive: "Archive", folders: "FOLDERS", about: "About", rate: "Rate Us",
         settings: "Settings", switch_acc: "Switch", logout: "Logout", empty: "Nothing here yet",
-        general: "General", language: "Language", appearance: "Appearance", appearance_settings: "Appearance settings",
-        editor_settings: "Editor settings", editor_tools: "Editor tools", presets: "Presets",
+        general: "General", language: "Language", appearance: "Appearance", presets: "Presets",
         manual: "Manual Config", c_text: "Text", c_accent: "Accent", c_bg: "Background",
         reset: "Reset", close: "Close", save: "Save", team: "Team",
         contact_us: "Contact us:", send: "Send", cancel: "Cancel", yes: "Yes",
-        tools: "Editor Tools", search: "Search...", note_title: "Title", note_tags: "#tag (Enter)",
-        feedback_placeholder: "Your feedback...",
+        tools: "Editor Tools",
+        sections: "Sections",
+        appearance_settings: "Appearance",
+        editor_settings: "Editor Settings",
+        tool_size: "Text size",
+        tool_bold: "Bold",
+        tool_italic: "Italic",
+        tool_list_ul: "List",
+        tool_task: "Checklist",
+        tool_color: "Text color",
+        tool_highlight: "Highlight",
+        tool_image: "Image",
+        tool_voice: "Voice",
+        tool_sketch: "Sketch",
+        tool_drive: "Google Drive",
+        tool_clear: "Clear formatting",
         t_bold: "Bold", t_italic: "Italic", t_list: "List", t_check: "Checklist",
         t_code: "Code", t_quote: "Quote", t_image: "Image", t_mic: "Voice",
-        t_sketch: "Sketch", t_clear: "Clear Formatting", t_size: "Text size", t_color: "Text color",
-        t_highlight: "Highlight", t_drive: "Save to Drive", task_item: "Task",
-        t_align_left: "Align left", t_align_center: "Align center", t_align_right: "Align right",
-        folders_overview: "Folders", effects: "Effects", glass_effect: "Glass effect",
-        high_contrast: "High contrast mode", photo_editor: "Photo editor", empty_folder: "Empty"
+        t_sketch: "Sketch", t_clear: "Clear Formatting"
     }
 };
 
@@ -313,6 +331,12 @@ const ThemeManager = {
         const def = this.themes.neon;
         this.setManual(def.p, def.bg, def.t);
         this.renderPicker();
+    },
+
+    revertToLastSaved() {
+        const saved = JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
+        this.applyCSS(saved.p, saved.bg, saved.t);
+        this.syncInputs(saved.p, saved.bg, saved.t);
     }
 };
 
