@@ -1,0 +1,56 @@
+.tags-row {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-chip i {
+  font-size: 18px;
+  opacity: 0.85;
+}
+
+.tag-suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: rgba(var(--primary-rgb), 0.12);
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
+  cursor: pointer;
+}
+
+.tag-suggest:hover {
+  background: rgba(var(--primary-rgb), 0.18);
+}
+
+.lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 12px;
+  background: rgba(255, 59, 48, 0.14);
+  border: 1px solid rgba(255, 59, 48, 0.25);
+  color: #ffb4ae;
+}

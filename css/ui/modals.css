@@ -1,0 +1,230 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal-card {
+  width: min(92vw, 520px);
+  max-height: 86vh;
+  overflow: auto;
+  border-radius: var(--radius-xl);
+  background: rgba(15, 15, 17, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(var(--blur-strength));
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-body {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.modal-footer {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.full-screen-modal {
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+}
+
+.modal-header-tight {
+  padding: 10px 15px;
+}
+
+.modal-title {
+  font-size: 1.1rem;
+}
+
+.no-padding {
+  padding: 0;
+}
+
+.modal-canvas-body {
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-full {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.input-area {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.prompt-input {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.row-center {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.row-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  opacity: 0.9;
+  font-weight: 600;
+}
+
+.input-color-round {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+
+.range-compact {
+  width: 110px;
+}
+
+.modal-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.team-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.team-member {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.bot-link-wrapper {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.telegram-btn {
+  text-decoration: none;
+  width: fit-content;
+}
+
+.confirm-layer {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.confirm-box {
+  width: min(90vw, 420px);
+  padding: 18px;
+  border-radius: var(--radius-xl);
+  background: rgba(15, 15, 17, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 16px;
+}
+
+.login-box {
+  width: min(92vw, 420px);
+  border-radius: var(--radius-xl);
+  background: rgba(15, 15, 17, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-lg);
+  padding: 22px 20px;
+  backdrop-filter: blur(var(--blur-strength));
+  display: grid;
+  gap: 12px;
+}
+
+.subtext {
+  opacity: 0.85;
+}
+
+.auth-buttons-group {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.stars-row {
+  display: flex;
+  gap: 6px;
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.stars-row .star {
+  cursor: pointer;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.stars-row .star:hover {
+  transform: scale(1.15);
+  color: var(--primary);
+}
+
+@media (max-width: 768px) {
+  .modal-card {
+    width: 100%;
+    margin: 0;
+    max-height: 85vh;
+    border-radius: 24px 24px 0 0;
+    border-bottom: none;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+  }
+}

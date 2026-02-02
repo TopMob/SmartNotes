@@ -1,0 +1,73 @@
+html {
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-size: calc(var(--font-base) * var(--type-scale));
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100dvh;
+  width: 100vw;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 900;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+p {
+  line-height: 1.55;
+}
+
+.muted {
+  opacity: 0.8;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.brand-text-fixed {
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-color: var(--focus-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-enabled: 0;
+  }
+
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

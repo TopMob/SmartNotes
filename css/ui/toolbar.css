@@ -1,0 +1,149 @@
+.top-bar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-transparent);
+  backdrop-filter: blur(var(--blur-strength));
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-only-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.search-container {
+  flex: 1;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 10px 14px;
+  margin: 0 14px;
+}
+
+.search-icon {
+  opacity: 0.75;
+}
+
+.search-container input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar-wrapper {
+  position: relative;
+}
+
+.header-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 240px;
+  border-radius: var(--radius-lg);
+  background: rgba(15, 15, 17, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  display: none;
+  z-index: 1200;
+  backdrop-filter: blur(var(--blur-strength));
+}
+
+.dropdown-menu.active {
+  display: block;
+}
+
+.dropdown-header {
+  padding: 10px;
+  opacity: 0.9;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.dropdown-item {
+  width: 100%;
+  height: var(--hit-size);
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dropdown-item.danger {
+  color: #ff6b6b;
+}
+
+.editor-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.divider-vertical {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 6px;
+}
+
+@media (max-width: 768px) {
+  .top-bar {
+    padding: 0 15px;
+    height: 60px;
+  }
+
+  .search-container {
+    position: absolute;
+    top: 65px;
+    left: 15px;
+    right: 15px;
+    max-width: none;
+    z-index: 90;
+    box-shadow: var(--shadow-lg);
+    margin: 0;
+  }
+
+  .mobile-only-title {
+    display: none;
+  }
+}

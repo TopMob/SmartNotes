@@ -1,0 +1,117 @@
+.sidebar-glass {
+  width: 320px;
+  height: 100dvh;
+  background: rgba(15, 15, 17, 0.65);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(var(--blur-strength));
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-sidebar);
+  transform: translateX(-100%);
+  transition: transform var(--animation-duration) var(--ease-out);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-glass.active {
+  transform: translateX(0);
+}
+
+.sidebar-header {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-nav {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.nav-title {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+  padding: 8px 10px 4px;
+}
+
+.nav-item {
+  height: var(--hit-size);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.nav-item i {
+  font-size: 22px;
+  opacity: 0.9;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-item.active {
+  background: rgba(var(--primary-rgb), 0.12);
+  border-color: rgba(var(--primary-rgb), 0.25);
+}
+
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+
+.footer-link {
+  height: var(--hit-size);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.footer-link:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+@media (max-width: 768px) {
+  .sidebar-glass {
+    width: 85%;
+    max-width: 320px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sidebar-glass {
+    transform: translateX(0);
+    position: relative;
+    height: 100%;
+    box-shadow: none;
+    z-index: 1;
+  }
+}

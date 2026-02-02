@@ -1,0 +1,36 @@
+.task-checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.task-checkbox:checked {
+  background: rgba(var(--primary-rgb), 0.5);
+  border-color: rgba(var(--primary-rgb), 0.8);
+}
+
+.task-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: #000;
+  border-radius: 3px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.task-item.completed {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
