@@ -141,6 +141,8 @@ const SketchService = {
     drawing: false,
     history: [],
     els: {},
+    size: { width: 0, height: 0 },
+    dpr: 1,
 
     init() {
         this.canvas = document.getElementById('sketch-canvas');
@@ -150,33 +152,45 @@ const SketchService = {
             width: document.getElementById('sketch-width-picker')
         };
         this.setupCanvas();
+        this.saveState();
         this.bindEvents();
     },
 
     setupCanvas() {
         const rect = this.canvas.parentElement.getBoundingClientRect();
-        this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
+        const width = Math.max(1, rect.width);
+        const height = Math.max(1, rect.height);
+        this.dpr = window.devicePixelRatio || 1;
+        this.canvas.style.width = `${width}px`;
+        this.canvas.style.height = `${height}px`;
+        this.canvas.width = Math.round(width * this.dpr);
+        this.canvas.height = Math.round(height * this.dpr);
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        this.size = { width, height };
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
-        this.saveState();
     },
 
     bindEvents() {
         const getPos = (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const point = e.touches ? e.touches[0] : e;
+            const clientX = point.clientX;
+            const clientY = point.clientY;
             return { x: clientX - rect.left, y: clientY - rect.top };
         };
 
         const start = (e) => {
+            e.preventDefault();
             this.drawing = true;
             this.ctx.beginPath();
             this.ctx.strokeStyle = this.els.color.value;
             this.ctx.lineWidth = this.els.width.value;
             const pos = getPos(e);
             this.ctx.moveTo(pos.x, pos.y);
+            if (e.pointerId !== undefined) {
+                this.canvas.setPointerCapture(e.pointerId);
+            }
         };
 
         const move = (e) => {
@@ -187,23 +201,24 @@ const SketchService = {
             this.ctx.stroke();
         };
 
-        const end = () => {
+        const end = (e) => {
             if (!this.drawing) return;
             this.drawing = false;
             this.ctx.closePath();
             this.saveState();
+            if (e && e.pointerId !== undefined) {
+                this.canvas.releasePointerCapture(e.pointerId);
+            }
         };
 
-        this.canvas.onmousedown = start;
-        this.canvas.onmousemove = move;
-        this.canvas.onmouseup = end;
-        this.canvas.onmouseout = end;
-
-        this.canvas.addEventListener('touchstart', start, { passive: true });
-        this.canvas.addEventListener('touchmove', move, { passive: false });
-        this.canvas.addEventListener('touchend', end, { passive: true });
+        this.canvas.addEventListener('pointerdown', start);
+        this.canvas.addEventListener('pointermove', move);
+        this.canvas.addEventListener('pointerup', end);
+        this.canvas.addEventListener('pointercancel', end);
+        this.canvas.addEventListener('pointerout', end);
 
         window.addEventListener('resize', Utils.debounce(() => this.resizeCanvas(), 150));
+        window.addEventListener('orientationchange', Utils.debounce(() => this.resizeCanvas(), 150));
     },
 
     saveState() {
@@ -213,12 +228,13 @@ const SketchService = {
 
     resizeCanvas() {
         if (!this.canvas) return;
-        const prev = new Image();
-        prev.src = this.canvas.toDataURL();
-        prev.onload = () => {
+        const prevImage = new Image();
+        const prevSize = { ...this.size };
+        prevImage.onload = () => {
             this.setupCanvas();
-            this.ctx.drawImage(prev, 0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.drawImage(prevImage, 0, 0, prevSize.width, prevSize.height, 0, 0, this.size.width, this.size.height);
         };
+        prevImage.src = this.canvas.toDataURL();
     },
 
     undo() {
@@ -228,7 +244,7 @@ const SketchService = {
         img.src = this.history[this.history.length - 1];
         img.onload = () => {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.drawImage(img, 0, 0);
+            this.ctx.drawImage(img, 0, 0, this.size.width, this.size.height);
         };
     },
 
@@ -372,6 +388,7 @@ const Editor = {
     savedRange: null,
     activeFontSize: null,
     toolbarDrag: { active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 },
+    toolbarCollapsed: false,
     els: {},
     fontSizes: [12, 14, 16, 18, 20, 24, 28],
 
@@ -396,12 +413,14 @@ const Editor = {
             tags: document.getElementById('note-tags-input'),
             tagsContainer: document.getElementById('note-tags-container'),
             toolbar: document.getElementById('editor-toolbar'),
+            toolbarToggle: document.getElementById('toolbar-toggle'),
             wrapper: document.getElementById('note-editor'),
             sizePopup: document.getElementById('text-size-popup'),
             sizeRange: document.getElementById('font-size-range'),
             ctxMenu: document.getElementById('media-context-menu')
         };
 
+        this.toolbarCollapsed = localStorage.getItem('editor-toolbar-collapsed') === 'true';
         this.loadConfig();
         this.renderToolbar();
         this.bindEvents();
@@ -564,6 +583,10 @@ const Editor = {
             document.addEventListener('pointerup', this.stopDragToolbar);
         });
 
+        if (this.els.toolbarToggle) {
+            this.els.toolbarToggle.addEventListener('click', () => this.toggleToolbar());
+        }
+
         this.els.content.addEventListener('focusin', () => this.showToolbar());
         this.els.content.addEventListener('focusout', () => this.scheduleHideToolbar());
         this.els.title.addEventListener('focusin', () => this.showToolbar());
@@ -620,12 +643,14 @@ const Editor = {
 
     showToolbar() {
         clearTimeout(this.toolbarHideTimer);
+        if (this.els.toolbar.classList.contains('is-hidden')) return;
         this.els.toolbar.classList.remove('auto-hidden');
     },
 
     scheduleHideToolbar() {
         clearTimeout(this.toolbarHideTimer);
         if (!this.els.toolbar.classList.contains('floating')) return;
+        if (this.els.toolbar.classList.contains('is-hidden')) return;
         this.toolbarHideTimer = setTimeout(() => {
             this.els.toolbar.classList.add('auto-hidden');
         }, 1800);
@@ -644,6 +669,7 @@ const Editor = {
             this.els.toolbar.style.top = '';
             this.els.toolbar.style.bottom = '';
         }
+        this.syncToolbarVisibility();
     },
 
     handleResize: (e) => {
@@ -805,26 +831,17 @@ const Editor = {
         const selection = window.getSelection();
         if (!selection || selection.rangeCount === 0) return;
         const range = selection.getRangeAt(0);
+        if (range.collapsed) return;
         const span = document.createElement('span');
         span.style.fontSize = `${size}px`;
-        if (range.collapsed) {
-            span.appendChild(document.createTextNode('​'));
-            range.insertNode(span);
-            const newRange = document.createRange();
-            newRange.setStart(span.firstChild, 1);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-        } else {
-            const contents = range.extractContents();
-            span.appendChild(contents);
-            range.insertNode(span);
-            selection.removeAllRanges();
-            const newRange = document.createRange();
-            newRange.selectNodeContents(span);
-            newRange.collapse(false);
-            selection.addRange(newRange);
-        }
+        const contents = range.extractContents();
+        span.appendChild(contents);
+        range.insertNode(span);
+        selection.removeAllRanges();
+        const newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        newRange.collapse(false);
+        selection.addRange(newRange);
         this.queueSnapshot();
     },
 
@@ -837,25 +854,86 @@ const Editor = {
         });
     },
 
-    insertTaskItem(label) {
+    insertTasksFromSelection() {
         const selection = window.getSelection();
-        const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
-        const list = range ? range.startContainer.closest?.('.task-list') : null;
-        const itemHtml = `<li class="task-item"><input type="checkbox" class="task-checkbox" aria-label="${Utils.escapeHtml(label)}" contenteditable="false"><span class="task-text">${Utils.escapeHtml(label)}</span></li>`;
-        if (list) {
-            list.insertAdjacentHTML('beforeend', itemHtml);
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        if (range.collapsed) {
+            const block = this.getClosestBlock(range.startContainer);
+            if (block && block.closest('.task-list')) return;
+        }
+        const dict = LANG[state.config.lang] || LANG.ru;
+        const fallback = dict.task_item || 'Task';
+        const lines = this.getSelectedLines(range, fallback);
+        if (!lines.length) return;
+        const list = this.buildTaskList(lines);
+        this.els.content.focus();
+        if (range.collapsed) {
+            const block = this.getClosestBlock(range.startContainer);
+            if (block && block !== this.els.content) {
+                block.replaceWith(list);
+            } else {
+                range.insertNode(list);
+            }
         } else {
-            document.execCommand('insertHTML', false, `<ul class="task-list">${itemHtml}</ul>`);
+            range.deleteContents();
+            range.insertNode(list);
         }
-        const target = this.els.content.querySelector('.task-item:last-child .task-text');
-        if (target) {
-            const newRange = document.createRange();
-            newRange.selectNodeContents(target);
-            newRange.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-        }
+        this.placeCursorInTask(list);
         this.queueSnapshot();
+    },
+
+    getSelectedLines(range, fallback) {
+        if (!range || !range.startContainer) return [];
+        if (!range.collapsed) {
+            const text = range.toString();
+            const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+            return lines.length ? lines : [fallback];
+        }
+        const block = this.getClosestBlock(range.startContainer);
+        const text = block ? block.textContent : '';
+        const cleaned = text.trim();
+        return [cleaned || fallback];
+    },
+
+    getClosestBlock(node) {
+        const blockTags = ['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE'];
+        let current = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        while (current && current !== this.els.content) {
+            if (blockTags.includes(current.tagName)) return current;
+            current = current.parentElement;
+        }
+        return this.els.content;
+    },
+
+    buildTaskList(lines) {
+        const list = document.createElement('ul');
+        list.className = 'task-list';
+        lines.forEach(line => {
+            const item = document.createElement('li');
+            item.className = 'task-item';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'task-checkbox';
+            checkbox.setAttribute('contenteditable', 'false');
+            const span = document.createElement('span');
+            span.className = 'task-text';
+            span.textContent = line;
+            item.append(checkbox, span);
+            list.appendChild(item);
+        });
+        return list;
+    },
+
+    placeCursorInTask(list) {
+        const last = list.querySelector('.task-item:last-child .task-text');
+        if (!last) return;
+        const selection = window.getSelection();
+        const newRange = document.createRange();
+        newRange.selectNodeContents(last);
+        newRange.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
     },
 
     syncTaskStates() {
@@ -897,16 +975,16 @@ const Editor = {
                 const target = document.querySelector('[data-action="toggleSizeSlider"]');
                 if (!target) return;
                 const rect = target.getBoundingClientRect();
-                this.els.sizePopup.style.bottom = '60px';
+                this.els.sizePopup.style.top = `${Math.max(rect.top - 80, 20)}px`;
                 this.els.sizePopup.style.left = `${rect.left + rect.width / 2}px`;
+                this.els.sizePopup.style.bottom = 'auto';
                 this.els.sizePopup.classList.toggle('hidden');
                 if (!this.els.sizePopup.classList.contains('hidden')) {
                     this.saveSelection();
                 }
             },
             task: () => {
-                const label = LANG[state.config.lang]?.task_item || 'Task';
-                this.insertTaskItem(label);
+                this.insertTasksFromSelection();
             },
             align_left: () => this.alignMediaOrText('left'),
             align_center: () => this.alignMediaOrText('center'),
@@ -1021,8 +1099,9 @@ const Editor = {
 
     renderToolbar() {
         const dict = LANG[state.config.lang] || LANG.ru;
+        const activeTools = this.config.filter(t => t.active);
         const handle = `<button type="button" class="tool-btn toolbar-handle" aria-label="${Utils.escapeHtml(dict.move_toolbar || 'Move toolbar')}"><i class="material-icons-round">drag_indicator</i></button>`;
-        this.els.toolbar.innerHTML = handle + this.config.map(t => {
+        this.els.toolbar.innerHTML = (activeTools.length ? handle : '') + activeTools.map(t => {
             if (!t.active) return '';
             if (t.color) return `
                 <div class="tool-wrapper">
@@ -1030,8 +1109,40 @@ const Editor = {
                     <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}">
                     </label>
                 </div>`;
-            return `<button type="button" class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
+            const action = t.action || t.cmd;
+            return `<button type="button" class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${action}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
         }).join('');
+        this.syncToolbarVisibility();
+    },
+
+    toggleToolbar(force = null) {
+        if (typeof force === 'boolean') {
+            this.toolbarCollapsed = !force;
+        } else {
+            this.toolbarCollapsed = !this.toolbarCollapsed;
+        }
+        localStorage.setItem('editor-toolbar-collapsed', `${this.toolbarCollapsed}`);
+        this.syncToolbarVisibility();
+    },
+
+    syncToolbarVisibility() {
+        const hasTools = this.config.some(tool => tool.active);
+        const hidden = this.toolbarCollapsed || !hasTools;
+        this.els.toolbar.classList.toggle('is-hidden', hidden);
+        this.els.toolbar.classList.toggle('is-empty', !hasTools);
+        this.els.toolbar.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+        if (hidden) {
+            this.els.toolbar.classList.add('auto-hidden');
+        }
+        if (this.els.toolbarToggle) {
+            const icon = this.toolbarCollapsed || !hasTools ? 'expand_more' : 'expand_less';
+            const label = this.toolbarCollapsed || !hasTools
+                ? UI.getText('toolbar_show', 'Show toolbar')
+                : UI.getText('toolbar_hide', 'Hide toolbar');
+            this.els.toolbarToggle.setAttribute('aria-label', label);
+            const iconEl = this.els.toolbarToggle.querySelector('i');
+            if (iconEl) iconEl.textContent = icon;
+        }
     },
 
     addTag(tag) {
@@ -1552,6 +1663,7 @@ const UI = {
         this.updateViewTitle();
         this.updatePrimaryActionLabel();
         ThemeManager.renderPicker();
+        Editor.syncToolbarVisibility();
         switchView(state.view, state.activeFolderId);
     },
 

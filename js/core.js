@@ -180,6 +180,8 @@ const LANG = {
         reminder_set: "Напоминание",
         confirm_delete: "Удалить?", confirm_exit: "Выйти?", confirm_account: "Сменить аккаунт?", confirm_delete_folder: "Удалить папку?", confirm_default: "Подтвердите",
         move_toolbar: "Переместить панель",
+        toolbar_show: "Показать панель инструментов",
+        toolbar_hide: "Скрыть панель инструментов",
         task_item: "Задача",
         system_override: "System Override",
         close_menu: "Закрыть меню", add_folder: "Создать папку", open_menu: "Открыть меню", search_aria: "Поиск заметок",
@@ -250,6 +252,8 @@ const LANG = {
         reminder_set: "Reminder set",
         confirm_delete: "Delete?", confirm_exit: "Sign out?", confirm_account: "Switch account?", confirm_delete_folder: "Delete folder?", confirm_default: "Confirm",
         move_toolbar: "Move toolbar",
+        toolbar_show: "Show toolbar",
+        toolbar_hide: "Hide toolbar",
         task_item: "Task",
         system_override: "System Override",
         close_menu: "Close menu", add_folder: "Create folder", open_menu: "Open menu", search_aria: "Search notes",
@@ -295,25 +299,25 @@ const LANG = {
    ========================================================================== */
 const ThemeManager = {
     themes: {
-        light: { p: '#2563eb', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.1)', radius: 14, fontBase: 16, hitSize: 44, shadow: '0 10px 30px rgba(15, 23, 42, 0.1)', density: 1, blur: 18, motion: 1 },
-        dark: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', density: 1, blur: 20, motion: 1 },
+        light: { p: '#2563eb', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.1)', radius: 14, radiusScale: 1, fontBase: 16, hitSize: 44, shadow: '0 10px 30px rgba(15, 23, 42, 0.1)', shadowSmall: '0 6px 18px rgba(15, 23, 42, 0.08)', density: 1, blur: 14, motion: 1, typeScale: 1, spaceUnit: 12, editorPadding: 30, editorLineHeight: 1.7, editorLetterSpacing: '0px', toolbarBg: 'rgba(15, 23, 42, 0.04)', toolbarBorder: 'rgba(15, 23, 42, 0.12)', toolbarShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' },
+        dark: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, radiusScale: 1, fontBase: 16, hitSize: 44, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', shadowSmall: '0 10px 18px rgba(0, 0, 0, 0.35)', density: 1, blur: 20, motion: 1, typeScale: 1, spaceUnit: 12, editorPadding: 30, editorLineHeight: 1.7, editorLetterSpacing: '0px', toolbarBg: 'rgba(255, 255, 255, 0.03)', toolbarBorder: 'rgba(255, 255, 255, 0.1)', toolbarShadow: '0 16px 28px rgba(0, 0, 0, 0.45)' },
         system: { preset: 'system' },
-        high_contrast: { p: '#ffffff', bg: '#000000', t: '#ffffff', surface: '#000000', surfaceLight: '#141414', border: 'rgba(255, 255, 255, 0.6)', radius: 14, fontBase: 18, hitSize: 52, shadow: 'none', density: 1.1, blur: 0, motion: 0.8 },
-        oled: { p: '#22c55e', bg: '#000000', t: '#ffffff', surface: '#050505', surfaceLight: '#0f0f0f', border: 'rgba(255, 255, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 44, shadow: 'none', density: 1, blur: 8, motion: 1 },
-        monochrome: { p: '#6b7280', bg: '#0b0b0b', t: '#f5f5f5', surface: '#111111', surfaceLight: '#1a1a1a', border: 'rgba(255, 255, 255, 0.15)', radius: 10, fontBase: 16, hitSize: 44, shadow: '0 16px 30px rgba(0, 0, 0, 0.45)', density: 0.95, blur: 8, motion: 1 },
-        pastel: { p: '#8b5cf6', bg: '#f8f5ff', t: '#2e1065', surface: '#ffffff', surfaceLight: '#f1ecff', border: 'rgba(46, 16, 101, 0.15)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(76, 29, 149, 0.12)', density: 1.05, blur: 18, motion: 1 },
-        warm: { p: '#f97316', bg: '#fff7ed', t: '#7c2d12', surface: '#ffffff', surfaceLight: '#ffedd5', border: 'rgba(124, 45, 18, 0.15)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(124, 45, 18, 0.15)', density: 1.05, blur: 16, motion: 1 },
-        cold: { p: '#06b6d4', bg: '#ecfeff', t: '#0e7490', surface: '#ffffff', surfaceLight: '#cffafe', border: 'rgba(14, 116, 144, 0.15)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(14, 116, 144, 0.15)', density: 1.05, blur: 16, motion: 1 },
-        minimal: { p: '#0f172a', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.08)', radius: 8, fontBase: 15, hitSize: 42, shadow: 'none', density: 0.9, blur: 0, motion: 0.9 },
-        compact: { p: '#3b82f6', bg: '#0b1220', t: '#e2e8f0', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(226, 232, 240, 0.1)', radius: 10, fontBase: 14, hitSize: 40, shadow: '0 12px 24px rgba(0, 0, 0, 0.4)', density: 0.85, blur: 12, motion: 1 },
-        spacious: { p: '#22c55e', bg: '#0f172a', t: '#f8fafc', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(248, 250, 252, 0.1)', radius: 20, fontBase: 17, hitSize: 52, shadow: '0 24px 40px rgba(0, 0, 0, 0.5)', density: 1.2, blur: 20, motion: 1 },
-        accessibility: { p: '#facc15', bg: '#0a0a0a', t: '#ffffff', surface: '#111111', surfaceLight: '#1f1f1f', border: 'rgba(255, 255, 255, 0.45)', radius: 18, fontBase: 20, hitSize: 56, shadow: 'none', density: 1.25, blur: 0, motion: 0.6 },
-        glass: { p: '#00f2ff', bg: '#06080f', t: '#ffffff', surface: 'rgba(15, 23, 42, 0.65)', surfaceLight: 'rgba(30, 41, 59, 0.7)', surfaceTransparent: 'rgba(15, 23, 42, 0.55)', border: 'rgba(255, 255, 255, 0.2)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 25px 50px rgba(0, 0, 0, 0.5)', density: 1, blur: 24, motion: 1 },
-        matte: { p: '#4ade80', bg: '#111827', t: '#f1f5f9', surface: '#1f2937', surfaceLight: '#374151', border: 'rgba(241, 245, 249, 0.12)', radius: 14, fontBase: 16, hitSize: 44, shadow: '0 16px 26px rgba(0, 0, 0, 0.35)', density: 1, blur: 0, motion: 1 },
-        neon: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', density: 1, blur: 18, motion: 1 },
-        paper: { p: '#2563eb', bg: '#f8f1e7', t: '#1f2937', surface: '#fffaf3', surfaceLight: '#f3e8d6', border: 'rgba(31, 41, 55, 0.15)', radius: 10, fontBase: 16, hitSize: 44, shadow: '0 12px 20px rgba(31, 41, 55, 0.1)', density: 1, blur: 6, motion: 1 },
-        sunrise: { p: '#ef4444', bg: '#1f0a0a', t: '#fee2e2', surface: '#2a0f0f', surfaceLight: '#3a1515', border: 'rgba(254, 226, 226, 0.15)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)', density: 1, blur: 14, motion: 1 },
-        ocean: { p: '#38bdf8', bg: '#04121f', t: '#e2f2ff', surface: '#0b1d2a', surfaceLight: '#12283a', border: 'rgba(226, 242, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)', density: 1, blur: 14, motion: 1 }
+        high_contrast: { p: '#ffffff', bg: '#000000', t: '#ffffff', surface: '#000000', surfaceLight: '#141414', border: 'rgba(255, 255, 255, 0.6)', radius: 14, radiusScale: 0.9, fontBase: 18, hitSize: 52, shadow: 'none', shadowSmall: 'none', density: 1.1, blur: 0, motion: 0.7, typeScale: 1.1, spaceUnit: 14, editorPadding: 34, editorLineHeight: 1.8, editorLetterSpacing: '0.3px', toolbarBg: '#000000', toolbarBorder: 'rgba(255, 255, 255, 0.75)', toolbarShadow: 'none' },
+        oled: { p: '#22c55e', bg: '#000000', t: '#ffffff', surface: '#050505', surfaceLight: '#0f0f0f', border: 'rgba(255, 255, 255, 0.15)', radius: 12, radiusScale: 0.9, fontBase: 16, hitSize: 44, shadow: 'none', shadowSmall: 'none', density: 0.95, blur: 6, motion: 0.9, typeScale: 0.98, spaceUnit: 10, editorPadding: 26, editorLineHeight: 1.6, editorLetterSpacing: '0px', toolbarBg: 'rgba(255, 255, 255, 0.04)', toolbarBorder: 'rgba(255, 255, 255, 0.12)', toolbarShadow: 'none' },
+        monochrome: { p: '#6b7280', bg: '#0b0b0b', t: '#f5f5f5', surface: '#111111', surfaceLight: '#1a1a1a', border: 'rgba(255, 255, 255, 0.15)', radius: 10, radiusScale: 0.95, fontBase: 16, hitSize: 44, shadow: '0 16px 30px rgba(0, 0, 0, 0.45)', shadowSmall: '0 10px 18px rgba(0, 0, 0, 0.35)', density: 0.95, blur: 8, motion: 0.9, typeScale: 1.02, spaceUnit: 11, editorPadding: 28, editorLineHeight: 1.65, editorLetterSpacing: '0px', toolbarBg: 'rgba(255, 255, 255, 0.04)', toolbarBorder: 'rgba(255, 255, 255, 0.1)', toolbarShadow: '0 12px 20px rgba(0, 0, 0, 0.4)' },
+        pastel: { p: '#8b5cf6', bg: '#f8f5ff', t: '#2e1065', surface: '#ffffff', surfaceLight: '#f1ecff', border: 'rgba(46, 16, 101, 0.15)', radius: 18, radiusScale: 1.1, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(76, 29, 149, 0.12)', shadowSmall: '0 8px 16px rgba(76, 29, 149, 0.1)', density: 1.1, blur: 20, motion: 1, typeScale: 1.08, spaceUnit: 14, editorPadding: 36, editorLineHeight: 1.8, editorLetterSpacing: '0.2px', toolbarBg: 'rgba(139, 92, 246, 0.08)', toolbarBorder: 'rgba(46, 16, 101, 0.18)', toolbarShadow: '0 12px 24px rgba(46, 16, 101, 0.18)' },
+        warm: { p: '#f97316', bg: '#fff7ed', t: '#7c2d12', surface: '#ffffff', surfaceLight: '#ffedd5', border: 'rgba(124, 45, 18, 0.15)', radius: 18, radiusScale: 1.1, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(124, 45, 18, 0.15)', shadowSmall: '0 8px 16px rgba(124, 45, 18, 0.12)', density: 1.05, blur: 16, motion: 1, typeScale: 1.06, spaceUnit: 14, editorPadding: 34, editorLineHeight: 1.75, editorLetterSpacing: '0.15px', toolbarBg: 'rgba(249, 115, 22, 0.08)', toolbarBorder: 'rgba(124, 45, 18, 0.18)', toolbarShadow: '0 10px 22px rgba(124, 45, 18, 0.18)' },
+        cold: { p: '#06b6d4', bg: '#ecfeff', t: '#0e7490', surface: '#ffffff', surfaceLight: '#cffafe', border: 'rgba(14, 116, 144, 0.15)', radius: 18, radiusScale: 1.1, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(14, 116, 144, 0.15)', shadowSmall: '0 8px 16px rgba(14, 116, 144, 0.12)', density: 1.05, blur: 16, motion: 1, typeScale: 1.06, spaceUnit: 14, editorPadding: 34, editorLineHeight: 1.75, editorLetterSpacing: '0.15px', toolbarBg: 'rgba(6, 182, 212, 0.08)', toolbarBorder: 'rgba(14, 116, 144, 0.18)', toolbarShadow: '0 10px 22px rgba(14, 116, 144, 0.18)' },
+        minimal: { p: '#0f172a', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.08)', radius: 8, radiusScale: 0.75, fontBase: 15, hitSize: 40, shadow: 'none', shadowSmall: 'none', density: 0.85, blur: 0, motion: 0.6, typeScale: 0.94, spaceUnit: 9, editorPadding: 24, editorLineHeight: 1.55, editorLetterSpacing: '0px', toolbarBg: 'rgba(15, 23, 42, 0.02)', toolbarBorder: 'rgba(15, 23, 42, 0.08)', toolbarShadow: 'none' },
+        compact: { p: '#3b82f6', bg: '#0b1220', t: '#e2e8f0', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(226, 232, 240, 0.1)', radius: 10, radiusScale: 0.8, fontBase: 14, hitSize: 38, shadow: '0 12px 24px rgba(0, 0, 0, 0.4)', shadowSmall: '0 8px 16px rgba(0, 0, 0, 0.35)', density: 0.8, blur: 10, motion: 0.9, typeScale: 0.9, spaceUnit: 8, editorPadding: 22, editorLineHeight: 1.5, editorLetterSpacing: '0px', toolbarBg: 'rgba(59, 130, 246, 0.08)', toolbarBorder: 'rgba(226, 232, 240, 0.12)', toolbarShadow: '0 10px 18px rgba(0, 0, 0, 0.4)' },
+        spacious: { p: '#22c55e', bg: '#0f172a', t: '#f8fafc', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(248, 250, 252, 0.1)', radius: 20, radiusScale: 1.2, fontBase: 17, hitSize: 54, shadow: '0 24px 40px rgba(0, 0, 0, 0.5)', shadowSmall: '0 16px 24px rgba(0, 0, 0, 0.45)', density: 1.25, blur: 22, motion: 1.1, typeScale: 1.2, spaceUnit: 18, editorPadding: 44, editorLineHeight: 1.9, editorLetterSpacing: '0.3px', toolbarBg: 'rgba(34, 197, 94, 0.1)', toolbarBorder: 'rgba(248, 250, 252, 0.16)', toolbarShadow: '0 22px 34px rgba(0, 0, 0, 0.55)' },
+        accessibility: { p: '#facc15', bg: '#0a0a0a', t: '#ffffff', surface: '#111111', surfaceLight: '#1f1f1f', border: 'rgba(255, 255, 255, 0.45)', radius: 18, radiusScale: 1.2, fontBase: 20, hitSize: 58, shadow: 'none', shadowSmall: 'none', density: 1.3, blur: 0, motion: 0.6, typeScale: 1.25, spaceUnit: 20, editorPadding: 48, editorLineHeight: 2, editorLetterSpacing: '0.4px', toolbarBg: 'rgba(250, 204, 21, 0.15)', toolbarBorder: 'rgba(255, 255, 255, 0.5)', toolbarShadow: 'none' },
+        glass: { p: '#00f2ff', bg: '#06080f', t: '#ffffff', surface: 'rgba(15, 23, 42, 0.65)', surfaceLight: 'rgba(30, 41, 59, 0.7)', surfaceTransparent: 'rgba(15, 23, 42, 0.55)', border: 'rgba(255, 255, 255, 0.2)', radius: 18, radiusScale: 1.1, fontBase: 16, hitSize: 46, shadow: '0 25px 50px rgba(0, 0, 0, 0.5)', shadowSmall: '0 18px 30px rgba(0, 0, 0, 0.45)', density: 1.05, blur: 28, motion: 1.1, typeScale: 1.02, spaceUnit: 14, editorPadding: 36, editorLineHeight: 1.7, editorLetterSpacing: '0.2px', toolbarBg: 'rgba(15, 23, 42, 0.45)', toolbarBorder: 'rgba(255, 255, 255, 0.25)', toolbarShadow: '0 20px 30px rgba(0, 0, 0, 0.45)' },
+        matte: { p: '#4ade80', bg: '#111827', t: '#f1f5f9', surface: '#1f2937', surfaceLight: '#374151', border: 'rgba(241, 245, 249, 0.12)', radius: 14, radiusScale: 0.95, fontBase: 16, hitSize: 44, shadow: '0 16px 26px rgba(0, 0, 0, 0.35)', shadowSmall: '0 10px 16px rgba(0, 0, 0, 0.3)', density: 0.98, blur: 0, motion: 0.85, typeScale: 1, spaceUnit: 12, editorPadding: 30, editorLineHeight: 1.65, editorLetterSpacing: '0px', toolbarBg: 'rgba(31, 41, 55, 0.92)', toolbarBorder: 'rgba(241, 245, 249, 0.12)', toolbarShadow: 'none' },
+        neon: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, radiusScale: 1.05, fontBase: 16, hitSize: 44, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', shadowSmall: '0 12px 18px rgba(0, 0, 0, 0.4)', density: 1.05, blur: 22, motion: 1.2, typeScale: 1.05, spaceUnit: 12, editorPadding: 32, editorLineHeight: 1.75, editorLetterSpacing: '0.25px', toolbarBg: 'rgba(0, 242, 255, 0.08)', toolbarBorder: 'rgba(255, 255, 255, 0.2)', toolbarShadow: '0 0 24px rgba(0, 242, 255, 0.35)' },
+        paper: { p: '#2563eb', bg: '#f8f1e7', t: '#1f2937', surface: '#fffaf3', surfaceLight: '#f3e8d6', border: 'rgba(31, 41, 55, 0.15)', radius: 10, radiusScale: 0.9, fontBase: 16, hitSize: 44, shadow: '0 12px 20px rgba(31, 41, 55, 0.1)', shadowSmall: '0 6px 12px rgba(31, 41, 55, 0.08)', density: 1.05, blur: 6, motion: 0.8, typeScale: 1.08, spaceUnit: 16, editorPadding: 40, editorLineHeight: 1.85, editorLetterSpacing: '0.2px', toolbarBg: 'rgba(31, 41, 55, 0.06)', toolbarBorder: 'rgba(31, 41, 55, 0.18)', toolbarShadow: '0 8px 18px rgba(31, 41, 55, 0.12)' },
+        sunrise: { p: '#ef4444', bg: '#1f0a0a', t: '#fee2e2', surface: '#2a0f0f', surfaceLight: '#3a1515', border: 'rgba(254, 226, 226, 0.15)', radius: 12, radiusScale: 1, fontBase: 16, hitSize: 44, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)', shadowSmall: '0 12px 18px rgba(0, 0, 0, 0.45)', density: 1.05, blur: 16, motion: 1.05, typeScale: 1.05, spaceUnit: 13, editorPadding: 32, editorLineHeight: 1.75, editorLetterSpacing: '0.2px', toolbarBg: 'rgba(239, 68, 68, 0.08)', toolbarBorder: 'rgba(254, 226, 226, 0.2)', toolbarShadow: '0 14px 24px rgba(0, 0, 0, 0.5)' },
+        ocean: { p: '#38bdf8', bg: '#04121f', t: '#e2f2ff', surface: '#0b1d2a', surfaceLight: '#12283a', border: 'rgba(226, 242, 255, 0.15)', radius: 12, radiusScale: 1, fontBase: 16, hitSize: 44, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)', shadowSmall: '0 12px 18px rgba(0, 0, 0, 0.45)', density: 1.05, blur: 16, motion: 1.05, typeScale: 1.04, spaceUnit: 13, editorPadding: 32, editorLineHeight: 1.75, editorLetterSpacing: '0.15px', toolbarBg: 'rgba(56, 189, 248, 0.08)', toolbarBorder: 'rgba(226, 242, 255, 0.18)', toolbarShadow: '0 14px 24px rgba(0, 0, 0, 0.5)' }
     },
 
     init() {
@@ -444,9 +448,21 @@ const ThemeManager = {
         const surface = theme.surface || Utils.adjustColor(bg, 10);
         const surfaceLight = theme.surfaceLight || Utils.adjustColor(bg, 20);
         const border = theme.border || 'rgba(255, 255, 255, 0.1)';
-        const motionAllowed = this.motionAllowed() ? theme.motion !== 0 : false;
+        const motionScale = typeof theme.motion === 'number' ? theme.motion : 1;
+        const motionAllowed = this.motionAllowed() && motionScale > 0;
         const blurAllowed = this.blurAllowed() ? theme.blur : 0;
         const density = theme.density || 1;
+        const radiusBase = typeof theme.radius === 'number' ? theme.radius : 12;
+        const radiusScale = typeof theme.radiusScale === 'number' ? theme.radiusScale : 1;
+        const radiusMd = Math.round(radiusBase * radiusScale);
+        const radiusSm = Math.max(4, Math.round(radiusMd * 0.6));
+        const radiusLg = Math.round(radiusMd * 1.5);
+        const radiusXl = Math.round(radiusMd * 2.2);
+        const typeScale = typeof theme.typeScale === 'number' ? theme.typeScale : 1;
+        const spaceUnit = typeof theme.spaceUnit === 'number' ? theme.spaceUnit : 12;
+        const editorPadding = typeof theme.editorPadding === 'number' ? theme.editorPadding : Math.round(spaceUnit * 2.5);
+        const editorLineHeight = typeof theme.editorLineHeight === 'number' ? theme.editorLineHeight : 1.7;
+        const editorLetterSpacing = theme.editorLetterSpacing || '0px';
         root.style.setProperty('--primary', theme.p);
         root.style.setProperty('--bg', bg);
         root.style.setProperty('--surface', surface);
@@ -454,17 +470,26 @@ const ThemeManager = {
         root.style.setProperty('--surface-transparent', theme.surfaceTransparent || surface);
         root.style.setProperty('--text', theme.t);
         root.style.setProperty('--border', border);
-        root.style.setProperty('--radius-md', `${theme.radius}px`);
-        root.style.setProperty('--radius-lg', `${theme.radius + 6}px`);
-        root.style.setProperty('--radius-sm', `${Math.max(theme.radius - 4, 6)}px`);
+        root.style.setProperty('--radius-sm', `${radiusSm}px`);
+        root.style.setProperty('--radius-md', `${radiusMd}px`);
+        root.style.setProperty('--radius-lg', `${radiusLg}px`);
+        root.style.setProperty('--radius-xl', `${radiusXl}px`);
         root.style.setProperty('--font-base', `${theme.fontBase}px`);
+        root.style.setProperty('--type-scale', `${typeScale}`);
         root.style.setProperty('--hit-size', `${theme.hitSize}px`);
         root.style.setProperty('--shadow-lg', theme.shadow);
         root.style.setProperty('--shadow-sm', theme.shadowSmall || theme.shadow);
         root.style.setProperty('--density', density);
         root.style.setProperty('--blur-strength', `${blurAllowed}px`);
         root.style.setProperty('--motion-enabled', motionAllowed ? '1' : '0');
-        root.style.setProperty('--animation-duration', motionAllowed ? '0.3s' : '0s');
+        root.style.setProperty('--animation-duration', motionAllowed ? `${0.3 * motionScale}s` : '0s');
+        root.style.setProperty('--space-unit', `${spaceUnit}px`);
+        root.style.setProperty('--editor-padding', `${editorPadding}px`);
+        root.style.setProperty('--editor-line-height', `${editorLineHeight}`);
+        root.style.setProperty('--editor-letter-spacing', editorLetterSpacing);
+        root.style.setProperty('--editor-toolbar-bg', theme.toolbarBg || 'rgba(255, 255, 255, 0.03)');
+        root.style.setProperty('--editor-toolbar-border', theme.toolbarBorder || border);
+        root.style.setProperty('--editor-toolbar-shadow', theme.toolbarShadow || 'none');
 
         const res = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(theme.p);
         const rgb = res ? `${parseInt(res[1], 16)}, ${parseInt(res[2], 16)}, ${parseInt(res[3], 16)}` : '0, 242, 255';
