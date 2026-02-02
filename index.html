@@ -10,45 +10,35 @@
 
     <title>SmartNotes</title>
 
-    <!-- Manifest & Icons -->
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="Logo.png">
 
-    <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://www.gstatic.com">
 
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
-    <!-- Styles -->
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- Core Dependencies (Load Order Critical) -->
-    <!-- 1. Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js" defer></script>
 
-    <!-- 2. Google Identity & API -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
 
-    <!-- 3. App Logic (Sequential Execution) -->
     <script src="js/core.js" defer></script>
     <script src="js/sync.js" defer></script>
     <script src="js/app.js" defer></script>
 </head>
 
 <body>
-    <!-- Background Layer -->
     <div class="bg-wrapper" aria-hidden="true"></div>
 
-    <!-- Login Screen -->
-    <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true">
+    <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true" aria-label="Авторизация">
         <div class="login-box">
             <h1 class="brand-text-fixed">SmartNotes</h1>
             <p class="subtext" data-lang="login">Вход в систему</p>
@@ -61,286 +51,411 @@
         </div>
     </div>
 
-    <!-- Main Layout -->
-    <div id="app" class="app-layout">
-        
-        <!-- Sidebar Navigation -->
-        <aside id="sidebar" class="sidebar-glass">
+    <div id="app" class="app-layout" aria-hidden="false">
+        <aside id="sidebar" class="sidebar-glass" aria-label="Навигация">
             <header class="sidebar-header">
                 <span class="brand-text-fixed">SmartNotes</span>
                 <button type="button" class="btn-icon mobile-only" onclick="UI.toggleSidebar(false)" aria-label="Закрыть меню" data-lang-aria="close_menu">
-                    <i class="material-icons-round">close</i>
+                    <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
 
-            <nav class="sidebar-nav scrollable">
+            <nav class="sidebar-nav scrollable" aria-label="Разделы">
                 <div class="nav-group">
                     <button type="button" class="nav-item active" onclick="switchView('notes')" data-view="notes">
-                        <i class="material-icons-round">description</i>
+                        <i class="material-icons-round" aria-hidden="true">description</i>
                         <span data-lang="all_notes">Все записи</span>
                     </button>
+
                     <button type="button" class="nav-item" onclick="switchView('favorites')" data-view="favorites">
-                        <i class="material-icons-round">star</i>
+                        <i class="material-icons-round" aria-hidden="true">star</i>
                         <span data-lang="favorites">Важное</span>
                     </button>
+
                     <button type="button" class="nav-item" onclick="switchView('archive')" data-view="archive">
-                        <i class="material-icons-round">archive</i>
+                        <i class="material-icons-round" aria-hidden="true">archive</i>
                         <span data-lang="archive">Архив</span>
                     </button>
+
                     <button type="button" class="nav-item" onclick="switchView('folders')" data-view="folders">
-                        <i class="material-icons-round">folder_open</i>
+                        <i class="material-icons-round" aria-hidden="true">folder</i>
                         <span data-lang="folders_overview">Папки</span>
                     </button>
-                </div>
 
-                <div class="nav-divider"></div>
-
-                <div class="folders-header">
-                    <span data-lang="folders">ПАПКИ</span>
-                    <button type="button" class="btn-icon-small" id="add-folder-btn" aria-label="Создать папку" data-lang-aria="add_folder">
-                        <i class="material-icons-round">add</i>
+                    <button type="button" class="nav-item" onclick="UI.primaryAction()" data-view="primary">
+                        <i class="material-icons-round" aria-hidden="true">add</i>
+                        <span data-lang="create_note">Создать заметку</span>
                     </button>
                 </div>
-                <div id="folder-list-root" class="folder-list"></div>
+
+                <div class="nav-group">
+                    <div class="nav-title" data-lang="folders">ПАПКИ</div>
+                    <div id="folder-list-root" class="folder-list-root"></div>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-title">УМНЫЕ ФУНКЦИИ</div>
+                    <button type="button" class="nav-item" onclick="UI.openModal('survey-modal')">
+                        <i class="material-icons-round" aria-hidden="true">quiz</i>
+                        <span>Опросник</span>
+                    </button>
+                    <button type="button" class="nav-item" onclick="UI.openModal('lock-center-modal')">
+                        <i class="material-icons-round" aria-hidden="true">lock</i>
+                        <span>Защита заметок</span>
+                    </button>
+                </div>
             </nav>
 
             <footer class="sidebar-footer">
                 <button type="button" class="footer-link" onclick="UI.openModal('about-modal')">
-                    <i class="material-icons-round">info</i> <span data-lang="about">О нас</span>
+                    <i class="material-icons-round" aria-hidden="true">info</i>
+                    <span data-lang="about">О нас</span>
                 </button>
+
                 <button type="button" class="footer-link" onclick="UI.openModal('rate-modal')">
-                    <i class="material-icons-round">thumb_up</i> <span data-lang="rate">Оценить</span>
+                    <i class="material-icons-round" aria-hidden="true">thumb_up</i>
+                    <span data-lang="rate">Оценить</span>
                 </button>
+
                 <button type="button" class="footer-link" onclick="UI.openSettings()">
-                    <i class="material-icons-round">settings</i> <span data-lang="settings">Настройки</span>
+                    <i class="material-icons-round" aria-hidden="true">settings</i>
+                    <span data-lang="settings">Настройки</span>
                 </button>
             </footer>
         </aside>
 
-        <!-- Main Workspace -->
         <main class="main-content">
-            <header class="top-bar">
+            <header class="top-bar" role="banner">
                 <div class="header-left">
                     <button type="button" id="menu-toggle" class="btn-icon" onclick="UI.toggleSidebar()" aria-label="Открыть меню" data-lang-aria="open_menu">
-                        <i class="material-icons-round">menu</i>
+                        <i class="material-icons-round" aria-hidden="true">menu</i>
                     </button>
                     <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
                 </div>
 
-                <div class="search-container">
-                    <i class="material-icons-round search-icon">search</i>
+                <div class="search-container" role="search">
+                    <i class="material-icons-round search-icon" aria-hidden="true">search</i>
                     <input type="text" id="search-input" placeholder="Поиск..." data-lang-placeholder="search" oninput="filterAndRender(this.value)" autocomplete="off" aria-label="Поиск заметок" data-lang-aria="search_aria">
                 </div>
 
                 <div class="header-right">
                     <button type="button" class="btn-icon" onclick="UI.triggerImport()" aria-label="Импортировать файл" data-lang-aria="import_file">
-                        <i class="material-icons-round">upload_file</i>
+                        <i class="material-icons-round" aria-hidden="true">upload_file</i>
                     </button>
+
                     <div class="user-avatar-wrapper">
                         <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" class="header-avatar" onclick="UI.toggleUserMenu()">
-                        <div id="user-dropdown" class="dropdown-menu">
+                        <div id="user-dropdown" class="dropdown-menu" role="menu" aria-label="Пользователь">
                             <div class="dropdown-header">
-                                <span id="user-name">...</span>
+                                <span id="user-name">.</span>
                             </div>
                             <button type="button" class="dropdown-item" onclick="UI.showConfirm('account', () => Auth.switchAccount())">
-                                <i class="material-icons-round">switch_account</i> <span data-lang="switch_acc">Сменить</span>
+                                <i class="material-icons-round" aria-hidden="true">switch_account</i>
+                                <span data-lang="switch_acc">Сменить</span>
                             </button>
                             <button type="button" class="dropdown-item danger" onclick="UI.showConfirm('exit', () => Auth.logout())">
-                                <i class="material-icons-round">logout</i> <span data-lang="logout">Выйти</span>
+                                <i class="material-icons-round" aria-hidden="true">logout</i>
+                                <span data-lang="logout">Выйти</span>
                             </button>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <section id="notes-content-area" class="content-scrollable scrollable">
-                <div id="app-loader" class="loader-container hidden">
-                    <div class="spinner"></div>
+            <section id="notes-content-area" class="content-scrollable scrollable" aria-label="Список заметок">
+                <div id="app-loader" class="loader-container hidden" aria-hidden="true">
+                    <div class="spinner" aria-hidden="true"></div>
                 </div>
-                <div id="empty-state" class="empty-placeholder hidden">
-                    <i class="material-icons-round">note_add</i>
+
+                <div id="empty-state" class="empty-placeholder hidden" aria-live="polite">
+                    <i class="material-icons-round" aria-hidden="true">note_add</i>
                     <p data-lang="empty">Здесь пока пусто</p>
                 </div>
-                <div id="notes-container" class="notes-grid"></div>
+
+                <div id="notes-container" class="notes-grid" role="list"></div>
             </section>
 
             <button type="button" class="btn-fab" onclick="UI.primaryAction()" aria-label="Создать заметку" data-lang-aria="create_note">
-                <i class="material-icons-round">add</i>
+                <i class="material-icons-round" aria-hidden="true">add</i>
             </button>
         </main>
     </div>
 
-    <!-- Editor Overlay -->
     <div id="note-editor" class="editor-overlay" role="dialog" aria-modal="true" aria-label="Редактор" data-lang-aria="editor">
         <div class="editor-container">
             <header class="editor-header-bar">
                 <button type="button" class="btn-icon" onclick="Editor.close()" aria-label="Назад" data-lang-aria="back">
-                    <i class="material-icons-round">arrow_back</i>
+                    <i class="material-icons-round" aria-hidden="true">arrow_back</i>
                 </button>
-                <div class="editor-tools">
+
+                <div class="editor-tools" aria-label="Действия редактора">
                     <button type="button" class="btn-icon" onclick="Editor.undo()" aria-label="Отменить" data-lang-aria="undo">
-                        <i class="material-icons-round">undo</i>
+                        <i class="material-icons-round" aria-hidden="true">undo</i>
                     </button>
                     <button type="button" class="btn-icon" onclick="Editor.redo()" aria-label="Повторить" data-lang-aria="redo">
-                        <i class="material-icons-round">redo</i>
+                        <i class="material-icons-round" aria-hidden="true">redo</i>
                     </button>
-                    <div class="divider-vertical"></div>
+
+                    <div class="divider-vertical" aria-hidden="true"></div>
+
                     <button type="button" class="btn-icon" onclick="Editor.deleteCurrent()" aria-label="Удалить заметку" data-lang-aria="delete_note">
-                        <i class="material-icons-round">delete</i>
+                        <i class="material-icons-round" aria-hidden="true">delete</i>
                     </button>
+
+                    <button type="button" class="btn-icon" onclick="UI.openModal('share-modal')" aria-label="Поделиться">
+                        <i class="material-icons-round" aria-hidden="true">share</i>
+                    </button>
+
+                    <button type="button" class="btn-icon" onclick="UI.openModal('collab-modal')" aria-label="Совместное редактирование">
+                        <i class="material-icons-round" aria-hidden="true">group</i>
+                    </button>
+
+                    <button type="button" class="btn-icon" onclick="UI.openModal('lock-modal')" aria-label="Заблокировать заметку">
+                        <i class="material-icons-round" aria-hidden="true">lock</i>
+                    </button>
+
                     <button type="button" class="btn-icon" id="toolbar-toggle" aria-label="Скрыть панель инструментов" data-lang-aria="toolbar_hide">
-                        <i class="material-icons-round">expand_less</i>
+                        <i class="material-icons-round" aria-hidden="true">expand_less</i>
                     </button>
                 </div>
             </header>
 
-            <div class="editor-scroll-area">
-                <div id="editor-toolbar" class="editor-toolbar"></div>
-                <input type="text" id="note-title" placeholder="Заголовок" data-lang-placeholder="note_title" autocomplete="off" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
-                <div id="note-content-editable" class="rich-editor scrollable" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
-            </div>
+            <div class="editor-scroll-area scrollable">
+                <input id="note-title" type="text" placeholder="Заголовок" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
 
-            <div class="editor-bottom-panel">
-                <div class="tags-section">
-                    <div id="note-tags-container" class="tags-list-editor"></div>
-                    <input type="text" id="note-tags-input" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" autocomplete="off" aria-label="Добавить тег" data-lang-aria="note_tags_aria">
+                <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора"></div>
+
+                <div id="text-size-popup" class="text-size-popup hidden" role="dialog" aria-label="Размер текста">
+                    <input type="range" id="font-size-range" min="12" max="28" step="1" value="16" aria-label="Размер шрифта">
                 </div>
-                <div class="editor-footer-row">
-                    <div class="save-status-wrapper">
-                        <button type="button" class="btn-icon active" onclick="Editor.manualSave()" style="color:var(--primary)" aria-label="Сохранить" data-lang-aria="save_note">
-                            <i class="material-icons-round">check</i>
-                        </button>
-                        <span id="last-edited" data-lang="saved">Сохранено</span>
-                    </div>
+
+                <div id="note-content-editable" class="note-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+
+                <div class="tags-row" aria-label="Теги">
+                    <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
+                    <div id="note-tags-container" class="tags-container" aria-live="polite"></div>
+                </div>
+
+                <div class="editor-bottom-actions">
+                    <button type="button" class="btn-secondary" onclick="UI.openModal('note-actions-modal')" aria-label="Действия">
+                        <i class="material-icons-round" aria-hidden="true">more_horiz</i>
+                        <span data-lang="note_actions">Действия</span>
+                    </button>
+                    <button type="button" class="btn-primary" onclick="Editor.save()" aria-label="Сохранить" data-lang-aria="save_note">
+                        <i class="material-icons-round" aria-hidden="true">save</i>
+                        <span data-lang="save">Сохранить</span>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modals -->
+    <div id="media-context-menu" class="media-context-menu hidden" role="menu" aria-label="Меню изображения">
+        <button type="button" class="btn-icon" onclick="Editor.resetMediaTransform()" aria-label="Сбросить размер" data-lang-aria="reset_media">
+            <i class="material-icons-round" aria-hidden="true">aspect_ratio</i>
+        </button>
+        <button type="button" class="btn-icon" onclick="Editor.alignMediaOrText('left')" aria-label="По левому краю" data-lang-aria="align_left">
+            <i class="material-icons-round" aria-hidden="true">format_align_left</i>
+        </button>
+        <button type="button" class="btn-icon" onclick="Editor.alignMediaOrText('right')" aria-label="По правому краю" data-lang-aria="align_right">
+            <i class="material-icons-round" aria-hidden="true">format_align_right</i>
+        </button>
+        <button type="button" class="btn-icon" onclick="Editor.drawOnSelectedMedia()" aria-label="Рисовать на фото" data-lang-aria="draw_photo">
+            <i class="material-icons-round" aria-hidden="true">brush</i>
+        </button>
+        <button type="button" class="btn-icon" onclick="Editor.deleteSelectedMedia()" style="color:var(--danger)" aria-label="Удалить" data-lang-aria="delete">
+            <i class="material-icons-round" aria-hidden="true">delete</i>
+        </button>
+    </div>
 
-    <!-- Settings -->
-    <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div id="confirm-modal" class="modal-overlay confirm-layer" role="dialog" aria-modal="true">
+        <div class="confirm-box">
+            <h3 id="confirm-title" data-lang="confirm_default">Подтвердите</h3>
+            <div class="row-center">
+                <button type="button" class="btn-secondary" id="confirm-cancel" data-lang="cancel">Отмена</button>
+                <button type="button" class="btn-danger" id="confirm-ok" data-lang="yes">Да</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="prompt-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card confirm-box">
+            <h3 id="prompt-title" data-lang="prompt_title">Ввод</h3>
+            <input type="text" id="prompt-input" class="input-area prompt-input" autocomplete="off" aria-label="Поле ввода" data-lang-aria="prompt_input">
+            <div class="row-center">
+                <button type="button" class="btn-secondary" id="prompt-cancel" data-lang="cancel">Отмена</button>
+                <button type="button" class="btn-primary" id="prompt-ok" data-lang="ok">ОК</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="note-actions-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
-                <h2 data-lang="settings">Настройки</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeSettings()" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round">close</i>
+                <h2 data-lang="note_actions">Действия</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('note-actions-modal')" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
-            <div class="modal-body scrollable">
-                <section class="settings-group">
-                    <h3 data-lang="general">Общие</h3>
-                    <div class="settings-row">
-                        <span data-lang="language">Язык</span>
-                        <div class="toggle-switch-lang">
-                            <button type="button" class="lang-btn active" onclick="UI.setLang('ru')">RU</button>
-                            <button type="button" class="lang-btn" onclick="UI.setLang('en')">EN</button>
-                        </div>
-                    </div>
-                </section>
+            <div class="modal-body">
+                <button type="button" class="btn-primary" onclick="UI.downloadSelectedNote()" data-lang="download_note">Скачать файл</button>
+                <button type="button" class="btn-secondary" onclick="UI.uploadSelectedNote()" data-lang="upload_note">Отправить в облако</button>
+            </div>
+        </div>
+    </div>
 
-                <section class="settings-group">
-                    <h3 data-lang="sections">Разделы</h3>
-                    <button type="button" class="settings-link" onclick="UI.openModal('editor-settings-modal')">
-                        <span class="settings-link-title" data-lang="editor_settings">Настройки редактора</span>
-                        <i class="material-icons-round">chevron_right</i>
-                    </button>
-                    <button type="button" class="settings-link" onclick="UI.openModal('appearance-modal')">
-                        <span class="settings-link-title" data-lang="appearance_settings">Внешний вид</span>
-                        <i class="material-icons-round">chevron_right</i>
-                    </button>
-                </section>
-                <section class="settings-group">
-                    <h3 data-lang="folders_settings">Папки</h3>
-                    <div class="settings-row">
-                        <span data-lang="folder_view_mode">Отображение</span>
-                        <div class="segmented-control" role="group" aria-label="Режим отображения папок" data-lang-aria="folder_view_aria">
-                            <button type="button" class="segmented-btn" data-folder-mode="compact" onclick="UI.setFolderViewMode('compact')" data-lang="folder_view_compact">В боковой панели</button>
-                            <button type="button" class="segmented-btn" data-folder-mode="full" onclick="UI.setFolderViewMode('full')" data-lang="folder_view_full">Полный экран</button>
-                        </div>
-                    </div>
-                    <div class="settings-row">
-                        <span data-lang="reduce_motion">Уменьшить анимации</span>
-                        <button type="button" class="toggle-btn" id="reduce-motion-toggle" onclick="UI.toggleReduceMotion()"></button>
-                    </div>
-                </section>
+    <div id="share-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Поделиться заметкой">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2>Поделиться</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('share-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <p class="muted">Ссылка будет сгенерирована в JS и появится здесь</p>
+                <input id="share-link" type="text" class="input-area" readonly value="">
+                <div class="row-right">
+                    <button type="button" class="btn-secondary" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('share-link').value)">Копировать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="collab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Совместное редактирование">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2>Совместное редактирование</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('collab-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <p class="muted">Одноразовая ссылка будет сгенерирована в JS и появится здесь</p>
+                <input id="collab-link" type="text" class="input-area" readonly value="">
+                <div class="row-right">
+                    <button type="button" class="btn-secondary" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('collab-link').value)">Копировать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="lock-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Блокировка заметки">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2>Блокировка</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('lock-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <input id="lock-password" type="password" class="input-area" placeholder="Пароль" autocomplete="new-password">
+                <div class="row-right">
+                    <button type="button" class="btn-secondary" onclick="UI.closeModal('lock-modal')">Отмена</button>
+                    <button type="button" class="btn-primary" id="lock-apply">Применить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="lock-center-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Центр защиты">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2>Защита заметок</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('lock-center-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <p class="muted">Тут будут фильтры скрытых заметок и быстрые действия</p>
+                <div class="modal-actions-grid">
+                    <button type="button" class="btn-secondary" onclick="UI.closeModal('lock-center-modal')">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="survey-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Опросник">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2>Опросник</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('survey-modal')" aria-label="Закрыть">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <label class="field">
+                    <span class="field-label">Зачем ты чаще всего используешь заметки</span>
+                    <input id="survey-q1" class="input-area" type="text" autocomplete="off">
+                </label>
+                <label class="field">
+                    <span class="field-label">Сколько заметок в неделю создаёшь</span>
+                    <input id="survey-q2" class="input-area" type="text" inputmode="numeric" autocomplete="off">
+                </label>
+                <label class="field">
+                    <span class="field-label">Какая функция самая важная</span>
+                    <input id="survey-q3" class="input-area" type="text" autocomplete="off">
+                </label>
+                <div class="row-right">
+                    <button type="button" class="btn-secondary" onclick="UI.closeModal('survey-modal')">Позже</button>
+                    <button type="button" class="btn-primary" id="survey-submit">Отправить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="sketch-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card full-screen-modal">
+            <header class="modal-header modal-header-tight">
+                <div class="row-left">
+                    <h2 class="modal-title" data-lang="sketch_title">Холст</h2>
+                    <input type="color" id="sketch-color-picker" value="#00f2ff" class="input-color-custom input-color-round" aria-label="Цвет кисти" data-lang-aria="sketch_color">
+                    <input type="range" id="sketch-width-picker" min="1" max="20" value="3" class="range-compact" aria-label="Толщина кисти" data-lang-aria="sketch_width">
+                </div>
+                <div class="row-right">
+                    <button type="button" class="btn-icon" onclick="SketchService.undo()" aria-label="Отменить штрих" data-lang-aria="sketch_undo"><i class="material-icons-round" aria-hidden="true">undo</i></button>
+                    <button type="button" class="btn-icon" onclick="SketchService.clear()" aria-label="Очистить" data-lang-aria="sketch_clear"><i class="material-icons-round" aria-hidden="true">delete</i></button>
+                    <button type="button" class="btn-icon" onclick="UI.closeModal('sketch-modal')" aria-label="Закрыть" data-lang-aria="close"><i class="material-icons-round" aria-hidden="true">close</i></button>
+                </div>
+            </header>
+            <div class="modal-body no-padding modal-canvas-body">
+                <canvas id="sketch-canvas" class="canvas-full" style="touch-action:none;"></canvas>
             </div>
             <footer class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="UI.closeSettings()" data-lang="close">Закрыть</button>
+                <button type="button" class="btn-primary" onclick="SketchService.save()" data-lang="insert">Вставить</button>
             </footer>
         </div>
     </div>
 
-    <!-- Editor Settings -->
-    <div id="editor-settings-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="editor_settings">Настройки редактора</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeModal('editor-settings-modal')" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round">close</i>
-                </button>
+    <div id="photo-editor-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card full-screen-modal">
+            <header class="modal-header modal-header-tight">
+                <div class="row-left">
+                    <h2 class="modal-title" data-lang="photo_editor">Редактор фото</h2>
+                    <input type="color" id="photo-color-picker" value="#00f2ff" class="input-color-custom input-color-round" aria-label="Цвет кисти" data-lang-aria="photo_color">
+                    <input type="range" id="photo-width-picker" min="1" max="20" value="3" class="range-compact" aria-label="Толщина кисти" data-lang-aria="photo_width">
+                </div>
+                <div class="row-right">
+                    <button type="button" class="btn-icon" onclick="PhotoEditor.undo()" aria-label="Отменить" data-lang-aria="undo"><i class="material-icons-round" aria-hidden="true">undo</i></button>
+                    <button type="button" class="btn-icon" onclick="PhotoEditor.clear()" aria-label="Очистить" data-lang-aria="clear"><i class="material-icons-round" aria-hidden="true">delete</i></button>
+                    <button type="button" class="btn-icon" onclick="UI.closeModal('photo-editor-modal')" aria-label="Закрыть" data-lang-aria="close"><i class="material-icons-round" aria-hidden="true">close</i></button>
+                </div>
             </header>
-            <div class="modal-body scrollable">
-                <section class="settings-group">
-                    <h3 data-lang="tools">Инструменты редактора</h3>
-                    <div id="tools-config-root" class="tools-config-grid"></div>
-                </section>
+            <div class="modal-body no-padding modal-canvas-body">
+                <canvas id="photo-editor-canvas" class="canvas-full" style="touch-action:none;"></canvas>
             </div>
             <footer class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="UI.closeModal('editor-settings-modal')" data-lang="close">Закрыть</button>
+                <button type="button" class="btn-primary" onclick="PhotoEditor.save()" data-lang="save">Сохранить</button>
             </footer>
         </div>
     </div>
 
-    <!-- Appearance -->
-    <div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="appearance_settings">Внешний вид</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeModal('appearance-modal')" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round">close</i>
-                </button>
-            </header>
-            <div class="modal-body scrollable">
-                <section class="settings-group">
-                    <h3 data-lang="appearance">Внешний вид</h3>
-                    <p class="subtext" data-lang="presets">Пресеты</p>
-                    <div id="theme-picker-root" class="theme-grid"></div>
-                    <p class="subtext manual-spacing" data-lang="manual">Ручная настройка</p>
-                    <div class="color-pickers-grid">
-                        <div class="color-picker-item">
-                            <span data-lang="c_text">Текст</span>
-                            <input type="color" id="cp-text" class="input-color-custom" aria-label="Цвет текста" data-lang-aria="color_text">
-                        </div>
-                        <div class="color-picker-item">
-                            <span data-lang="c_accent">Акцент</span>
-                            <input type="color" id="cp-primary" class="input-color-custom" aria-label="Акцентный цвет" data-lang-aria="color_accent">
-                        </div>
-                        <div class="color-picker-item">
-                            <span data-lang="c_bg">Фон</span>
-                            <input type="color" id="cp-bg" class="input-color-custom" aria-label="Цвет фона" data-lang-aria="color_bg">
-                        </div>
-                    </div>
-                </section>
-            </div>
-            <footer class="modal-footer" style="justify-content: space-between;">
-                <button type="button" class="btn-secondary" onclick="ThemeManager.reset()" data-lang="reset">Сбросить</button>
-                <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-secondary" onclick="UI.closeModal('appearance-modal')" data-lang="close">Закрыть</button>
-                    <button type="button" class="btn-primary" onclick="UI.saveAppearance()" data-lang="save">Сохранить</button>
-                </div>
-            </footer>
-        </div>
-    </div>
-
-    <!-- About -->
     <div id="about-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
                 <h2 data-lang="team">Команда</h2>
                 <button type="button" class="btn-icon" onclick="UI.closeModal('about-modal')" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round">close</i>
+                    <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
             <div class="modal-body">
@@ -353,31 +468,31 @@
                 <div class="bot-link-wrapper">
                     <span class="bot-link-label" data-lang="contact_us">Связаться с нами:</span>
                     <a href="https://t.me/SmartNotesInfo_bot" target="_blank" rel="noopener noreferrer" class="btn-primary telegram-btn">
-                        <i class="material-icons-round">smart_toy</i> @SmartNotesInfo_bot
+                        <i class="material-icons-round" aria-hidden="true">smart_toy</i>
+                        @SmartNotesInfo_bot
                     </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Rating -->
     <div id="rate-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
                 <h2 data-lang="rate">Оценить</h2>
                 <button type="button" class="btn-icon" onclick="UI.closeModal('rate-modal')" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round">close</i>
+                    <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
             <div class="modal-body">
-                <div class="star-rating" style="margin-bottom: 20px;">
+                <div class="stars-row" aria-label="Оценка">
                     <i class="material-icons-round star" data-val="1">star_border</i>
                     <i class="material-icons-round star" data-val="2">star_border</i>
                     <i class="material-icons-round star" data-val="3">star_border</i>
                     <i class="material-icons-round star" data-val="4">star_border</i>
                     <i class="material-icons-round star" data-val="5">star_border</i>
                 </div>
-                <textarea id="feedback-text" placeholder="..." data-lang-placeholder="feedback_placeholder" rows="4" class="input-area" aria-label="Ваш отзыв" data-lang-aria="feedback_aria"></textarea>
+                <textarea id="feedback-text" placeholder="." data-lang-placeholder="feedback_placeholder" rows="4" class="input-area" aria-label="Ваш отзыв" data-lang-aria="feedback_aria"></textarea>
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-primary" onclick="UI.submitFeedback()" data-lang="send">Отправить</button>
@@ -385,129 +500,22 @@
         </div>
     </div>
 
-    <!-- Confirmation Dialog -->
-    <div id="confirm-modal" class="modal-overlay confirm-layer" role="dialog" aria-modal="true">
-        <div class="confirm-box">
-            <h3 id="confirm-title" data-lang="confirm_default">Подтвердите</h3>
-            <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
-                <button type="button" class="btn-secondary" id="confirm-cancel" data-lang="cancel">Отмена</button>
-                <button type="button" class="btn-danger" id="confirm-ok" data-lang="yes">Да</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Input Prompt -->
-    <div id="prompt-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card confirm-box">
-            <h3 id="prompt-title" data-lang="prompt_title">Ввод</h3>
-            <input type="text" id="prompt-input" class="input-area" style="margin-top:15px; text-align:center;" autocomplete="off" aria-label="Поле ввода" data-lang-aria="prompt_input">
-            <div style="display:flex; justify-content:center; gap:10px; margin-top:20px;">
-                <button type="button" class="btn-secondary" id="prompt-cancel" data-lang="cancel">Отмена</button>
-                <button type="button" class="btn-primary" id="prompt-ok" data-lang="ok">ОК</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="note-actions-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="note_actions">Действия</h2>
-                <button type="button" class="btn-icon" onclick="UI.closeModal('note-actions-modal')" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <button type="button" class="btn-primary" onclick="UI.downloadSelectedNote()" data-lang="download_note">Скачать файл</button>
-                <button type="button" class="btn-secondary" onclick="UI.uploadSelectedNote()" data-lang="upload_note">Отправить в облако</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sketch Modal -->
-    <div id="sketch-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card full-screen-modal">
-            <header class="modal-header" style="padding:10px 15px;">
-                <div style="display:flex; align-items:center; gap:15px;">
-                    <h2 style="font-size:1.1rem;" data-lang="sketch_title">Холст</h2>
-                    <input type="color" id="sketch-color-picker" value="#00f2ff" class="input-color-custom" style="width:44px; height:44px; border-radius:50%; border:2px solid var(--border);" aria-label="Цвет кисти" data-lang-aria="sketch_color">
-                    <input type="range" id="sketch-width-picker" min="1" max="20" value="3" style="width:80px" aria-label="Толщина кисти" data-lang-aria="sketch_width">
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-icon" onclick="SketchService.undo()" aria-label="Отменить штрих" data-lang-aria="sketch_undo"><i class="material-icons-round">undo</i></button>
-                    <button type="button" class="btn-icon" onclick="SketchService.clear()" aria-label="Очистить" data-lang-aria="sketch_clear"><i class="material-icons-round">delete</i></button>
-                    <button type="button" class="btn-icon" onclick="UI.closeModal('sketch-modal')" aria-label="Закрыть" data-lang-aria="close"><i class="material-icons-round">close</i></button>
-                </div>
-            </header>
-            <div class="modal-body no-padding" style="background:#fff; position:relative; overflow:hidden;">
-                <!-- touch-action:none prevents page scrolling when drawing -->
-                <canvas id="sketch-canvas" style="width:100%; height:100%; display:block; touch-action:none;"></canvas>
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-primary" onclick="SketchService.save()" data-lang="insert">Вставить</button>
-            </footer>
-        </div>
-    </div>
-
-    <!-- UI Helpers -->
-    <div id="text-size-popup" class="popup-tool hidden">
-        <div class="slider-wrapper">
-            <span style="font-size:12px">A</span>
-            <input type="range" id="font-size-range" min="1" max="7" step="1" value="3" aria-label="Размер шрифта" data-lang-aria="text_size">
-            <span style="font-size:20px">A</span>
-        </div>
-    </div>
-
-    <div id="media-context-menu" class="context-menu hidden">
-        <button type="button" onclick="Editor.alignMedia('left')" aria-label="По левому краю" data-lang-aria="align_left"><i class="material-icons-round">format_align_left</i></button>
-        <button type="button" onclick="Editor.alignMedia('center')" aria-label="По центру" data-lang-aria="align_center"><i class="material-icons-round">format_align_center</i></button>
-        <button type="button" onclick="Editor.alignMedia('right')" aria-label="По правому краю" data-lang-aria="align_right"><i class="material-icons-round">format_align_right</i></button>
-        <div class="divider-vertical"></div>
-        <button type="button" onclick="Editor.resetMediaTransform()" aria-label="Сбросить размер" data-lang-aria="reset_media"><i class="material-icons-round">restore</i></button>
-        <button type="button" onclick="PhotoEditor.open()" aria-label="Рисовать на фото" data-lang-aria="draw_photo"><i class="material-icons-round">brush</i></button>
-        <button type="button" onclick="Editor.deleteSelectedMedia()" style="color:var(--danger)" aria-label="Удалить" data-lang-aria="delete"><i class="material-icons-round">delete</i></button>
-    </div>
-
-    <!-- Photo Editor Modal -->
-    <div id="photo-editor-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card full-screen-modal">
-            <header class="modal-header" style="padding:10px 15px;">
-                <div style="display:flex; align-items:center; gap:15px;">
-                    <h2 style="font-size:1.1rem;" data-lang="photo_editor">Редактор фото</h2>
-                    <input type="color" id="photo-color-picker" value="#00f2ff" class="input-color-custom" style="width:44px; height:44px; border-radius:50%; border:2px solid var(--border);" aria-label="Цвет кисти" data-lang-aria="photo_color">
-                    <input type="range" id="photo-width-picker" min="1" max="20" value="3" style="width:80px" aria-label="Толщина кисти" data-lang-aria="photo_width">
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-icon" onclick="PhotoEditor.undo()" aria-label="Отменить" data-lang-aria="undo"><i class="material-icons-round">undo</i></button>
-                    <button type="button" class="btn-icon" onclick="PhotoEditor.clear()" aria-label="Очистить" data-lang-aria="clear"><i class="material-icons-round">delete</i></button>
-                    <button type="button" class="btn-icon" onclick="UI.closeModal('photo-editor-modal')" aria-label="Закрыть" data-lang-aria="close"><i class="material-icons-round">close</i></button>
-                </div>
-            </header>
-            <div class="modal-body no-padding" style="background:#fff; position:relative; overflow:hidden;">
-                <canvas id="photo-editor-canvas" style="width:100%; height:100%; display:block; touch-action:none;"></canvas>
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-primary" onclick="PhotoEditor.save()" data-lang="save">Сохранить</button>
-            </footer>
-        </div>
-    </div>
-
     <div id="voice-indicator" class="voice-indicator" aria-hidden="true">
-        <div class="pulse-ring"></div>
-        <i class="material-icons-round">mic</i>
+        <div class="pulse-ring" aria-hidden="true"></div>
+        <i class="material-icons-round" aria-hidden="true">mic</i>
         <span data-lang="recording">Запись...</span>
     </div>
 
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
-    <!-- Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW Registered'))
-                    .catch(err => console.log('SW Failed', err));
+                    .catch(() => null);
             });
         }
     </script>
