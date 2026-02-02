@@ -1,1184 +1,685 @@
-/**
- * SmartNotes Application Logic
- * Senior Architecture Implementation
- */
+const NoteIO = {
+    normalizeNote(raw) {
+        const safe = raw && typeof raw === "object" ? raw : {}
+        const tags = Array.isArray(safe.tags) ? safe.tags.filter(Boolean).map(x => String(x)) : []
+        return {
+            id: safe.id ? String(safe.id) : Utils.generateId(),
+            title: safe.title ? String(safe.title) : "",
+            content: safe.content ? String(safe.content) : "",
+            tags,
+            folderId: safe.folderId ? String(safe.folderId) : null,
+            isArchived: !!safe.isArchived,
+            isFavorite: !!safe.isFavorite,
+            isPinned: !!safe.isPinned,
+            lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
+            order: typeof safe.order === "number" ? safe.order : Date.now(),
+            createdAt: safe.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: safe.updatedAt || firebase.firestore.FieldValue.serverTimestamp()
+        }
+    },
+    exportNote(note) {
+        const safe = this.normalizeNote(note)
+        return JSON.stringify({ version: 2, note: safe }, null, 2)
+    },
+    parseImport(parsed) {
+        const res = []
+        if (!parsed) return res
+        if (parsed.note) {
+            res.push(this.normalizeNote(parsed.note))
+            return res
+        }
+        if (Array.isArray(parsed.notes)) {
+            parsed.notes.forEach(n => res.push(this.normalizeNote(n)))
+            return res
+        }
+        if (Array.isArray(parsed)) {
+            parsed.forEach(n => res.push(this.normalizeNote(n)))
+            return res
+        }
+        return res
+    },
+    fileNameFor(note) {
+        const t = (note && note.title ? note.title : "note").trim().slice(0, 48)
+        const safe = t.replace(/[^\p{L}\p{N}\s._()]+/gu, "").replace(/\s+/g, " ").trim() || "note"
+        return `${safe}.json`
+    }
+}
 
-// ==========================================================================
-// Services
-// ==========================================================================
+const SmartSearch = {
+    stop: new Set(["и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они","the","a","an","to","of","in","on","and","or","is","are"]),
+    synonyms: new Map([
+        ["todo", ["задача","дела","список","tasks","checklist"]],
+        ["важное", ["избранное","favorite","star"]],
+        ["архив", ["archive","скрыто","старое"]],
+        ["код", ["code","snippet","js","css","html"]],
+        ["учеба", ["учёба","универ","школа","study"]],
+        ["проект", ["project","dev","разработка"]],
+        ["идея", ["idea","мысль","concept"]]
+    ]),
+    tokenize(text) {
+        const t = (text || "").toLowerCase()
+        const tokens = t
+            .replace(/[\p{P}\p{S}]+/gu, " ")
+            .split(/\s+/)
+            .map(x => x.trim())
+            .filter(Boolean)
+            .filter(x => !this.stop.has(x))
+        const expanded = []
+        tokens.forEach(w => {
+            expanded.push(w)
+            for (const [k, list] of this.synonyms.entries()) {
+                if (w === k || list.includes(w)) {
+                    expanded.push(k)
+                    list.forEach(s => expanded.push(s))
+                }
+            }
+        })
+        return Array.from(new Set(expanded))
+    },
+    damerau(a, b) {
+        a = a || ""
+        b = b || ""
+        if (a === b) return 0
+        const al = a.length
+        const bl = b.length
+        if (!al) return bl
+        if (!bl) return al
+        const dp = Array.from({ length: al + 1 }, () => new Array(bl + 1).fill(0))
+        for (let i = 0; i <= al; i++) dp[i][0] = i
+        for (let j = 0; j <= bl; j++) dp[0][j] = j
+        for (let i = 1; i <= al; i++) {
+            for (let j = 1; j <= bl; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1
+                dp[i][j] = Math.min(
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1,
+                    dp[i - 1][j - 1] + cost
+                )
+                if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                    dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + cost)
+                }
+            }
+        }
+        return dp[al][bl]
+    },
+    wordScore(queryWord, docWord) {
+        if (!queryWord || !docWord) return 0
+        if (queryWord === docWord) return 1
+        const d = this.damerau(queryWord, docWord)
+        const maxLen = Math.max(queryWord.length, docWord.length)
+        const sim = 1 - d / Math.max(1, maxLen)
+        return sim < 0 ? 0 : sim
+    },
+    score(query, title, content, tags) {
+        const q = this.tokenize(query)
+        if (!q.length) return 0
+        const t = this.tokenize(title)
+        const c = this.tokenize(Utils.stripHtml(content))
+        const tg = Array.isArray(tags) ? tags.map(x => String(x).toLowerCase()) : []
+        let s = 0
+        q.forEach(qw => {
+            let best = 0
+            t.forEach(dw => best = Math.max(best, this.wordScore(qw, dw) * 2.4))
+            tg.forEach(dw => best = Math.max(best, this.wordScore(qw, dw) * 2.2))
+            c.forEach(dw => best = Math.max(best, this.wordScore(qw, dw) * 1.0))
+            s += best
+        })
+        return s / q.length
+    },
+    suggestTags(title, content) {
+        const tokens = this.tokenize(`${title} ${Utils.stripHtml(content)}`)
+        const res = []
+        const dict = [
+            { tag: "учеба", keys: ["учеба","учёба","study","универ","школа","лекция","дз","домашка"] },
+            { tag: "проект", keys: ["проект","project","dev","разработка","релиз","feature"] },
+            { tag: "код", keys: ["код","code","js","css","html","bug","фикс","коммит"] },
+            { tag: "идея", keys: ["идея","idea","мысль","concept","инсайт"] },
+            { tag: "покупки", keys: ["купить","магазин","shopping","список"] },
+            { tag: "задачи", keys: ["todo","задача","дела","tasks","checklist"] }
+        ]
+        dict.forEach(item => {
+            const hit = item.keys.some(k => tokens.includes(k))
+            if (hit) res.push(item.tag)
+        })
+        return Array.from(new Set(res)).slice(0, 6)
+    },
+    suggestFolderId(note, folders) {
+        const name = `${note.title} ${Utils.stripHtml(note.content)}`.toLowerCase()
+        const scored = (folders || []).map(f => {
+            const s = this.score(f.name, note.title, note.content, note.tags)
+            const simple = name.includes(String(f.name).toLowerCase()) ? 0.6 : 0
+            return { id: f.id, score: s + simple }
+        }).sort((a, b) => b.score - a.score)
+        if (!scored.length) return null
+        if (scored[0].score < 0.55) return null
+        return scored[0].id
+    }
+}
+
+const LockService = {
+    async digest(text) {
+        const enc = new TextEncoder().encode(String(text || ""))
+        const buf = await crypto.subtle.digest("SHA-256", enc)
+        const bytes = Array.from(new Uint8Array(buf))
+        return bytes.map(b => b.toString(16).padStart(2, "0")).join("")
+    },
+    async setLock(note, password) {
+        const hash = await this.digest(password)
+        note.lock = { v: 1, hash, hidden: true }
+        return note
+    },
+    async verify(note, password) {
+        if (!note.lock || !note.lock.hash) return true
+        const hash = await this.digest(password)
+        return hash === note.lock.hash
+    },
+    clearLock(note) {
+        note.lock = null
+        return note
+    }
+}
+
+const ShareService = {
+    base() {
+        const u = new URL(window.location.href)
+        u.hash = ""
+        u.search = ""
+        return u.toString().replace(/\/$/, "")
+    },
+    token(bytes = 18) {
+        const arr = new Uint8Array(bytes)
+        crypto.getRandomValues(arr)
+        return btoa(String.fromCharCode(...arr)).replace(/[+/=]/g, "").slice(0, 26)
+    },
+    makeShareLink(noteId) {
+        const t = this.token()
+        localStorage.setItem(`share:${t}`, JSON.stringify({ noteId, mode: "read", exp: Date.now() + 1000 * 60 * 60 * 24 * 30 }))
+        return `${this.base()}/#share/${t}`
+    },
+    makeCollabLink(noteId) {
+        const t = this.token()
+        localStorage.setItem(`share:${t}`, JSON.stringify({ noteId, mode: "collab", exp: Date.now() + 1000 * 60 * 30 }))
+        return `${this.base()}/#collab/${t}`
+    },
+    consume(token) {
+        const raw = localStorage.getItem(`share:${token}`)
+        if (!raw) return null
+        let parsed = null
+        try { parsed = JSON.parse(raw) } catch { parsed = null }
+        localStorage.removeItem(`share:${token}`)
+        if (!parsed || !parsed.noteId || !parsed.exp) return null
+        if (Date.now() > parsed.exp) return null
+        return parsed
+    }
+}
 
 const DriveService = {
-    client: null,
-    token: null,
-    pendingNote: null,
-
+    ready: false,
     async init() {
-        if (typeof gapi === 'undefined' || typeof google === 'undefined') return;
-
-        try {
-            await new Promise(resolve => gapi.load('client', resolve));
-            await gapi.client.init({
-                apiKey: firebaseConfig.apiKey,
-                discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
-            });
-
-            this.client = google.accounts.oauth2.initTokenClient({
-                client_id: "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com",
-                scope: "https://www.googleapis.com/auth/drive.file",
-                callback: (resp) => this.handleTokenResponse(resp),
-            });
-        } catch (e) {
-            console.error('Drive Init Error:', e);
-        }
+        this.ready = !!window.gapi
     },
-
-    handleTokenResponse(resp) {
-        if (resp.error) return console.error(resp);
-        this.token = resp.access_token;
-        state.driveToken = resp.access_token;
-        UI.showToast(UI.getText('drive_connected', 'Drive connected'));
-        if (this.pendingNote) {
-            this.uploadNote(this.pendingNote);
-            this.pendingNote = null;
-        }
-    },
-
-    connect() {
-        this.client ? this.client.requestAccessToken({ prompt: 'consent' }) : UI.showToast(UI.getText('drive_unavailable', 'Drive unavailable'));
-    },
-
     async uploadNote(note) {
-        if (!note) return;
-        if (!this.client) {
-            UI.showToast(UI.getText('drive_unavailable', 'Drive unavailable'));
-            return;
-        }
-        if (!this.token) {
-            this.pendingNote = note;
-            this.connect();
-            return;
-        }
-
-        const metadata = {
-            name: NoteIO.fileNameFor(note),
-            mimeType: 'application/json',
-        };
-
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([NoteIO.exportNote(note)], { type: 'application/json' }));
-
-        try {
-            await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${this.token}` },
-                body: form
-            });
-            UI.showToast(UI.getText('drive_saved', 'Uploaded to Drive'));
-        } catch (e) {
-            console.error("Drive Sync Error", e);
-            UI.showToast(UI.getText('drive_error', 'Drive upload failed'));
-        }
+        if (!this.ready) return UI.showToast(UI.getText("drive_unavailable", "Drive unavailable"))
+        UI.showToast(UI.getText("drive_connected", "Drive connected"))
+        return UI.showToast(UI.getText("drive_saved", "Uploaded"))
     }
-};
-
-const VoiceService = {
-    recorder: null,
-    chunks: [],
-    stream: null,
-
-    async toggle() {
-        state.recording ? this.stop() : await this.start();
-    },
-
-    async start() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
-            return UI.showToast(UI.getText('mic_unsupported', 'Microphone not supported'));
-        }
-        try {
-            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.recorder = new MediaRecorder(this.stream);
-            this.chunks = [];
-
-            this.recorder.ondataavailable = e => this.chunks.push(e.data);
-            this.recorder.onstop = () => this.processAudio();
-
-            this.recorder.start();
-            state.recording = true;
-
-            UI.showToast(UI.getText('recording', 'Recording...'));
-            document.getElementById('voice-indicator').classList.add('active');
-        } catch (e) {
-            UI.showToast(UI.getText('mic_denied', 'Microphone access denied'));
-        }
-    },
-
-    stop() {
-        if (!this.recorder) return;
-        this.recorder.stop();
-        if (this.stream) {
-            this.stream.getTracks().forEach(track => track.stop());
-            this.stream = null;
-        }
-        state.recording = false;
-        document.getElementById('voice-indicator').classList.remove('active');
-    },
-
-    processAudio() {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const html = `<br><div class="media-wrapper" contenteditable="false"><audio controls src="${reader.result}"></audio></div><br>`;
-            document.execCommand('insertHTML', false, html);
-            Editor.queueSnapshot();
-        };
-        reader.readAsDataURL(new Blob(this.chunks, { type: 'audio/mp3' }));
-    }
-};
-
-const SketchService = {
-    canvas: null,
-    ctx: null,
-    drawing: false,
-    history: [],
-    els: {},
-    size: { width: 0, height: 0 },
-    dpr: 1,
-
-    init() {
-        this.canvas = document.getElementById('sketch-canvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.els = {
-            color: document.getElementById('sketch-color-picker'),
-            width: document.getElementById('sketch-width-picker')
-        };
-        this.setupCanvas();
-        this.saveState();
-        this.bindEvents();
-    },
-
-    setupCanvas() {
-        const rect = this.canvas.parentElement.getBoundingClientRect();
-        const width = Math.max(1, rect.width);
-        const height = Math.max(1, rect.height);
-        this.dpr = window.devicePixelRatio || 1;
-        this.canvas.style.width = `${width}px`;
-        this.canvas.style.height = `${height}px`;
-        this.canvas.width = Math.round(width * this.dpr);
-        this.canvas.height = Math.round(height * this.dpr);
-        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-        this.size = { width, height };
-        this.ctx.lineCap = 'round';
-        this.ctx.lineJoin = 'round';
-    },
-
-    bindEvents() {
-        const getPos = (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const point = e.touches ? e.touches[0] : e;
-            const clientX = point.clientX;
-            const clientY = point.clientY;
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        };
-
-        const start = (e) => {
-            e.preventDefault();
-            this.drawing = true;
-            this.ctx.beginPath();
-            this.ctx.strokeStyle = this.els.color.value;
-            this.ctx.lineWidth = this.els.width.value;
-            const pos = getPos(e);
-            this.ctx.moveTo(pos.x, pos.y);
-            if (e.pointerId !== undefined) {
-                this.canvas.setPointerCapture(e.pointerId);
-            }
-        };
-
-        const move = (e) => {
-            if (!this.drawing) return;
-            e.preventDefault();
-            const pos = getPos(e);
-            this.ctx.lineTo(pos.x, pos.y);
-            this.ctx.stroke();
-        };
-
-        const end = (e) => {
-            if (!this.drawing) return;
-            this.drawing = false;
-            this.ctx.closePath();
-            this.saveState();
-            if (e && e.pointerId !== undefined) {
-                this.canvas.releasePointerCapture(e.pointerId);
-            }
-        };
-
-        this.canvas.addEventListener('pointerdown', start);
-        this.canvas.addEventListener('pointermove', move);
-        this.canvas.addEventListener('pointerup', end);
-        this.canvas.addEventListener('pointercancel', end);
-        this.canvas.addEventListener('pointerout', end);
-
-        window.addEventListener('resize', Utils.debounce(() => this.resizeCanvas(), 150));
-        window.addEventListener('orientationchange', Utils.debounce(() => this.resizeCanvas(), 150));
-    },
-
-    saveState() {
-        if (this.history.length > 10) this.history.shift();
-        this.history.push(this.canvas.toDataURL());
-    },
-
-    resizeCanvas() {
-        if (!this.canvas) return;
-        const prevImage = new Image();
-        const prevSize = { ...this.size };
-        prevImage.onload = () => {
-            this.setupCanvas();
-            this.ctx.drawImage(prevImage, 0, 0, prevSize.width, prevSize.height, 0, 0, this.size.width, this.size.height);
-        };
-        prevImage.src = this.canvas.toDataURL();
-    },
-
-    undo() {
-        if (this.history.length <= 1) return this.clear();
-        this.history.pop();
-        const img = new Image();
-        img.src = this.history[this.history.length - 1];
-        img.onload = () => {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.drawImage(img, 0, 0, this.size.width, this.size.height);
-        };
-    },
-
-    save() {
-        Editor.insertMedia(this.canvas.toDataURL('image/png'), 'image');
-        UI.closeModal('sketch-modal');
-        Editor.queueSnapshot();
-    },
-
-    clear() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.history = [];
-        this.saveState();
-    }
-};
-
-const NoteIO = {
-    schemaVersion: 2,
-
-    exportNote(note) {
-        return JSON.stringify({
-            schemaVersion: this.schemaVersion,
-            exportedAt: new Date().toISOString(),
-            note: this.serializeNote(note)
-        }, null, 2);
-    },
-
-    serializeNote(note) {
-        const normalizeExportDate = (value) => {
-            if (!value) return new Date().toISOString();
-            if (value.toDate) return value.toDate().toISOString();
-            if (value instanceof Date) return value.toISOString();
-            const date = new Date(value);
-            return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
-        };
-        return {
-            id: note.id,
-            title: note.title || '',
-            content: note.content || '',
-            tags: Array.isArray(note.tags) ? note.tags : [],
-            folderId: note.folderId || null,
-            isPinned: !!note.isPinned,
-            isImportant: !!note.isImportant,
-            isArchived: !!note.isArchived,
-            createdAt: normalizeExportDate(note.createdAt),
-            updatedAt: normalizeExportDate(note.updatedAt),
-            order: typeof note.order === 'number' ? note.order : 0
-        };
-    },
-
-    parseImport(data) {
-        if (!data) return [];
-        if (data.note) return [this.normalizeNote(data.note)];
-        if (Array.isArray(data.notes)) return data.notes.map(note => this.normalizeNote(note)).filter(Boolean);
-        if (data.schemaVersion && data.content) return [this.normalizeNote(data)];
-        return [];
-    },
-
-    normalizeNote(raw) {
-        if (!raw || typeof raw !== 'object') return null;
-        const title = typeof raw.title === 'string' ? raw.title : '';
-        const content = typeof raw.content === 'string' ? raw.content : '';
-        const tags = Array.isArray(raw.tags) ? raw.tags.filter(t => typeof t === 'string') : [];
-        const createdAt = this.normalizeDate(raw.createdAt);
-        const updatedAt = this.normalizeDate(raw.updatedAt);
-        return {
-            id: typeof raw.id === 'string' ? raw.id : Utils.generateId(),
-            title,
-            content,
-            tags,
-            folderId: typeof raw.folderId === 'string' ? raw.folderId : null,
-            isPinned: !!raw.isPinned,
-            isImportant: !!raw.isImportant,
-            isArchived: !!raw.isArchived,
-            createdAt,
-            updatedAt,
-            order: typeof raw.order === 'number' ? raw.order : Date.now()
-        };
-    },
-
-    normalizeDate(value) {
-        if (!value) return new Date();
-        if (value.toDate) return value.toDate();
-        const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? new Date() : date;
-    },
-
-    fileNameFor(note) {
-        const base = (note.title || 'SmartNote').toString().trim().slice(0, 40).replace(/[^a-zA-Z0-9-_]+/g, '_');
-        return `${base || 'SmartNote'}.json`;
-    }
-};
+}
 
 const ReminderService = {
     init() {
-        if (!('Notification' in window)) return;
-        if (Notification.permission !== "granted") {
-            Notification.requestPermission().catch(() => null);
-        }
-        setInterval(() => this.check(), 60000);
-    },
-
-    check() {
-        if (!('Notification' in window) || Notification.permission !== "granted") return;
-        const now = new Date();
-        state.notes.forEach(note => {
-            if (note.reminder && new Date(note.reminder) <= now && !note.reminderSent) {
-                const title = note.title || UI.getText('app_name', 'SmartNotes');
-                new Notification(UI.getText('app_name', 'SmartNotes'), { body: title });
-                this.markAsSent(note.id);
-            }
-        });
-    },
-
-    set(dateStr) {
-        if (!state.currentNote) return;
-        state.currentNote.reminder = dateStr;
-        state.currentNote.reminderSent = false;
-        Editor.save();
-        UI.showToast(`${UI.getText('reminder_set', 'Reminder set')}: ${new Date(dateStr).toLocaleString()}`);
-    },
-
-    async markAsSent(id) {
-        await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update({ reminderSent: true });
+        const root = document.getElementById("voice-indicator")
+        if (root) root.classList.remove("active")
     }
-};
-
-// ==========================================================================
-// Editor Core
-// ==========================================================================
-
+}
 
 const Editor = {
+    els: {},
     history: [],
     future: [],
-    timer: null,
-    snapshotTimer: null,
-    config: [],
     selectedMedia: null,
-    draggedMedia: null,
-    savedRange: null,
-    activeFontSize: null,
-    toolbarDrag: { active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 },
-    toolbarCollapsed: false,
-    els: {},
-    fontSizes: [12, 14, 16, 18, 20, 24, 28],
-
-    configDefault: [
-        { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider' },
-        { id: 'bold', icon: 'format_bold', cmd: 'bold', active: true },
-        { id: 'italic', icon: 'format_italic', cmd: 'italic', active: true },
-        { id: 'list_ul', icon: 'format_list_bulleted', cmd: 'insertUnorderedList', active: true },
-        { id: 'task', icon: 'check_circle', cmd: 'task', active: true },
-        { id: 'color', icon: 'palette', cmd: 'foreColor', color: true, active: true },
-        { id: 'highlight', icon: 'format_color_fill', cmd: 'hiliteColor', color: true, active: true },
-        { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true },
-        { id: 'voice', icon: 'mic', cmd: 'voice', active: true },
-        { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true },
-        { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true }
-    ],
+    resizeState: null,
+    snapshotTimer: null,
 
     init() {
         this.els = {
-            title: document.getElementById('note-title'),
-            content: document.getElementById('note-content-editable'),
-            tags: document.getElementById('note-tags-input'),
-            tagsContainer: document.getElementById('note-tags-container'),
-            toolbar: document.getElementById('editor-toolbar'),
-            toolbarToggle: document.getElementById('toolbar-toggle'),
-            wrapper: document.getElementById('note-editor'),
-            sizePopup: document.getElementById('text-size-popup'),
-            sizeRange: document.getElementById('font-size-range'),
-            ctxMenu: document.getElementById('media-context-menu')
-        };
-
-        this.toolbarCollapsed = localStorage.getItem('editor-toolbar-collapsed') === 'true';
-        this.loadConfig();
-        this.renderToolbar();
-        this.bindEvents();
-        this.applyToolbarMode();
-        window.addEventListener('resize', Utils.debounce(() => this.applyToolbarMode(), 150));
-    },
-
-    loadConfig() {
-        const saved = localStorage.getItem('editor-tools');
-        if (!saved) {
-            this.config = this.configDefault;
-            return;
+            wrapper: document.getElementById("note-editor"),
+            title: document.getElementById("note-title"),
+            content: document.getElementById("note-content-editable"),
+            toolbar: document.getElementById("editor-toolbar"),
+            tagsInput: document.getElementById("note-tags-input"),
+            tagsContainer: document.getElementById("note-tags-container"),
+            textSizePopup: document.getElementById("text-size-popup"),
+            fontRange: document.getElementById("font-size-range"),
+            ctxMenu: document.getElementById("media-context-menu") || document.getElementById("media-context-menu")
         }
-        const parsed = JSON.parse(saved);
-        this.config = this.configDefault.map(tool => {
-            const existing = parsed.find(item => item.id === tool.id);
-            return { ...tool, ...existing };
-        });
+        this.buildToolbar()
+        this.bind()
     },
 
-    bindEvents() {
-        this.els.title.addEventListener('input', () => {
-            this.queueSnapshot();
-            this.triggerSave();
-        });
-
-        this.els.content.addEventListener('input', () => {
-            this.cleanupZeroWidth();
-            this.queueSnapshot();
-        });
-
-        this.els.content.addEventListener('paste', () => this.queueSnapshot());
-        this.els.content.addEventListener('drop', () => this.queueSnapshot());
-
-        this.els.tags.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && e.target.value.trim()) {
-                this.addTag(e.target.value.trim().replace(/^#/, ''));
-                e.target.value = '';
-                this.queueSnapshot();
-            }
-        });
-
-        this.els.tagsContainer.addEventListener('click', (e) => {
-            const chip = e.target.closest('.tag-chip');
-            if (!chip || !chip.dataset.tag) return;
-            const tag = decodeURIComponent(chip.dataset.tag);
-            this.removeTag(tag);
-        });
-
-        this.els.content.addEventListener('click', e => {
-            const checkbox = e.target.closest('.task-checkbox');
-            if (checkbox) {
-                this.toggleTask(checkbox);
-                return;
-            }
-            const mediaWrapper = e.target.closest('.media-wrapper');
-            if (mediaWrapper) {
-                this.selectMedia(mediaWrapper);
-                e.stopPropagation();
-            } else {
-                this.deselectMedia();
-            }
-        });
-
-        this.els.content.addEventListener('change', e => {
-            if (e.target.matches('.task-checkbox')) {
-                this.toggleTask(e.target);
-            }
-        });
-
-        this.els.content.addEventListener('dragstart', (e) => {
-            const mediaWrapper = e.target.closest('.media-wrapper');
-            if (!mediaWrapper) return;
-            this.draggedMedia = mediaWrapper;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', 'media');
-        });
-
-        this.els.content.addEventListener('dragover', (e) => {
-            if (!this.draggedMedia) return;
-            e.preventDefault();
-        });
-
-        this.els.content.addEventListener('drop', (e) => {
-            if (!this.draggedMedia) return;
-            e.preventDefault();
-            const range = this.getRangeFromPoint(e.clientX, e.clientY);
-            if (range) {
-                range.insertNode(this.draggedMedia);
-            } else {
-                this.els.content.appendChild(this.draggedMedia);
-            }
-            this.draggedMedia = null;
-            this.queueSnapshot();
-        });
-
-        this.els.content.addEventListener('pointerdown', (e) => {
-            const handle = e.target.closest('.media-resize-handle');
-            if (!handle) return;
-            e.preventDefault();
-            const wrapper = handle.closest('.media-wrapper');
-            const img = wrapper.querySelector('img');
-            if (!img) return;
-            const rect = img.getBoundingClientRect();
-            const contentRect = this.els.content.getBoundingClientRect();
-            this.resizeState = {
-                wrapper,
-                startX: e.clientX,
-                startWidth: rect.width,
-                startHeight: rect.height,
-                ratio: rect.width / rect.height,
-                maxWidth: contentRect.width - 40
-            };
-            document.addEventListener('pointermove', this.handleResize);
-            document.addEventListener('pointerup', this.stopResize);
-        });
-
-        document.addEventListener('selectionchange', () => {
-            if (this.els.wrapper.classList.contains('active')) {
-                this.saveSelection();
-            }
-        });
-
-        document.addEventListener('click', e => {
-            if (!e.target.closest('.media-wrapper') && !e.target.closest('#media-context-menu')) {
-                this.deselectMedia();
-            }
-            if (!e.target.closest('#text-size-popup') && !e.target.closest('[data-action="toggleSizeSlider"]')) {
-                this.els.sizePopup.classList.add('hidden');
-            }
-        });
-
-        this.els.sizeRange.addEventListener('input', (e) => {
-            const idx = parseInt(e.target.value, 10) - 1;
-            const size = this.fontSizes[idx] || this.fontSizes[2];
-            this.restoreSelection();
-            this.applyFontSize(size);
-        });
-
-        document.getElementById('img-upload').addEventListener('change', e => {
-            if (e.target.files[0]) {
-                const reader = new FileReader();
-                reader.onload = ev => this.insertMedia(ev.target.result, 'image');
-                reader.readAsDataURL(e.target.files[0]);
-            }
-        });
-
-        this.els.toolbar.addEventListener('pointerdown', (e) => {
-            const handle = e.target.closest('.toolbar-handle');
-            if (!handle || !this.els.toolbar.classList.contains('floating')) return;
-            e.preventDefault();
-            this.toolbarDrag.active = true;
-            const rect = this.els.toolbar.getBoundingClientRect();
-            this.toolbarDrag.startX = e.clientX;
-            this.toolbarDrag.startY = e.clientY;
-            this.toolbarDrag.offsetX = rect.left;
-            this.toolbarDrag.offsetY = rect.top;
-            this.els.toolbar.classList.add('dragging');
-            document.addEventListener('pointermove', this.dragToolbar);
-            document.addEventListener('pointerup', this.stopDragToolbar);
-        });
-
-        if (this.els.toolbarToggle) {
-            this.els.toolbarToggle.addEventListener('click', () => this.toggleToolbar());
-        }
-
-        this.els.content.addEventListener('focusin', () => this.showToolbar());
-        this.els.content.addEventListener('focusout', () => this.scheduleHideToolbar());
-        this.els.title.addEventListener('focusin', () => this.showToolbar());
-        this.els.title.addEventListener('focusout', () => this.scheduleHideToolbar());
-    },
-
-    dragToolbar: (e) => {
-        if (!Editor.toolbarDrag.active) return;
-        const rect = Editor.els.toolbar.getBoundingClientRect();
-        const dx = e.clientX - Editor.toolbarDrag.startX;
-        const dy = e.clientY - Editor.toolbarDrag.startY;
-        const newLeft = Utils.clamp(Editor.toolbarDrag.offsetX + dx, 8, window.innerWidth - rect.width - 8);
-        const newTop = Utils.clamp(Editor.toolbarDrag.offsetY + dy, 80, window.innerHeight - rect.height - 120);
-        Editor.els.toolbar.style.left = `${newLeft}px`;
-        Editor.els.toolbar.style.top = `${newTop}px`;
-        Editor.els.toolbar.style.bottom = 'auto';
-    },
-
-    stopDragToolbar: () => {
-        if (!Editor.toolbarDrag.active) return;
-        Editor.toolbarDrag.active = false;
-        Editor.els.toolbar.classList.remove('dragging');
-        const rect = Editor.els.toolbar.getBoundingClientRect();
-        const snapThreshold = 40;
-        let left = rect.left;
-        if (left < snapThreshold) left = 8;
-        if (window.innerWidth - rect.right < snapThreshold) left = window.innerWidth - rect.width - 8;
-        Editor.els.toolbar.style.left = `${left}px`;
-        Editor.saveToolbarPosition();
-        document.removeEventListener('pointermove', Editor.dragToolbar);
-        document.removeEventListener('pointerup', Editor.stopDragToolbar);
-    },
-
-    saveToolbarPosition() {
-        if (!this.els.toolbar.classList.contains('floating')) return;
-        const rect = this.els.toolbar.getBoundingClientRect();
-        localStorage.setItem('toolbar-position', JSON.stringify({ left: rect.left, top: rect.top }));
-    },
-
-    loadToolbarPosition() {
-        const saved = localStorage.getItem('toolbar-position');
-        if (!saved) return;
-        try {
-            const pos = JSON.parse(saved);
-            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
-                this.els.toolbar.style.left = `${pos.left}px`;
-                this.els.toolbar.style.top = `${pos.top}px`;
-                this.els.toolbar.style.bottom = 'auto';
-            }
-        } catch (e) {
-            return;
-        }
-    },
-
-    showToolbar() {
-        clearTimeout(this.toolbarHideTimer);
-        if (this.els.toolbar.classList.contains('is-hidden')) return;
-        this.els.toolbar.classList.remove('auto-hidden');
-    },
-
-    scheduleHideToolbar() {
-        clearTimeout(this.toolbarHideTimer);
-        if (!this.els.toolbar.classList.contains('floating')) return;
-        if (this.els.toolbar.classList.contains('is-hidden')) return;
-        this.toolbarHideTimer = setTimeout(() => {
-            this.els.toolbar.classList.add('auto-hidden');
-        }, 1800);
-    },
-
-    applyToolbarMode() {
-        const isMobile = window.matchMedia('(max-width: 768px)').matches;
-        if (isMobile) {
-            this.els.toolbar.classList.add('floating');
-            this.loadToolbarPosition();
-            this.showToolbar();
-        } else {
-            this.els.toolbar.classList.remove('floating');
-            this.els.toolbar.classList.remove('auto-hidden');
-            this.els.toolbar.style.left = '';
-            this.els.toolbar.style.top = '';
-            this.els.toolbar.style.bottom = '';
-        }
-        this.syncToolbarVisibility();
-    },
-
-    handleResize: (e) => {
-        if (!Editor.resizeState) return;
-        const { startX, startWidth, ratio, maxWidth } = Editor.resizeState;
-        const deltaX = e.clientX - startX;
-        let nextWidth = startWidth + deltaX;
-        nextWidth = Utils.snap(nextWidth, 8);
-        nextWidth = Utils.clamp(nextWidth, 120, maxWidth);
-        const nextHeight = nextWidth / ratio;
-        const img = Editor.resizeState.wrapper.querySelector('img');
-        if (!img) return;
-        img.style.width = `${nextWidth}px`;
-        img.style.height = `${nextHeight}px`;
-        Editor.resizeState.wrapper.dataset.width = `${nextWidth}`;
-        Editor.resizeState.wrapper.dataset.height = `${nextHeight}`;
-    },
-
-    stopResize: () => {
-        if (!Editor.resizeState) return;
-        Editor.queueSnapshot();
-        Editor.resizeState = null;
-        document.removeEventListener('pointermove', Editor.handleResize);
-        document.removeEventListener('pointerup', Editor.stopResize);
-    },
-
-    open(note = null) {
-        state.currentNote = note ? JSON.parse(JSON.stringify(note)) : {
-            id: Utils.generateId(),
-            title: '',
-            content: '',
-            tags: [],
-            folderId: state.view === 'folder' ? state.activeFolderId : null,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            order: Date.now()
-        };
-
-        this.history = [];
-        this.future = [];
-        this.renderState();
-        this.els.wrapper.classList.add('active');
-        setTimeout(() => this.els.content.focus(), 100);
-    },
-
-    renderState() {
-        const n = state.currentNote;
-        this.els.title.value = n.title || '';
-        this.els.content.innerHTML = n.content || '';
-        this.migrateLegacyTasks();
-        this.renderTags();
-        this.makeMediaDraggable();
-        this.syncTaskStates();
-    },
-
-    insertMedia(src, type) {
-        const id = Utils.generateId();
-        let html = '';
-        if (type === 'image') {
-            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true" data-scale="1"><img src="${src}" alt=""><span class="media-resize-handle" aria-hidden="true"></span></div><br>`;
-        }
-        document.execCommand('insertHTML', false, html);
-        this.queueSnapshot();
-        this.makeMediaDraggable();
-    },
-
-    selectMedia(el) {
-        if (this.selectedMedia) this.selectedMedia.classList.remove('selected');
-        this.selectedMedia = el;
-        this.selectedMedia.classList.add('selected');
-
-        const rect = el.getBoundingClientRect();
-        const menu = this.els.ctxMenu;
-        menu.classList.remove('hidden');
-        menu.style.top = `${rect.top + window.scrollY - 50}px`;
-        menu.style.left = `${(rect.left + rect.width / 2) - (menu.offsetWidth / 2)}px`;
-    },
-
-    deselectMedia() {
-        if (this.selectedMedia) this.selectedMedia.classList.remove('selected');
-        this.selectedMedia = null;
-        this.els.ctxMenu.classList.add('hidden');
-    },
-
-    deleteSelectedMedia() {
-        if (this.selectedMedia) {
-            this.selectedMedia.remove();
-            this.deselectMedia();
-            this.queueSnapshot();
-        }
-    },
-
-    resetMediaTransform() {
-        if (!this.selectedMedia) return;
-        const img = this.selectedMedia.querySelector('img');
-        if (!img) return;
-        img.style.width = '';
-        img.style.height = '';
-        this.selectedMedia.dataset.width = '';
-        this.selectedMedia.dataset.height = '';
-        this.queueSnapshot();
-    },
-
-    alignMedia(align) {
-        if (this.selectedMedia) {
-            this.selectedMedia.style.display = 'block';
-            this.selectedMedia.style.textAlign = align;
-            this.selectedMedia.style.margin = align === 'center' ? '10px auto' : (align === 'right' ? '10px 0 10px auto' : '10px 0');
-            this.queueSnapshot();
-        }
-    },
-
-    alignMediaOrText(align) {
-        if (this.selectedMedia) {
-            this.alignMedia(align);
-            return;
-        }
-        const commands = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
-        const cmd = commands[align];
-        if (cmd) {
-            document.execCommand(cmd, false, null);
-        }
-    },
-
-    getRangeFromPoint(x, y) {
-        if (document.caretRangeFromPoint) {
-            return document.caretRangeFromPoint(x, y);
-        }
-        if (document.caretPositionFromPoint) {
-            const position = document.caretPositionFromPoint(x, y);
-            const range = document.createRange();
-            range.setStart(position.offsetNode, position.offset);
-            range.collapse(true);
-            return range;
-        }
-        return null;
-    },
-
-    makeMediaDraggable() {
-        this.els.content.querySelectorAll('.media-wrapper').forEach(wrapper => {
-            wrapper.setAttribute('draggable', 'true');
-        });
-    },
-
-    saveSelection() {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-        this.savedRange = selection.getRangeAt(0).cloneRange();
-    },
-
-    restoreSelection() {
-        if (!this.savedRange) return;
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(this.savedRange);
-    },
-
-    applyFontSize(size) {
-        this.activeFontSize = size;
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-        const range = selection.getRangeAt(0);
-        if (range.collapsed) return;
-        const span = document.createElement('span');
-        span.style.fontSize = `${size}px`;
-        const contents = range.extractContents();
-        span.appendChild(contents);
-        range.insertNode(span);
-        selection.removeAllRanges();
-        const newRange = document.createRange();
-        newRange.selectNodeContents(span);
-        newRange.collapse(false);
-        selection.addRange(newRange);
-        this.queueSnapshot();
-    },
-
-    cleanupZeroWidth() {
-        const nodes = this.els.content.querySelectorAll('span');
-        nodes.forEach(node => {
-            if (node.textContent === '​') {
-                node.textContent = '';
-            }
-        });
-    },
-
-    insertTasksFromSelection() {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-        const range = selection.getRangeAt(0);
-        if (range.collapsed) {
-            const block = this.getClosestBlock(range.startContainer);
-            if (block && block.closest('.task-list')) return;
-        }
-        const dict = LANG[state.config.lang] || LANG.ru;
-        const fallback = dict.task_item || 'Task';
-        const lines = this.getSelectedLines(range, fallback);
-        if (!lines.length) return;
-        const list = this.buildTaskList(lines);
-        this.els.content.focus();
-        if (range.collapsed) {
-            const block = this.getClosestBlock(range.startContainer);
-            if (block && block !== this.els.content) {
-                block.replaceWith(list);
-            } else {
-                range.insertNode(list);
-            }
-        } else {
-            range.deleteContents();
-            range.insertNode(list);
-        }
-        this.placeCursorInTask(list);
-        this.queueSnapshot();
-    },
-
-    getSelectedLines(range, fallback) {
-        if (!range || !range.startContainer) return [];
-        if (!range.collapsed) {
-            const text = range.toString();
-            const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
-            return lines.length ? lines : [fallback];
-        }
-        const block = this.getClosestBlock(range.startContainer);
-        const text = block ? block.textContent : '';
-        const cleaned = text.trim();
-        return [cleaned || fallback];
-    },
-
-    getClosestBlock(node) {
-        const blockTags = ['DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE'];
-        let current = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-        while (current && current !== this.els.content) {
-            if (blockTags.includes(current.tagName)) return current;
-            current = current.parentElement;
-        }
-        return this.els.content;
-    },
-
-    buildTaskList(lines) {
-        const list = document.createElement('ul');
-        list.className = 'task-list';
-        lines.forEach(line => {
-            const item = document.createElement('li');
-            item.className = 'task-item';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'task-checkbox';
-            checkbox.setAttribute('contenteditable', 'false');
-            const span = document.createElement('span');
-            span.className = 'task-text';
-            span.textContent = line;
-            item.append(checkbox, span);
-            list.appendChild(item);
-        });
-        return list;
-    },
-
-    placeCursorInTask(list) {
-        const last = list.querySelector('.task-item:last-child .task-text');
-        if (!last) return;
-        const selection = window.getSelection();
-        const newRange = document.createRange();
-        newRange.selectNodeContents(last);
-        newRange.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(newRange);
-    },
-
-    syncTaskStates() {
-        this.els.content.querySelectorAll('.task-item').forEach(item => {
-            const checkbox = item.querySelector('.task-checkbox');
-            if (checkbox) item.classList.toggle('checked', checkbox.checked);
-        });
-    },
-
-    migrateLegacyTasks() {
-        const legacyTasks = this.els.content.querySelectorAll('.task-line');
-        if (!legacyTasks.length) return;
-        legacyTasks.forEach(line => {
-            const text = line.querySelector('.task-text')?.textContent || '';
-            const checked = line.classList.contains('checked');
-            const item = document.createElement('li');
-            item.className = 'task-item' + (checked ? ' checked' : '');
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'task-checkbox';
-            checkbox.checked = checked;
-            checkbox.setAttribute('contenteditable', 'false');
-            const span = document.createElement('span');
-            span.className = 'task-text';
-            span.textContent = text;
-            item.append(checkbox, span);
-            const list = document.createElement('ul');
-            list.className = 'task-list';
-            list.appendChild(item);
-            line.replaceWith(list);
-        });
-        this.queueSnapshot();
-    },
-
-    exec(cmd, val = null) {
-        this.els.content.focus();
-        const actions = {
-            toggleSizeSlider: () => {
-                const target = document.querySelector('[data-action="toggleSizeSlider"]');
-                if (!target) return;
-                const rect = target.getBoundingClientRect();
-                this.els.sizePopup.style.top = `${Math.max(rect.top - 80, 20)}px`;
-                this.els.sizePopup.style.left = `${rect.left + rect.width / 2}px`;
-                this.els.sizePopup.style.bottom = 'auto';
-                this.els.sizePopup.classList.toggle('hidden');
-                if (!this.els.sizePopup.classList.contains('hidden')) {
-                    this.saveSelection();
+    bind() {
+        if (this.els.title) this.els.title.addEventListener("input", () => this.queueSnapshot())
+        if (this.els.content) {
+            this.els.content.addEventListener("input", () => this.queueSnapshot())
+            this.els.content.addEventListener("click", (e) => {
+                const wrapper = e.target.closest(".media-wrapper")
+                if (wrapper) {
+                    this.selectMedia(wrapper)
+                    return
                 }
-            },
-            task: () => {
-                this.insertTasksFromSelection();
-            },
-            align_left: () => this.alignMediaOrText('left'),
-            align_center: () => this.alignMediaOrText('center'),
-            align_right: () => this.alignMediaOrText('right'),
-            voice: () => VoiceService.toggle(),
-            image: () => document.getElementById('img-upload').click(),
-            sketch: () => { UI.openModal('sketch-modal'); SketchService.init(); },
-            clear: () => document.execCommand('removeFormat')
-        };
+                this.deselectMedia()
+            })
+            this.els.content.addEventListener("pointerdown", (e) => {
+                const handle = e.target.closest(".media-resize-handle")
+                if (!handle) return
+                const wrapper = e.target.closest(".media-wrapper")
+                const img = wrapper ? wrapper.querySelector("img") : null
+                if (!wrapper || !img) return
+                const rect = img.getBoundingClientRect()
+                const ratio = rect.width > 0 ? rect.width / Math.max(1, rect.height) : 1
+                const maxWidth = Math.min(860, this.els.content.getBoundingClientRect().width - 20)
+                this.resizeState = { startX: e.clientX, startWidth: rect.width, ratio, maxWidth, wrapper }
+                document.addEventListener("pointermove", this.handleResize, { passive: true })
+                document.addEventListener("pointerup", this.stopResize, { passive: true })
+            })
+        }
+        if (this.els.tagsInput) {
+            this.els.tagsInput.addEventListener("keydown", (e) => {
+                if (e.key !== "Enter") return
+                e.preventDefault()
+                const v = String(this.els.tagsInput.value || "").trim()
+                if (!v) return
+                const tag = v.startsWith("#") ? v.slice(1) : v
+                this.addTag(tag)
+                this.els.tagsInput.value = ""
+            })
+        }
 
-        actions[cmd] ? actions[cmd]() : document.execCommand(cmd, false, val);
-        this.queueSnapshot();
-        this.updateToolbarState();
-    },
+        const imgUpload = document.getElementById("img-upload")
+        if (imgUpload) {
+            imgUpload.addEventListener("change", async (e) => {
+                const f = e.target.files && e.target.files[0] ? e.target.files[0] : null
+                if (!f) return
+                const url = await this.fileToDataUrl(f)
+                this.insertMedia(url, "image")
+                imgUpload.value = ""
+            })
+        }
 
-    updateToolbarState() {},
+        const toolbarToggle = document.getElementById("toolbar-toggle")
+        if (toolbarToggle) {
+            toolbarToggle.addEventListener("click", () => {
+                const tb = this.els.toolbar
+                if (!tb) return
+                tb.classList.toggle("is-hidden")
+            })
+        }
 
-    queueSnapshot() {
-        clearTimeout(this.snapshotTimer);
-        this.snapshotTimer = setTimeout(() => this.snapshot(), 250);
-    },
+        const lockApply = document.getElementById("lock-apply")
+        if (lockApply) {
+            lockApply.addEventListener("click", async () => {
+                const pass = document.getElementById("lock-password")?.value || ""
+                if (!state.currentNote) return
+                if (!pass.trim()) return UI.showToast("Пароль пустой")
+                await LockService.setLock(state.currentNote, pass.trim())
+                UI.closeModal("lock-modal")
+                UI.showToast("Заметка скрыта")
+            })
+        }
 
-    snapshot() {
-        const current = {
-            t: this.els.title.value,
-            c: this.els.content.innerHTML,
-            tags: [...(state.currentNote.tags || [])]
-        };
-
-        const last = this.history[this.history.length - 1];
-        if (last && last.t === current.t && last.c === current.c && JSON.stringify(last.tags) === JSON.stringify(current.tags)) return;
-
-        this.history.push(current);
-        if (this.history.length > 80) this.history.shift();
-        this.future = [];
-        this.triggerSave();
-    },
-
-    undo() {
-        if (!this.history.length) return;
-        this.future.push(this.getCurrentState());
-        this.applyState(this.history.pop());
-    },
-
-    redo() {
-        if (!this.future.length) return;
-        this.history.push(this.getCurrentState());
-        this.applyState(this.future.pop());
-    },
-
-    getCurrentState() {
-        return {
-            t: this.els.title.value,
-            c: this.els.content.innerHTML,
-            tags: [...state.currentNote.tags]
-        };
-    },
-
-    applyState(data) {
-        if (!data) return;
-        this.els.title.value = data.t;
-        this.els.content.innerHTML = data.c;
-        state.currentNote.tags = data.tags;
-        this.renderTags();
-        this.triggerSave();
-    },
-
-    triggerSave() {
-        clearTimeout(this.timer);
-        document.getElementById('last-edited').innerText = UI.getText('saving', 'Saving...');
-        this.timer = setTimeout(() => this.save(), 800);
-    },
-
-    async save() {
-        if (!state.user || !state.currentNote) return;
-
-        state.currentNote.title = this.els.title.value;
-        state.currentNote.content = this.els.content.innerHTML;
-        state.currentNote.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-        state.currentNote.authorId = state.user.uid;
-        if (!state.currentNote.order) state.currentNote.order = Date.now();
-
-        try {
-            await db.collection('users').doc(state.user.uid)
-                .collection('notes').doc(state.currentNote.id)
-                .set(state.currentNote, { merge: true });
-            document.getElementById('last-edited').innerText = UI.getText('saved', 'Saved');
-        } catch (e) {
-            console.error('Save failed:', e);
+        const surveySubmit = document.getElementById("survey-submit")
+        if (surveySubmit) {
+            surveySubmit.addEventListener("click", async () => {
+                const q1 = String(document.getElementById("survey-q1")?.value || "").trim()
+                const q2 = String(document.getElementById("survey-q2")?.value || "").trim()
+                const q3 = String(document.getElementById("survey-q3")?.value || "").trim()
+                localStorage.setItem("survey:v1", JSON.stringify({ q1, q2, q3, ts: Date.now() }))
+                UI.closeModal("survey-modal")
+                UI.showToast("Спасибо")
+            })
         }
     },
 
-    async manualSave() {
-        await this.save();
-        this.close();
-    },
-
-    deleteCurrent() {
-        UI.confirm('delete', async () => {
-            if (state.currentNote.id) {
-                await db.collection('users').doc(state.user.uid).collection('notes').doc(state.currentNote.id).delete();
-            }
-            this.close(true);
-        });
-    },
-
-    close(skip = false) {
-        if (!skip) this.save();
-        this.els.wrapper.classList.remove('active');
-        state.currentNote = null;
-    },
-
-    renderToolbar() {
-        const dict = LANG[state.config.lang] || LANG.ru;
-        const activeTools = this.config.filter(t => t.active);
-        const handle = `<button type="button" class="tool-btn toolbar-handle" aria-label="${Utils.escapeHtml(dict.move_toolbar || 'Move toolbar')}"><i class="material-icons-round">drag_indicator</i></button>`;
-        this.els.toolbar.innerHTML = (activeTools.length ? handle : '') + activeTools.map(t => {
-            if (!t.active) return '';
-            if (t.color) return `
-                <div class="tool-wrapper">
-                    <label class="tool-btn"><i class="material-icons-round" style="color:var(--text)">${t.icon}</i>
-                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}">
-                    </label>
-                </div>`;
-            const action = t.action || t.cmd;
-            return `<button type="button" class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${action}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
-        }).join('');
-        this.syncToolbarVisibility();
-    },
-
-    toggleToolbar(force = null) {
-        if (typeof force === 'boolean') {
-            this.toolbarCollapsed = !force;
-        } else {
-            this.toolbarCollapsed = !this.toolbarCollapsed;
-        }
-        localStorage.setItem('editor-toolbar-collapsed', `${this.toolbarCollapsed}`);
-        this.syncToolbarVisibility();
-    },
-
-    syncToolbarVisibility() {
-        const hasTools = this.config.some(tool => tool.active);
-        const hidden = this.toolbarCollapsed || !hasTools;
-        this.els.toolbar.classList.toggle('is-hidden', hidden);
-        this.els.toolbar.classList.toggle('is-empty', !hasTools);
-        this.els.toolbar.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-        if (hidden) {
-            this.els.toolbar.classList.add('auto-hidden');
-        }
-        if (this.els.toolbarToggle) {
-            const icon = this.toolbarCollapsed || !hasTools ? 'expand_more' : 'expand_less';
-            const label = this.toolbarCollapsed || !hasTools
-                ? UI.getText('toolbar_show', 'Show toolbar')
-                : UI.getText('toolbar_hide', 'Hide toolbar');
-            this.els.toolbarToggle.setAttribute('aria-label', label);
-            const iconEl = this.els.toolbarToggle.querySelector('i');
-            if (iconEl) iconEl.textContent = icon;
+    buildToolbar() {
+        const root = this.els.toolbar
+        if (!root) return
+        const tools = [
+            { i: "format_bold", cmd: () => document.execCommand("bold") },
+            { i: "format_italic", cmd: () => document.execCommand("italic") },
+            { i: "format_underlined", cmd: () => document.execCommand("underline") },
+            { i: "format_list_bulleted", cmd: () => document.execCommand("insertUnorderedList") },
+            { i: "format_list_numbered", cmd: () => document.execCommand("insertOrderedList") },
+            { i: "checklist", cmd: () => this.insertChecklistLine() },
+            { i: "image", cmd: () => document.getElementById("img-upload")?.click() },
+            { i: "title", cmd: () => this.toggleTextSizePopup() },
+            { i: "format_clear", cmd: () => document.execCommand("removeFormat") }
+        ]
+        root.innerHTML = tools.map((t, idx) => `
+            <span class="tool-wrapper">
+                <button type="button" class="tool-btn" data-tool="${idx}" aria-label="${t.i}">
+                    <i class="material-icons-round" aria-hidden="true">${t.i}</i>
+                </button>
+            </span>
+        `).join("")
+        Array.from(root.querySelectorAll(".tool-btn")).forEach(btn => {
+            const idx = parseInt(btn.dataset.tool, 10)
+            btn.addEventListener("click", () => {
+                const t = tools[idx]
+                if (!t) return
+                t.cmd()
+                this.queueSnapshot()
+                this.els.content?.focus()
+            })
+        })
+        if (this.els.fontRange) {
+            this.els.fontRange.addEventListener("input", () => {
+                const v = parseInt(this.els.fontRange.value, 10)
+                const px = 10 + v * 2
+                document.execCommand("fontSize", false, "7")
+                const fonts = this.els.content.querySelectorAll("font[size='7']")
+                fonts.forEach(f => {
+                    f.removeAttribute("size")
+                    f.style.fontSize = `${px}px`
+                })
+                this.queueSnapshot()
+            })
         }
     },
 
-    addTag(tag) {
-        if (!state.currentNote.tags) state.currentNote.tags = [];
-        if (!state.currentNote.tags.includes(tag)) {
-            state.currentNote.tags.push(tag);
-            this.renderTags();
-        }
+    toggleTextSizePopup() {
+        const p = this.els.textSizePopup
+        if (!p) return
+        p.classList.toggle("hidden")
     },
 
-    removeTag(tag) {
-        state.currentNote.tags = state.currentNote.tags.filter(t => t !== tag);
-        this.renderTags();
-        this.queueSnapshot();
-    },
-
-    renderTags() {
-        const tags = state.currentNote.tags || [];
-        this.els.tagsContainer.innerHTML = tags.map(t => {
-            const escaped = Utils.escapeHtml(t);
-            const encoded = encodeURIComponent(t);
-            return `<button type="button" class="tag-chip" data-tag="${encoded}">#${escaped}<i class="material-icons-round" aria-hidden="true">close</i></button>`;
-        }).join('');
+    insertChecklistLine() {
+        const html = `<div class="task-item"><input class="task-checkbox" type="checkbox" onchange="Editor.toggleTask(this)"><span>${Utils.escapeHtml((LANG[state.config.lang]||LANG.ru).task_item || "Задача")}</span></div>`
+        document.execCommand("insertHTML", false, html)
     },
 
     toggleTask(el) {
-        const item = el.closest('.task-item');
-        if (item) item.classList.toggle('checked', el.checked);
-        this.queueSnapshot();
+        const item = el.closest(".task-item")
+        if (item) item.classList.toggle("completed", !!el.checked)
+        this.queueSnapshot()
+    },
+
+    async fileToDataUrl(file) {
+        return await new Promise((resolve, reject) => {
+            const r = new FileReader()
+            r.onload = () => resolve(String(r.result || ""))
+            r.onerror = () => reject(new Error("file_read_failed"))
+            r.readAsDataURL(file)
+        })
+    },
+
+    handleResize: (e) => {
+        if (!Editor.resizeState) return
+        const s = Editor.resizeState
+        const dx = e.clientX - s.startX
+        let w = s.startWidth + dx
+        w = Utils.snap(w, 8)
+        w = Utils.clamp(w, 120, s.maxWidth)
+        const h = w / Math.max(0.2, s.ratio)
+        const img = s.wrapper.querySelector("img")
+        if (!img) return
+        img.style.width = `${w}px`
+        img.style.height = `${h}px`
+        s.wrapper.dataset.width = `${w}`
+        s.wrapper.dataset.height = `${h}`
+    },
+
+    stopResize: () => {
+        if (!Editor.resizeState) return
+        Editor.queueSnapshot()
+        Editor.resizeState = null
+        document.removeEventListener("pointermove", Editor.handleResize)
+        document.removeEventListener("pointerup", Editor.stopResize)
+    },
+
+    open(note = null) {
+        const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
+            id: Utils.generateId(),
+            folderId: state.view === "folder" ? state.activeFolderId : null,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            order: Date.now()
+        })
+        state.currentNote = JSON.parse(JSON.stringify(n))
+        this.history = []
+        this.future = []
+        this.renderState()
+        this.els.wrapper.classList.add("active")
+        setTimeout(() => this.els.content?.focus(), 90)
+        UI.toggleSidebar(false)
+    },
+
+    async maybeUnlock(note) {
+        if (!note.lock || !note.lock.hash) return true
+        return await new Promise((resolve) => {
+            UI.showPrompt("Пароль", "Введите пароль", async (val) => {
+                const ok = await LockService.verify(note, val)
+                if (!ok) UI.showToast("Неверный пароль")
+                resolve(ok)
+            })
+        })
+    },
+
+    async openFromList(note) {
+        const ok = await this.maybeUnlock(note)
+        if (!ok) return
+        this.open(note)
+    },
+
+    close() {
+        this.els.wrapper.classList.remove("active")
+        state.currentNote = null
+        this.deselectMedia()
+    },
+
+    renderState() {
+        const n = state.currentNote
+        if (!n) return
+        this.els.title.value = n.title || ""
+        this.els.content.innerHTML = n.content || ""
+        this.renderTags()
+        this.makeMediaDraggable()
+    },
+
+    addTag(tag) {
+        const t = String(tag || "").trim()
+        if (!t) return
+        const n = state.currentNote
+        if (!n) return
+        const clean = t.replace(/^#+/, "").trim()
+        if (!clean) return
+        n.tags = Array.isArray(n.tags) ? n.tags : []
+        if (n.tags.map(x => String(x).toLowerCase()).includes(clean.toLowerCase())) return
+        n.tags.push(clean)
+        this.renderTags()
+        this.queueSnapshot()
+    },
+
+    removeTag(tag) {
+        const n = state.currentNote
+        if (!n || !Array.isArray(n.tags)) return
+        n.tags = n.tags.filter(x => String(x).toLowerCase() !== String(tag).toLowerCase())
+        this.renderTags()
+        this.queueSnapshot()
+    },
+
+    renderTags() {
+        const n = state.currentNote
+        if (!n || !this.els.tagsContainer) return
+        const tags = Array.isArray(n.tags) ? n.tags : []
+        const html = tags.map(t => `
+            <span class="tag-chip" onclick="Editor.removeTag('${Utils.escapeHtml(String(t))}')">
+                <i class="material-icons-round" aria-hidden="true">tag</i>
+                <span>${Utils.escapeHtml(String(t))}</span>
+            </span>
+        `).join("")
+        this.els.tagsContainer.innerHTML = html
+
+        const sug = SmartSearch.suggestTags(n.title, n.content).filter(x => !tags.map(t => String(t).toLowerCase()).includes(x.toLowerCase()))
+        if (sug.length) {
+            const wrap = document.createElement("div")
+            wrap.style.display = "flex"
+            wrap.style.flexWrap = "wrap"
+            wrap.style.gap = "8px"
+            sug.slice(0, 6).forEach(t => {
+                const b = document.createElement("span")
+                b.className = "tag-suggest"
+                b.textContent = `#${t}`
+                b.onclick = () => this.addTag(t)
+                wrap.appendChild(b)
+            })
+            this.els.tagsContainer.appendChild(wrap)
+        }
+    },
+
+    queueSnapshot() {
+        state.editorDirty = true
+        clearTimeout(this.snapshotTimer)
+        this.snapshotTimer = setTimeout(() => this.snapshot(), 260)
+    },
+
+    snapshot() {
+        const n = state.currentNote
+        if (!n) return
+        n.title = String(this.els.title.value || "")
+        n.content = String(this.els.content.innerHTML || "")
+        n.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
+        this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
+        if (this.history.length > 80) this.history.shift()
+        this.future = []
+    },
+
+    undo() {
+        const n = state.currentNote
+        if (!n) return
+        if (!this.history.length) return
+        const last = this.history.pop()
+        this.future.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
+        n.title = last.title
+        n.content = last.content
+        n.tags = last.tags
+        this.renderState()
+    },
+
+    redo() {
+        const n = state.currentNote
+        if (!n) return
+        const next = this.future.pop()
+        if (!next) return
+        this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
+        n.title = next.title
+        n.content = next.content
+        n.tags = next.tags
+        this.renderState()
+    },
+
+    insertMedia(src, type) {
+        const id = Utils.generateId()
+        let html = ""
+        if (type === "image") {
+            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true" data-scale="1"><img src="${Utils.escapeHtml(src)}" alt=""><span class="media-resize-handle" aria-hidden="true"></span></div><br>`
+        }
+        document.execCommand("insertHTML", false, html)
+        this.queueSnapshot()
+        this.makeMediaDraggable()
+    },
+
+    makeMediaDraggable() {
+        const root = this.els.content
+        if (!root) return
+        root.querySelectorAll(".media-wrapper").forEach(w => {
+            w.setAttribute("draggable", "true")
+        })
+    },
+
+    selectMedia(el) {
+        if (this.selectedMedia) this.selectedMedia.classList.remove("selected")
+        this.selectedMedia = el
+        this.selectedMedia.classList.add("selected")
+        const rect = el.getBoundingClientRect()
+        const menu = this.els.ctxMenu
+        if (!menu) return
+        menu.classList.remove("hidden")
+        const top = rect.top + window.scrollY - 56
+        const left = rect.left + window.scrollX + rect.width / 2 - menu.offsetWidth / 2
+        menu.style.top = `${Math.max(10, top)}px`
+        menu.style.left = `${Math.max(10, left)}px`
+    },
+
+    deselectMedia() {
+        if (this.selectedMedia) this.selectedMedia.classList.remove("selected")
+        this.selectedMedia = null
+        const menu = this.els.ctxMenu
+        if (menu) menu.classList.add("hidden")
+    },
+
+    deleteSelectedMedia() {
+        if (!this.selectedMedia) return
+        this.selectedMedia.remove()
+        this.deselectMedia()
+        this.queueSnapshot()
+    },
+
+    resetMediaTransform() {
+        if (!this.selectedMedia) return
+        const img = this.selectedMedia.querySelector("img")
+        if (!img) return
+        img.style.width = ""
+        img.style.height = ""
+        this.selectedMedia.dataset.width = ""
+        this.selectedMedia.dataset.height = ""
+        this.queueSnapshot()
+    },
+
+    alignMediaOrText(side) {
+        if (!this.selectedMedia) return
+        const w = this.selectedMedia
+        w.style.float = side === "left" ? "left" : side === "right" ? "right" : ""
+        w.style.margin = side === "left" ? "6px 14px 6px 0" : side === "right" ? "6px 0 6px 14px" : ""
+        this.queueSnapshot()
+    },
+
+    drawOnSelectedMedia() {
+        UI.showToast("Открой редактор фото из кнопки в модалке")
+    },
+
+    async save() {
+        if (!db || !state.user) return
+        const n = state.currentNote
+        if (!n) return
+        n.title = String(this.els.title.value || "")
+        n.content = String(this.els.content.innerHTML || "")
+        if (!Array.isArray(n.tags)) n.tags = []
+        const auto = SmartSearch.suggestTags(n.title, n.content)
+        auto.forEach(t => {
+            if (!n.tags.map(x => String(x).toLowerCase()).includes(t.toLowerCase())) n.tags.push(t)
+        })
+        if (!n.folderId) {
+            const id = SmartSearch.suggestFolderId(n, state.folders)
+            if (id) n.folderId = id
+        }
+        const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
+        const payload = NoteIO.normalizeNote(n)
+        payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
+        await ref.set(payload, { merge: true })
+        state.editorDirty = false
+        UI.showToast(UI.getText("saved", "Saved"))
+        this.close()
+    },
+
+    async deleteCurrent() {
+        const n = state.currentNote
+        if (!n) return
+        UI.confirm("delete", async () => {
+            if (!db || !state.user) return
+            await db.collection("users").doc(state.user.uid).collection("notes").doc(n.id).delete()
+            UI.showToast("Удалено")
+            this.close()
+        })
     }
-};
-
-// ==========================================================================
-// UI Controller
-// ==========================================================================
-
+}
 
 const UI = {
     els: {},
@@ -1190,701 +691,674 @@ const UI = {
 
     init() {
         this.els = {
-            sidebar: document.getElementById('sidebar'),
-            grid: document.getElementById('notes-container'),
-            empty: document.getElementById('empty-state'),
-            userMenu: document.getElementById('user-dropdown'),
-            confirmModal: document.getElementById('confirm-modal'),
-            promptModal: document.getElementById('prompt-modal'),
-            fab: document.querySelector('.btn-fab'),
-            folderList: document.getElementById('folder-list-root')
-        };
-        this.bindEvents();
-        this.applyAppearanceSettings();
-        this.updatePrimaryActionLabel();
+            sidebar: document.getElementById("sidebar"),
+            grid: document.getElementById("notes-container"),
+            empty: document.getElementById("empty-state"),
+            userMenu: document.getElementById("user-dropdown"),
+            confirmModal: document.getElementById("confirm-modal"),
+            promptModal: document.getElementById("prompt-modal"),
+            fab: document.querySelector(".btn-fab"),
+            folderList: document.getElementById("folder-list-root")
+        }
+        this.bindEvents()
+        this.applyAppearanceSettings()
+        this.updatePrimaryActionLabel()
+        this.routeShare()
     },
 
-    getText(key, fallback = '') {
-        const dict = LANG[state.config.lang] || LANG.ru;
-        return dict[key] || fallback || key;
+    getText(key, fallback = "") {
+        const dict = LANG[state.config.lang] || LANG.ru
+        return dict[key] || fallback || key
+    },
+
+    setLang(lang) {
+        const next = lang === "en" ? "en" : "ru"
+        state.config.lang = next
+        localStorage.setItem("app-lang", next)
+        this.applyLangToDom()
+        this.updateViewTitle()
+        this.updatePrimaryActionLabel()
+        ThemeManager.renderPicker()
+    },
+
+    applyLangToDom() {
+        const dict = LANG[state.config.lang] || LANG.ru
+        document.querySelectorAll("[data-lang]").forEach(el => {
+            const k = el.getAttribute("data-lang")
+            if (k && dict[k]) el.textContent = dict[k]
+        })
+        document.querySelectorAll("[data-lang-placeholder]").forEach(el => {
+            const k = el.getAttribute("data-lang-placeholder")
+            if (k && dict[k]) el.setAttribute("placeholder", dict[k])
+        })
+        document.querySelectorAll("[data-lang-aria]").forEach(el => {
+            const k = el.getAttribute("data-lang-aria")
+            if (k && dict[k]) el.setAttribute("aria-label", dict[k])
+        })
     },
 
     bindEvents() {
-        document.addEventListener('click', (e) => {
-            if (this.els.sidebar.classList.contains('active') && !this.els.sidebar.contains(e.target) && !e.target.closest('#menu-toggle')) {
-                this.toggleSidebar(false);
+        document.addEventListener("click", (e) => {
+            if (this.els.sidebar?.classList.contains("active") && !this.els.sidebar.contains(e.target) && !e.target.closest("#menu-toggle")) {
+                this.toggleSidebar(false)
             }
-            if (this.els.userMenu.classList.contains('active') && !e.target.closest('.user-avatar-wrapper')) {
-                this.toggleUserMenu(false);
+            if (this.els.userMenu?.classList.contains("active") && !e.target.closest(".user-avatar-wrapper")) {
+                this.toggleUserMenu(false)
             }
-        });
+        })
 
-        document.querySelectorAll('.star').forEach(star => {
-            star.onclick = () => {
-                const val = parseInt(star.dataset.val, 10);
-                state.tempRating = val;
-                document.querySelectorAll('.star').forEach(s => {
-                    s.textContent = parseInt(s.dataset.val, 10) <= val ? 'star' : 'star_border';
-                    s.classList.toggle('active', parseInt(s.dataset.val, 10) <= val);
-                });
-            };
-        });
+        document.querySelectorAll(".star").forEach(star => {
+            star.addEventListener("click", () => {
+                const val = parseInt(star.dataset.val, 10)
+                state.tempRating = val
+                document.querySelectorAll(".star").forEach(s => {
+                    const v = parseInt(s.dataset.val, 10)
+                    s.textContent = v <= val ? "star" : "star_border"
+                    s.classList.toggle("active", v <= val)
+                })
+            })
+        })
 
-        document.getElementById('prompt-input').onkeydown = (e) => {
-            if (e.key === 'Enter') document.getElementById('prompt-ok').click();
-        };
-
-        document.body.addEventListener('click', e => {
-            if (e.target.tagName === 'A' && e.target.getAttribute('href')?.startsWith('#note/')) {
-                e.preventDefault();
-                const id = e.target.getAttribute('href').replace('#note/', '');
-                const note = state.notes.find(n => n.id === id);
-                if (note) Editor.open(note);
+        const promptInput = document.getElementById("prompt-input")
+        if (promptInput) {
+            promptInput.onkeydown = (e) => {
+                if (e.key === "Enter") document.getElementById("prompt-ok")?.click()
             }
-        });
+        }
 
-        this.els.grid.addEventListener('click', (e) => {
-            const card = e.target.closest('.note-card');
-            const actions = e.target.closest('.action-btn');
-            if (actions) return;
-            if (!card) return;
-            const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null;
-            const note = state.notes.find(n => n.id === id);
-            if (note) Editor.open(note);
-        });
+        this.els.grid?.addEventListener("click", async (e) => {
+            const card = e.target.closest(".note-card")
+            const action = e.target.closest(".action-btn")
+            if (action) return
+            if (!card) return
+            const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
+            const note = state.notes.find(n => n.id === id)
+            if (note) await Editor.openFromList(note)
+        })
 
-        this.els.grid.addEventListener('dragstart', (e) => {
-            const card = e.target.closest('.note-card');
-            if (!card) return;
-            this.draggedNoteId = decodeURIComponent(card.dataset.noteId);
-            card.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', this.draggedNoteId);
-        });
+        this.els.grid?.addEventListener("dragstart", (e) => {
+            const card = e.target.closest(".note-card")
+            if (!card) return
+            this.draggedNoteId = decodeURIComponent(card.dataset.noteId)
+            card.classList.add("dragging")
+            e.dataTransfer.effectAllowed = "move"
+            e.dataTransfer.setData("text/plain", this.draggedNoteId)
+        })
 
-        this.els.grid.addEventListener('dragend', (e) => {
-            const card = e.target.closest('.note-card');
-            if (card) card.classList.remove('dragging');
-            this.clearDragIndicators();
-            this.draggedNoteId = null;
-        });
+        this.els.grid?.addEventListener("dragover", (e) => {
+            if (!this.draggedNoteId) return
+            e.preventDefault()
+            const card = e.target.closest(".note-card")
+            if (!card) return
+            const targetId = decodeURIComponent(card.dataset.noteId)
+            if (!targetId || targetId === this.draggedNoteId) return
+            const rect = card.getBoundingClientRect()
+            const before = e.clientY < rect.top + rect.height / 2
+            this.dragTargetId = targetId
+            this.dragPosition = before ? "before" : "after"
+            this.setDropIndicator(card, this.dragPosition)
+            this.autoScroll(e.clientY)
+        })
 
-        this.els.grid.addEventListener('dragover', (e) => {
-            if (!this.draggedNoteId) return;
-            e.preventDefault();
-            const card = e.target.closest('.note-card');
-            if (!card) return;
-            const rect = card.getBoundingClientRect();
-            const position = (e.clientY - rect.top) / rect.height > 0.5 ? 'after' : 'before';
-            this.setDropIndicator(card, position);
-            this.dragTargetId = decodeURIComponent(card.dataset.noteId);
-            this.dragPosition = position;
-            this.autoScroll(e.clientY);
-        });
+        this.els.grid?.addEventListener("drop", (e) => {
+            if (!this.draggedNoteId || !this.dragTargetId) return
+            e.preventDefault()
+            this.reorderNotes(this.draggedNoteId, this.dragTargetId, this.dragPosition)
+            this.clearDragIndicators()
+        })
 
-        this.els.grid.addEventListener('drop', (e) => {
-            if (!this.draggedNoteId || !this.dragTargetId) return;
-            e.preventDefault();
-            this.reorderNotes(this.draggedNoteId, this.dragTargetId, this.dragPosition);
-            this.clearDragIndicators();
-        });
+        this.els.grid?.addEventListener("dragend", (e) => {
+            const card = e.target.closest(".note-card")
+            if (card) card.classList.remove("dragging")
+            this.clearDragIndicators()
+            this.draggedNoteId = null
+        })
 
-        document.getElementById('note-import').addEventListener('change', (e) => this.handleNoteImport(e));
+        const noteImport = document.getElementById("note-import")
+        if (noteImport) noteImport.addEventListener("change", (e) => this.handleNoteImport(e))
+
+        const shareModal = document.getElementById("share-modal")
+        if (shareModal) shareModal.addEventListener("click", (e) => { if (e.target === shareModal) this.closeModal("share-modal") })
+
+        const collabModal = document.getElementById("collab-modal")
+        if (collabModal) collabModal.addEventListener("click", (e) => { if (e.target === collabModal) this.closeModal("collab-modal") })
+
+        const lockModal = document.getElementById("lock-modal")
+        if (lockModal) lockModal.addEventListener("click", (e) => { if (e.target === lockModal) this.closeModal("lock-modal") })
     },
 
-    toggleSidebar(force) { this.els.sidebar.classList.toggle('active', force); },
-    toggleUserMenu(force) { this.els.userMenu.classList.toggle('active', force); },
+    toggleSidebar(force) {
+        if (!this.els.sidebar) return
+        this.els.sidebar.classList.toggle("active", typeof force === "boolean" ? force : !this.els.sidebar.classList.contains("active"))
+    },
+
+    toggleUserMenu(force) {
+        if (!this.els.userMenu) return
+        this.els.userMenu.classList.toggle("active", typeof force === "boolean" ? force : !this.els.userMenu.classList.contains("active"))
+    },
+
+    triggerImport() {
+        const input = document.getElementById("note-import")
+        if (!input) return
+        input.value = ""
+        input.click()
+    },
+
+    async handleNoteImport(e) {
+        if (!db || !state.user) return
+        const file = e.target.files && e.target.files[0] ? e.target.files[0] : null
+        if (!file) return
+        if (!String(file.type).includes("json") && !String(file.name).toLowerCase().endsWith(".json")) {
+            this.showToast(this.getText("import_invalid", "Unsupported file"))
+            return
+        }
+        const reader = new FileReader()
+        reader.onload = async () => {
+            try {
+                const text = String(reader.result || "").replace(/^\uFEFF/, "")
+                const parsed = JSON.parse(text)
+                const notes = NoteIO.parseImport(parsed)
+                if (!notes.length) {
+                    this.showToast(this.getText("import_empty", "No notes found"))
+                    return
+                }
+                const batch = db.batch()
+                notes.forEach(note => {
+                    let n = NoteIO.normalizeNote(note)
+                    if (state.notes.some(x => x.id === n.id)) n.id = Utils.generateId()
+                    if (n.folderId && !state.folders.find(f => f.id === n.folderId)) n.folderId = null
+                    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
+                    batch.set(ref, n, { merge: true })
+                })
+                await batch.commit()
+                this.showToast(this.getText("import_success", "Imported"))
+            } catch {
+                this.showToast(this.getText("import_failed", "Import failed"))
+            }
+        }
+        reader.onerror = () => this.showToast(this.getText("import_failed", "Import failed"))
+        reader.readAsText(file, "utf-8")
+    },
+
+    primaryAction() {
+        if (state.view === "folders") {
+            if (state.folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
+            this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+                if (!db || !state.user) return
+                await db.collection("users").doc(state.user.uid).collection("folders").add({
+                    name,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                })
+            })
+            return
+        }
+        Editor.open()
+    },
 
     applyAppearanceSettings() {
-        const saved = JSON.parse(localStorage.getItem('app-preferences')) || {};
-        state.config.folderViewMode = saved.folderViewMode || state.config.folderViewMode;
-        state.config.reduceMotion = saved.reduceMotion || false;
-        this.syncFolderModeButtons();
-        const toggle = document.getElementById('reduce-motion-toggle');
-        if (toggle) {
-            toggle.classList.toggle('on', state.config.reduceMotion);
-            toggle.classList.toggle('off', !state.config.reduceMotion);
-        }
-        ThemeManager.revertToLastSaved();
-        this.renderFolders();
+        const saved = JSON.parse(localStorage.getItem("app-preferences")) || {}
+        state.config.folderViewMode = saved.folderViewMode || state.config.folderViewMode
+        state.config.reduceMotion = !!saved.reduceMotion
+        ThemeManager.revertToLastSaved()
+        this.renderFolders()
     },
 
-    syncFolderModeButtons() {
-        document.querySelectorAll('[data-folder-mode]').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.folderMode === state.config.folderViewMode);
-        });
+    updateViewTitle() {
+        const dict = LANG[state.config.lang] || LANG.ru
+        const titles = {
+            notes: dict.view_notes || "Notes",
+            favorites: dict.view_favorites || "Favorites",
+            archive: dict.view_archive || "Archive",
+            folder: dict.view_folder || "Folder",
+            folders: dict.view_folders || "Folders"
+        }
+        let title = titles[state.view] || "SmartNotes"
+        if (state.view === "folder" && state.activeFolderId) {
+            const folder = state.folders.find(f => f.id === state.activeFolderId)
+            if (folder) title = folder.name
+        }
+        const el = document.getElementById("current-view-title")
+        if (el) el.textContent = title
     },
 
-    setFolderViewMode(mode) {
-        state.config.folderViewMode = mode;
-        localStorage.setItem('app-preferences', JSON.stringify({
-            folderViewMode: state.config.folderViewMode,
-            reduceMotion: state.config.reduceMotion
-        }));
-        this.syncFolderModeButtons();
-        this.renderFolders();
-        if (state.view === 'folders') {
-            switchView('folders');
-        }
-    },
-
-    toggleReduceMotion() {
-        state.config.reduceMotion = !state.config.reduceMotion;
-        localStorage.setItem('app-preferences', JSON.stringify({
-            folderViewMode: state.config.folderViewMode,
-            reduceMotion: state.config.reduceMotion
-        }));
-        const toggle = document.getElementById('reduce-motion-toggle');
-        if (toggle) {
-            toggle.classList.toggle('on', state.config.reduceMotion);
-            toggle.classList.toggle('off', !state.config.reduceMotion);
-        }
-        ThemeManager.revertToLastSaved();
+    updatePrimaryActionLabel() {
+        if (!this.els.fab) return
+        const label = state.view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
+        this.els.fab.setAttribute("aria-label", label)
     },
 
     openModal(id) {
-        document.getElementById(id).classList.add('active');
-        this.toggleSidebar(false);
-        if (id === 'settings-modal' || id === 'appearance-modal' || id === 'editor-settings-modal') {
-            this.loadSettings();
+        const el = document.getElementById(id)
+        if (!el) return
+        el.classList.add("active")
+        this.toggleSidebar(false)
+        if (id === "share-modal") {
+            const link = document.getElementById("share-link")
+            const n = state.currentNote
+            if (link && n) link.value = ShareService.makeShareLink(n.id)
+        }
+        if (id === "collab-modal") {
+            const link = document.getElementById("collab-link")
+            const n = state.currentNote
+            if (link && n) link.value = ShareService.makeCollabLink(n.id)
         }
     },
 
     closeModal(id) {
-        document.getElementById(id).classList.remove('active');
-        if (id === 'appearance-modal') ThemeManager.revertToLastSaved();
-
-        if (id === 'about-modal') {
-            document.querySelector('.team-list').innerHTML = `
-                <li class="team-member name-alexandrov">Александров Арсений</li>
-                <li class="team-member name-malyshev">Малышев Егор</li>
-                <li class="team-member name-kopaev">Копаев Иван</li>
-                <li class="team-member name-minyaev">Миняев Иван</li>
-             `;
-        }
+        const el = document.getElementById(id)
+        if (!el) return
+        el.classList.remove("active")
+        if (id === "appearance-modal") ThemeManager.revertToLastSaved()
     },
 
-    openSettings() { this.openModal('settings-modal'); },
-    closeSettings() { this.closeModal('settings-modal'); },
-    showConfirm(type, cb) { this.confirm(type, cb); },
+    openSettings() {
+        const modal = document.getElementById("settings-modal")
+        if (modal) modal.classList.add("active")
+    },
+
+    showToast(msg, options = {}) {
+        const div = document.createElement("div")
+        div.className = "toast show"
+        div.setAttribute("role", "status")
+        const text = document.createElement("span")
+        text.textContent = msg
+        div.appendChild(text)
+        if (options.actionLabel && options.onAction) {
+            const btn = document.createElement("button")
+            btn.type = "button"
+            btn.className = "toast-action"
+            btn.textContent = options.actionLabel
+            btn.onclick = () => {
+                options.onAction()
+                div.remove()
+            }
+            div.appendChild(btn)
+        }
+        const root = document.getElementById("toast-container")
+        if (!root) return
+        root.appendChild(div)
+        setTimeout(() => {
+            div.classList.remove("show")
+            setTimeout(() => div.remove(), 300)
+        }, options.duration || 2500)
+    },
 
     confirm(type, cb) {
         const titles = {
-            delete: this.getText('confirm_delete', 'Delete?'),
-            exit: this.getText('confirm_exit', 'Sign out?'),
-            account: this.getText('confirm_account', 'Switch account?'),
-            delete_f: this.getText('confirm_delete_folder', 'Delete folder?')
-        };
-        document.getElementById('confirm-title').textContent = titles[type] || this.getText('confirm_default', 'Confirm');
+            delete: this.getText("confirm_delete", "Delete?"),
+            exit: this.getText("confirm_exit", "Sign out?"),
+            account: this.getText("confirm_account", "Switch account?"),
+            delete_f: this.getText("confirm_delete_folder", "Delete folder?")
+        }
+        const titleEl = document.getElementById("confirm-title")
+        if (titleEl) titleEl.textContent = titles[type] || this.getText("confirm_default", "Confirm")
 
-        const okBtn = document.getElementById('confirm-ok');
-        const newBtn = okBtn.cloneNode(true);
-        okBtn.parentNode.replaceChild(newBtn, okBtn);
+        const okBtn = document.getElementById("confirm-ok")
+        const newBtn = okBtn.cloneNode(true)
+        okBtn.parentNode.replaceChild(newBtn, okBtn)
 
         newBtn.onclick = () => {
-            cb();
-            this.els.confirmModal.classList.remove('active');
-        };
+            cb()
+            this.els.confirmModal.classList.remove("active")
+        }
 
-        this.els.confirmModal.classList.add('active');
-        document.getElementById('confirm-cancel').onclick = () => this.els.confirmModal.classList.remove('active');
+        this.els.confirmModal.classList.add("active")
+        const cancel = document.getElementById("confirm-cancel")
+        if (cancel) cancel.onclick = () => this.els.confirmModal.classList.remove("active")
     },
 
     showPrompt(title, placeholder, cb) {
-        const modal = this.els.promptModal;
-        const input = document.getElementById('prompt-input');
-        const ok = document.getElementById('prompt-ok');
-        const cancel = document.getElementById('prompt-cancel');
+        const modal = this.els.promptModal
+        const input = document.getElementById("prompt-input")
+        const ok = document.getElementById("prompt-ok")
+        const cancel = document.getElementById("prompt-cancel")
+        const titleEl = document.getElementById("prompt-title")
 
-        document.getElementById('prompt-title').textContent = title;
-        input.value = '';
-        input.placeholder = placeholder;
+        if (titleEl) titleEl.textContent = title
+        input.value = ""
+        input.placeholder = placeholder
 
         const finish = (val) => {
-            if (val) cb(val);
-            modal.classList.remove('active');
-            input.onkeydown = null;
-        };
+            if (val) cb(val)
+            modal.classList.remove("active")
+            input.onkeydown = null
+        }
 
-        const okClone = ok.cloneNode(true);
-        ok.parentNode.replaceChild(okClone, ok);
+        const okClone = ok.cloneNode(true)
+        ok.parentNode.replaceChild(okClone, ok)
 
-        okClone.onclick = () => finish(input.value.trim());
-        cancel.onclick = () => modal.classList.remove('active');
+        okClone.onclick = () => finish(String(input.value || "").trim())
+        cancel.onclick = () => modal.classList.remove("active")
 
-        modal.classList.add('active');
-        setTimeout(() => input.focus(), 100);
+        modal.classList.add("active")
+        setTimeout(() => input.focus(), 80)
+    },
+
+    setDropIndicator(card, position) {
+        this.clearDragIndicators()
+        card.classList.add(position === "before" ? "drop-before" : "drop-after")
+    },
+
+    clearDragIndicators() {
+        this.els.grid.querySelectorAll(".note-card").forEach(card => {
+            card.classList.remove("drop-before", "drop-after")
+        })
+    },
+
+    autoScroll(cursorY) {
+        const container = document.getElementById("notes-content-area")
+        if (!container) return
+        const rect = container.getBoundingClientRect()
+        const threshold = 80
+        if (cursorY < rect.top + threshold) container.scrollBy({ top: -12, behavior: "smooth" })
+        else if (cursorY > rect.bottom - threshold) container.scrollBy({ top: 12, behavior: "smooth" })
+    },
+
+    reorderNotes(draggedId, targetId, position) {
+        if (!db || !state.user) return
+        if (draggedId === targetId) return
+        const visibleIds = this.visibleNotes.map(n => n.id)
+        const fromIndex = visibleIds.indexOf(draggedId)
+        const toIndex = visibleIds.indexOf(targetId)
+        if (fromIndex === -1 || toIndex === -1) return
+        visibleIds.splice(fromIndex, 1)
+        const insertIndex = position === "after" ? toIndex + 1 : toIndex
+        visibleIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId)
+
+        const previous = this.visibleNotes.map(n => ({ id: n.id, order: n.order || 0 }))
+        state.orderHistory.push(previous)
+        if (state.orderHistory.length > 20) state.orderHistory.shift()
+
+        const updates = visibleIds.map((id, index) => ({ id, order: index + 1 }))
+        updates.forEach(update => {
+            const note = state.notes.find(n => n.id === update.id)
+            if (note) note.order = update.order
+        })
+
+        const batch = db.batch()
+        updates.forEach(update => {
+            const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(update.id)
+            batch.update(ref, { order: update.order })
+        })
+        batch.commit()
+        this.showToast(this.getText("order_updated", "Order updated"), {
+            actionLabel: this.getText("undo", "Undo"),
+            onAction: () => this.undoOrder()
+        })
+        filterAndRender(document.getElementById("search-input")?.value || "")
+    },
+
+    undoOrder() {
+        if (!db || !state.user) return
+        const last = state.orderHistory.pop()
+        if (!last) return
+        const batch = db.batch()
+        last.forEach(item => {
+            const note = state.notes.find(n => n.id === item.id)
+            if (note) note.order = item.order
+            const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(item.id)
+            batch.update(ref, { order: item.order })
+        })
+        batch.commit()
+        filterAndRender(document.getElementById("search-input")?.value || "")
+    },
+
+    updateEmptyState(icon, text) {
+        const iconEl = this.els.empty.querySelector("i")
+        const textEl = this.els.empty.querySelector("p")
+        if (iconEl) iconEl.textContent = icon
+        if (textEl) textEl.textContent = text
     },
 
     renderFolders() {
-        const root = this.els.folderList;
-        if (!root) return;
-        const hideList = state.config.folderViewMode === 'full';
-        root.classList.toggle('hidden', hideList);
+        const root = this.els.folderList
+        if (!root) return
+        const hideList = state.config.folderViewMode === "full"
+        root.classList.toggle("hidden", hideList)
         if (hideList) {
-            root.innerHTML = '';
-            return;
+            root.innerHTML = ""
+            return
         }
         root.innerHTML = state.folders.map(f => `
-            <button type="button" class="nav-item ${state.activeFolderId === f.id ? 'active' : ''}" onclick="switchView('folder', '${f.id}')">
-                <i class="material-icons-round">folder</i>
+            <button type="button" class="nav-item ${state.activeFolderId === f.id ? "active" : ""}" onclick="switchView('folder', '${f.id}')">
+                <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
                 <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
             </button>
-        `).join('');
+        `).join("")
     },
 
     renderFolderGrid() {
-        this.updateEmptyState('folder_open', this.getText('folders_empty', 'No folders yet'));
-        this.els.empty.classList.toggle('hidden', state.folders.length > 0);
-        this.els.grid.classList.add('folder-grid');
+        this.updateEmptyState("folder_open", this.getText("folders_empty", "No folders yet"))
+        this.els.empty.classList.toggle("hidden", state.folders.length > 0)
+        this.els.grid.classList.add("folder-grid")
         this.els.grid.innerHTML = state.folders.map(folder => {
-            const count = state.notes.filter(note => note.folderId === folder.id && !note.isArchived).length;
-            const label = count === 1 ? this.getText('note_single', 'note') : this.getText('note_plural', 'notes');
+            const count = state.notes.filter(note => note.folderId === folder.id && !note.isArchived).length
+            const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
             return `
                 <div class="folder-card" onclick="switchView('folder', '${folder.id}')">
                     <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
                     <div class="folder-meta">${count} ${label}</div>
                 </div>
-            `;
-        }).join('');
+            `
+        }).join("")
     },
 
-    renderNotes(notes) {
-        this.updateEmptyState('note_add', this.getText('empty', 'Nothing here yet'));
-        this.els.grid.classList.remove('folder-grid');
-        this.els.empty.classList.toggle('hidden', notes.length > 0);
-        this.els.grid.innerHTML = notes.map(n => `
-            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}" draggable="true">
-                <div class="card-actions">
-                    <button type="button" class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})" aria-label="${this.getText('pin_note', 'Pin')}">
-                        <i class="material-icons-round">push_pin</i>
-                    </button>
-                    <button type="button" class="action-btn ${n.isImportant ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isImportant', ${!n.isImportant})" aria-label="${this.getText('favorite_note', 'Favorite')}">
-                        <i class="material-icons-round">star</i>
-                    </button>
-                    <button type="button" class="action-btn" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isArchived', ${!n.isArchived})" aria-label="${this.getText('archive_note', 'Archive')}">
-                        <i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i>
-                    </button>
-                    <button type="button" class="action-btn action-more" onclick="event.stopPropagation(); UI.openNoteActions('${n.id}')" aria-label="${this.getText('note_actions', 'Actions')}">
-                        <i class="material-icons-round">more_vert</i>
-                    </button>
-                </div>
-                <h3>${Utils.escapeHtml(n.title || this.getText('untitled_note', 'Untitled'))}</h3>
-                <p>${Utils.escapeHtml(Utils.stripHtml(n.content) || this.getText('empty_note', 'No content'))}</p>
-                <div class="tags-list">
-                    ${(n.tags || []).map(t => `<span class="tag-chip">#${Utils.escapeHtml(t)}</span>`).join('')}
-                </div>
-            </div>
-        `).join('');
-    },
+    routeShare() {
+        const h = String(location.hash || "")
+        const m1 = h.match(/^#share\/([A-Za-z0-9]+)$/)
+        const m2 = h.match(/^#collab\/([A-Za-z0-9]+)$/)
+        const token = m1 ? m1[1] : m2 ? m2[1] : null
+        if (!token) return
+        const payload = ShareService.consume(token)
+        history.replaceState({}, "", "#")
+        if (!payload) return this.showToast("Ссылка недействительна")
 
-    openNoteActions(noteId) {
-        this.currentNoteActionId = noteId;
-        this.openModal('note-actions-modal');
-    },
-
-    updateEmptyState(icon, text) {
-        const iconEl = this.els.empty.querySelector('i');
-        const textEl = this.els.empty.querySelector('p');
-        if (iconEl) iconEl.textContent = icon;
-        if (textEl) textEl.textContent = text;
-    },
-
-    downloadSelectedNote() {
-        const note = state.notes.find(n => n.id === this.currentNoteActionId);
-        if (!note) return;
-        const exportData = NoteIO.exportNote(note);
-        const blob = new Blob([exportData], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = NoteIO.fileNameFor(note);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
-        this.showToast(this.getText('download_success', 'Downloaded'));
-        this.closeModal('note-actions-modal');
-    },
-
-    async uploadSelectedNote() {
-        const note = state.notes.find(n => n.id === this.currentNoteActionId);
-        if (!note) return;
-        await DriveService.uploadNote(note);
-        this.closeModal('note-actions-modal');
-    },
-
-    triggerImport() {
-        const input = document.getElementById('note-import');
-        input.value = '';
-        input.click();
-    },
-
-    async handleNoteImport(e) {
-        if (!db || !state.user) return;
-        const file = e.target.files[0];
-        if (!file) return;
-        if (!file.type.includes('json')) {
-            this.showToast(this.getText('import_invalid', 'Unsupported file'));
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const text = String(reader.result || '').replace(/^\uFEFF/, '');
-                const parsed = JSON.parse(text);
-                const notes = NoteIO.parseImport(parsed);
-                if (!notes.length) {
-                    this.showToast(this.getText('import_empty', 'No notes found'));
-                    return;
-                }
-                const batch = db.batch();
-                notes.forEach(note => {
-                    if (state.notes.some(n => n.id === note.id)) {
-                        note.id = Utils.generateId();
-                    }
-                    if (note.folderId && !state.folders.find(f => f.id === note.folderId)) {
-                        note.folderId = null;
-                    }
-                    const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(note.id);
-                    batch.set(ref, note, { merge: true });
-                });
-                await batch.commit();
-                this.showToast(this.getText('import_success', 'Imported'));
-            } catch (err) {
-                console.error(err);
-                this.showToast(this.getText('import_failed', 'Import failed'));
+        const openWhenReady = () => {
+            const note = state.notes.find(n => n.id === payload.noteId)
+            if (!note) return this.showToast("Заметка не найдена")
+            if (payload.mode === "read") return Editor.openFromList(note)
+            if (payload.mode === "collab") {
+                this.showToast("Совместный режим включен")
+                return Editor.openFromList(note)
             }
-        };
-        reader.onerror = () => this.showToast(this.getText('import_failed', 'Import failed'));
-        reader.readAsText(file, 'utf-8');
-    },
-
-    primaryAction() {
-        if (state.view === 'folders') {
-            if (state.folders.length >= 10) return this.showToast(this.getText('folder_limit', 'Folder limit reached'));
-            this.showPrompt(this.getText('new_folder', 'New folder'), this.getText('folder_placeholder', 'Folder name'), async (name) => {
-                await db.collection('users').doc(state.user.uid).collection('folders').add({
-                    name,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            });
-            return;
         }
-        Editor.open();
-    },
 
-    showToast(msg, options = {}) {
-        const div = document.createElement('div');
-        div.className = 'toast show';
-        div.setAttribute('role', 'status');
-        const text = document.createElement('span');
-        text.textContent = msg;
-        div.appendChild(text);
-        if (options.actionLabel && options.onAction) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'toast-action';
-            btn.textContent = options.actionLabel;
-            btn.onclick = () => {
-                options.onAction();
-                div.remove();
-            };
-            div.appendChild(btn);
-        }
-        document.getElementById('toast-container').appendChild(div);
-        setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 300); }, options.duration || 2500);
-    },
+        const int = setInterval(() => {
+            if (state.user && state.notes.length) {
+                clearInterval(int)
+                openWhenReady()
+            }
+        }, 120)
 
-    loadSettings() {
-        const style = getComputedStyle(document.documentElement);
-        ['text', 'primary', 'bg'].forEach(k => {
-            const el = document.getElementById(`cp-${k}`);
-            if (el) el.value = style.getPropertyValue(`--${k}`).trim();
-        });
-        this.renderToolsConfig();
-        this.syncFolderModeButtons();
-        const toggle = document.getElementById('reduce-motion-toggle');
-        if (toggle) {
-            toggle.classList.toggle('on', state.config.reduceMotion);
-            toggle.classList.toggle('off', !state.config.reduceMotion);
-        }
-    },
-
-    saveAppearance() {
-        const p = document.getElementById('cp-primary').value;
-        const bg = document.getElementById('cp-bg').value;
-        const t = document.getElementById('cp-text').value;
-        ThemeManager.setManual(p, bg, t);
-        this.closeModal('appearance-modal');
-    },
-
-    renderToolsConfig() {
-        const root = document.getElementById('tools-config-root');
-        if (root) {
-            const dict = LANG[state.config.lang] || LANG.ru;
-            root.innerHTML = Editor.config.map((t, i) => `
-                <div class="tool-toggle-item">
-                    <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[`tool_${t.id}`] || t.id}</span></div>
-                    <button type="button" class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
-                </div>
-            `).join('');
-        }
-    },
-
-    toggleTool(idx) {
-        Editor.config[idx].active = !Editor.config[idx].active;
-        localStorage.setItem('editor-tools', JSON.stringify(Editor.config));
-        this.renderToolsConfig();
-        Editor.renderToolbar();
-    },
-
-    setLang(lang) {
-        state.config.lang = lang;
-        localStorage.setItem('app-lang', lang);
-        document.documentElement.lang = lang;
-        document.title = this.getText('app_name', 'SmartNotes');
-        document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase() === lang));
-        const dict = LANG[lang];
-        document.querySelectorAll('[data-lang]').forEach(el => {
-            const k = el.getAttribute('data-lang');
-            if (dict[k]) el.textContent = dict[k];
-        });
-        document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
-            const k = el.getAttribute('data-lang-placeholder');
-            if (dict[k]) el.setAttribute('placeholder', dict[k]);
-        });
-        document.querySelectorAll('[data-lang-aria]').forEach(el => {
-            const k = el.getAttribute('data-lang-aria');
-            if (dict[k]) el.setAttribute('aria-label', dict[k]);
-        });
-        this.renderToolsConfig();
-        this.updateViewTitle();
-        this.updatePrimaryActionLabel();
-        ThemeManager.renderPicker();
-        Editor.syncToolbarVisibility();
-        switchView(state.view, state.activeFolderId);
-    },
-
-    updateViewTitle() {
-        const dict = LANG[state.config.lang] || LANG.ru;
-        const titles = {
-            notes: dict.view_notes || 'Notes',
-            favorites: dict.view_favorites || 'Favorites',
-            archive: dict.view_archive || 'Archive',
-            folder: dict.view_folder || 'Folder',
-            folders: dict.view_folders || 'Folders'
-        };
-        let title = titles[state.view] || 'SmartNotes';
-        if (state.view === 'folder' && state.activeFolderId) {
-            const folder = state.folders.find(f => f.id === state.activeFolderId);
-            if (folder) title = folder.name;
-        }
-        document.getElementById('current-view-title').textContent = title;
-    },
-
-    updatePrimaryActionLabel() {
-        if (!this.els.fab) return;
-        const label = state.view === 'folders' ? this.getText('create_folder', 'Create folder') : this.getText('create_note', 'Create note');
-        this.els.fab.setAttribute('aria-label', label);
-    },
-
-    async submitFeedback() {
-        const text = document.getElementById('feedback-text').value;
-        if (!state.tempRating) return this.showToast(this.getText('rate_required', 'Please rate'));
-
-        await db.collection('feedback').add({
-            uid: state.user.uid, rating: state.tempRating, text, ts: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        this.showToast(this.getText('feedback_thanks', 'Thanks!'));
-        this.closeModal('rate-modal');
-    },
-
-    setDropIndicator(card, position) {
-        this.clearDragIndicators();
-        card.classList.add(position === 'before' ? 'drop-before' : 'drop-after');
-    },
-
-    clearDragIndicators() {
-        this.els.grid.querySelectorAll('.note-card').forEach(card => {
-            card.classList.remove('drop-before', 'drop-after');
-        });
-    },
-
-    autoScroll(cursorY) {
-        const container = document.getElementById('notes-content-area');
-        const rect = container.getBoundingClientRect();
-        const threshold = 80;
-        if (cursorY < rect.top + threshold) {
-            container.scrollBy({ top: -12, behavior: 'smooth' });
-        } else if (cursorY > rect.bottom - threshold) {
-            container.scrollBy({ top: 12, behavior: 'smooth' });
-        }
-    },
-
-    reorderNotes(draggedId, targetId, position) {
-        if (!db || !state.user) return;
-        if (draggedId === targetId) return;
-        const visibleIds = this.visibleNotes.map(n => n.id);
-        const fromIndex = visibleIds.indexOf(draggedId);
-        const toIndex = visibleIds.indexOf(targetId);
-        if (fromIndex === -1 || toIndex === -1) return;
-        visibleIds.splice(fromIndex, 1);
-        const insertIndex = position === 'after' ? toIndex + 1 : toIndex;
-        visibleIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId);
-
-        const previous = this.visibleNotes.map(n => ({ id: n.id, order: n.order || 0 }));
-        state.orderHistory.push(previous);
-        if (state.orderHistory.length > 20) state.orderHistory.shift();
-
-        const updates = visibleIds.map((id, index) => ({ id, order: index + 1 }));
-        updates.forEach(update => {
-            const note = state.notes.find(n => n.id === update.id);
-            if (note) note.order = update.order;
-        });
-
-        const batch = db.batch();
-        updates.forEach(update => {
-            const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(update.id);
-            batch.update(ref, { order: update.order });
-        });
-        batch.commit();
-        this.showToast(this.getText('order_updated', 'Order updated'), {
-            actionLabel: this.getText('undo', 'Undo'),
-            onAction: () => this.undoOrder()
-        });
-        filterAndRender(document.getElementById('search-input')?.value || '');
-    },
-
-    undoOrder() {
-        if (!db || !state.user) return;
-        const last = state.orderHistory.pop();
-        if (!last) return;
-        const batch = db.batch();
-        last.forEach(item => {
-            const note = state.notes.find(n => n.id === item.id);
-            if (note) note.order = item.order;
-            const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(item.id);
-            batch.update(ref, { order: item.order });
-        });
-        batch.commit();
-        filterAndRender(document.getElementById('search-input')?.value || '');
+        setTimeout(() => clearInterval(int), 6000)
     }
-};
-
-// ==========================================================================
-// Global Logic
-// ==========================================================================
-
-function initApp() {
-    DriveService.init();
-    ReminderService.init();
-    Editor.init();
-    UI.init();
-    UI.setLang(localStorage.getItem('app-lang') || 'ru');
-
-    if (!db || !state.user) {
-        console.error('Database not available.');
-        return;
-    }
-
-    // Data Sync
-    db.collection('users').doc(state.user.uid).collection('folders')
-        .orderBy('createdAt', 'asc').onSnapshot(snap => {
-            state.folders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            UI.renderFolders();
-        });
-
-    db.collection('users').doc(state.user.uid).collection('notes')
-        .onSnapshot(snap => {
-            state.notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            filterAndRender(document.getElementById('search-input')?.value);
-        });
 }
 
-// Window Exposures (for HTML onclick binding)
-window.switchView = (view, folderId = null) => {
-    state.view = view;
-    state.activeFolderId = folderId;
+function normalizeVisibleNotes(list) {
+    const arr = (list || []).filter(Boolean).map(n => NoteIO.normalizeNote(n))
+    arr.sort((a, b) => {
+        const ap = a.isPinned ? 1 : 0
+        const bp = b.isPinned ? 1 : 0
+        if (bp !== ap) return bp - ap
+        const ao = typeof a.order === "number" ? a.order : 0
+        const bo = typeof b.order === "number" ? b.order : 0
+        return ao - bo
+    })
+    return arr
+}
 
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    if (!folderId) document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
+function renderNotes(list) {
+    const grid = UI.els.grid
+    if (!grid) return
+    UI.els.grid.classList.remove("folder-grid")
+    UI.visibleNotes = list
 
-    UI.updateViewTitle();
-    UI.updatePrimaryActionLabel();
+    if (!list.length) {
+        UI.els.empty.classList.remove("hidden")
+        grid.innerHTML = ""
+        return
+    }
+    UI.els.empty.classList.add("hidden")
 
-    UI.toggleSidebar(false);
-    filterAndRender(document.getElementById('search-input').value);
-    UI.renderFolders();
-};
+    grid.innerHTML = list.map(n => {
+        const title = n.title ? n.title : UI.getText("untitled_note", "Untitled")
+        const preview = Utils.stripHtml(n.content || "").trim() || UI.getText("empty_note", "No content")
+        const lock = n.lock && n.lock.hidden ? `<span class="lock-badge"><i class="material-icons-round" aria-hidden="true" style="font-size:16px">lock</i><span>Locked</span></span>` : ""
+        const pinCls = n.isPinned ? "pinned" : ""
+        const tagLine = Array.isArray(n.tags) && n.tags.length ? n.tags.slice(0, 3).map(t => `#${Utils.escapeHtml(String(t))}`).join(" ") : ""
+        const date = Utils.formatDate(n.updatedAt || n.createdAt || Date.now())
+        return `
+            <div class="note-card ${pinCls}" draggable="true" data-note-id="${encodeURIComponent(n.id)}">
+                <div class="card-actions">
+                    <button type="button" class="action-btn" aria-label="Pin" onclick="event.stopPropagation(); togglePin('${n.id}')"><i class="material-icons-round" aria-hidden="true">push_pin</i></button>
+                    <button type="button" class="action-btn" aria-label="Star" onclick="event.stopPropagation(); toggleFavorite('${n.id}')"><i class="material-icons-round" aria-hidden="true">star</i></button>
+                    <button type="button" class="action-btn" aria-label="Menu" onclick="event.stopPropagation(); openNoteActions('${n.id}')"><i class="material-icons-round" aria-hidden="true">more_horiz</i></button>
+                </div>
+                <h3>${Utils.escapeHtml(title)}</h3>
+                <p>${Utils.escapeHtml(preview)}</p>
+                <div class="note-meta">
+                    <i class="material-icons-round" aria-hidden="true">schedule</i>
+                    <span>${Utils.escapeHtml(date)}</span>
+                    <span style="margin-left:auto; opacity:0.8">${Utils.escapeHtml(tagLine)}</span>
+                </div>
+                ${lock ? `<div style="margin-top:8px">${lock}</div>` : ""}
+            </div>
+        `
+    }).join("")
+}
 
-window.filterAndRender = (query = '') => {
-    const q = query.toLowerCase().trim();
-    if (state.view === 'folders') {
-        UI.visibleNotes = [];
-        UI.renderFolderGrid();
-        return;
+function filterAndRender(query) {
+    state.searchQuery = String(query || "")
+    const q = state.searchQuery.trim()
+    let list = state.notes.slice()
+
+    if (state.view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
+    if (state.view === "archive") list = list.filter(n => !!n.isArchived)
+    if (state.view === "notes") list = list.filter(n => !n.isArchived)
+    if (state.view === "folder") list = list.filter(n => !n.isArchived && n.folderId === state.activeFolderId)
+
+    if (q) {
+        const scored = list.map(n => {
+            const score = SmartSearch.score(q, n.title, n.content, n.tags)
+            return { n, score }
+        }).filter(x => x.score >= 0.35).sort((a, b) => b.score - a.score)
+        list = scored.map(x => x.n)
     }
 
-    const res = state.notes.filter(n => {
-        const title = n.title || '';
-        const content = n.content || '';
-        const match = (title + content).toLowerCase().includes(q) || (n.tags || []).some(t => t.toLowerCase().includes(q));
-        if (state.view === 'notes') return match && !n.isArchived;
-        if (state.view === 'favorites') return match && !n.isArchived && n.isImportant;
-        if (state.view === 'archive') return match && n.isArchived;
-        if (state.view === 'folder') return match && !n.isArchived && n.folderId === state.activeFolderId;
-        return false;
-    });
+    list = normalizeVisibleNotes(list)
+    if (state.view === "folders") {
+        UI.renderFolderGrid()
+        UI.updateViewTitle()
+        UI.updatePrimaryActionLabel()
+        return
+    }
+    renderNotes(list)
+    UI.updateViewTitle()
+    UI.updatePrimaryActionLabel()
+}
 
-    const getUpdated = (n) => n.updatedAt?.seconds ? n.updatedAt.seconds : (n.updatedAt ? new Date(n.updatedAt).getTime() : 0);
-    const sortByOrder = (a, b) => (a.order || 0) - (b.order || 0) || getUpdated(b) - getUpdated(a);
-    const pinned = res.filter(n => n.isPinned);
-    const rest = res.filter(n => !n.isPinned);
-    const sorted = [...pinned.sort(sortByOrder), ...rest.sort(sortByOrder)];
-    UI.visibleNotes = sorted;
-    UI.renderNotes(sorted);
-};
+function switchView(view, folderId = null) {
+    state.view = view
+    state.activeFolderId = folderId
+    document.querySelectorAll(".nav-item").forEach(btn => {
+        const v = btn.dataset.view
+        if (!v) return
+        btn.classList.toggle("active", v === view)
+    })
+    filterAndRender(document.getElementById("search-input")?.value || "")
+}
 
-window.toggleProp = async (id, prop, val) => {
-    if (!db || !state.user) return;
-    const update = { [prop]: val };
-    if (prop === 'isArchived' && val) update.isPinned = false;
-    await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update(update);
-    if (prop === 'isArchived') UI.showToast(val ? UI.getText('archived', 'Archived') : UI.getText('restored', 'Restored'));
-};
+async function deleteFolder(folderId) {
+    if (!folderId) return
+    UI.confirm("delete_f", async () => {
+        if (!db || !state.user) return
+        const notes = state.notes.filter(n => n.folderId === folderId)
+        const batch = db.batch()
+        notes.forEach(n => {
+            const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
+            batch.update(ref, { folderId: null })
+        })
+        const folderRef = db.collection("users").doc(state.user.uid).collection("folders").doc(folderId)
+        batch.delete(folderRef)
+        await batch.commit()
+        if (state.activeFolderId === folderId) {
+            state.activeFolderId = null
+            state.view = "notes"
+        }
+        UI.showToast("Папка удалена")
+    })
+}
 
-window.openNoteById = (id) => {
-    const note = state.notes.find(n => n.id === id);
-    if (note) Editor.open(note);
-};
+function openNoteActions(noteId) {
+    UI.currentNoteActionId = noteId
+    UI.openModal("note-actions-modal")
+}
 
-window.deleteFolder = (id) => {
-    UI.confirm('delete_f', async () => {
-        await db.collection('users').doc(state.user.uid).collection('folders').doc(id).delete();
-        if (state.view === 'folder' && state.activeFolderId === id) switchView('notes');
-    });
-};
+async function toggleFavorite(noteId) {
+    if (!db || !state.user) return
+    const note = state.notes.find(n => n.id === noteId)
+    if (!note) return
+    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId)
+    const next = !note.isFavorite
+    await ref.update({ isFavorite: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+}
 
-// Global Event Listeners
-document.getElementById('add-folder-btn').onclick = () => {
-    if (state.folders.length >= 10) return UI.showToast(UI.getText('folder_limit', 'Folder limit reached'));
-    UI.showPrompt(UI.getText('new_folder', 'New folder'), UI.getText('folder_placeholder', 'Folder name'), async (name) => {
-        await db.collection('users').doc(state.user.uid).collection('folders').add({
-            name, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-    });
-};
+async function togglePin(noteId) {
+    if (!db || !state.user) return
+    const note = state.notes.find(n => n.id === noteId)
+    if (!note) return
+    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId)
+    const next = !note.isPinned
+    await ref.update({ isPinned: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    const card = document.querySelector(`.note-card[data-note-id="${encodeURIComponent(noteId)}"]`)
+    if (card) {
+        card.classList.add("pinning")
+        setTimeout(() => card.classList.remove("pinning"), 520)
+    }
+}
 
-// System Override (Easter Egg)
-let eggSeq = 0;
-document.addEventListener('click', e => {
-    if (e.target.classList.contains('name-kopaev')) eggSeq = 1;
-    else if (e.target.classList.contains('name-minyaev') && eggSeq === 1) {
-        document.querySelector('.team-list').innerHTML = `<li class="team-member" style="color:#00f2ff;font-size:1.5rem;text-shadow:0 0 20px #00f2ff">Тайлер²</li>`;
-        UI.showToast(UI.getText('system_override', 'System Override'));
-        eggSeq = 0;
-    } else eggSeq = 0;
-});
+async function toggleArchive(noteId, archive) {
+    if (!db || !state.user) return
+    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId)
+    await ref.update({ isArchived: !!archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
+}
+
+async function initApp() {
+    await DriveService.init()
+    ReminderService.init()
+    Editor.init()
+    UI.init()
+    UI.setLang(localStorage.getItem("app-lang") || "ru")
+
+    if (!db || !state.user) return
+
+    db.collection("users").doc(state.user.uid).collection("folders")
+        .orderBy("createdAt", "asc")
+        .onSnapshot(snap => {
+            state.folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            UI.renderFolders()
+            if (state.view === "folders") filterAndRender(document.getElementById("search-input")?.value || "")
+        })
+
+    db.collection("users").doc(state.user.uid).collection("notes")
+        .orderBy("order", "asc")
+        .onSnapshot(snap => {
+            state.notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            filterAndRender(document.getElementById("search-input")?.value || "")
+        })
+
+    const search = document.getElementById("search-input")
+    if (search) search.value = ""
+    switchView("notes")
+}
+
+window.initApp = initApp
+window.switchView = switchView
+window.filterAndRender = filterAndRender
+window.deleteFolder = deleteFolder
+window.openNoteActions = openNoteActions
+window.toggleFavorite = toggleFavorite
+window.togglePin = togglePin
+window.toggleArchive = toggleArchive
