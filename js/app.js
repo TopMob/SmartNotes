@@ -12,13 +12,19 @@ const defaultSettings = {
     accessibility: "system"
 };
 
+const defaultApiBase = window.location.protocol === "file:"
+    ? "http://localhost:5178"
+    : `${window.location.protocol}//${window.location.hostname}:5178`;
+
 const state = {
     media: null,
+    formats: { video: [], audio: [] },
     downloads: [],
     settings: { ...defaultSettings },
-    activeControllers: new Map(),
     rating: 0,
-    view: "home"
+    view: "home",
+    helperOnline: false,
+    apiBase: defaultApiBase
 };
 
 const elements = {
@@ -57,6 +63,7 @@ const elements = {
     ratingStars: qsa(".star", qs("#rate-modal")),
     submitRating: qs("#submit-rating"),
     toast: qs("#toast"),
+    connectionStatus: qs("#connection-status"),
     settings: {
         format: qs("#setting-format"),
         container: qs("#setting-container"),
@@ -126,11 +133,6 @@ const formatDuration = (seconds) => {
     return `${mins}m ${secs}s`;
 };
 
-const sanitizeFileName = (name) => {
-    const cleaned = name.replace(/[\\/:*?"<>|]/g, "").trim();
-    return cleaned.length ? cleaned : "media";
-};
-
 let toastTimer;
 const showToast = (message) => {
     elements.toast.textContent = message;
@@ -152,46 +154,6 @@ const isValidUrl = (value) => {
     } catch {
         return false;
     }
-};
-
-const detectPlaylist = (url) => {
-    const value = url.toLowerCase();
-    return value.includes("playlist") || value.includes("list=") || value.includes("collection");
-};
-
-const withTimeout = (promise, timeoutMs) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    return Promise.race([
-        promise(controller.signal),
-        new Promise((_, reject) => {
-            controller.signal.addEventListener("abort", () => {
-                reject(new Error("timeout"));
-            });
-        })
-    ]).finally(() => clearTimeout(timeoutId));
-};
-
-const fetchNoEmbed = (url) => withTimeout((signal) => fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`, { signal }), 7000)
-    .then((response) => (response.ok ? response.json() : null))
-    .catch(() => null);
-
-const fetchHead = (url) => withTimeout((signal) => fetch(url, { method: "HEAD", signal }), 7000)
-    .then((response) => (response.ok ? response : null))
-    .catch(() => null);
-
-const buildMediaStats = (media) => {
-    const stats = [];
-    if (media.host) {
-        stats.push(`Host: ${media.host}`);
-    }
-    if (media.fileSize) {
-        stats.push(`Size: ${media.fileSize}`);
-    }
-    if (media.contentType) {
-        stats.push(`Type: ${media.contentType}`);
-    }
-    return stats;
 };
 
 const updateHeroState = () => {
@@ -221,7 +183,18 @@ const renderMedia = () => {
     elements.mediaType.textContent = media.isPlaylist ? "Playlist" : "Single";
     elements.mediaDuration.textContent = `Duration: ${formatDuration(media.duration)}`;
     elements.mediaThumb.style.backgroundImage = media.thumbnail ? `url(${media.thumbnail})` : "";
-    elements.mediaStats.innerHTML = buildMediaStats(media).map((stat) => `<span>${stat}</span>`).join("");
+    let hostLabel = null;
+    if (media.webpageUrl) {
+        try {
+            hostLabel = `Host: ${new URL(media.webpageUrl).hostname}`;
+        } catch {
+            hostLabel = null;
+        }
+    }
+    elements.mediaStats.innerHTML = [
+        hostLabel,
+        media.entriesCount ? `Items: ${media.entriesCount}` : null
+    ].filter(Boolean).map((stat) => `<span>${stat}</span>`).join("");
     renderPlaylist();
 };
 
@@ -234,13 +207,13 @@ const renderPlaylist = () => {
     const entries = state.media.entries || [];
     elements.playlistCount.textContent = `Items: ${state.media.entriesCount || entries.length || "Unknown"}`;
     if (entries.length === 0) {
-        elements.playlistList.innerHTML = `<div class="playlist-item"><span>Playlist items are not accessible in the browser for this source.</span></div>`;
+        elements.playlistList.innerHTML = `<div class="playlist-item"><span>Playlist entries are available once download starts.</span></div>`;
         return;
     }
     elements.playlistList.innerHTML = entries.map((entry, index) => `
         <div class="playlist-item">
             <span>${index + 1}. ${entry.title}</span>
-            <span class="muted">${entry.duration || ""}</span>
+            <span class="muted">${entry.duration ? formatDuration(entry.duration) : ""}</span>
         </div>
     `).join("");
 };
@@ -293,7 +266,7 @@ const downloadCard = (download) => {
                 </div>
                 <span class="${statusClass}">${statusLabel}</span>
             </div>
-            <div class="muted">${timestamp} • ${download.format.toUpperCase()} • ${download.container.toUpperCase()} • ${download.quality}</div>
+            <div class="muted">${timestamp} • ${download.format.toUpperCase()} • ${download.qualityLabel || download.quality} • ${download.container.toUpperCase()}</div>
             <div class="card-actions">
                 <button class="action-btn" data-action="open" data-id="${download.id}">Open location</button>
                 <button class="action-btn" data-action="retry" data-id="${download.id}">Redownload</button>
@@ -371,15 +344,14 @@ const resetSettings = () => {
 
 const syncFormatOptions = () => {
     const format = elements.formatSelect.value;
-    const containerOptions = format === "audio" ? ["mp3", "m4a"] : ["mp4", "mkv", "webm"];
-    const qualityOptions = format === "audio" ? ["auto", "320k", "192k"] : ["auto", "1080p", "720p", "480p"];
+    const formatList = state.formats[format] || [];
+    elements.qualitySelect.innerHTML = formatList.length
+        ? formatList.map((entry) => `<option value="${entry.id}">${entry.label}</option>`).join("")
+        : `<option value="auto">Best available</option>`;
+    const containerOptions = format === "audio" ? ["mp3", "m4a", "opus"] : ["mp4", "mkv", "webm"];
     elements.containerSelect.innerHTML = containerOptions.map((value) => `<option value="${value}">${value.toUpperCase()}</option>`).join("");
-    elements.qualitySelect.innerHTML = qualityOptions.map((value) => `<option value="${value}">${value === "auto" ? "Best available" : value}</option>`).join("");
     if (!containerOptions.includes(state.settings.container)) {
         elements.containerSelect.value = containerOptions[0];
-    }
-    if (!qualityOptions.includes(state.settings.quality)) {
-        elements.qualitySelect.value = qualityOptions[0];
     }
 };
 
@@ -392,21 +364,23 @@ const updateDownloadOptionDefaults = () => {
 
 const createDownloadRecord = (media, options) => ({
     id: crypto.randomUUID(),
+    jobId: options.jobId || "",
     title: media.title,
     url: media.url,
     format: options.format,
     container: options.container,
     quality: options.quality,
+    qualityLabel: options.qualityLabel || options.quality,
     status: "queued",
     statusLabel: "Queued",
     progress: 0,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     favorite: false,
-    fileName: "",
-    fileUrl: "",
+    filePath: "",
     speed: 0,
-    eta: 0
+    eta: 0,
+    error: ""
 });
 
 const updateDownload = (id, updates) => {
@@ -423,161 +397,190 @@ const enqueueDownload = (record) => {
     state.downloads.unshift(record);
     storage.saveDownloads(state.downloads);
     renderDownloads();
-    processQueue();
 };
 
-const getActiveCount = () => state.downloads.filter((download) => download.status === "downloading").length;
-
-const processQueue = () => {
-    const limit = state.settings.concurrent;
-    if (getActiveCount() >= limit) {
-        return;
-    }
-    const next = state.downloads.find((download) => download.status === "queued");
-    if (!next) {
-        return;
-    }
-    startDownload(next);
-    if (getActiveCount() < limit) {
-        processQueue();
-    }
-};
-
-const startDownload = async (record) => {
-    updateDownload(record.id, { status: "downloading", statusLabel: "Downloading" });
-    const controller = new AbortController();
-    state.activeControllers.set(record.id, controller);
+const checkHelperStatus = async () => {
     try {
-        await performDownload(record, controller);
-        updateDownload(record.id, { status: "completed", statusLabel: "Completed", progress: 100, speed: 0, eta: 0 });
-        state.activeControllers.delete(record.id);
-        showToast("Download completed");
-    } catch (error) {
-        state.activeControllers.delete(record.id);
-        if (error.name === "AbortError" || error.message === "cancelled") {
-            updateDownload(record.id, { status: "cancelled", statusLabel: "Cancelled", speed: 0, eta: 0 });
-            showToast("Download cancelled");
-        } else {
-            updateDownload(record.id, { status: "failed", statusLabel: "Failed", speed: 0, eta: 0 });
-            const errorMessageMap = {
-                blocked: "Source blocks direct downloads",
-                large_file: "Large files need the file picker or helper service",
-                network: "Network error while downloading",
-                audio_unavailable: "Audio-only is not available for this source",
-                video_unavailable: "Video format is not available for this source"
-            };
-            showToast(errorMessageMap[error.message] || "Download failed");
+        const response = await fetch(`${state.apiBase}/api/health`);
+        state.helperOnline = response.ok;
+    } catch {
+        state.helperOnline = false;
+    }
+    renderHelperStatus();
+};
+
+const renderHelperStatus = () => {
+    const label = state.helperOnline ? "Helper online" : "Helper offline";
+    elements.connectionStatus.querySelector("span:last-child").textContent = label;
+    elements.connectionStatus.querySelector(".status-dot").style.background = state.helperOnline ? "#36c68e" : "#e63946";
+};
+
+const analyzeLink = async (value) => {
+    setAlert("");
+    const url = value.trim();
+    if (!isValidUrl(url)) {
+        setAlert("Enter a valid http or https URL.");
+        return;
+    }
+    if (!state.helperOnline) {
+        setAlert("Local helper service is offline. Start it to analyze this link.");
+        return;
+    }
+    elements.analyzeBtn.disabled = true;
+    elements.analyzeBtn.textContent = "Analyzing";
+    try {
+        const response = await fetch(`${state.apiBase}/api/inspect`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setAlert(data.error || "Unable to analyze the link.");
+            return;
         }
+        state.media = {
+            url,
+            title: data.metadata.title,
+            author: data.metadata.author,
+            duration: data.metadata.duration,
+            thumbnail: data.metadata.thumbnail,
+            isPlaylist: data.metadata.isPlaylist,
+            entries: data.metadata.entries,
+            entriesCount: data.metadata.entriesCount,
+            webpageUrl: data.metadata.webpageUrl
+        };
+        state.formats = data.formats || { video: [], audio: [] };
+        renderMedia();
+        updateHeroState();
+        syncFormatOptions();
+    } catch {
+        setAlert("Unable to connect to the helper service.");
     } finally {
-        processQueue();
+        elements.analyzeBtn.disabled = false;
+        elements.analyzeBtn.textContent = "Analyze";
     }
 };
 
-const performDownload = async (record, controller) => {
-    if (!state.media) {
-        throw new Error("no_media");
-    }
-    const media = state.media;
-    if (!media.directAccess) {
-        throw new Error("blocked");
-    }
-    if (record.format === "audio" && !media.supportsAudio) {
-        throw new Error("audio_unavailable");
-    }
-    if (record.format === "video" && !media.supportsVideo) {
-        throw new Error("video_unavailable");
-    }
-    const response = await fetch(record.url, { signal: controller.signal });
-    if (!response.ok || !response.body) {
-        throw new Error("network");
-    }
-    const total = Number(response.headers.get("content-length"));
-    if (!window.showSaveFilePicker && total > 1024 * 1024 * 200) {
-        throw new Error("large_file");
-    }
-    const fileName = `${sanitizeFileName(record.title)}.${record.container}`;
-    let handle = null;
-    if (window.showSaveFilePicker) {
-        try {
-            handle = await window.showSaveFilePicker({
-                suggestedName: fileName,
-                types: [{ description: "Media", accept: { "application/octet-stream": [`.${record.container}`] } }]
-            });
-        } catch (error) {
-            if (error.name === "AbortError") {
-                throw new Error("cancelled");
-            }
-            throw error;
-        }
-    }
-    let received = 0;
-    const startedAt = performance.now();
-    const reader = response.body.getReader();
-    if (handle) {
-        const writable = await handle.createWritable();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            await writable.write(value);
-            received += value.length;
-            updateProgress(record, received, total, startedAt);
-        }
-        await writable.close();
-        updateDownload(record.id, { fileName });
-        return;
-    }
-    const chunks = [];
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-            break;
-        }
-        chunks.push(value);
-        received += value.length;
-        updateProgress(record, received, total, startedAt);
-    }
-    const blob = new Blob(chunks, { type: response.headers.get("content-type") || "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    updateDownload(record.id, { fileName, fileUrl: url });
+const resetMedia = () => {
+    state.media = null;
+    state.formats = { video: [], audio: [] };
+    elements.mediaUrl.value = "";
+    setAlert("");
+    updateHeroState();
+    renderMedia();
 };
 
-const updateProgress = (record, received, total, startedAt) => {
-    const percent = total ? (received / total) * 100 : Math.min(99, record.progress + 1);
-    const elapsed = (performance.now() - startedAt) / 1000;
-    const speed = elapsed > 0 ? received / elapsed : 0;
-    const eta = total && speed ? (total - received) / speed : 0;
-    updateDownload(record.id, {
-        progress: percent,
-        speed,
-        eta,
-        statusLabel: "Downloading"
+const requestDownload = async (record) => {
+    const payload = {
+        url: record.url,
+        title: record.title,
+        formatId: record.quality === "auto" ? null : record.quality,
+        formatType: record.format,
+        container: record.container
+    };
+    const response = await fetch(`${state.apiBase}/api/download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
     });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || "Download failed");
+    }
+    return data.jobId;
 };
 
-const cancelDownload = (id) => {
-    const controller = state.activeControllers.get(id);
-    if (controller) {
-        controller.abort();
+const startDownloadFromRecord = async (record) => {
+    try {
+        const jobId = await requestDownload(record);
+        updateDownload(record.id, { jobId, status: "downloading", statusLabel: "Downloading" });
+    } catch (error) {
+        updateDownload(record.id, { status: "failed", statusLabel: "Failed", error: error.message });
+        showToast(error.message);
+    }
+};
+
+const handleDownload = async () => {
+    if (!state.media) {
+        showToast("Paste a link first");
         return;
     }
-    updateDownload(id, { status: "cancelled", statusLabel: "Cancelled" });
+    if (!state.helperOnline) {
+        showToast("Helper service is offline");
+        return;
+    }
+    const format = elements.formatSelect.value;
+    const quality = elements.qualitySelect.value;
+    const container = elements.containerSelect.value;
+    const qualityLabel = elements.qualitySelect.selectedOptions[0]?.textContent?.trim() || quality;
+    const record = createDownloadRecord(state.media, { format, quality, container, qualityLabel });
+    enqueueDownload(record);
+    await startDownloadFromRecord(record);
 };
 
-const retryDownload = (id) => {
+const pollDownloads = async () => {
+    if (!state.helperOnline) {
+        return;
+    }
+    const active = state.downloads.filter((download) => ["queued", "downloading"].includes(download.status) && download.jobId);
+    await Promise.all(active.map(async (download) => {
+        try {
+            const response = await fetch(`${state.apiBase}/api/status/${download.jobId}`);
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+            updateDownload(download.id, {
+                status: data.status,
+                statusLabel: data.statusLabel,
+                progress: data.progress,
+                speed: data.speed,
+                eta: data.eta,
+                filePath: data.filePath || download.filePath,
+                error: data.error || ""
+            });
+        } catch {
+            return;
+        }
+    }));
+};
+
+const cancelDownload = async (id) => {
     const record = state.downloads.find((download) => download.id === id);
     if (!record) {
         return;
     }
-    updateDownload(id, { status: "queued", statusLabel: "Queued", progress: 0, speed: 0, eta: 0 });
-    processQueue();
+    if (!record.jobId) {
+        updateDownload(id, { status: "cancelled", statusLabel: "Cancelled" });
+        return;
+    }
+    try {
+        await fetch(`${state.apiBase}/api/cancel`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ jobId: record.jobId })
+        });
+        updateDownload(id, { status: "cancelled", statusLabel: "Cancelled" });
+    } catch {
+        showToast("Unable to cancel download");
+    }
+};
+
+const retryDownload = async (id) => {
+    const record = state.downloads.find((download) => download.id === id);
+    if (!record) {
+        return;
+    }
+    if (!state.helperOnline) {
+        showToast("Helper service is offline");
+        return;
+    }
+    updateDownload(id, { status: "queued", statusLabel: "Queued", progress: 0, speed: 0, eta: 0, jobId: "" });
+    const updated = state.downloads.find((download) => download.id === id);
+    if (updated) {
+        await startDownloadFromRecord(updated);
+    }
 };
 
 const toggleFavorite = (id) => {
@@ -588,90 +591,25 @@ const toggleFavorite = (id) => {
     updateDownload(id, { favorite: !record.favorite });
 };
 
-const openLocation = (id) => {
+const openLocation = async (id) => {
     const record = state.downloads.find((download) => download.id === id);
-    if (!record) {
+    if (!record || !record.filePath) {
+        showToast("Download location is not available yet");
         return;
     }
-    if (record.fileUrl) {
-        window.open(record.fileUrl, "_blank", "noopener,noreferrer");
-        return;
+    try {
+        const response = await fetch(`${state.apiBase}/api/reveal`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: record.filePath })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            showToast(data.error || "Unable to open location");
+        }
+    } catch {
+        showToast("Unable to open location");
     }
-    showToast("Browser access to the download location is restricted");
-};
-
-const analyzeLink = async (value) => {
-    setAlert("");
-    const url = value.trim();
-    if (!isValidUrl(url)) {
-        setAlert("Enter a valid http or https URL.");
-        return;
-    }
-    elements.analyzeBtn.disabled = true;
-    elements.analyzeBtn.textContent = "Analyzing";
-    const parsed = new URL(url);
-    const [noEmbed, headResponse] = await Promise.all([fetchNoEmbed(url), fetchHead(url)]);
-    const contentType = headResponse ? headResponse.headers.get("content-type") : "";
-    const normalizedType = contentType ? contentType.toLowerCase() : "";
-    const contentLength = headResponse ? Number(headResponse.headers.get("content-length")) : null;
-    const titleFromUrl = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || parsed.hostname);
-    state.media = {
-        url,
-        title: noEmbed?.title || titleFromUrl || "Untitled media",
-        author: noEmbed?.author_name || parsed.hostname,
-        duration: noEmbed?.duration || null,
-        thumbnail: noEmbed?.thumbnail_url || "",
-        isPlaylist: detectPlaylist(url),
-        entries: [],
-        entriesCount: null,
-        host: parsed.hostname,
-        contentType: contentType || "Unknown",
-        fileSize: formatBytes(contentLength),
-        directAccess: Boolean(headResponse),
-        supportsAudio: normalizedType.startsWith("audio"),
-        supportsVideo: normalizedType.startsWith("video") || normalizedType === "" || normalizedType.includes("octet-stream")
-    };
-    renderMedia();
-    updateHeroState();
-    elements.analyzeBtn.disabled = false;
-    elements.analyzeBtn.textContent = "Analyze";
-    if (!state.media.directAccess) {
-        setAlert("Direct access is blocked by the source. Use a direct media link or local helper service.");
-    }
-};
-
-const resetMedia = () => {
-    state.media = null;
-    elements.mediaUrl.value = "";
-    setAlert("");
-    updateHeroState();
-    renderMedia();
-};
-
-const handleDownload = () => {
-    if (!state.media) {
-        showToast("Paste a link first");
-        return;
-    }
-    const options = {
-        format: elements.formatSelect.value,
-        quality: elements.qualitySelect.value,
-        container: elements.containerSelect.value
-    };
-    if (!state.media.directAccess) {
-        showToast("Direct download is blocked for this source");
-        return;
-    }
-    if (options.format === "audio" && !state.media.supportsAudio) {
-        showToast("Audio-only format is unavailable for this source");
-        return;
-    }
-    if (options.format === "video" && !state.media.supportsVideo) {
-        showToast("Video format is unavailable for this source");
-        return;
-    }
-    const record = createDownloadRecord(state.media, options);
-    enqueueDownload(record);
 };
 
 const handleRating = () => {
@@ -760,6 +698,9 @@ const initialize = () => {
     renderDownloads();
     updateHeroState();
     bindEvents();
+    checkHelperStatus();
+    setInterval(checkHelperStatus, 5000);
+    setInterval(pollDownloads, 1200);
 };
 
 initialize();
