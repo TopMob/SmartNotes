@@ -140,6 +140,8 @@ const SketchService = {
     ctx: null,
     drawing: false,
     history: [],
+    resizeObserver: null,
+    dpr: 1,
     els: {},
 
     init() {
@@ -154,56 +156,64 @@ const SketchService = {
     },
 
     setupCanvas() {
-        const rect = this.canvas.parentElement.getBoundingClientRect();
-        this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
-        this.ctx.lineCap = 'round';
-        this.ctx.lineJoin = 'round';
+        this.syncCanvasSize(false);
         this.saveState();
     },
 
     bindEvents() {
-        const getPos = (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        };
-
         const start = (e) => {
+            if (e.button !== undefined && e.button !== 0) return;
             this.drawing = true;
             this.ctx.beginPath();
             this.ctx.strokeStyle = this.els.color.value;
-            this.ctx.lineWidth = this.els.width.value;
-            const pos = getPos(e);
+            this.ctx.lineWidth = parseFloat(this.els.width.value);
+            const pos = this.getCanvasPoint(e);
             this.ctx.moveTo(pos.x, pos.y);
+            if (e.pointerId !== undefined) {
+                this.canvas.setPointerCapture(e.pointerId);
+            }
         };
 
         const move = (e) => {
             if (!this.drawing) return;
             e.preventDefault();
-            const pos = getPos(e);
+            const pos = this.getCanvasPoint(e);
             this.ctx.lineTo(pos.x, pos.y);
             this.ctx.stroke();
         };
 
-        const end = () => {
+        const end = (e) => {
             if (!this.drawing) return;
             this.drawing = false;
             this.ctx.closePath();
+            if (e && e.pointerId !== undefined) {
+                this.canvas.releasePointerCapture(e.pointerId);
+            }
             this.saveState();
         };
 
-        this.canvas.onmousedown = start;
-        this.canvas.onmousemove = move;
-        this.canvas.onmouseup = end;
-        this.canvas.onmouseout = end;
+        if (window.PointerEvent) {
+            this.canvas.addEventListener('pointerdown', start);
+            this.canvas.addEventListener('pointermove', move);
+            this.canvas.addEventListener('pointerup', end);
+            this.canvas.addEventListener('pointercancel', end);
+            this.canvas.addEventListener('pointerleave', end);
+        } else {
+            this.canvas.addEventListener('mousedown', start);
+            this.canvas.addEventListener('mousemove', move);
+            this.canvas.addEventListener('mouseup', end);
+            this.canvas.addEventListener('mouseleave', end);
+            this.canvas.addEventListener('touchstart', start, { passive: true });
+            this.canvas.addEventListener('touchmove', move, { passive: false });
+            this.canvas.addEventListener('touchend', end, { passive: true });
+        }
 
-        this.canvas.addEventListener('touchstart', start, { passive: true });
-        this.canvas.addEventListener('touchmove', move, { passive: false });
-        this.canvas.addEventListener('touchend', end, { passive: true });
-
+        if (window.ResizeObserver) {
+            this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
+            this.resizeObserver.observe(this.canvas.parentElement);
+        }
         window.addEventListener('resize', Utils.debounce(() => this.resizeCanvas(), 150));
+        window.addEventListener('orientationchange', Utils.debounce(() => this.resizeCanvas(), 150));
     },
 
     saveState() {
@@ -213,12 +223,37 @@ const SketchService = {
 
     resizeCanvas() {
         if (!this.canvas) return;
-        const prev = new Image();
-        prev.src = this.canvas.toDataURL();
-        prev.onload = () => {
-            this.setupCanvas();
-            this.ctx.drawImage(prev, 0, 0, this.canvas.width, this.canvas.height);
-        };
+        this.syncCanvasSize(true);
+    },
+
+    syncCanvasSize(keepDrawing) {
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const previous = keepDrawing ? this.canvas.toDataURL() : null;
+        this.dpr = window.devicePixelRatio || 1;
+        this.canvas.style.width = `${rect.width}px`;
+        this.canvas.style.height = `${rect.height}px`;
+        this.canvas.width = Math.round(rect.width * this.dpr);
+        this.canvas.height = Math.round(rect.height * this.dpr);
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        if (previous) {
+            const img = new Image();
+            img.onload = () => {
+                this.ctx.clearRect(0, 0, rect.width, rect.height);
+                this.ctx.drawImage(img, 0, 0, rect.width, rect.height);
+            };
+            img.src = previous;
+        }
+    },
+
+    getCanvasPoint(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const point = e.touches ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
+        const x = point.clientX - rect.left;
+        const y = point.clientY - rect.top;
+        return { x, y };
     },
 
     undo() {
@@ -371,6 +406,7 @@ const Editor = {
     draggedMedia: null,
     savedRange: null,
     activeFontSize: null,
+    toolbarVisible: true,
     toolbarDrag: { active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 },
     els: {},
     fontSizes: [12, 14, 16, 18, 20, 24, 28],
@@ -399,13 +435,17 @@ const Editor = {
             wrapper: document.getElementById('note-editor'),
             sizePopup: document.getElementById('text-size-popup'),
             sizeRange: document.getElementById('font-size-range'),
-            ctxMenu: document.getElementById('media-context-menu')
+            ctxMenu: document.getElementById('media-context-menu'),
+            toolbarToggle: document.getElementById('toolbar-toggle'),
+            toolbarToggleIcon: document.getElementById('toolbar-toggle-icon')
         };
 
         this.loadConfig();
+        this.loadToolbarVisibility();
         this.renderToolbar();
         this.bindEvents();
         this.applyToolbarMode();
+        this.updateToolbarToggle();
         window.addEventListener('resize', Utils.debounce(() => this.applyToolbarMode(), 150));
     },
 
@@ -541,6 +581,12 @@ const Editor = {
             this.applyFontSize(size);
         });
 
+        if (this.els.toolbarToggle) {
+            this.els.toolbarToggle.addEventListener('click', () => {
+                this.setToolbarVisibility(!this.toolbarVisible);
+            });
+        }
+
         document.getElementById('img-upload').addEventListener('change', e => {
             if (e.target.files[0]) {
                 const reader = new FileReader();
@@ -620,12 +666,13 @@ const Editor = {
 
     showToolbar() {
         clearTimeout(this.toolbarHideTimer);
+        if (!this.isToolbarVisible()) return;
         this.els.toolbar.classList.remove('auto-hidden');
     },
 
     scheduleHideToolbar() {
         clearTimeout(this.toolbarHideTimer);
-        if (!this.els.toolbar.classList.contains('floating')) return;
+        if (!this.els.toolbar.classList.contains('floating') || !this.isToolbarVisible()) return;
         this.toolbarHideTimer = setTimeout(() => {
             this.els.toolbar.classList.add('auto-hidden');
         }, 1800);
@@ -643,6 +690,46 @@ const Editor = {
             this.els.toolbar.style.left = '';
             this.els.toolbar.style.top = '';
             this.els.toolbar.style.bottom = '';
+        }
+    },
+
+    loadToolbarVisibility() {
+        const saved = localStorage.getItem('editor-toolbar-visible');
+        this.toolbarVisible = saved === null ? true : saved === 'true';
+    },
+
+    setToolbarVisibility(visible) {
+        this.toolbarVisible = visible;
+        localStorage.setItem('editor-toolbar-visible', String(visible));
+        this.updateToolbarVisibility();
+        this.updateToolbarToggle();
+        if (visible) {
+            this.showToolbar();
+        }
+    },
+
+    updateToolbarToggle() {
+        if (!this.els.toolbarToggle || !this.els.toolbarToggleIcon) return;
+        const dict = LANG[state.config.lang] || LANG.ru;
+        const isVisible = this.isToolbarVisible();
+        this.els.toolbarToggleIcon.textContent = isVisible ? 'expand_less' : 'expand_more';
+        const label = isVisible ? (dict.hide_toolbar || 'Hide toolbar') : (dict.show_toolbar || 'Show toolbar');
+        this.els.toolbarToggle.setAttribute('aria-label', label);
+    },
+
+    hasActiveTools() {
+        return this.config.some(tool => tool.active);
+    },
+
+    isToolbarVisible() {
+        return this.toolbarVisible && this.hasActiveTools();
+    },
+
+    updateToolbarVisibility() {
+        const visible = this.isToolbarVisible();
+        this.els.toolbar.classList.toggle('is-hidden', !visible);
+        if (!visible) {
+            this.els.toolbar.classList.remove('auto-hidden');
         }
     },
 
@@ -815,6 +902,7 @@ const Editor = {
             newRange.collapse(true);
             selection.removeAllRanges();
             selection.addRange(newRange);
+            this.savedRange = newRange.cloneRange();
         } else {
             const contents = range.extractContents();
             span.appendChild(contents);
@@ -824,6 +912,7 @@ const Editor = {
             newRange.selectNodeContents(span);
             newRange.collapse(false);
             selection.addRange(newRange);
+            this.savedRange = newRange.cloneRange();
         }
         this.queueSnapshot();
     },
@@ -837,25 +926,79 @@ const Editor = {
         });
     },
 
-    insertTaskItem(label) {
+    insertTaskListFromSelection() {
         const selection = window.getSelection();
-        const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
-        const list = range ? range.startContainer.closest?.('.task-list') : null;
-        const itemHtml = `<li class="task-item"><input type="checkbox" class="task-checkbox" aria-label="${Utils.escapeHtml(label)}" contenteditable="false"><span class="task-text">${Utils.escapeHtml(label)}</span></li>`;
-        if (list) {
-            list.insertAdjacentHTML('beforeend', itemHtml);
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        const dict = LANG[state.config.lang] || LANG.ru;
+        const fallbackLabel = dict.task_item || 'Task';
+        let targetRange = range;
+        let lines = [];
+
+        if (range.collapsed) {
+            const block = this.getClosestBlock(range.startContainer);
+            if (block && block !== this.els.content) {
+                targetRange = document.createRange();
+                targetRange.selectNode(block);
+                lines = block.innerText.split(/\n+/);
+            } else {
+                lines = [range.startContainer.textContent || ''];
+            }
         } else {
-            document.execCommand('insertHTML', false, `<ul class="task-list">${itemHtml}</ul>`);
+            const fragment = range.cloneContents();
+            const container = document.createElement('div');
+            container.appendChild(fragment);
+            lines = container.innerText.split(/\n+/);
         }
-        const target = this.els.content.querySelector('.task-item:last-child .task-text');
-        if (target) {
-            const newRange = document.createRange();
-            newRange.selectNodeContents(target);
-            newRange.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-        }
+
+        const normalized = lines.map(line => line.replace(/\u200B/g, ''));
+        const trimmed = normalized.map(line => line.trim());
+        const hasContent = trimmed.some(line => line !== '');
+        const finalLines = hasContent ? trimmed : [fallbackLabel];
+
+        targetRange.deleteContents();
+        const list = this.buildTaskList(finalLines, fallbackLabel);
+        targetRange.insertNode(list);
+        this.placeCursorAtTask(list);
         this.queueSnapshot();
+    },
+
+    getClosestBlock(node) {
+        if (!node) return null;
+        const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        if (!element) return null;
+        return element.closest('.task-item, li, p, div, blockquote');
+    },
+
+    buildTaskList(lines, fallbackLabel) {
+        const list = document.createElement('ul');
+        list.className = 'task-list';
+        lines.forEach(line => {
+            const item = document.createElement('li');
+            item.className = 'task-item';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'task-checkbox';
+            checkbox.setAttribute('contenteditable', 'false');
+            checkbox.setAttribute('aria-label', line || fallbackLabel);
+            const text = document.createElement('span');
+            text.className = 'task-text';
+            text.textContent = line || '';
+            item.append(checkbox, text);
+            list.appendChild(item);
+        });
+        return list;
+    },
+
+    placeCursorAtTask(list) {
+        const selection = window.getSelection();
+        const target = list.querySelector('.task-item:last-child .task-text');
+        if (!selection || !target) return;
+        const newRange = document.createRange();
+        newRange.selectNodeContents(target);
+        newRange.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
     },
 
     syncTaskStates() {
@@ -890,23 +1033,33 @@ const Editor = {
         this.queueSnapshot();
     },
 
-    exec(cmd, val = null) {
+    exec(cmd, val = null, action = '') {
         this.els.content.focus();
         const actions = {
             toggleSizeSlider: () => {
                 const target = document.querySelector('[data-action="toggleSizeSlider"]');
                 if (!target) return;
                 const rect = target.getBoundingClientRect();
-                this.els.sizePopup.style.bottom = '60px';
+                this.saveSelection();
+                const wasHidden = this.els.sizePopup.classList.contains('hidden');
+                if (wasHidden) {
+                    this.els.sizePopup.classList.remove('hidden');
+                }
+                const popupHeight = this.els.sizePopup.getBoundingClientRect().height || 0;
+                const top = Math.max(12, rect.top - popupHeight - 12);
                 this.els.sizePopup.style.left = `${rect.left + rect.width / 2}px`;
-                this.els.sizePopup.classList.toggle('hidden');
-                if (!this.els.sizePopup.classList.contains('hidden')) {
-                    this.saveSelection();
+                this.els.sizePopup.style.top = `${top}px`;
+                this.els.sizePopup.style.bottom = 'auto';
+                if (wasHidden) {
+                    const active = this.activeFontSize || this.fontSizes[2];
+                    const idx = this.fontSizes.indexOf(active);
+                    this.els.sizeRange.value = idx === -1 ? 3 : idx + 1;
+                } else {
+                    this.els.sizePopup.classList.add('hidden');
                 }
             },
             task: () => {
-                const label = LANG[state.config.lang]?.task_item || 'Task';
-                this.insertTaskItem(label);
+                this.insertTaskListFromSelection();
             },
             align_left: () => this.alignMediaOrText('left'),
             align_center: () => this.alignMediaOrText('center'),
@@ -917,7 +1070,13 @@ const Editor = {
             clear: () => document.execCommand('removeFormat')
         };
 
-        actions[cmd] ? actions[cmd]() : document.execCommand(cmd, false, val);
+        if (action && actions[action]) {
+            actions[action]();
+        } else if (actions[cmd]) {
+            actions[cmd]();
+        } else {
+            document.execCommand(cmd, false, val);
+        }
         this.queueSnapshot();
         this.updateToolbarState();
     },
@@ -1021,17 +1180,25 @@ const Editor = {
 
     renderToolbar() {
         const dict = LANG[state.config.lang] || LANG.ru;
+        const activeTools = this.config.filter(t => t.active);
+        if (!activeTools.length) {
+            this.els.toolbar.innerHTML = '';
+            this.updateToolbarVisibility();
+            this.updateToolbarToggle();
+            return;
+        }
         const handle = `<button type="button" class="tool-btn toolbar-handle" aria-label="${Utils.escapeHtml(dict.move_toolbar || 'Move toolbar')}"><i class="material-icons-round">drag_indicator</i></button>`;
-        this.els.toolbar.innerHTML = handle + this.config.map(t => {
-            if (!t.active) return '';
+        this.els.toolbar.innerHTML = handle + activeTools.map(t => {
             if (t.color) return `
                 <div class="tool-wrapper">
                     <label class="tool-btn"><i class="material-icons-round" style="color:var(--text)">${t.icon}</i>
                     <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}">
                     </label>
                 </div>`;
-            return `<button type="button" class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
+            return `<button type="button" class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}', '${t.action || ''}')" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
         }).join('');
+        this.updateToolbarVisibility();
+        this.updateToolbarToggle();
     },
 
     addTag(tag) {
@@ -1527,6 +1694,8 @@ const UI = {
         localStorage.setItem('editor-tools', JSON.stringify(Editor.config));
         this.renderToolsConfig();
         Editor.renderToolbar();
+        Editor.updateToolbarVisibility();
+        Editor.updateToolbarToggle();
     },
 
     setLang(lang) {
@@ -1552,6 +1721,7 @@ const UI = {
         this.updateViewTitle();
         this.updatePrimaryActionLabel();
         ThemeManager.renderPicker();
+        Editor.updateToolbarToggle();
         switchView(state.view, state.activeFolderId);
     },
 

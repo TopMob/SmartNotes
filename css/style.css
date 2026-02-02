@@ -40,6 +40,14 @@
     --blur-strength: 18px;
     --motion-enabled: 1;
     --animation-duration: 0.3s;
+    --space-unit: 1;
+    --font-scale: 1;
+    --line-height: 1.7;
+    --editor-surface: var(--surface);
+    --editor-border: var(--border);
+    --editor-toolbar-bg: rgba(255, 255, 255, 0.03);
+    --editor-header-bg: var(--surface-transparent);
+    --editor-shadow: var(--shadow-lg);
     
     --z-sidebar: 2000;
     --z-editor: 2500;
@@ -623,10 +631,10 @@ body {
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    background: var(--surface);
-    box-shadow: var(--shadow-lg);
-    border-left: 1px solid var(--border);
-    border-right: 1px solid var(--border);
+    background: var(--editor-surface);
+    box-shadow: var(--editor-shadow);
+    border-left: 1px solid var(--editor-border);
+    border-right: 1px solid var(--editor-border);
     position: relative;
     overflow: hidden;
 }
@@ -636,41 +644,45 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 20px;
-    border-bottom: 1px solid var(--border);
+    padding: 0 calc(20px * var(--space-unit));
+    border-bottom: 1px solid var(--editor-border);
     flex-shrink: 0;
-    background: var(--surface-transparent);
+    background: var(--editor-header-bg);
     backdrop-filter: blur(var(--blur-strength));
 }
 
 .editor-tools {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: calc(8px * var(--space-unit));
 }
 
 .editor-scroll-area {
     flex: 1;
     overflow-y: auto;
-    padding: 30px;
+    padding: calc(30px * var(--space-unit));
     display: flex;
     flex-direction: column;
-    padding-bottom: 300px;
+    padding-bottom: calc(300px * var(--space-unit));
 }
 
 .editor-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    gap: calc(6px * var(--space-unit));
+    padding: calc(8px * var(--space-unit));
+    background: var(--editor-toolbar-bg);
     border-radius: 12px;
-    border: 1px solid var(--border);
-    margin-bottom: 20px;
+    border: 1px solid var(--editor-border);
+    margin-bottom: calc(20px * var(--space-unit));
     position: sticky;
     top: 0;
     z-index: 10;
     backdrop-filter: blur(var(--blur-strength));
+}
+
+.editor-toolbar.is-hidden {
+    display: none;
 }
 
 .editor-toolbar.auto-hidden {
@@ -708,8 +720,8 @@ body {
 }
 
 .tool-btn {
-    width: 40px;
-    height: 40px;
+    width: calc(40px * var(--density));
+    height: calc(40px * var(--density));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -748,10 +760,10 @@ body {
 #note-title {
     background: transparent;
     border: none;
-    font-size: 2rem;
+    font-size: calc(2rem * var(--font-scale));
     font-weight: 800;
     color: var(--text);
-    margin-bottom: 20px;
+    margin-bottom: calc(20px * var(--space-unit));
     width: 100%;
     line-height: 1.2;
 }
@@ -763,26 +775,26 @@ body {
 .rich-editor {
     flex: 1;
     color: var(--text);
-    font-size: 1.15rem;
-    line-height: 1.7;
+    font-size: calc(1.15rem * var(--font-scale));
+    line-height: var(--line-height);
     outline: none;
     min-height: 200px;
     white-space: pre-wrap;
-    padding-bottom: 40px;
+    padding-bottom: calc(40px * var(--space-unit));
 }
 
 
 .rich-editor ul, .rich-editor ol {
-    margin-left: 24px;
-    margin-bottom: 12px;
+    margin-left: calc(24px * var(--space-unit));
+    margin-bottom: calc(12px * var(--space-unit));
 }
 
 .rich-editor blockquote {
     border-left: 3px solid var(--primary);
-    padding-left: 16px;
+    padding-left: calc(16px * var(--space-unit));
     color: var(--text-dim);
     font-style: italic;
-    margin: 16px 0;
+    margin: calc(16px * var(--space-unit)) 0;
 }
 
 .rich-editor code {
@@ -796,16 +808,16 @@ body {
 .task-list {
     list-style: none;
     padding-left: 0;
-    margin: 8px 0;
+    margin: calc(8px * var(--space-unit)) 0;
     display: grid;
-    gap: 8px;
+    gap: calc(8px * var(--space-unit));
 }
 
 .task-item {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: calc(12px * var(--space-unit));
+    padding: calc(10px * var(--space-unit)) calc(12px * var(--space-unit));
     background: rgba(255, 255, 255, 0.02);
     border-radius: 10px;
     transition: background var(--animation-duration) var(--ease-out), border-color var(--animation-duration) var(--ease-out);
@@ -838,10 +850,10 @@ body {
 }
 
 .editor-bottom-panel {
-    border-top: 1px solid var(--border);
-    padding: 15px 25px;
-    padding-bottom: max(15px, var(--safe-bottom));
-    background: var(--surface);
+    border-top: 1px solid var(--editor-border);
+    padding: calc(15px * var(--space-unit)) calc(25px * var(--space-unit));
+    padding-bottom: max(calc(15px * var(--space-unit)), var(--safe-bottom));
+    background: var(--editor-surface);
     flex-shrink: 0;
 }
 
@@ -1649,7 +1661,7 @@ input[type=range]::-webkit-slider-thumb {
     
     .content-scrollable { padding-top: 60px; }
     
-    #note-title { font-size: 1.5rem; }
+    #note-title { font-size: calc(1.5rem * var(--font-scale)); }
     
     .mobile-only-title { display: none; }
     
