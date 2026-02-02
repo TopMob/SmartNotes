@@ -8,6 +8,8 @@
    ========================================================================== */
 const Utils = {
     generateId: () => Math.random().toString(36).slice(2, 11),
+    clamp: (value, min, max) => Math.min(Math.max(value, min), max),
+    snap: (value, step) => Math.round(value / step) * step,
     
     debounce: (func, wait) => {
         let timeout;
@@ -41,16 +43,6 @@ const Utils = {
         const tmp = document.createElement("DIV");
         tmp.innerHTML = html;
         return tmp.textContent || tmp.innerText || "";
-    },
-
-    escapeHtml: (value) => {
-        if (value === null || value === undefined) return '';
-        return String(value)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
     },
 
     escapeHtml: (value) => {
@@ -135,7 +127,7 @@ const state = {
     searchQuery: '',
     currentNote: null,
     tempRating: 0,
-    config: { lang: 'ru' },
+    config: { lang: 'ru', folderViewMode: 'compact', reduceMotion: false },
     
     // Tools State
     driveToken: null,
@@ -145,7 +137,8 @@ const state = {
     
     // Editor State
     editorDirty: false,
-    lastSaved: null
+    lastSaved: null,
+    orderHistory: []
 };
 
 // Expose state globally
@@ -156,13 +149,55 @@ window.state = state;
    ========================================================================== */
 const LANG = {
     ru: {
-        slogan: "Ваши мысли. В порядке.", login_google: "Войти через Google", all_notes: "Все записи",
-        favorites: "Важное", archive: "Архив", folders: "ПАПКИ", about: "О нас", rate: "Оценить",
+        app_name: "SmartNotes",
+        slogan: "Ваши мысли. В порядке.", login: "Вход в систему", login_google: "Войти через Google", all_notes: "Все записи",
+        favorites: "Важное", archive: "Архив", folders: "ПАПКИ", folders_overview: "Папки", about: "О нас", rate: "Оценить",
         settings: "Настройки", switch_acc: "Сменить", logout: "Выйти", empty: "Здесь пока пусто",
         general: "Общие", language: "Язык", appearance: "Внешний вид", presets: "Пресеты",
         manual: "Ручная настройка", c_text: "Текст", c_accent: "Акцент", c_bg: "Фон",
         reset: "Сбросить", close: "Закрыть", save: "Сохранить", team: "Команда",
         contact_us: "Связаться с нами:", send: "Отправить", cancel: "Отмена", yes: "Да",
+        search: "Поиск...", note_title: "Заголовок", note_tags: "#тег (Enter)",
+        feedback_placeholder: "Поделитесь впечатлениями...",
+        note_actions: "Действия", download_note: "Скачать файл", upload_note: "Отправить в облако",
+        photo_editor: "Редактор фото",
+        folders_settings: "Папки", folder_view_mode: "Отображение", folder_view_compact: "В боковой панели", folder_view_full: "Полный экран",
+        reduce_motion: "Уменьшить анимации",
+        view_notes: "Все записи", view_favorites: "Важное", view_archive: "Архив", view_folder: "Папка", view_folders: "Папки",
+        note_single: "заметка", note_plural: "заметок", folders_empty: "Нет папок",
+        pin_note: "Закрепить", favorite_note: "Важное", archive_note: "Архивировать",
+        untitled_note: "Без названия", empty_note: "Нет содержимого",
+        new_folder: "Новая папка", folder_placeholder: "Название...", folder_limit: "Лимит папок достигнут",
+        archived: "В архиве", restored: "Восстановлено",
+        saving: "Сохранение...", saved: "Сохранено",
+        rate_required: "Поставьте оценку", feedback_thanks: "Спасибо!",
+        order_updated: "Порядок обновлен", undo: "Отменить",
+        import_file: "Импортировать файл", import_invalid: "Неверный формат файла", import_empty: "Файлы не содержат заметок",
+        import_success: "Импортировано", import_failed: "Ошибка импорта",
+        download_success: "Файл сохранен",
+        drive_connected: "Google Drive подключен", drive_unavailable: "Сервис Drive недоступен", drive_saved: "Загружено в Drive", drive_error: "Ошибка синхронизации",
+        mic_unsupported: "Микрофон не поддерживается", mic_denied: "Нет доступа к микрофону", recording: "Запись...",
+        reminder_set: "Напоминание",
+        confirm_delete: "Удалить?", confirm_exit: "Выйти?", confirm_account: "Сменить аккаунт?", confirm_delete_folder: "Удалить папку?", confirm_default: "Подтвердите",
+        move_toolbar: "Переместить панель",
+        task_item: "Задача",
+        system_override: "System Override",
+        close_menu: "Закрыть меню", add_folder: "Создать папку", open_menu: "Открыть меню", search_aria: "Поиск заметок",
+        create_note: "Создать заметку", create_folder: "Создать папку", editor: "Редактор", back: "Назад", undo: "Отменить", redo: "Повторить",
+        delete_note: "Удалить заметку", note_title_aria: "Заголовок заметки", note_body_aria: "Текст заметки",
+        note_tags_aria: "Добавить тег", save_note: "Сохранить", prompt_title: "Ввод", prompt_input: "Поле ввода",
+        ok: "ОК", insert: "Вставить", sketch_title: "Холст", sketch_color: "Цвет кисти", sketch_width: "Толщина кисти",
+        sketch_undo: "Отменить штрих", sketch_clear: "Очистить", text_size: "Размер шрифта",
+        align_left: "По левому краю", align_center: "По центру", align_right: "По правому краю",
+        reset_media: "Сбросить размер", draw_photo: "Рисовать на фото", delete: "Удалить",
+        photo_color: "Цвет кисти", photo_width: "Толщина кисти", clear: "Очистить",
+        folder_view_aria: "Режим отображения папок", color_text: "Цвет текста", color_accent: "Акцентный цвет",
+        color_bg: "Цвет фона", feedback_aria: "Ваш отзыв",
+        theme_light: "Светлая", theme_dark: "Темная", theme_system: "Системная", theme_high_contrast: "Высокий контраст",
+        theme_oled: "OLED", theme_monochrome: "Монохром", theme_pastel: "Пастель", theme_warm: "Теплая",
+        theme_cold: "Холодная", theme_minimal: "Минимал", theme_compact: "Компактная", theme_spacious: "Просторная",
+        theme_accessibility: "Доступность", theme_glass: "Стекло", theme_matte: "Матовая", theme_neon: "Неон",
+        theme_paper: "Бумага", theme_sunrise: "Рассвет", theme_ocean: "Океан",
         tools: "Инструменты редактора",
         sections: "Разделы",
         appearance_settings: "Внешний вид",
@@ -184,13 +219,55 @@ const LANG = {
         t_sketch: "Рисунок", t_clear: "Очистить"
     },
     en: {
-        slogan: "Your thoughts. Organized.", login_google: "Sign in with Google", all_notes: "All Notes",
-        favorites: "Important", archive: "Archive", folders: "FOLDERS", about: "About", rate: "Rate Us",
+        app_name: "SmartNotes",
+        slogan: "Your thoughts. Organized.", login: "Sign in", login_google: "Sign in with Google", all_notes: "All Notes",
+        favorites: "Important", archive: "Archive", folders: "FOLDERS", folders_overview: "Folders", about: "About", rate: "Rate Us",
         settings: "Settings", switch_acc: "Switch", logout: "Logout", empty: "Nothing here yet",
         general: "General", language: "Language", appearance: "Appearance", presets: "Presets",
         manual: "Manual Config", c_text: "Text", c_accent: "Accent", c_bg: "Background",
         reset: "Reset", close: "Close", save: "Save", team: "Team",
         contact_us: "Contact us:", send: "Send", cancel: "Cancel", yes: "Yes",
+        search: "Search...", note_title: "Title", note_tags: "#tag (Enter)",
+        feedback_placeholder: "Share your feedback...",
+        note_actions: "Actions", download_note: "Download file", upload_note: "Upload to cloud",
+        photo_editor: "Photo Editor",
+        folders_settings: "Folders", folder_view_mode: "Display", folder_view_compact: "Sidebar list", folder_view_full: "Full view",
+        reduce_motion: "Reduce motion",
+        view_notes: "All Notes", view_favorites: "Important", view_archive: "Archive", view_folder: "Folder", view_folders: "Folders",
+        note_single: "note", note_plural: "notes", folders_empty: "No folders yet",
+        pin_note: "Pin", favorite_note: "Favorite", archive_note: "Archive",
+        untitled_note: "Untitled", empty_note: "No content",
+        new_folder: "New folder", folder_placeholder: "Folder name", folder_limit: "Folder limit reached",
+        archived: "Archived", restored: "Restored",
+        saving: "Saving...", saved: "Saved",
+        rate_required: "Please rate the app", feedback_thanks: "Thanks!",
+        order_updated: "Order updated", undo: "Undo",
+        import_file: "Import file", import_invalid: "Unsupported file", import_empty: "No notes found",
+        import_success: "Imported", import_failed: "Import failed",
+        download_success: "File saved",
+        drive_connected: "Drive connected", drive_unavailable: "Drive unavailable", drive_saved: "Uploaded to Drive", drive_error: "Drive upload failed",
+        mic_unsupported: "Microphone not supported", mic_denied: "Microphone access denied", recording: "Recording...",
+        reminder_set: "Reminder set",
+        confirm_delete: "Delete?", confirm_exit: "Sign out?", confirm_account: "Switch account?", confirm_delete_folder: "Delete folder?", confirm_default: "Confirm",
+        move_toolbar: "Move toolbar",
+        task_item: "Task",
+        system_override: "System Override",
+        close_menu: "Close menu", add_folder: "Create folder", open_menu: "Open menu", search_aria: "Search notes",
+        create_note: "Create note", create_folder: "Create folder", editor: "Editor", back: "Back", undo: "Undo", redo: "Redo",
+        delete_note: "Delete note", note_title_aria: "Note title", note_body_aria: "Note body",
+        note_tags_aria: "Add tag", save_note: "Save", prompt_title: "Input", prompt_input: "Input field",
+        ok: "OK", insert: "Insert", sketch_title: "Canvas", sketch_color: "Brush color", sketch_width: "Brush width",
+        sketch_undo: "Undo stroke", sketch_clear: "Clear", text_size: "Text size",
+        align_left: "Align left", align_center: "Align center", align_right: "Align right",
+        reset_media: "Reset size", draw_photo: "Draw on photo", delete: "Delete",
+        photo_color: "Brush color", photo_width: "Brush width", clear: "Clear",
+        folder_view_aria: "Folder display mode", color_text: "Text color", color_accent: "Accent color",
+        color_bg: "Background color", feedback_aria: "Your feedback",
+        theme_light: "Light", theme_dark: "Dark", theme_system: "System", theme_high_contrast: "High Contrast",
+        theme_oled: "OLED", theme_monochrome: "Monochrome", theme_pastel: "Pastel", theme_warm: "Warm",
+        theme_cold: "Cold", theme_minimal: "Minimal", theme_compact: "Compact", theme_spacious: "Spacious",
+        theme_accessibility: "Accessibility", theme_glass: "Glass", theme_matte: "Matte", theme_neon: "Neon",
+        theme_paper: "Paper", theme_sunrise: "Sunrise", theme_ocean: "Ocean",
         tools: "Editor Tools",
         sections: "Sections",
         appearance_settings: "Appearance",
@@ -218,25 +295,25 @@ const LANG = {
    ========================================================================== */
 const ThemeManager = {
     themes: {
-        light: { p: '#2563eb', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.1)', radius: 14, fontBase: 16, hitSize: 44, shadow: '0 10px 30px rgba(15, 23, 42, 0.1)' },
-        dark: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' },
-        system: { p: '#6366f1', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' },
-        high_contrast: { p: '#ffffff', bg: '#000000', t: '#ffffff', surface: '#000000', surfaceLight: '#141414', border: 'rgba(255, 255, 255, 0.5)', radius: 12, fontBase: 18, hitSize: 48, shadow: 'none' },
-        oled: { p: '#22c55e', bg: '#000000', t: '#ffffff', surface: '#050505', surfaceLight: '#0f0f0f', border: 'rgba(255, 255, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 40, shadow: 'none' },
-        monochrome: { p: '#6b7280', bg: '#0b0b0b', t: '#f5f5f5', surface: '#111111', surfaceLight: '#1a1a1a', border: 'rgba(255, 255, 255, 0.15)', radius: 10, fontBase: 16, hitSize: 40, shadow: '0 16px 30px rgba(0, 0, 0, 0.45)' },
-        pastel: { p: '#8b5cf6', bg: '#f8f5ff', t: '#2e1065', surface: '#ffffff', surfaceLight: '#f1ecff', border: 'rgba(46, 16, 101, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 12px 24px rgba(76, 29, 149, 0.12)' },
-        warm: { p: '#f97316', bg: '#fff7ed', t: '#7c2d12', surface: '#ffffff', surfaceLight: '#ffedd5', border: 'rgba(124, 45, 18, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 12px 24px rgba(124, 45, 18, 0.15)' },
-        cool: { p: '#06b6d4', bg: '#ecfeff', t: '#0e7490', surface: '#ffffff', surfaceLight: '#cffafe', border: 'rgba(14, 116, 144, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 12px 24px rgba(14, 116, 144, 0.15)' },
-        minimal: { p: '#0f172a', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.08)', radius: 8, fontBase: 15, hitSize: 40, shadow: 'none' },
-        compact: { p: '#3b82f6', bg: '#0b1220', t: '#e2e8f0', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(226, 232, 240, 0.1)', radius: 10, fontBase: 14, hitSize: 36, shadow: '0 12px 24px rgba(0, 0, 0, 0.4)' },
-        spacious: { p: '#22c55e', bg: '#0f172a', t: '#f8fafc', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(248, 250, 252, 0.1)', radius: 18, fontBase: 17, hitSize: 48, shadow: '0 24px 40px rgba(0, 0, 0, 0.5)' },
-        low_vision: { p: '#facc15', bg: '#0a0a0a', t: '#ffffff', surface: '#111111', surfaceLight: '#1f1f1f', border: 'rgba(255, 255, 255, 0.35)', radius: 16, fontBase: 20, hitSize: 52, shadow: 'none' },
-        glass: { p: '#00f2ff', bg: '#06080f', t: '#ffffff', surface: 'rgba(15, 23, 42, 0.65)', surfaceLight: 'rgba(30, 41, 59, 0.7)', border: 'rgba(255, 255, 255, 0.15)', radius: 16, fontBase: 16, hitSize: 44, shadow: '0 25px 50px rgba(0, 0, 0, 0.5)' },
-        matte: { p: '#4ade80', bg: '#111827', t: '#f1f5f9', surface: '#1f2937', surfaceLight: '#374151', border: 'rgba(241, 245, 249, 0.12)', radius: 14, fontBase: 16, hitSize: 42, shadow: '0 16px 26px rgba(0, 0, 0, 0.4)' },
-        neon: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' },
-        paper: { p: '#2563eb', bg: '#f8f1e7', t: '#1f2937', surface: '#fffaf3', surfaceLight: '#f3e8d6', border: 'rgba(31, 41, 55, 0.15)', radius: 10, fontBase: 16, hitSize: 42, shadow: '0 12px 20px rgba(31, 41, 55, 0.1)' },
-        sunrise: { p: '#ef4444', bg: '#1f0a0a', t: '#fee2e2', surface: '#2a0f0f', surfaceLight: '#3a1515', border: 'rgba(254, 226, 226, 0.15)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)' },
-        ocean: { p: '#38bdf8', bg: '#04121f', t: '#e2f2ff', surface: '#0b1d2a', surfaceLight: '#12283a', border: 'rgba(226, 242, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 40, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)' }
+        light: { p: '#2563eb', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.1)', radius: 14, fontBase: 16, hitSize: 44, shadow: '0 10px 30px rgba(15, 23, 42, 0.1)', density: 1, blur: 18, motion: 1 },
+        dark: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', density: 1, blur: 20, motion: 1 },
+        system: { preset: 'system' },
+        high_contrast: { p: '#ffffff', bg: '#000000', t: '#ffffff', surface: '#000000', surfaceLight: '#141414', border: 'rgba(255, 255, 255, 0.6)', radius: 14, fontBase: 18, hitSize: 52, shadow: 'none', density: 1.1, blur: 0, motion: 0.8 },
+        oled: { p: '#22c55e', bg: '#000000', t: '#ffffff', surface: '#050505', surfaceLight: '#0f0f0f', border: 'rgba(255, 255, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 44, shadow: 'none', density: 1, blur: 8, motion: 1 },
+        monochrome: { p: '#6b7280', bg: '#0b0b0b', t: '#f5f5f5', surface: '#111111', surfaceLight: '#1a1a1a', border: 'rgba(255, 255, 255, 0.15)', radius: 10, fontBase: 16, hitSize: 44, shadow: '0 16px 30px rgba(0, 0, 0, 0.45)', density: 0.95, blur: 8, motion: 1 },
+        pastel: { p: '#8b5cf6', bg: '#f8f5ff', t: '#2e1065', surface: '#ffffff', surfaceLight: '#f1ecff', border: 'rgba(46, 16, 101, 0.15)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(76, 29, 149, 0.12)', density: 1.05, blur: 18, motion: 1 },
+        warm: { p: '#f97316', bg: '#fff7ed', t: '#7c2d12', surface: '#ffffff', surfaceLight: '#ffedd5', border: 'rgba(124, 45, 18, 0.15)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(124, 45, 18, 0.15)', density: 1.05, blur: 16, motion: 1 },
+        cold: { p: '#06b6d4', bg: '#ecfeff', t: '#0e7490', surface: '#ffffff', surfaceLight: '#cffafe', border: 'rgba(14, 116, 144, 0.15)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 12px 24px rgba(14, 116, 144, 0.15)', density: 1.05, blur: 16, motion: 1 },
+        minimal: { p: '#0f172a', bg: '#f8fafc', t: '#0f172a', surface: '#ffffff', surfaceLight: '#f1f5f9', border: 'rgba(15, 23, 42, 0.08)', radius: 8, fontBase: 15, hitSize: 42, shadow: 'none', density: 0.9, blur: 0, motion: 0.9 },
+        compact: { p: '#3b82f6', bg: '#0b1220', t: '#e2e8f0', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(226, 232, 240, 0.1)', radius: 10, fontBase: 14, hitSize: 40, shadow: '0 12px 24px rgba(0, 0, 0, 0.4)', density: 0.85, blur: 12, motion: 1 },
+        spacious: { p: '#22c55e', bg: '#0f172a', t: '#f8fafc', surface: '#111827', surfaceLight: '#1f2937', border: 'rgba(248, 250, 252, 0.1)', radius: 20, fontBase: 17, hitSize: 52, shadow: '0 24px 40px rgba(0, 0, 0, 0.5)', density: 1.2, blur: 20, motion: 1 },
+        accessibility: { p: '#facc15', bg: '#0a0a0a', t: '#ffffff', surface: '#111111', surfaceLight: '#1f1f1f', border: 'rgba(255, 255, 255, 0.45)', radius: 18, fontBase: 20, hitSize: 56, shadow: 'none', density: 1.25, blur: 0, motion: 0.6 },
+        glass: { p: '#00f2ff', bg: '#06080f', t: '#ffffff', surface: 'rgba(15, 23, 42, 0.65)', surfaceLight: 'rgba(30, 41, 59, 0.7)', surfaceTransparent: 'rgba(15, 23, 42, 0.55)', border: 'rgba(255, 255, 255, 0.2)', radius: 18, fontBase: 16, hitSize: 46, shadow: '0 25px 50px rgba(0, 0, 0, 0.5)', density: 1, blur: 24, motion: 1 },
+        matte: { p: '#4ade80', bg: '#111827', t: '#f1f5f9', surface: '#1f2937', surfaceLight: '#374151', border: 'rgba(241, 245, 249, 0.12)', radius: 14, fontBase: 16, hitSize: 44, shadow: '0 16px 26px rgba(0, 0, 0, 0.35)', density: 1, blur: 0, motion: 1 },
+        neon: { p: '#00f2ff', bg: '#050505', t: '#ffffff', surface: '#0f0f11', surfaceLight: '#18181b', border: 'rgba(255, 255, 255, 0.08)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', density: 1, blur: 18, motion: 1 },
+        paper: { p: '#2563eb', bg: '#f8f1e7', t: '#1f2937', surface: '#fffaf3', surfaceLight: '#f3e8d6', border: 'rgba(31, 41, 55, 0.15)', radius: 10, fontBase: 16, hitSize: 44, shadow: '0 12px 20px rgba(31, 41, 55, 0.1)', density: 1, blur: 6, motion: 1 },
+        sunrise: { p: '#ef4444', bg: '#1f0a0a', t: '#fee2e2', surface: '#2a0f0f', surfaceLight: '#3a1515', border: 'rgba(254, 226, 226, 0.15)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)', density: 1, blur: 14, motion: 1 },
+        ocean: { p: '#38bdf8', bg: '#04121f', t: '#e2f2ff', surface: '#0b1d2a', surfaceLight: '#12283a', border: 'rgba(226, 242, 255, 0.15)', radius: 12, fontBase: 16, hitSize: 44, shadow: '0 20px 30px rgba(0, 0, 0, 0.5)', density: 1, blur: 14, motion: 1 }
     },
 
     init() {
@@ -251,6 +328,13 @@ const ThemeManager = {
         } else {
             this.applyPreset('dark');
         }
+        const media = window.matchMedia('(prefers-color-scheme: dark)');
+        media.addEventListener('change', () => {
+            const current = JSON.parse(localStorage.getItem('app-theme-settings'));
+            if (current?.preset === 'system') {
+                this.applyPreset('system');
+            }
+        });
         
         // Observer for lazy-loaded DOM elements (Theme Picker)
         const observer = new MutationObserver(() => {
@@ -283,7 +367,29 @@ const ThemeManager = {
         const root = document.getElementById('theme-picker-root');
         if (!root) return;
         root.innerHTML = '';
-        
+        const dict = LANG[state.config.lang] || LANG.ru;
+        const labels = {
+            light: dict.theme_light || 'Light',
+            dark: dict.theme_dark || 'Dark',
+            system: dict.theme_system || 'System',
+            high_contrast: dict.theme_high_contrast || 'High Contrast',
+            oled: dict.theme_oled || 'OLED',
+            monochrome: dict.theme_monochrome || 'Monochrome',
+            pastel: dict.theme_pastel || 'Pastel',
+            warm: dict.theme_warm || 'Warm',
+            cold: dict.theme_cold || 'Cold',
+            minimal: dict.theme_minimal || 'Minimal',
+            compact: dict.theme_compact || 'Compact',
+            spacious: dict.theme_spacious || 'Spacious',
+            accessibility: dict.theme_accessibility || 'Accessibility',
+            glass: dict.theme_glass || 'Glass',
+            matte: dict.theme_matte || 'Matte',
+            neon: dict.theme_neon || 'Neon',
+            paper: dict.theme_paper || 'Paper',
+            sunrise: dict.theme_sunrise || 'Sunrise',
+            ocean: dict.theme_ocean || 'Ocean'
+        };
+
         Object.keys(this.themes).forEach(key => {
             const t = this.themes[key];
             const wrapper = document.createElement('div');
@@ -291,7 +397,8 @@ const ThemeManager = {
             
             const dot = document.createElement('div');
             dot.className = 'theme-dot';
-            dot.style.background = t.p;
+            const color = t.p || (key === 'system' ? '#6366f1' : '#00f2ff');
+            dot.style.background = color;
             
             const current = localStorage.getItem('app-theme-settings');
             const parsed = current ? JSON.parse(current) : null;
@@ -300,7 +407,7 @@ const ThemeManager = {
 
             const label = document.createElement('span');
             label.className = 'theme-label';
-            label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+            label.textContent = labels[key] || key.charAt(0).toUpperCase() + key.slice(1);
 
             dot.onclick = () => {
                 this.applyPreset(key);
@@ -324,46 +431,87 @@ const ThemeManager = {
     },
 
     setManual(primary, bg, text) {
-        this.applyCSS(primary, bg, text);
+        const base = this.themes.dark;
+        this.applyThemeVars({ ...base, p: primary, bg, t: text, surface: Utils.adjustColor(bg, 10), surfaceLight: Utils.adjustColor(bg, 20) });
         this.syncInputs(primary, bg, text);
         localStorage.setItem('app-theme-settings', JSON.stringify({ p: primary, bg: bg, t: text }));
     },
 
-    getSavedTheme() {
-        return JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
-    },
 
-    revertToLastSaved() {
-        const saved = this.getSavedTheme();
-        this.setManual(saved.p, saved.bg, saved.t);
-        this.renderPicker();
-    },
-
-    applyCSS(p, bg, t) {
+    applyThemeVars(theme) {
         const root = document.documentElement;
-        root.style.setProperty('--primary', p);
+        const bg = theme.bg;
+        const surface = theme.surface || Utils.adjustColor(bg, 10);
+        const surfaceLight = theme.surfaceLight || Utils.adjustColor(bg, 20);
+        const border = theme.border || 'rgba(255, 255, 255, 0.1)';
+        const motionAllowed = this.motionAllowed() ? theme.motion !== 0 : false;
+        const blurAllowed = this.blurAllowed() ? theme.blur : 0;
+        const density = theme.density || 1;
+        root.style.setProperty('--primary', theme.p);
         root.style.setProperty('--bg', bg);
-        // Calculate surface variations based on background
-        root.style.setProperty('--surface', Utils.adjustColor(bg, 10)); 
-        root.style.setProperty('--surface-light', Utils.adjustColor(bg, 20));
-        root.style.setProperty('--text', t);
-        
-        // Convert Hex to RGB for opacity usage in CSS
-        const res = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(p);
+        root.style.setProperty('--surface', surface);
+        root.style.setProperty('--surface-light', surfaceLight);
+        root.style.setProperty('--surface-transparent', theme.surfaceTransparent || surface);
+        root.style.setProperty('--text', theme.t);
+        root.style.setProperty('--border', border);
+        root.style.setProperty('--radius-md', `${theme.radius}px`);
+        root.style.setProperty('--radius-lg', `${theme.radius + 6}px`);
+        root.style.setProperty('--radius-sm', `${Math.max(theme.radius - 4, 6)}px`);
+        root.style.setProperty('--font-base', `${theme.fontBase}px`);
+        root.style.setProperty('--hit-size', `${theme.hitSize}px`);
+        root.style.setProperty('--shadow-lg', theme.shadow);
+        root.style.setProperty('--shadow-sm', theme.shadowSmall || theme.shadow);
+        root.style.setProperty('--density', density);
+        root.style.setProperty('--blur-strength', `${blurAllowed}px`);
+        root.style.setProperty('--motion-enabled', motionAllowed ? '1' : '0');
+        root.style.setProperty('--animation-duration', motionAllowed ? '0.3s' : '0s');
+
+        const res = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(theme.p);
         const rgb = res ? `${parseInt(res[1], 16)}, ${parseInt(res[2], 16)}, ${parseInt(res[3], 16)}` : '0, 242, 255';
         root.style.setProperty('--primary-rgb', rgb);
     },
 
+    motionAllowed() {
+        const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        return !prefersReduced && !state.config.reduceMotion;
+    },
+
+    blurAllowed() {
+        const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const lowPower = (connection && connection.saveData) || (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
+        return !(prefersReduced || lowPower);
+    },
+
+    applyPreset(key) {
+        const preset = this.themes[key];
+        if (!preset) return;
+        if (preset.preset === 'system') {
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const variant = isDark ? this.themes.dark : this.themes.light;
+            this.applyThemeVars({ ...variant });
+            localStorage.setItem('app-theme-settings', JSON.stringify({ preset: 'system' }));
+            return;
+        }
+        this.applyThemeVars(preset);
+        localStorage.setItem('app-theme-settings', JSON.stringify({ preset: key }));
+        this.syncInputs(preset.p, preset.bg, preset.t);
+    },
+
     reset() {
-        const def = this.themes.neon;
-        this.setManual(def.p, def.bg, def.t);
+        this.applyPreset('dark');
         this.renderPicker();
     },
 
     revertToLastSaved() {
-        const saved = JSON.parse(localStorage.getItem('app-theme-settings')) || this.themes.neon;
-        this.applyCSS(saved.p, saved.bg, saved.t);
-        this.syncInputs(saved.p, saved.bg, saved.t);
+        const saved = JSON.parse(localStorage.getItem('app-theme-settings')) || { preset: 'dark' };
+        if (saved.preset) {
+            this.applyPreset(saved.preset);
+            this.renderPicker();
+            return;
+        }
+        this.setManual(saved.p, saved.bg, saved.t);
+        this.renderPicker();
     }
 };
 

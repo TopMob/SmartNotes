@@ -36,25 +36,37 @@ const DriveService = {
         if (resp.error) return console.error(resp);
         this.token = resp.access_token;
         state.driveToken = resp.access_token;
-        UI.showToast("Google Drive подключен");
-        this.syncCurrentNote();
+        UI.showToast(UI.getText('drive_connected', 'Drive connected'));
+        if (this.pendingNote) {
+            this.uploadNote(this.pendingNote);
+            this.pendingNote = null;
+        }
     },
 
     connect() {
-        this.client ? this.client.requestAccessToken({ prompt: 'consent' }) : UI.showToast("Сервис Drive недоступен");
+        this.client ? this.client.requestAccessToken({ prompt: 'consent' }) : UI.showToast(UI.getText('drive_unavailable', 'Drive unavailable'));
     },
 
-    async syncCurrentNote() {
-        if (!state.currentNote || !this.token) return;
+    async uploadNote(note) {
+        if (!note) return;
+        if (!this.client) {
+            UI.showToast(UI.getText('drive_unavailable', 'Drive unavailable'));
+            return;
+        }
+        if (!this.token) {
+            this.pendingNote = note;
+            this.connect();
+            return;
+        }
 
         const metadata = {
-            name: `SmartNote_${state.currentNote.title || 'Untitled'}.json`,
+            name: NoteIO.fileNameFor(note),
             mimeType: 'application/json',
         };
 
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(state.currentNote)], { type: 'application/json' }));
+        form.append('file', new Blob([NoteIO.exportNote(note)], { type: 'application/json' }));
 
         try {
             await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
@@ -62,10 +74,10 @@ const DriveService = {
                 headers: { 'Authorization': `Bearer ${this.token}` },
                 body: form
             });
-            UI.showToast("Сохранено в Drive");
+            UI.showToast(UI.getText('drive_saved', 'Uploaded to Drive'));
         } catch (e) {
             console.error("Drive Sync Error", e);
-            UI.showToast("Ошибка синхронизации");
+            UI.showToast(UI.getText('drive_error', 'Drive upload failed'));
         }
     }
 };
@@ -81,7 +93,7 @@ const VoiceService = {
 
     async start() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
-            return UI.showToast("Микрофон не поддерживается");
+            return UI.showToast(UI.getText('mic_unsupported', 'Microphone not supported'));
         }
         try {
             this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -94,10 +106,10 @@ const VoiceService = {
             this.recorder.start();
             state.recording = true;
 
-            UI.showToast("Запись...");
+            UI.showToast(UI.getText('recording', 'Recording...'));
             document.getElementById('voice-indicator').classList.add('active');
         } catch (e) {
-            UI.showToast("Нет доступа к микрофону");
+            UI.showToast(UI.getText('mic_denied', 'Microphone access denied'));
         }
     },
 
@@ -117,7 +129,7 @@ const VoiceService = {
         reader.onloadend = () => {
             const html = `<br><div class="media-wrapper" contenteditable="false"><audio controls src="${reader.result}"></audio></div><br>`;
             document.execCommand('insertHTML', false, html);
-            Editor.snapshot();
+            Editor.queueSnapshot();
         };
         reader.readAsDataURL(new Blob(this.chunks, { type: 'audio/mp3' }));
     }
@@ -221,16 +233,92 @@ const SketchService = {
     },
 
     save() {
-        const html = `<div class="media-wrapper"><img src="${this.canvas.toDataURL('image/png')}" style="max-width:100%; border-radius:12px;"></div><br>`;
-        document.execCommand('insertHTML', false, html);
+        Editor.insertMedia(this.canvas.toDataURL('image/png'), 'image');
         UI.closeModal('sketch-modal');
-        Editor.snapshot();
+        Editor.queueSnapshot();
     },
 
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.history = [];
         this.saveState();
+    }
+};
+
+const NoteIO = {
+    schemaVersion: 2,
+
+    exportNote(note) {
+        return JSON.stringify({
+            schemaVersion: this.schemaVersion,
+            exportedAt: new Date().toISOString(),
+            note: this.serializeNote(note)
+        }, null, 2);
+    },
+
+    serializeNote(note) {
+        const normalizeExportDate = (value) => {
+            if (!value) return new Date().toISOString();
+            if (value.toDate) return value.toDate().toISOString();
+            if (value instanceof Date) return value.toISOString();
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+        };
+        return {
+            id: note.id,
+            title: note.title || '',
+            content: note.content || '',
+            tags: Array.isArray(note.tags) ? note.tags : [],
+            folderId: note.folderId || null,
+            isPinned: !!note.isPinned,
+            isImportant: !!note.isImportant,
+            isArchived: !!note.isArchived,
+            createdAt: normalizeExportDate(note.createdAt),
+            updatedAt: normalizeExportDate(note.updatedAt),
+            order: typeof note.order === 'number' ? note.order : 0
+        };
+    },
+
+    parseImport(data) {
+        if (!data) return [];
+        if (data.note) return [this.normalizeNote(data.note)];
+        if (Array.isArray(data.notes)) return data.notes.map(note => this.normalizeNote(note)).filter(Boolean);
+        if (data.schemaVersion && data.content) return [this.normalizeNote(data)];
+        return [];
+    },
+
+    normalizeNote(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        const title = typeof raw.title === 'string' ? raw.title : '';
+        const content = typeof raw.content === 'string' ? raw.content : '';
+        const tags = Array.isArray(raw.tags) ? raw.tags.filter(t => typeof t === 'string') : [];
+        const createdAt = this.normalizeDate(raw.createdAt);
+        const updatedAt = this.normalizeDate(raw.updatedAt);
+        return {
+            id: typeof raw.id === 'string' ? raw.id : Utils.generateId(),
+            title,
+            content,
+            tags,
+            folderId: typeof raw.folderId === 'string' ? raw.folderId : null,
+            isPinned: !!raw.isPinned,
+            isImportant: !!raw.isImportant,
+            isArchived: !!raw.isArchived,
+            createdAt,
+            updatedAt,
+            order: typeof raw.order === 'number' ? raw.order : Date.now()
+        };
+    },
+
+    normalizeDate(value) {
+        if (!value) return new Date();
+        if (value.toDate) return value.toDate();
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? new Date() : date;
+    },
+
+    fileNameFor(note) {
+        const base = (note.title || 'SmartNote').toString().trim().slice(0, 40).replace(/[^a-zA-Z0-9-_]+/g, '_');
+        return `${base || 'SmartNote'}.json`;
     }
 };
 
@@ -248,8 +336,8 @@ const ReminderService = {
         const now = new Date();
         state.notes.forEach(note => {
             if (note.reminder && new Date(note.reminder) <= now && !note.reminderSent) {
-                const title = note.title || "SmartNotes";
-                new Notification("SmartNotes", { body: title });
+                const title = note.title || UI.getText('app_name', 'SmartNotes');
+                new Notification(UI.getText('app_name', 'SmartNotes'), { body: title });
                 this.markAsSent(note.id);
             }
         });
@@ -260,7 +348,7 @@ const ReminderService = {
         state.currentNote.reminder = dateStr;
         state.currentNote.reminderSent = false;
         Editor.save();
-        UI.showToast(`Напоминание: ${new Date(dateStr).toLocaleString()}`);
+        UI.showToast(`${UI.getText('reminder_set', 'Reminder set')}: ${new Date(dateStr).toLocaleString()}`);
     },
 
     async markAsSent(id) {
@@ -272,13 +360,20 @@ const ReminderService = {
 // Editor Core
 // ==========================================================================
 
+
 const Editor = {
     history: [],
     future: [],
     timer: null,
+    snapshotTimer: null,
     config: [],
     selectedMedia: null,
+    draggedMedia: null,
+    savedRange: null,
+    activeFontSize: null,
+    toolbarDrag: { active: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 },
     els: {},
+    fontSizes: [12, 14, 16, 18, 20, 24, 28],
 
     configDefault: [
         { id: 'size', icon: 'text_fields', cmd: 'fontSize', active: true, action: 'toggleSizeSlider' },
@@ -291,7 +386,6 @@ const Editor = {
         { id: 'image', icon: 'add_photo_alternate', cmd: 'image', active: true },
         { id: 'voice', icon: 'mic', cmd: 'voice', active: true },
         { id: 'sketch', icon: 'brush', cmd: 'sketch', active: true },
-        { id: 'drive', icon: 'cloud_upload', cmd: 'drive', active: true },
         { id: 'clear', icon: 'format_clear', cmd: 'removeFormat', active: true }
     ],
 
@@ -311,6 +405,8 @@ const Editor = {
         this.loadConfig();
         this.renderToolbar();
         this.bindEvents();
+        this.applyToolbarMode();
+        window.addEventListener('resize', Utils.debounce(() => this.applyToolbarMode(), 150));
     },
 
     loadConfig() {
@@ -327,28 +423,25 @@ const Editor = {
     },
 
     bindEvents() {
-        const change = () => {
-            this.snapshot();
-            this.updateToolbarState();
-        };
+        this.els.title.addEventListener('input', () => {
+            this.queueSnapshot();
+            this.triggerSave();
+        });
 
-        this.els.title.oninput = () => { this.snapshot(); this.triggerSave(); };
-        this.els.content.oninput = change;
+        this.els.content.addEventListener('input', () => {
+            this.cleanupZeroWidth();
+            this.queueSnapshot();
+        });
 
-        // Tags
-        this.els.tags.onkeydown = e => {
+        this.els.content.addEventListener('paste', () => this.queueSnapshot());
+        this.els.content.addEventListener('drop', () => this.queueSnapshot());
+
+        this.els.tags.addEventListener('keydown', e => {
             if (e.key === 'Enter' && e.target.value.trim()) {
                 this.addTag(e.target.value.trim().replace(/^#/, ''));
                 e.target.value = '';
-                this.snapshot();
+                this.queueSnapshot();
             }
-        };
-
-        this.els.tagsContainer.addEventListener('click', (e) => {
-            const chip = e.target.closest('.tag-chip');
-            if (!chip || !chip.dataset.tag) return;
-            const tag = decodeURIComponent(chip.dataset.tag);
-            this.removeTag(tag);
         });
 
         this.els.tagsContainer.addEventListener('click', (e) => {
@@ -358,10 +451,11 @@ const Editor = {
             this.removeTag(tag);
         });
 
-        // Editor Interactivity (Tasks, Media)
         this.els.content.addEventListener('click', e => {
-            if (e.target.classList.contains('task-checkbox')) {
-                this.toggleTask(e.target);
+            const checkbox = e.target.closest('.task-checkbox');
+            if (checkbox) {
+                this.toggleTask(checkbox);
+                return;
             }
             const mediaWrapper = e.target.closest('.media-wrapper');
             if (mediaWrapper) {
@@ -372,6 +466,12 @@ const Editor = {
             }
         });
 
+        this.els.content.addEventListener('change', e => {
+            if (e.target.matches('.task-checkbox')) {
+                this.toggleTask(e.target);
+            }
+        });
+
         this.els.content.addEventListener('dragstart', (e) => {
             const mediaWrapper = e.target.closest('.media-wrapper');
             if (!mediaWrapper) return;
@@ -395,36 +495,36 @@ const Editor = {
                 this.els.content.appendChild(this.draggedMedia);
             }
             this.draggedMedia = null;
-            this.snapshot();
+            this.queueSnapshot();
         });
 
-        this.els.content.addEventListener('dragstart', (e) => {
-            const mediaWrapper = e.target.closest('.media-wrapper');
-            if (!mediaWrapper) return;
-            this.draggedMedia = mediaWrapper;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', 'media');
-        });
-
-        this.els.content.addEventListener('dragover', (e) => {
-            if (!this.draggedMedia) return;
+        this.els.content.addEventListener('pointerdown', (e) => {
+            const handle = e.target.closest('.media-resize-handle');
+            if (!handle) return;
             e.preventDefault();
+            const wrapper = handle.closest('.media-wrapper');
+            const img = wrapper.querySelector('img');
+            if (!img) return;
+            const rect = img.getBoundingClientRect();
+            const contentRect = this.els.content.getBoundingClientRect();
+            this.resizeState = {
+                wrapper,
+                startX: e.clientX,
+                startWidth: rect.width,
+                startHeight: rect.height,
+                ratio: rect.width / rect.height,
+                maxWidth: contentRect.width - 40
+            };
+            document.addEventListener('pointermove', this.handleResize);
+            document.addEventListener('pointerup', this.stopResize);
         });
 
-        this.els.content.addEventListener('drop', (e) => {
-            if (!this.draggedMedia) return;
-            e.preventDefault();
-            const range = this.getRangeFromPoint(e.clientX, e.clientY);
-            if (range) {
-                range.insertNode(this.draggedMedia);
-            } else {
-                this.els.content.appendChild(this.draggedMedia);
+        document.addEventListener('selectionchange', () => {
+            if (this.els.wrapper.classList.contains('active')) {
+                this.saveSelection();
             }
-            this.draggedMedia = null;
-            this.snapshot();
         });
 
-        // Global Clicks (Context Menus)
         document.addEventListener('click', e => {
             if (!e.target.closest('.media-wrapper') && !e.target.closest('#media-context-menu')) {
                 this.deselectMedia();
@@ -434,14 +534,13 @@ const Editor = {
             }
         });
 
-        // Font Size
-        this.els.sizeRange.oninput = (e) => {
+        this.els.sizeRange.addEventListener('input', (e) => {
+            const idx = parseInt(e.target.value, 10) - 1;
+            const size = this.fontSizes[idx] || this.fontSizes[2];
             this.restoreSelection();
-            document.execCommand('fontSize', false, e.target.value);
-            this.snapshot();
-        };
+            this.applyFontSize(size);
+        });
 
-        // Image Upload
         document.getElementById('img-upload').addEventListener('change', e => {
             if (e.target.files[0]) {
                 const reader = new FileReader();
@@ -449,6 +548,126 @@ const Editor = {
                 reader.readAsDataURL(e.target.files[0]);
             }
         });
+
+        this.els.toolbar.addEventListener('pointerdown', (e) => {
+            const handle = e.target.closest('.toolbar-handle');
+            if (!handle || !this.els.toolbar.classList.contains('floating')) return;
+            e.preventDefault();
+            this.toolbarDrag.active = true;
+            const rect = this.els.toolbar.getBoundingClientRect();
+            this.toolbarDrag.startX = e.clientX;
+            this.toolbarDrag.startY = e.clientY;
+            this.toolbarDrag.offsetX = rect.left;
+            this.toolbarDrag.offsetY = rect.top;
+            this.els.toolbar.classList.add('dragging');
+            document.addEventListener('pointermove', this.dragToolbar);
+            document.addEventListener('pointerup', this.stopDragToolbar);
+        });
+
+        this.els.content.addEventListener('focusin', () => this.showToolbar());
+        this.els.content.addEventListener('focusout', () => this.scheduleHideToolbar());
+        this.els.title.addEventListener('focusin', () => this.showToolbar());
+        this.els.title.addEventListener('focusout', () => this.scheduleHideToolbar());
+    },
+
+    dragToolbar: (e) => {
+        if (!Editor.toolbarDrag.active) return;
+        const rect = Editor.els.toolbar.getBoundingClientRect();
+        const dx = e.clientX - Editor.toolbarDrag.startX;
+        const dy = e.clientY - Editor.toolbarDrag.startY;
+        const newLeft = Utils.clamp(Editor.toolbarDrag.offsetX + dx, 8, window.innerWidth - rect.width - 8);
+        const newTop = Utils.clamp(Editor.toolbarDrag.offsetY + dy, 80, window.innerHeight - rect.height - 120);
+        Editor.els.toolbar.style.left = `${newLeft}px`;
+        Editor.els.toolbar.style.top = `${newTop}px`;
+        Editor.els.toolbar.style.bottom = 'auto';
+    },
+
+    stopDragToolbar: () => {
+        if (!Editor.toolbarDrag.active) return;
+        Editor.toolbarDrag.active = false;
+        Editor.els.toolbar.classList.remove('dragging');
+        const rect = Editor.els.toolbar.getBoundingClientRect();
+        const snapThreshold = 40;
+        let left = rect.left;
+        if (left < snapThreshold) left = 8;
+        if (window.innerWidth - rect.right < snapThreshold) left = window.innerWidth - rect.width - 8;
+        Editor.els.toolbar.style.left = `${left}px`;
+        Editor.saveToolbarPosition();
+        document.removeEventListener('pointermove', Editor.dragToolbar);
+        document.removeEventListener('pointerup', Editor.stopDragToolbar);
+    },
+
+    saveToolbarPosition() {
+        if (!this.els.toolbar.classList.contains('floating')) return;
+        const rect = this.els.toolbar.getBoundingClientRect();
+        localStorage.setItem('toolbar-position', JSON.stringify({ left: rect.left, top: rect.top }));
+    },
+
+    loadToolbarPosition() {
+        const saved = localStorage.getItem('toolbar-position');
+        if (!saved) return;
+        try {
+            const pos = JSON.parse(saved);
+            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+                this.els.toolbar.style.left = `${pos.left}px`;
+                this.els.toolbar.style.top = `${pos.top}px`;
+                this.els.toolbar.style.bottom = 'auto';
+            }
+        } catch (e) {
+            return;
+        }
+    },
+
+    showToolbar() {
+        clearTimeout(this.toolbarHideTimer);
+        this.els.toolbar.classList.remove('auto-hidden');
+    },
+
+    scheduleHideToolbar() {
+        clearTimeout(this.toolbarHideTimer);
+        if (!this.els.toolbar.classList.contains('floating')) return;
+        this.toolbarHideTimer = setTimeout(() => {
+            this.els.toolbar.classList.add('auto-hidden');
+        }, 1800);
+    },
+
+    applyToolbarMode() {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        if (isMobile) {
+            this.els.toolbar.classList.add('floating');
+            this.loadToolbarPosition();
+            this.showToolbar();
+        } else {
+            this.els.toolbar.classList.remove('floating');
+            this.els.toolbar.classList.remove('auto-hidden');
+            this.els.toolbar.style.left = '';
+            this.els.toolbar.style.top = '';
+            this.els.toolbar.style.bottom = '';
+        }
+    },
+
+    handleResize: (e) => {
+        if (!Editor.resizeState) return;
+        const { startX, startWidth, ratio, maxWidth } = Editor.resizeState;
+        const deltaX = e.clientX - startX;
+        let nextWidth = startWidth + deltaX;
+        nextWidth = Utils.snap(nextWidth, 8);
+        nextWidth = Utils.clamp(nextWidth, 120, maxWidth);
+        const nextHeight = nextWidth / ratio;
+        const img = Editor.resizeState.wrapper.querySelector('img');
+        if (!img) return;
+        img.style.width = `${nextWidth}px`;
+        img.style.height = `${nextHeight}px`;
+        Editor.resizeState.wrapper.dataset.width = `${nextWidth}`;
+        Editor.resizeState.wrapper.dataset.height = `${nextHeight}`;
+    },
+
+    stopResize: () => {
+        if (!Editor.resizeState) return;
+        Editor.queueSnapshot();
+        Editor.resizeState = null;
+        document.removeEventListener('pointermove', Editor.handleResize);
+        document.removeEventListener('pointerup', Editor.stopResize);
     },
 
     open(note = null) {
@@ -458,7 +677,8 @@ const Editor = {
             content: '',
             tags: [],
             folderId: state.view === 'folder' ? state.activeFolderId : null,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            order: Date.now()
         };
 
         this.history = [];
@@ -472,19 +692,20 @@ const Editor = {
         const n = state.currentNote;
         this.els.title.value = n.title || '';
         this.els.content.innerHTML = n.content || '';
+        this.migrateLegacyTasks();
         this.renderTags();
         this.makeMediaDraggable();
+        this.syncTaskStates();
     },
 
-    // Media Logic
     insertMedia(src, type) {
         const id = Utils.generateId();
         let html = '';
         if (type === 'image') {
-            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true"><img src="${src}" alt=""></div><br>`;
+            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true" data-scale="1"><img src="${src}" alt=""><span class="media-resize-handle" aria-hidden="true"></span></div><br>`;
         }
         document.execCommand('insertHTML', false, html);
-        this.snapshot();
+        this.queueSnapshot();
         this.makeMediaDraggable();
     },
 
@@ -510,8 +731,19 @@ const Editor = {
         if (this.selectedMedia) {
             this.selectedMedia.remove();
             this.deselectMedia();
-            this.snapshot();
+            this.queueSnapshot();
         }
+    },
+
+    resetMediaTransform() {
+        if (!this.selectedMedia) return;
+        const img = this.selectedMedia.querySelector('img');
+        if (!img) return;
+        img.style.width = '';
+        img.style.height = '';
+        this.selectedMedia.dataset.width = '';
+        this.selectedMedia.dataset.height = '';
+        this.queueSnapshot();
     },
 
     alignMedia(align) {
@@ -519,7 +751,7 @@ const Editor = {
             this.selectedMedia.style.display = 'block';
             this.selectedMedia.style.textAlign = align;
             this.selectedMedia.style.margin = align === 'center' ? '10px auto' : (align === 'right' ? '10px 0 10px auto' : '10px 0');
-            this.snapshot();
+            this.queueSnapshot();
         }
     },
 
@@ -568,11 +800,48 @@ const Editor = {
         selection.addRange(this.savedRange);
     },
 
+    applyFontSize(size) {
+        this.activeFontSize = size;
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        if (range.collapsed) {
+            span.appendChild(document.createTextNode('​'));
+            range.insertNode(span);
+            const newRange = document.createRange();
+            newRange.setStart(span.firstChild, 1);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+        } else {
+            const contents = range.extractContents();
+            span.appendChild(contents);
+            range.insertNode(span);
+            selection.removeAllRanges();
+            const newRange = document.createRange();
+            newRange.selectNodeContents(span);
+            newRange.collapse(false);
+            selection.addRange(newRange);
+        }
+        this.queueSnapshot();
+    },
+
+    cleanupZeroWidth() {
+        const nodes = this.els.content.querySelectorAll('span');
+        nodes.forEach(node => {
+            if (node.textContent === '​') {
+                node.textContent = '';
+            }
+        });
+    },
+
     insertTaskItem(label) {
         const selection = window.getSelection();
         const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
         const list = range ? range.startContainer.closest?.('.task-list') : null;
-        const itemHtml = `<li class="task-item"><input type="checkbox" class="task-checkbox" contenteditable="false"><span class="task-text">${Utils.escapeHtml(label)}</span></li>`;
+        const itemHtml = `<li class="task-item"><input type="checkbox" class="task-checkbox" aria-label="${Utils.escapeHtml(label)}" contenteditable="false"><span class="task-text">${Utils.escapeHtml(label)}</span></li>`;
         if (list) {
             list.insertAdjacentHTML('beforeend', itemHtml);
         } else {
@@ -586,7 +855,7 @@ const Editor = {
             selection.removeAllRanges();
             selection.addRange(newRange);
         }
-        this.snapshot();
+        this.queueSnapshot();
     },
 
     syncTaskStates() {
@@ -596,55 +865,33 @@ const Editor = {
         });
     },
 
-    alignMediaOrText(align) {
-        if (this.selectedMedia) {
-            this.alignMedia(align);
-            return;
-        }
-        const commands = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight' };
-        const cmd = commands[align];
-        if (cmd) {
-            document.execCommand(cmd, false, null);
-        }
-    },
-
-    getRangeFromPoint(x, y) {
-        if (document.caretRangeFromPoint) {
-            return document.caretRangeFromPoint(x, y);
-        }
-        if (document.caretPositionFromPoint) {
-            const position = document.caretPositionFromPoint(x, y);
-            const range = document.createRange();
-            range.setStart(position.offsetNode, position.offset);
-            range.collapse(true);
-            return range;
-        }
-        return null;
-    },
-
-    makeMediaDraggable() {
-        this.els.content.querySelectorAll('.media-wrapper').forEach(wrapper => {
-            wrapper.setAttribute('draggable', 'true');
+    migrateLegacyTasks() {
+        const legacyTasks = this.els.content.querySelectorAll('.task-line');
+        if (!legacyTasks.length) return;
+        legacyTasks.forEach(line => {
+            const text = line.querySelector('.task-text')?.textContent || '';
+            const checked = line.classList.contains('checked');
+            const item = document.createElement('li');
+            item.className = 'task-item' + (checked ? ' checked' : '');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'task-checkbox';
+            checkbox.checked = checked;
+            checkbox.setAttribute('contenteditable', 'false');
+            const span = document.createElement('span');
+            span.className = 'task-text';
+            span.textContent = text;
+            item.append(checkbox, span);
+            const list = document.createElement('ul');
+            list.className = 'task-list';
+            list.appendChild(item);
+            line.replaceWith(list);
         });
+        this.queueSnapshot();
     },
 
-    saveSelection() {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-        this.savedRange = selection.getRangeAt(0).cloneRange();
-    },
-
-    restoreSelection() {
-        if (!this.savedRange) return;
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(this.savedRange);
-    },
-
-    // Exec Commands
     exec(cmd, val = null) {
         this.els.content.focus();
-
         const actions = {
             toggleSizeSlider: () => {
                 const target = document.querySelector('[data-action="toggleSizeSlider"]');
@@ -658,19 +905,8 @@ const Editor = {
                 }
             },
             task: () => {
-                const id = Utils.generateId();
-                const label = LANG[state.config.lang]?.task_item || 'Задача';
-                const html = `<div class="task-line" id="${id}"><span class="task-checkbox" contenteditable="false"></span><span class="task-text">${Utils.escapeHtml(label)}</span></div>`;
-                document.execCommand('insertHTML', false, html);
-                const taskText = this.els.content.querySelector(`#${id} .task-text`);
-                if (taskText) {
-                    const range = document.createRange();
-                    range.selectNodeContents(taskText);
-                    range.collapse(false);
-                    const selection = window.getSelection();
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                }
+                const label = LANG[state.config.lang]?.task_item || 'Task';
+                this.insertTaskItem(label);
             },
             align_left: () => this.alignMediaOrText('left'),
             align_center: () => this.alignMediaOrText('center'),
@@ -678,21 +914,21 @@ const Editor = {
             voice: () => VoiceService.toggle(),
             image: () => document.getElementById('img-upload').click(),
             sketch: () => { UI.openModal('sketch-modal'); SketchService.init(); },
-            drive: () => DriveService.connect(),
             clear: () => document.execCommand('removeFormat')
         };
 
         actions[cmd] ? actions[cmd]() : document.execCommand(cmd, false, val);
-
-        this.snapshot();
+        this.queueSnapshot();
         this.updateToolbarState();
     },
 
-    updateToolbarState() {
-        // Placeholder for advanced state reflection (e.g. bold button highlight)
+    updateToolbarState() {},
+
+    queueSnapshot() {
+        clearTimeout(this.snapshotTimer);
+        this.snapshotTimer = setTimeout(() => this.snapshot(), 250);
     },
 
-    // History & Persistence
     snapshot() {
         const current = {
             t: this.els.title.value,
@@ -704,7 +940,7 @@ const Editor = {
         if (last && last.t === current.t && last.c === current.c && JSON.stringify(last.tags) === JSON.stringify(current.tags)) return;
 
         this.history.push(current);
-        if (this.history.length > 60) this.history.shift();
+        if (this.history.length > 80) this.history.shift();
         this.future = [];
         this.triggerSave();
     },
@@ -740,7 +976,7 @@ const Editor = {
 
     triggerSave() {
         clearTimeout(this.timer);
-        document.getElementById('last-edited').innerText = '...';
+        document.getElementById('last-edited').innerText = UI.getText('saving', 'Saving...');
         this.timer = setTimeout(() => this.save(), 800);
     },
 
@@ -751,12 +987,13 @@ const Editor = {
         state.currentNote.content = this.els.content.innerHTML;
         state.currentNote.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
         state.currentNote.authorId = state.user.uid;
+        if (!state.currentNote.order) state.currentNote.order = Date.now();
 
         try {
             await db.collection('users').doc(state.user.uid)
                 .collection('notes').doc(state.currentNote.id)
                 .set(state.currentNote, { merge: true });
-            document.getElementById('last-edited').innerText = 'Сохранено';
+            document.getElementById('last-edited').innerText = UI.getText('saved', 'Saved');
         } catch (e) {
             console.error('Save failed:', e);
         }
@@ -782,17 +1019,18 @@ const Editor = {
         state.currentNote = null;
     },
 
-    // Toolbar & Tags
     renderToolbar() {
-        this.els.toolbar.innerHTML = this.config.map(t => {
+        const dict = LANG[state.config.lang] || LANG.ru;
+        const handle = `<button type="button" class="tool-btn toolbar-handle" aria-label="${Utils.escapeHtml(dict.move_toolbar || 'Move toolbar')}"><i class="material-icons-round">drag_indicator</i></button>`;
+        this.els.toolbar.innerHTML = handle + this.config.map(t => {
             if (!t.active) return '';
             if (t.color) return `
                 <div class="tool-wrapper">
                     <label class="tool-btn"><i class="material-icons-round" style="color:var(--text)">${t.icon}</i>
-                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(LANG[state.config.lang]?.[t.labelKey] || t.id)}">
+                    <input type="color" class="hidden-color-input" onchange="Editor.exec('${t.cmd}', this.value)" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}">
                     </label>
                 </div>`;
-            return `<button class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(LANG[state.config.lang]?.[t.labelKey] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
+            return `<button type="button" class="tool-btn" data-action="${t.action || ''}" onmousedown="event.preventDefault(); Editor.exec('${t.cmd}', '${t.val || ''}')" aria-label="${Utils.escapeHtml(dict[`tool_${t.id}`] || t.id)}"><i class="material-icons-round">${t.icon}</i></button>`;
         }).join('');
     },
 
@@ -807,7 +1045,7 @@ const Editor = {
     removeTag(tag) {
         state.currentNote.tags = state.currentNote.tags.filter(t => t !== tag);
         this.renderTags();
-        this.snapshot();
+        this.queueSnapshot();
     },
 
     renderTags() {
@@ -820,8 +1058,9 @@ const Editor = {
     },
 
     toggleTask(el) {
-        el.closest('.task-line').classList.toggle('checked');
-        this.snapshot();
+        const item = el.closest('.task-item');
+        if (item) item.classList.toggle('checked', el.checked);
+        this.queueSnapshot();
     }
 };
 
@@ -829,9 +1068,14 @@ const Editor = {
 // UI Controller
 // ==========================================================================
 
+
 const UI = {
     els: {},
     currentNoteActionId: null,
+    draggedNoteId: null,
+    dragTargetId: null,
+    dragPosition: null,
+    visibleNotes: [],
 
     init() {
         this.els = {
@@ -841,40 +1085,44 @@ const UI = {
             userMenu: document.getElementById('user-dropdown'),
             confirmModal: document.getElementById('confirm-modal'),
             promptModal: document.getElementById('prompt-modal'),
-            fab: document.querySelector('.btn-fab')
+            fab: document.querySelector('.btn-fab'),
+            folderList: document.getElementById('folder-list-root')
         };
         this.bindEvents();
         this.applyAppearanceSettings();
+        this.updatePrimaryActionLabel();
+    },
+
+    getText(key, fallback = '') {
+        const dict = LANG[state.config.lang] || LANG.ru;
+        return dict[key] || fallback || key;
     },
 
     bindEvents() {
-        document.onclick = (e) => {
+        document.addEventListener('click', (e) => {
             if (this.els.sidebar.classList.contains('active') && !this.els.sidebar.contains(e.target) && !e.target.closest('#menu-toggle')) {
                 this.toggleSidebar(false);
             }
             if (this.els.userMenu.classList.contains('active') && !e.target.closest('.user-avatar-wrapper')) {
                 this.toggleUserMenu(false);
             }
-        };
+        });
 
-        // Star Rating
         document.querySelectorAll('.star').forEach(star => {
             star.onclick = () => {
-                const val = parseInt(star.dataset.val);
+                const val = parseInt(star.dataset.val, 10);
                 state.tempRating = val;
                 document.querySelectorAll('.star').forEach(s => {
-                    s.textContent = parseInt(s.dataset.val) <= val ? 'star' : 'star_border';
-                    s.classList.toggle('active', parseInt(s.dataset.val) <= val);
+                    s.textContent = parseInt(s.dataset.val, 10) <= val ? 'star' : 'star_border';
+                    s.classList.toggle('active', parseInt(s.dataset.val, 10) <= val);
                 });
             };
         });
 
-        // Prompt Input Key
         document.getElementById('prompt-input').onkeydown = (e) => {
             if (e.key === 'Enter') document.getElementById('prompt-ok').click();
         };
 
-        // Internal Links
         document.body.addEventListener('click', e => {
             if (e.target.tagName === 'A' && e.target.getAttribute('href')?.startsWith('#note/')) {
                 e.preventDefault();
@@ -886,17 +1134,103 @@ const UI = {
 
         this.els.grid.addEventListener('click', (e) => {
             const card = e.target.closest('.note-card');
-            if (!card || e.target.closest('.action-btn')) return;
+            const actions = e.target.closest('.action-btn');
+            if (actions) return;
+            if (!card) return;
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null;
             const note = state.notes.find(n => n.id === id);
             if (note) Editor.open(note);
         });
+
+        this.els.grid.addEventListener('dragstart', (e) => {
+            const card = e.target.closest('.note-card');
+            if (!card) return;
+            this.draggedNoteId = decodeURIComponent(card.dataset.noteId);
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedNoteId);
+        });
+
+        this.els.grid.addEventListener('dragend', (e) => {
+            const card = e.target.closest('.note-card');
+            if (card) card.classList.remove('dragging');
+            this.clearDragIndicators();
+            this.draggedNoteId = null;
+        });
+
+        this.els.grid.addEventListener('dragover', (e) => {
+            if (!this.draggedNoteId) return;
+            e.preventDefault();
+            const card = e.target.closest('.note-card');
+            if (!card) return;
+            const rect = card.getBoundingClientRect();
+            const position = (e.clientY - rect.top) / rect.height > 0.5 ? 'after' : 'before';
+            this.setDropIndicator(card, position);
+            this.dragTargetId = decodeURIComponent(card.dataset.noteId);
+            this.dragPosition = position;
+            this.autoScroll(e.clientY);
+        });
+
+        this.els.grid.addEventListener('drop', (e) => {
+            if (!this.draggedNoteId || !this.dragTargetId) return;
+            e.preventDefault();
+            this.reorderNotes(this.draggedNoteId, this.dragTargetId, this.dragPosition);
+            this.clearDragIndicators();
+        });
+
+        document.getElementById('note-import').addEventListener('change', (e) => this.handleNoteImport(e));
     },
 
     toggleSidebar(force) { this.els.sidebar.classList.toggle('active', force); },
     toggleUserMenu(force) { this.els.userMenu.classList.toggle('active', force); },
 
-    // Modals
+    applyAppearanceSettings() {
+        const saved = JSON.parse(localStorage.getItem('app-preferences')) || {};
+        state.config.folderViewMode = saved.folderViewMode || state.config.folderViewMode;
+        state.config.reduceMotion = saved.reduceMotion || false;
+        this.syncFolderModeButtons();
+        const toggle = document.getElementById('reduce-motion-toggle');
+        if (toggle) {
+            toggle.classList.toggle('on', state.config.reduceMotion);
+            toggle.classList.toggle('off', !state.config.reduceMotion);
+        }
+        ThemeManager.revertToLastSaved();
+        this.renderFolders();
+    },
+
+    syncFolderModeButtons() {
+        document.querySelectorAll('[data-folder-mode]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.folderMode === state.config.folderViewMode);
+        });
+    },
+
+    setFolderViewMode(mode) {
+        state.config.folderViewMode = mode;
+        localStorage.setItem('app-preferences', JSON.stringify({
+            folderViewMode: state.config.folderViewMode,
+            reduceMotion: state.config.reduceMotion
+        }));
+        this.syncFolderModeButtons();
+        this.renderFolders();
+        if (state.view === 'folders') {
+            switchView('folders');
+        }
+    },
+
+    toggleReduceMotion() {
+        state.config.reduceMotion = !state.config.reduceMotion;
+        localStorage.setItem('app-preferences', JSON.stringify({
+            folderViewMode: state.config.folderViewMode,
+            reduceMotion: state.config.reduceMotion
+        }));
+        const toggle = document.getElementById('reduce-motion-toggle');
+        if (toggle) {
+            toggle.classList.toggle('on', state.config.reduceMotion);
+            toggle.classList.toggle('off', !state.config.reduceMotion);
+        }
+        ThemeManager.revertToLastSaved();
+    },
+
     openModal(id) {
         document.getElementById(id).classList.add('active');
         this.toggleSidebar(false);
@@ -909,7 +1243,6 @@ const UI = {
         document.getElementById(id).classList.remove('active');
         if (id === 'appearance-modal') ThemeManager.revertToLastSaved();
 
-        // Reset Easter Egg on Close
         if (id === 'about-modal') {
             document.querySelector('.team-list').innerHTML = `
                 <li class="team-member name-alexandrov">Александров Арсений</li>
@@ -920,15 +1253,18 @@ const UI = {
         }
     },
 
-    // Shortcuts
     openSettings() { this.openModal('settings-modal'); },
     closeSettings() { this.closeModal('settings-modal'); },
     showConfirm(type, cb) { this.confirm(type, cb); },
 
-    // Native-like Dialogs
     confirm(type, cb) {
-        const titles = { delete: 'Удалить?', exit: 'Выйти?', account: 'Сменить аккаунт?', delete_f: 'Удалить папку?' };
-        document.getElementById('confirm-title').textContent = titles[type] || 'Подтвердите';
+        const titles = {
+            delete: this.getText('confirm_delete', 'Delete?'),
+            exit: this.getText('confirm_exit', 'Sign out?'),
+            account: this.getText('confirm_account', 'Switch account?'),
+            delete_f: this.getText('confirm_delete_folder', 'Delete folder?')
+        };
+        document.getElementById('confirm-title').textContent = titles[type] || this.getText('confirm_default', 'Confirm');
 
         const okBtn = document.getElementById('confirm-ok');
         const newBtn = okBtn.cloneNode(true);
@@ -969,37 +1305,62 @@ const UI = {
         setTimeout(() => input.focus(), 100);
     },
 
-    // Renderers
     renderFolders() {
-        const root = document.getElementById('folder-list-root');
+        const root = this.els.folderList;
         if (!root) return;
+        const hideList = state.config.folderViewMode === 'full';
+        root.classList.toggle('hidden', hideList);
+        if (hideList) {
+            root.innerHTML = '';
+            return;
+        }
         root.innerHTML = state.folders.map(f => `
-            <button class="nav-item ${state.activeFolderId === f.id ? 'active' : ''}" onclick="switchView('folder', '${f.id}')">
+            <button type="button" class="nav-item ${state.activeFolderId === f.id ? 'active' : ''}" onclick="switchView('folder', '${f.id}')">
                 <i class="material-icons-round">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
-                <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" 
-                   onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
+                <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
             </button>
         `).join('');
     },
 
+    renderFolderGrid() {
+        this.updateEmptyState('folder_open', this.getText('folders_empty', 'No folders yet'));
+        this.els.empty.classList.toggle('hidden', state.folders.length > 0);
+        this.els.grid.classList.add('folder-grid');
+        this.els.grid.innerHTML = state.folders.map(folder => {
+            const count = state.notes.filter(note => note.folderId === folder.id && !note.isArchived).length;
+            const label = count === 1 ? this.getText('note_single', 'note') : this.getText('note_plural', 'notes');
+            return `
+                <div class="folder-card" onclick="switchView('folder', '${folder.id}')">
+                    <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
+                    <div class="folder-meta">${count} ${label}</div>
+                </div>
+            `;
+        }).join('');
+    },
+
     renderNotes(notes) {
+        this.updateEmptyState('note_add', this.getText('empty', 'Nothing here yet'));
+        this.els.grid.classList.remove('folder-grid');
         this.els.empty.classList.toggle('hidden', notes.length > 0);
         this.els.grid.innerHTML = notes.map(n => `
-            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}">
+            <div class="note-card" data-note-id="${encodeURIComponent(n.id)}" draggable="true">
                 <div class="card-actions">
-                    <button class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})">
+                    <button type="button" class="action-btn ${n.isPinned ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isPinned', ${!n.isPinned})" aria-label="${this.getText('pin_note', 'Pin')}">
                         <i class="material-icons-round">push_pin</i>
                     </button>
-                    <button class="action-btn ${n.isImportant ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isImportant', ${!n.isImportant})">
+                    <button type="button" class="action-btn ${n.isImportant ? 'active' : ''}" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isImportant', ${!n.isImportant})" aria-label="${this.getText('favorite_note', 'Favorite')}">
                         <i class="material-icons-round">star</i>
                     </button>
-                    <button class="action-btn" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isArchived', ${!n.isArchived})">
+                    <button type="button" class="action-btn" onclick="event.stopPropagation(); toggleProp('${n.id}', 'isArchived', ${!n.isArchived})" aria-label="${this.getText('archive_note', 'Archive')}">
                         <i class="material-icons-round">${n.isArchived ? 'unarchive' : 'archive'}</i>
                     </button>
+                    <button type="button" class="action-btn action-more" onclick="event.stopPropagation(); UI.openNoteActions('${n.id}')" aria-label="${this.getText('note_actions', 'Actions')}">
+                        <i class="material-icons-round">more_vert</i>
+                    </button>
                 </div>
-                <h3>${Utils.escapeHtml(n.title || 'Без названия')}</h3>
-                <p>${Utils.escapeHtml(Utils.stripHtml(n.content) || 'Нет содержимого')}</p>
+                <h3>${Utils.escapeHtml(n.title || this.getText('untitled_note', 'Untitled'))}</h3>
+                <p>${Utils.escapeHtml(Utils.stripHtml(n.content) || this.getText('empty_note', 'No content'))}</p>
                 <div class="tags-list">
                     ${(n.tags || []).map(t => `<span class="tag-chip">#${Utils.escapeHtml(t)}</span>`).join('')}
                 </div>
@@ -1007,15 +1368,124 @@ const UI = {
         `).join('');
     },
 
-    showToast(msg) {
-        const div = document.createElement('div');
-        div.className = 'toast show';
-        div.textContent = msg;
-        document.getElementById('toast-container').appendChild(div);
-        setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 300); }, 2000);
+    openNoteActions(noteId) {
+        this.currentNoteActionId = noteId;
+        this.openModal('note-actions-modal');
     },
 
-    // Settings & Feedback
+    updateEmptyState(icon, text) {
+        const iconEl = this.els.empty.querySelector('i');
+        const textEl = this.els.empty.querySelector('p');
+        if (iconEl) iconEl.textContent = icon;
+        if (textEl) textEl.textContent = text;
+    },
+
+    downloadSelectedNote() {
+        const note = state.notes.find(n => n.id === this.currentNoteActionId);
+        if (!note) return;
+        const exportData = NoteIO.exportNote(note);
+        const blob = new Blob([exportData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = NoteIO.fileNameFor(note);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        this.showToast(this.getText('download_success', 'Downloaded'));
+        this.closeModal('note-actions-modal');
+    },
+
+    async uploadSelectedNote() {
+        const note = state.notes.find(n => n.id === this.currentNoteActionId);
+        if (!note) return;
+        await DriveService.uploadNote(note);
+        this.closeModal('note-actions-modal');
+    },
+
+    triggerImport() {
+        const input = document.getElementById('note-import');
+        input.value = '';
+        input.click();
+    },
+
+    async handleNoteImport(e) {
+        if (!db || !state.user) return;
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.includes('json')) {
+            this.showToast(this.getText('import_invalid', 'Unsupported file'));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const text = String(reader.result || '').replace(/^\uFEFF/, '');
+                const parsed = JSON.parse(text);
+                const notes = NoteIO.parseImport(parsed);
+                if (!notes.length) {
+                    this.showToast(this.getText('import_empty', 'No notes found'));
+                    return;
+                }
+                const batch = db.batch();
+                notes.forEach(note => {
+                    if (state.notes.some(n => n.id === note.id)) {
+                        note.id = Utils.generateId();
+                    }
+                    if (note.folderId && !state.folders.find(f => f.id === note.folderId)) {
+                        note.folderId = null;
+                    }
+                    const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(note.id);
+                    batch.set(ref, note, { merge: true });
+                });
+                await batch.commit();
+                this.showToast(this.getText('import_success', 'Imported'));
+            } catch (err) {
+                console.error(err);
+                this.showToast(this.getText('import_failed', 'Import failed'));
+            }
+        };
+        reader.onerror = () => this.showToast(this.getText('import_failed', 'Import failed'));
+        reader.readAsText(file, 'utf-8');
+    },
+
+    primaryAction() {
+        if (state.view === 'folders') {
+            if (state.folders.length >= 10) return this.showToast(this.getText('folder_limit', 'Folder limit reached'));
+            this.showPrompt(this.getText('new_folder', 'New folder'), this.getText('folder_placeholder', 'Folder name'), async (name) => {
+                await db.collection('users').doc(state.user.uid).collection('folders').add({
+                    name,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            return;
+        }
+        Editor.open();
+    },
+
+    showToast(msg, options = {}) {
+        const div = document.createElement('div');
+        div.className = 'toast show';
+        div.setAttribute('role', 'status');
+        const text = document.createElement('span');
+        text.textContent = msg;
+        div.appendChild(text);
+        if (options.actionLabel && options.onAction) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'toast-action';
+            btn.textContent = options.actionLabel;
+            btn.onclick = () => {
+                options.onAction();
+                div.remove();
+            };
+            div.appendChild(btn);
+        }
+        document.getElementById('toast-container').appendChild(div);
+        setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 300); }, options.duration || 2500);
+    },
+
     loadSettings() {
         const style = getComputedStyle(document.documentElement);
         ['text', 'primary', 'bg'].forEach(k => {
@@ -1023,6 +1493,12 @@ const UI = {
             if (el) el.value = style.getPropertyValue(`--${k}`).trim();
         });
         this.renderToolsConfig();
+        this.syncFolderModeButtons();
+        const toggle = document.getElementById('reduce-motion-toggle');
+        if (toggle) {
+            toggle.classList.toggle('on', state.config.reduceMotion);
+            toggle.classList.toggle('off', !state.config.reduceMotion);
+        }
     },
 
     saveAppearance() {
@@ -1040,7 +1516,7 @@ const UI = {
             root.innerHTML = Editor.config.map((t, i) => `
                 <div class="tool-toggle-item">
                     <div class="tool-info"><i class="material-icons-round">${t.icon}</i><span>${dict[`tool_${t.id}`] || t.id}</span></div>
-                    <button class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
+                    <button type="button" class="toggle-btn ${t.active ? 'on' : 'off'}" onclick="UI.toggleTool(${i})"></button>
                 </div>
             `).join('');
         }
@@ -1056,6 +1532,8 @@ const UI = {
     setLang(lang) {
         state.config.lang = lang;
         localStorage.setItem('app-lang', lang);
+        document.documentElement.lang = lang;
+        document.title = this.getText('app_name', 'SmartNotes');
         document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase() === lang));
         const dict = LANG[lang];
         document.querySelectorAll('[data-lang]').forEach(el => {
@@ -1066,20 +1544,121 @@ const UI = {
             const k = el.getAttribute('data-lang-placeholder');
             if (dict[k]) el.setAttribute('placeholder', dict[k]);
         });
+        document.querySelectorAll('[data-lang-aria]').forEach(el => {
+            const k = el.getAttribute('data-lang-aria');
+            if (dict[k]) el.setAttribute('aria-label', dict[k]);
+        });
         this.renderToolsConfig();
+        this.updateViewTitle();
+        this.updatePrimaryActionLabel();
+        ThemeManager.renderPicker();
         switchView(state.view, state.activeFolderId);
+    },
+
+    updateViewTitle() {
+        const dict = LANG[state.config.lang] || LANG.ru;
+        const titles = {
+            notes: dict.view_notes || 'Notes',
+            favorites: dict.view_favorites || 'Favorites',
+            archive: dict.view_archive || 'Archive',
+            folder: dict.view_folder || 'Folder',
+            folders: dict.view_folders || 'Folders'
+        };
+        let title = titles[state.view] || 'SmartNotes';
+        if (state.view === 'folder' && state.activeFolderId) {
+            const folder = state.folders.find(f => f.id === state.activeFolderId);
+            if (folder) title = folder.name;
+        }
+        document.getElementById('current-view-title').textContent = title;
+    },
+
+    updatePrimaryActionLabel() {
+        if (!this.els.fab) return;
+        const label = state.view === 'folders' ? this.getText('create_folder', 'Create folder') : this.getText('create_note', 'Create note');
+        this.els.fab.setAttribute('aria-label', label);
     },
 
     async submitFeedback() {
         const text = document.getElementById('feedback-text').value;
-        if (!state.tempRating) return this.showToast('Поставьте оценку');
+        if (!state.tempRating) return this.showToast(this.getText('rate_required', 'Please rate'));
 
         await db.collection('feedback').add({
             uid: state.user.uid, rating: state.tempRating, text, ts: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        this.showToast('Спасибо!');
+        this.showToast(this.getText('feedback_thanks', 'Thanks!'));
         this.closeModal('rate-modal');
+    },
+
+    setDropIndicator(card, position) {
+        this.clearDragIndicators();
+        card.classList.add(position === 'before' ? 'drop-before' : 'drop-after');
+    },
+
+    clearDragIndicators() {
+        this.els.grid.querySelectorAll('.note-card').forEach(card => {
+            card.classList.remove('drop-before', 'drop-after');
+        });
+    },
+
+    autoScroll(cursorY) {
+        const container = document.getElementById('notes-content-area');
+        const rect = container.getBoundingClientRect();
+        const threshold = 80;
+        if (cursorY < rect.top + threshold) {
+            container.scrollBy({ top: -12, behavior: 'smooth' });
+        } else if (cursorY > rect.bottom - threshold) {
+            container.scrollBy({ top: 12, behavior: 'smooth' });
+        }
+    },
+
+    reorderNotes(draggedId, targetId, position) {
+        if (!db || !state.user) return;
+        if (draggedId === targetId) return;
+        const visibleIds = this.visibleNotes.map(n => n.id);
+        const fromIndex = visibleIds.indexOf(draggedId);
+        const toIndex = visibleIds.indexOf(targetId);
+        if (fromIndex === -1 || toIndex === -1) return;
+        visibleIds.splice(fromIndex, 1);
+        const insertIndex = position === 'after' ? toIndex + 1 : toIndex;
+        visibleIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId);
+
+        const previous = this.visibleNotes.map(n => ({ id: n.id, order: n.order || 0 }));
+        state.orderHistory.push(previous);
+        if (state.orderHistory.length > 20) state.orderHistory.shift();
+
+        const updates = visibleIds.map((id, index) => ({ id, order: index + 1 }));
+        updates.forEach(update => {
+            const note = state.notes.find(n => n.id === update.id);
+            if (note) note.order = update.order;
+        });
+
+        const batch = db.batch();
+        updates.forEach(update => {
+            const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(update.id);
+            batch.update(ref, { order: update.order });
+        });
+        batch.commit();
+        this.showToast(this.getText('order_updated', 'Order updated'), {
+            actionLabel: this.getText('undo', 'Undo'),
+            onAction: () => this.undoOrder()
+        });
+        filterAndRender(document.getElementById('search-input')?.value || '');
+    },
+
+    undoOrder() {
+        if (!db || !state.user) return;
+        const last = state.orderHistory.pop();
+        if (!last) return;
+        const batch = db.batch();
+        last.forEach(item => {
+            const note = state.notes.find(n => n.id === item.id);
+            if (note) note.order = item.order;
+            const ref = db.collection('users').doc(state.user.uid).collection('notes').doc(item.id);
+            batch.update(ref, { order: item.order });
+        });
+        batch.commit();
+        filterAndRender(document.getElementById('search-input')?.value || '');
     }
 };
 
@@ -1121,8 +1700,8 @@ window.switchView = (view, folderId = null) => {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     if (!folderId) document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
 
-    const titles = { notes: 'Все записи', favorites: 'Важное', archive: 'Архив', folder: 'Папка' };
-    document.getElementById('current-view-title').textContent = titles[view] || 'SmartNotes';
+    UI.updateViewTitle();
+    UI.updatePrimaryActionLabel();
 
     UI.toggleSidebar(false);
     filterAndRender(document.getElementById('search-input').value);
@@ -1131,7 +1710,13 @@ window.switchView = (view, folderId = null) => {
 
 window.filterAndRender = (query = '') => {
     const q = query.toLowerCase().trim();
-    let res = state.notes.filter(n => {
+    if (state.view === 'folders') {
+        UI.visibleNotes = [];
+        UI.renderFolderGrid();
+        return;
+    }
+
+    const res = state.notes.filter(n => {
         const title = n.title || '';
         const content = n.content || '';
         const match = (title + content).toLowerCase().includes(q) || (n.tags || []).some(t => t.toLowerCase().includes(q));
@@ -1142,8 +1727,13 @@ window.filterAndRender = (query = '') => {
         return false;
     });
 
-    res.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-    UI.renderNotes(res);
+    const getUpdated = (n) => n.updatedAt?.seconds ? n.updatedAt.seconds : (n.updatedAt ? new Date(n.updatedAt).getTime() : 0);
+    const sortByOrder = (a, b) => (a.order || 0) - (b.order || 0) || getUpdated(b) - getUpdated(a);
+    const pinned = res.filter(n => n.isPinned);
+    const rest = res.filter(n => !n.isPinned);
+    const sorted = [...pinned.sort(sortByOrder), ...rest.sort(sortByOrder)];
+    UI.visibleNotes = sorted;
+    UI.renderNotes(sorted);
 };
 
 window.toggleProp = async (id, prop, val) => {
@@ -1151,7 +1741,7 @@ window.toggleProp = async (id, prop, val) => {
     const update = { [prop]: val };
     if (prop === 'isArchived' && val) update.isPinned = false;
     await db.collection('users').doc(state.user.uid).collection('notes').doc(id).update(update);
-    if (prop === 'isArchived') UI.showToast(val ? "В архиве" : "Восстановлено");
+    if (prop === 'isArchived') UI.showToast(val ? UI.getText('archived', 'Archived') : UI.getText('restored', 'Restored'));
 };
 
 window.openNoteById = (id) => {
@@ -1168,8 +1758,8 @@ window.deleteFolder = (id) => {
 
 // Global Event Listeners
 document.getElementById('add-folder-btn').onclick = () => {
-    if (state.folders.length >= 10) return UI.showToast("Лимит папок (10)");
-    UI.showPrompt("Новая папка", "Название...", async (name) => {
+    if (state.folders.length >= 10) return UI.showToast(UI.getText('folder_limit', 'Folder limit reached'));
+    UI.showPrompt(UI.getText('new_folder', 'New folder'), UI.getText('folder_placeholder', 'Folder name'), async (name) => {
         await db.collection('users').doc(state.user.uid).collection('folders').add({
             name, createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -1182,7 +1772,7 @@ document.addEventListener('click', e => {
     if (e.target.classList.contains('name-kopaev')) eggSeq = 1;
     else if (e.target.classList.contains('name-minyaev') && eggSeq === 1) {
         document.querySelector('.team-list').innerHTML = `<li class="team-member" style="color:#00f2ff;font-size:1.5rem;text-shadow:0 0 20px #00f2ff">Тайлер²</li>`;
-        UI.showToast("System Override");
+        UI.showToast(UI.getText('system_override', 'System Override'));
         eggSeq = 0;
     } else eggSeq = 0;
 });
