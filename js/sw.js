@@ -1,11 +1,18 @@
-const CACHE_NAME = 'smart-notes-v2';
+const CACHE_NAME = 'smart-notes-v3';
 const ASSETS = [
   './',
   './index.html',
-  './css/style.css',
+  './css/base.css',
+  './css/layout.css',
+  './css/editor.css',
+  './css/components.css',
+  './css/responsive.css',
   './js/core.js',
   './js/sync.js',
-  './js/app.js',
+  './js/services.js',
+  './js/editor.js',
+  './js/ui.js',
+  './js/notes.js',
   './manifest.json',
   './favicon.ico',
   './Logo.png'
