@@ -172,6 +172,7 @@ async function initApp() {
         .onSnapshot(snap => {
             state.notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
             filterAndRender(document.getElementById("search-input")?.value || "")
+            if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
         })
 
     const search = document.getElementById("search-input")

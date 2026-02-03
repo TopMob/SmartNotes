@@ -109,7 +109,8 @@ const state = {
     audioChunks: [],
     editorDirty: false,
     lastSaved: null,
-    orderHistory: []
+    orderHistory: [],
+    pendingShare: null
 }
 
 window.state = state
@@ -197,6 +198,9 @@ const LANG = {
         drive_unavailable: "Сервис Drive недоступен",
         drive_saved: "Загружено в Drive",
         drive_error: "Ошибка синхронизации",
+        share_invalid: "Ссылка недействительна",
+        share_missing: "Заметка не найдена",
+        share_title: "Ссылка",
         mic_unsupported: "Микрофон не поддерживается",
         mic_denied: "Нет доступа к микрофону",
         recording: "Запись...",
@@ -352,6 +356,9 @@ const LANG = {
         drive_unavailable: "Drive unavailable",
         drive_saved: "Uploaded to Drive",
         drive_error: "Drive upload failed",
+        share_invalid: "Invalid link",
+        share_missing: "Note not found",
+        share_title: "Link",
         mic_unsupported: "Microphone not supported",
         mic_denied: "Microphone access denied",
         recording: "Recording...",
@@ -892,9 +899,11 @@ const Auth = {
     async logout() {
         if (!auth) return
         try {
+            this.applySignedOutUI()
             await auth.signOut()
-            window.location.reload()
+            this.resetSession()
         } catch {
+            this.applySignedInUI(state.user)
             if (typeof UI !== "undefined") UI.showToast("Ошибка при выходе")
         }
     },
@@ -902,10 +911,13 @@ const Auth = {
     async switchAccount() {
         if (!auth) return
         try {
+            this.applySignedOutUI()
             await auth.signOut()
+            this.resetSession()
             await this.login()
         } catch {
-            window.location.reload()
+            this.applySignedInUI(state.user)
+            if (typeof UI !== "undefined") UI.showToast("Ошибка входа")
         }
     },
 
@@ -919,6 +931,89 @@ const Auth = {
         const msg = messages[code] || `Ошибка входа: ${code}`
         if (typeof UI !== "undefined") UI.showToast(msg)
         else alert(msg)
+    },
+
+    clearState() {
+        state.user = null
+        state.notes = []
+        state.folders = []
+        state.view = "notes"
+        state.activeFolderId = null
+        state.searchQuery = ""
+        state.currentNote = null
+        state.tempRating = 0
+        state.driveToken = null
+        state.recording = false
+        state.mediaRecorder = null
+        state.audioChunks = []
+        state.editorDirty = false
+        state.lastSaved = null
+        state.orderHistory = []
+        if (typeof UI !== "undefined") {
+            UI.visibleNotes = []
+            UI.currentNoteActionId = null
+            UI.draggedNoteId = null
+            UI.dragTargetId = null
+            UI.dragPosition = null
+            UI.closeAllModals()
+            UI.renderFolders()
+            UI.updateViewTitle()
+            UI.updatePrimaryActionLabel()
+        }
+        const search = document.getElementById("search-input")
+        if (search) search.value = ""
+        if (typeof Editor !== "undefined") Editor.close()
+    },
+
+    applySignedInUI(user) {
+        if (!user) return
+        const loginScreen = document.getElementById("login-screen")
+        const appScreen = document.getElementById("app")
+        const userPhoto = document.getElementById("user-photo")
+        const userName = document.getElementById("user-name")
+
+        if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
+        if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
+
+        if (loginScreen) {
+            loginScreen.style.opacity = "0"
+            setTimeout(() => {
+                loginScreen.style.display = "none"
+                loginScreen.classList.remove("active")
+            }, 320)
+        }
+
+        if (appScreen) {
+            appScreen.style.display = "flex"
+            setTimeout(() => {
+                appScreen.style.opacity = "1"
+                appScreen.classList.add("active")
+            }, 30)
+        }
+    },
+
+    applySignedOutUI() {
+        const loginScreen = document.getElementById("login-screen")
+        const appScreen = document.getElementById("app")
+        if (appScreen) {
+            appScreen.style.opacity = "0"
+            setTimeout(() => {
+                appScreen.style.display = "none"
+                appScreen.classList.remove("active")
+            }, 220)
+        }
+        if (loginScreen) {
+            loginScreen.style.display = "flex"
+            setTimeout(() => {
+                loginScreen.classList.add("active")
+                loginScreen.style.opacity = "1"
+            }, 30)
+        }
+    },
+
+    resetSession() {
+        this.clearState()
+        this.applySignedOutUI()
     }
 }
 
@@ -926,48 +1021,12 @@ if (auth) {
     auth.onAuthStateChanged(user => {
         state.user = user || null
 
-        const loginScreen = document.getElementById("login-screen")
-        const appScreen = document.getElementById("app")
-        const userPhoto = document.getElementById("user-photo")
-        const userName = document.getElementById("user-name")
-
         if (user) {
-            if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
-            if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
-
-            if (loginScreen) {
-                loginScreen.style.opacity = "0"
-                setTimeout(() => {
-                    loginScreen.style.display = "none"
-                    loginScreen.classList.remove("active")
-                }, 320)
-            }
-
-            if (appScreen) {
-                appScreen.style.display = "flex"
-                setTimeout(() => {
-                    appScreen.style.opacity = "1"
-                    appScreen.classList.add("active")
-                }, 30)
-            }
+            Auth.applySignedInUI(user)
 
             if (typeof window.initApp === "function") window.initApp()
         } else {
-            if (appScreen) {
-                appScreen.style.opacity = "0"
-                setTimeout(() => {
-                    appScreen.style.display = "none"
-                    appScreen.classList.remove("active")
-                }, 220)
-            }
-
-            if (loginScreen) {
-                loginScreen.style.display = "flex"
-                setTimeout(() => {
-                    loginScreen.classList.add("active")
-                    loginScreen.style.opacity = "1"
-                }, 30)
-            }
+            Auth.resetSession()
         }
     })
 }

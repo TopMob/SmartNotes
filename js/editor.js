@@ -5,6 +5,7 @@ const Editor = {
     selectedMedia: null,
     resizeState: null,
     snapshotTimer: null,
+    lastRange: null,
 
     init() {
         this.els = {
@@ -59,6 +60,11 @@ const Editor = {
                 this.els.tagsInput.value = ""
             })
         }
+
+        document.addEventListener("selectionchange", () => {
+            this.captureSelection()
+            this.syncFontSizeRange()
+        })
 
         const imgUpload = document.getElementById("img-upload")
         if (imgUpload) {
@@ -138,15 +144,9 @@ const Editor = {
         })
         if (this.els.fontRange) {
             this.els.fontRange.addEventListener("input", () => {
-                const v = parseInt(this.els.fontRange.value, 10)
-                const px = 10 + v * 2
-                document.execCommand("fontSize", false, "7")
-                const fonts = this.els.content.querySelectorAll("font[size='7']")
-                fonts.forEach(f => {
-                    f.removeAttribute("size")
-                    f.style.fontSize = `${px}px`
-                })
-                this.queueSnapshot()
+                const px = parseInt(this.els.fontRange.value, 10)
+                if (!Number.isFinite(px)) return
+                this.applyFontSize(px)
             })
         }
     },
@@ -155,6 +155,73 @@ const Editor = {
         const p = this.els.textSizePopup
         if (!p) return
         p.classList.toggle("hidden")
+        this.syncFontSizeRange()
+    },
+
+    getSelectionNode() {
+        const sel = window.getSelection()
+        if (!sel || !sel.rangeCount) return null
+        const range = sel.getRangeAt(0)
+        if (!this.els.content || !this.els.content.contains(range.startContainer)) return null
+        const node = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer
+        return node
+    },
+
+    captureSelection() {
+        const sel = window.getSelection()
+        if (!sel || !sel.rangeCount) return
+        const range = sel.getRangeAt(0)
+        if (!this.els.content || !this.els.content.contains(range.startContainer)) return
+        this.lastRange = range.cloneRange()
+    },
+
+    restoreSelection() {
+        if (!this.lastRange) return false
+        const sel = window.getSelection()
+        if (!sel) return false
+        sel.removeAllRanges()
+        sel.addRange(this.lastRange)
+        return true
+    },
+
+    normalizeFontTags(px) {
+        const root = this.els.content
+        if (!root) return
+        root.querySelectorAll("font[size='7']").forEach(font => {
+            font.style.fontSize = `${px}px`
+            font.removeAttribute("size")
+        })
+    },
+
+    applyFontSize(px) {
+        let target = this.getSelectionNode()
+        if (!target && this.restoreSelection()) {
+            target = this.getSelectionNode()
+        }
+        if (!target) return
+        this.els.content.focus()
+        document.execCommand("styleWithCSS", false, true)
+        document.execCommand("fontSize", false, "7")
+        this.normalizeFontTags(px)
+        this.syncFontSizeRange(px)
+        this.queueSnapshot()
+    },
+
+    syncFontSizeRange(forcedPx = null) {
+        if (!this.els.fontRange) return
+        if (!this.els.wrapper?.classList.contains("active")) return
+        let px = forcedPx
+        if (!px) {
+            const node = this.getSelectionNode()
+            if (!node) return
+            const computed = window.getComputedStyle(node)
+            px = parseFloat(computed.fontSize)
+        }
+        if (!px || !Number.isFinite(px)) return
+        const min = parseInt(this.els.fontRange.min, 10) || 12
+        const max = parseInt(this.els.fontRange.max, 10) || 28
+        const clamped = Utils.clamp(Math.round(px), min, max)
+        this.els.fontRange.value = String(clamped)
     },
 
     insertChecklistLine() {
@@ -211,6 +278,7 @@ const Editor = {
         state.currentNote = JSON.parse(JSON.stringify(n))
         this.history = []
         this.future = []
+        this.lastRange = null
         this.renderState()
         this.els.wrapper.classList.add("active")
         setTimeout(() => this.els.content?.focus(), 90)
@@ -238,6 +306,7 @@ const Editor = {
         this.els.wrapper.classList.remove("active")
         state.currentNote = null
         this.deselectMedia()
+        this.lastRange = null
     },
 
     renderState() {
@@ -247,6 +316,7 @@ const Editor = {
         this.els.content.innerHTML = n.content || ""
         this.renderTags()
         this.makeMediaDraggable()
+        this.syncFontSizeRange()
     },
 
     addTag(tag) {
@@ -311,7 +381,7 @@ const Editor = {
         if (!n) return
         n.title = String(this.els.title.value || "")
         n.content = String(this.els.content.innerHTML || "")
-        n.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
+        n.updatedAt = Utils.serverTimestamp()
         this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
         if (this.history.length > 80) this.history.shift()
         this.future = []
