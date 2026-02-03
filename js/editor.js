@@ -14,7 +14,8 @@ const Editor = {
             toolbar: document.getElementById("editor-toolbar"),
             tagsInput: document.getElementById("note-tags-input"),
             tagsContainer: document.getElementById("note-tags-container"),
-            ctxMenu: document.getElementById("media-context-menu") || document.getElementById("media-context-menu")
+            ctxMenu: document.getElementById("media-context-menu"),
+            scrollArea: document.querySelector(".editor-scroll-area")
         }
         this.loadToolSettings()
         this.buildToolbar()
@@ -25,6 +26,11 @@ const Editor = {
         if (this.els.title) this.els.title.addEventListener("input", () => this.queueSnapshot())
         if (this.els.content) {
             this.els.content.addEventListener("input", () => this.queueSnapshot())
+            this.els.content.addEventListener("change", (e) => {
+                if (e.target && e.target.classList.contains("task-checkbox")) {
+                    this.toggleTask(e.target)
+                }
+            })
             this.els.content.addEventListener("click", (e) => {
                 const wrapper = e.target.closest(".media-wrapper")
                 if (wrapper) {
@@ -46,6 +52,9 @@ const Editor = {
                 document.addEventListener("pointermove", this.handleResize, { passive: true })
                 document.addEventListener("pointerup", this.stopResize, { passive: true })
             })
+        }
+        if (this.els.scrollArea) {
+            this.els.scrollArea.addEventListener("scroll", () => this.deselectMedia())
         }
         if (this.els.tagsInput) {
             this.els.tagsInput.addEventListener("keydown", (e) => {
@@ -84,22 +93,10 @@ const Editor = {
             lockApply.addEventListener("click", async () => {
                 const pass = document.getElementById("lock-password")?.value || ""
                 if (!state.currentNote) return
-                if (!pass.trim()) return UI.showToast("Пароль пустой")
+                if (!pass.trim()) return UI.showToast(UI.getText("lock_empty", "Password is empty"))
                 await LockService.setLock(state.currentNote, pass.trim())
                 UI.closeModal("lock-modal")
-                UI.showToast("Заметка скрыта")
-            })
-        }
-
-        const surveySubmit = document.getElementById("survey-submit")
-        if (surveySubmit) {
-            surveySubmit.addEventListener("click", async () => {
-                const q1 = String(document.getElementById("survey-q1")?.value || "").trim()
-                const q2 = String(document.getElementById("survey-q2")?.value || "").trim()
-                const q3 = String(document.getElementById("survey-q3")?.value || "").trim()
-                localStorage.setItem("survey:v1", JSON.stringify({ q1, q2, q3, ts: Date.now() }))
-                UI.closeModal("survey-modal")
-                UI.showToast("Спасибо")
+                UI.showToast(UI.getText("lock_applied", "Note locked"))
             })
         }
     },
@@ -170,7 +167,9 @@ const Editor = {
     },
 
     insertChecklistLine() {
-        document.execCommand("strikeThrough")
+        const html = `<div class="task-item"><input class="task-checkbox" type="checkbox"><span class="task-text" contenteditable="true"></span></div><br>`
+        document.execCommand("insertHTML", false, html)
+        this.queueSnapshot()
     },
 
     toggleTask(el) {
@@ -223,6 +222,7 @@ const Editor = {
         this.history = []
         this.future = []
         this.renderState()
+        this.snapshot(true)
         this.els.wrapper.classList.add("active")
         setTimeout(() => this.els.content?.focus(), 90)
         UI.toggleSidebar(false)
@@ -231,9 +231,9 @@ const Editor = {
     async maybeUnlock(note) {
         if (!note.lock || !note.lock.hash) return true
         return await new Promise((resolve) => {
-            UI.showPrompt("Пароль", "Введите пароль", async (val) => {
+            UI.showPrompt(UI.getText("lock_prompt_title", "Password"), UI.getText("lock_prompt_placeholder", "Enter password"), async (val) => {
                 const ok = await LockService.verify(note, val)
-                if (!ok) UI.showToast("Неверный пароль")
+                if (!ok) UI.showToast(UI.getText("lock_invalid", "Invalid password"))
                 resolve(ok)
             })
         })
@@ -255,9 +255,11 @@ const Editor = {
         const n = state.currentNote
         if (!n) return
         this.els.title.value = n.title || ""
-        this.els.content.innerHTML = n.content || ""
+        this.els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
         this.renderTags()
         this.makeMediaDraggable()
+        this.applyMediaSizing()
+        this.syncTaskStates()
     },
 
     addTag(tag) {
@@ -287,12 +289,15 @@ const Editor = {
         if (!n || !this.els.tagsContainer) return
         const tags = Array.isArray(n.tags) ? n.tags : []
         const html = tags.map(t => `
-            <span class="tag-chip" onclick="Editor.removeTag('${Utils.escapeHtml(String(t))}')">
+            <span class="tag-chip" data-action="remove-tag" data-tag="${Utils.escapeHtml(String(t))}">
                 <i class="material-icons-round" aria-hidden="true">tag</i>
                 <span>${Utils.escapeHtml(String(t))}</span>
             </span>
         `).join("")
         this.els.tagsContainer.innerHTML = html
+        this.els.tagsContainer.querySelectorAll("[data-action=\"remove-tag\"]").forEach(el => {
+            el.addEventListener("click", () => this.removeTag(el.dataset.tag || ""))
+        })
 
         const sug = SmartSearch.suggestTags(n.title, n.content).filter(x => !tags.map(t => String(t).toLowerCase()).includes(x.toLowerCase()))
         if (sug.length) {
@@ -304,7 +309,7 @@ const Editor = {
                 const b = document.createElement("span")
                 b.className = "tag-suggest"
                 b.textContent = `#${t}`
-                b.onclick = () => this.addTag(t)
+                b.addEventListener("click", () => this.addTag(t))
                 wrap.appendChild(b)
             })
             this.els.tagsContainer.appendChild(wrap)
@@ -317,26 +322,33 @@ const Editor = {
         this.snapshotTimer = setTimeout(() => this.snapshot(), 260)
     },
 
-    snapshot() {
+    snapshot(force = false) {
         const n = state.currentNote
         if (!n) return
         n.title = String(this.els.title.value || "")
-        n.content = String(this.els.content.innerHTML || "")
+        n.content = Utils.sanitizeHtml(String(this.els.content.innerHTML || ""))
         n.updatedAt = Utils.serverTimestamp()
-        this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
+        const next = JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags }))
+        const last = this.history[this.history.length - 1]
+        if (!force && last && last.title === next.title && last.content === next.content && JSON.stringify(last.tags || []) === JSON.stringify(next.tags || [])) {
+            return
+        }
+        this.history.push(next)
         if (this.history.length > 80) this.history.shift()
-        this.future = []
+        if (!force) this.future = []
     },
 
     undo() {
         const n = state.currentNote
         if (!n) return
-        if (!this.history.length) return
-        const last = this.history.pop()
-        this.future.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
-        n.title = last.title
-        n.content = last.content
-        n.tags = last.tags
+        if (this.history.length < 2) return
+        const current = this.history.pop()
+        this.future.push(JSON.parse(JSON.stringify(current)))
+        const prev = this.history[this.history.length - 1]
+        if (!prev) return
+        n.title = prev.title
+        n.content = prev.content
+        n.tags = prev.tags
         this.renderState()
     },
 
@@ -345,7 +357,7 @@ const Editor = {
         if (!n) return
         const next = this.future.pop()
         if (!next) return
-        this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
+        this.history.push(JSON.parse(JSON.stringify(next)))
         n.title = next.title
         n.content = next.content
         n.tags = next.tags
@@ -356,7 +368,7 @@ const Editor = {
         const id = Utils.generateId()
         let html = ""
         if (type === "image") {
-            html = `<div class="media-wrapper" id="${id}" contenteditable="false" draggable="true" data-scale="1"><img src="${Utils.escapeHtml(src)}" alt=""><span class="media-resize-handle" aria-hidden="true"></span></div><br>`
+            html = `<div class="media-wrapper" id="${id}" contenteditable="false" data-scale="1"><img src="${Utils.escapeHtml(src)}" alt=""><span class="media-resize-handle" aria-hidden="true"></span></div><br>`
         }
         document.execCommand("insertHTML", false, html)
         this.queueSnapshot()
@@ -371,6 +383,28 @@ const Editor = {
         })
     },
 
+    applyMediaSizing() {
+        const root = this.els.content
+        if (!root) return
+        root.querySelectorAll(".media-wrapper").forEach(wrapper => {
+            const img = wrapper.querySelector("img")
+            if (!img) return
+            const width = Number(wrapper.dataset.width || 0)
+            const height = Number(wrapper.dataset.height || 0)
+            img.style.width = width ? `${width}px` : ""
+            img.style.height = height ? `${height}px` : ""
+        })
+    },
+
+    syncTaskStates() {
+        const root = this.els.content
+        if (!root) return
+        root.querySelectorAll(".task-checkbox").forEach(input => {
+            const item = input.closest(".task-item")
+            if (item) item.classList.toggle("completed", !!input.checked)
+        })
+    },
+
     selectMedia(el) {
         if (this.selectedMedia) this.selectedMedia.classList.remove("selected")
         this.selectedMedia = el
@@ -379,8 +413,8 @@ const Editor = {
         const menu = this.els.ctxMenu
         if (!menu) return
         menu.classList.remove("hidden")
-        const top = rect.top + window.scrollY - 56
-        const left = rect.left + window.scrollX + rect.width / 2 - menu.offsetWidth / 2
+        const top = rect.top - 56
+        const left = rect.left + rect.width / 2 - menu.offsetWidth / 2
         menu.style.top = `${Math.max(10, top)}px`
         menu.style.left = `${Math.max(10, left)}px`
     },
@@ -419,7 +453,7 @@ const Editor = {
     },
 
     drawOnSelectedMedia() {
-        UI.showToast("Открой редактор фото из кнопки в модалке")
+        UI.showToast(UI.getText("photo_editor_hint", "Open the photo editor from the modal button"))
     },
 
     async save() {
@@ -427,7 +461,7 @@ const Editor = {
         const n = state.currentNote
         if (!n) return
         n.title = String(this.els.title.value || "")
-        n.content = String(this.els.content.innerHTML || "")
+        n.content = Utils.sanitizeHtml(String(this.els.content.innerHTML || ""))
         if (!Array.isArray(n.tags)) n.tags = []
         const auto = SmartSearch.suggestTags(n.title, n.content)
         auto.forEach(t => {
@@ -439,6 +473,7 @@ const Editor = {
         }
         const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
         const payload = NoteIO.normalizeNote(n)
+        payload.content = Utils.sanitizeHtml(payload.content)
         payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
         await ref.set(payload, { merge: true })
         state.editorDirty = false
@@ -452,7 +487,7 @@ const Editor = {
         UI.confirm("delete", async () => {
             if (!db || !state.user) return
             await db.collection("users").doc(state.user.uid).collection("notes").doc(n.id).delete()
-            UI.showToast("Удалено")
+            UI.showToast(UI.getText("deleted", "Deleted"))
             this.close()
         })
     }

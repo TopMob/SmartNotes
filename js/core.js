@@ -34,6 +34,101 @@ const Utils = {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#39;")
     },
+    sanitizeHtml: (html) => {
+        if (!html) return ""
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(`<div>${html}</div>`, "text/html")
+        const root = doc.body.firstElementChild
+        if (!root) return ""
+
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "input"])
+        const allowedClasses = new Set(["task-item", "task-checkbox", "task-text", "completed", "media-wrapper", "media-resize-handle"])
+        const allowedData = new Set(["data-width", "data-height", "data-scale"])
+
+        const sanitizeNode = (node) => {
+            if (node.nodeType === 3) return
+            if (node.nodeType !== 1) {
+                node.remove()
+                return
+            }
+            const tag = node.tagName.toLowerCase()
+            if (!allowedTags.has(tag)) {
+                const text = doc.createTextNode(node.textContent || "")
+                node.replaceWith(text)
+                return
+            }
+
+            Array.from(node.attributes).forEach(attr => {
+                const name = attr.name.toLowerCase()
+                const value = attr.value
+                if (name.startsWith("on") || name === "style") {
+                    node.removeAttribute(attr.name)
+                    return
+                }
+
+                if (name === "class") {
+                    const safe = value.split(/\s+/).filter(c => allowedClasses.has(c)).join(" ")
+                    if (safe) node.setAttribute("class", safe)
+                    else node.removeAttribute("class")
+                    return
+                }
+
+                if (tag === "img") {
+                    if (name === "src") {
+                        const src = String(value || "")
+                        if (!/^data:image|^https:\/\//i.test(src)) {
+                            node.remove()
+                            return
+                        }
+                        return
+                    }
+                    if (name === "alt") return
+                    node.removeAttribute(attr.name)
+                    return
+                }
+
+                if (tag === "a") {
+                    if (name === "href") {
+                        const href = String(value || "")
+                        if (!/^(https?:|mailto:)/i.test(href)) {
+                            node.removeAttribute("href")
+                            return
+                        }
+                        if (/^https?:/i.test(href)) {
+                            node.setAttribute("rel", "noopener noreferrer")
+                            node.setAttribute("target", "_blank")
+                        }
+                        return
+                    }
+                    node.removeAttribute(attr.name)
+                    return
+                }
+
+                if (tag === "input") {
+                    if (name === "type") {
+                        if (value !== "checkbox") node.setAttribute("type", "checkbox")
+                        return
+                    }
+                    if (name === "checked") return
+                }
+
+                if (name === "contenteditable") {
+                    if (node.classList.contains("task-text") && value === "true") return
+                    if (value !== "false") node.setAttribute("contenteditable", "false")
+                    return
+                }
+
+                if (allowedData.has(name)) return
+
+                node.removeAttribute(attr.name)
+            })
+
+            Array.from(node.childNodes).forEach(child => sanitizeNode(child))
+        }
+
+        Array.from(root.childNodes).forEach(child => sanitizeNode(child))
+        return root.innerHTML
+    },
     adjustColor: (col, amt) => {
         if (!col) return "#000000"
         let c = String(col).trim()
@@ -121,6 +216,16 @@ const LANG = {
         slogan: "Ваши мысли. В порядке.",
         login: "Вход в систему",
         login_google: "Войти через Google",
+        login_title: "Авторизация",
+        nav_label: "Навигация",
+        sections_label: "Разделы",
+        user_menu: "Пользователь",
+        notes_list: "Список заметок",
+        editor_actions: "Действия редактора",
+        editor_toolbar: "Инструменты редактора",
+        tags_label: "Теги",
+        media_menu: "Меню изображения",
+        rate_label: "Оценка",
         all_notes: "Все записи",
         favorites: "Важное",
         archive: "Архив",
@@ -129,6 +234,14 @@ const LANG = {
         about: "О нас",
         rate: "Оценить",
         settings: "Настройки",
+        settings_menu_title: "Настройки",
+        settings_general: "Общие",
+        settings_appearance: "Внешний вид",
+        settings_editor_tools: "Инструменты редактора",
+        settings_back: "Назад",
+        settings_category_general_desc: "Язык, папки, анимации",
+        settings_category_appearance_desc: "Темы и ручные цвета",
+        settings_category_editor_tools_desc: "Кнопки панели редактора",
         switch_acc: "Сменить",
         logout: "Выйти",
         empty: "Здесь пока пусто",
@@ -140,6 +253,26 @@ const LANG = {
         c_text: "Текст",
         c_accent: "Акцент",
         c_bg: "Фон",
+        smart_features: "УМНЫЕ ФУНКЦИИ",
+        lock_center: "Защита заметок",
+        lock_center_hint: "Тут будут фильтры скрытых заметок и быстрые действия",
+        lock_title: "Блокировка",
+        lock_placeholder: "Пароль",
+        lock_empty: "Пароль пустой",
+        lock_applied: "Заметка скрыта",
+        lock_prompt_title: "Пароль",
+        lock_prompt_placeholder: "Введите пароль",
+        lock_invalid: "Неверный пароль",
+        share_note: "Поделиться заметкой",
+        collab_note: "Совместное редактирование",
+        lock_note: "Заблокировать заметку",
+        share_hint: "Ссылка будет сгенерирована в приложении",
+        collab_title: "Совместное редактирование",
+        collab_hint: "Одноразовая ссылка будет сгенерирована в приложении",
+        copy_link: "Копировать",
+        copied: "Скопировано",
+        copy_failed: "Не удалось скопировать",
+        apply: "Применить",
         reset: "Сбросить",
         close: "Закрыть",
         save: "Сохранить",
@@ -152,6 +285,7 @@ const LANG = {
         note_title: "Заголовок",
         note_tags: "#тег (Enter)",
         feedback_placeholder: "Поделитесь впечатлениями...",
+        feedback_aria: "Ваш отзыв",
         note_actions: "Действия",
         download_note: "Скачать файл",
         upload_note: "Отправить в облако",
@@ -182,13 +316,18 @@ const LANG = {
         folder_empty: "Введите название папки",
         folder_exists: "Папка уже существует",
         folder_limit: "Лимит папок достигнут",
+        folder_deleted: "Папка удалена",
         archived: "В архиве",
         restored: "Восстановлено",
+        deleted: "Удалено",
         saving: "Сохранение...",
         saved: "Сохранено",
         rate_required: "Поставьте оценку",
         feedback_thanks: "Спасибо!",
+        feedback_failed: "Не удалось отправить отзыв",
+        auth_required: "Сначала войдите",
         order_updated: "Порядок обновлен",
+        reorder_disabled_search: "Нельзя менять порядок во время поиска",
         undo: "Отменить",
         import_file: "Импортировать файл",
         import_invalid: "Неверный формат файла",
@@ -203,6 +342,7 @@ const LANG = {
         share_invalid: "Ссылка недействительна",
         share_missing: "Заметка не найдена",
         share_title: "Ссылка",
+        collab_enabled: "Совместный режим включен",
         mic_unsupported: "Микрофон не поддерживается",
         mic_denied: "Нет доступа к микрофону",
         recording: "Запись...",
@@ -212,7 +352,14 @@ const LANG = {
         confirm_account: "Сменить аккаунт?",
         confirm_delete_folder: "Удалить папку?",
         confirm_default: "Подтвердите",
+        photo_editor_hint: "Открой редактор фото из кнопки в модалке",
         auth_unavailable: "Авторизация недоступна",
+        login_failed: "Ошибка входа",
+        logout_failed: "Ошибка при выходе",
+        auth_popup_closed: "Вход отменен",
+        auth_network_failed: "Нет соединения с интернетом",
+        auth_popup_cancelled: "Запрос отменен",
+        auth_unknown: "Ошибка входа",
         move_toolbar: "Переместить панель",
         toolbar_show: "Показать панель инструментов",
         toolbar_hide: "Скрыть панель инструментов",
@@ -266,28 +413,29 @@ const LANG = {
         theme_light: "Светлая",
         theme_dark: "Темная",
         theme_system: "Системная",
-        theme_high_contrast: "Высокий контраст",
-        theme_oled: "OLED",
-        theme_monochrome: "Монохром",
-        theme_pastel: "Пастель",
-        theme_warm: "Теплая",
-        theme_cold: "Холодная",
-        theme_minimal: "Минимал",
-        theme_compact: "Компактная",
-        theme_spacious: "Просторная",
-        theme_accessibility: "Доступность",
-        theme_glass: "Стекло",
-        theme_matte: "Матовая",
-        theme_neon: "Неон",
-        theme_paper: "Бумага",
-        theme_sunrise: "Рассвет",
-        theme_ocean: "Океан"
+        theme_graphite: "Графит",
+        theme_neon_cyan: "Неон циан",
+        theme_emerald_calm: "Изумрудный",
+        theme_violet_pulse: "Фиолетовый импульс",
+        theme_ocean_deep: "Глубокий океан",
+        theme_oled_pure: "OLED чистый",
+        theme_manual: "Ручная"
     },
     en: {
         app_name: "SmartNotes",
         slogan: "Your thoughts. Organized.",
         login: "Sign in",
         login_google: "Sign in with Google",
+        login_title: "Authentication",
+        nav_label: "Navigation",
+        sections_label: "Sections",
+        user_menu: "User menu",
+        notes_list: "Notes list",
+        editor_actions: "Editor actions",
+        editor_toolbar: "Editor tools",
+        tags_label: "Tags",
+        media_menu: "Media menu",
+        rate_label: "Rating",
         all_notes: "All Notes",
         favorites: "Important",
         archive: "Archive",
@@ -296,6 +444,14 @@ const LANG = {
         about: "About",
         rate: "Rate Us",
         settings: "Settings",
+        settings_menu_title: "Settings",
+        settings_general: "General",
+        settings_appearance: "Appearance",
+        settings_editor_tools: "Editor tools",
+        settings_back: "Back",
+        settings_category_general_desc: "Language, folders, motion",
+        settings_category_appearance_desc: "Themes and manual colors",
+        settings_category_editor_tools_desc: "Editor toolbar buttons",
         switch_acc: "Switch",
         logout: "Logout",
         empty: "Nothing here yet",
@@ -307,6 +463,26 @@ const LANG = {
         c_text: "Text",
         c_accent: "Accent",
         c_bg: "Background",
+        smart_features: "SMART FEATURES",
+        lock_center: "Note protection",
+        lock_center_hint: "Filters and quick actions will appear here",
+        lock_title: "Lock",
+        lock_placeholder: "Password",
+        lock_empty: "Password is empty",
+        lock_applied: "Note locked",
+        lock_prompt_title: "Password",
+        lock_prompt_placeholder: "Enter password",
+        lock_invalid: "Invalid password",
+        share_note: "Share note",
+        collab_note: "Collaborate on note",
+        lock_note: "Lock note",
+        share_hint: "The link will be generated in the app",
+        collab_title: "Collaboration",
+        collab_hint: "A one-time link will be generated in the app",
+        copy_link: "Copy",
+        copied: "Copied",
+        copy_failed: "Copy failed",
+        apply: "Apply",
         reset: "Reset",
         close: "Close",
         save: "Save",
@@ -319,6 +495,7 @@ const LANG = {
         note_title: "Title",
         note_tags: "#tag (Enter)",
         feedback_placeholder: "Share your feedback...",
+        feedback_aria: "Your feedback",
         note_actions: "Actions",
         download_note: "Download file",
         upload_note: "Upload to cloud",
@@ -349,13 +526,18 @@ const LANG = {
         folder_empty: "Enter a folder name",
         folder_exists: "Folder already exists",
         folder_limit: "Folder limit reached",
+        folder_deleted: "Folder deleted",
         archived: "Archived",
         restored: "Restored",
+        deleted: "Deleted",
         saving: "Saving...",
         saved: "Saved",
         rate_required: "Please rate the app",
         feedback_thanks: "Thanks!",
+        feedback_failed: "Failed to send feedback",
+        auth_required: "Sign in first",
         order_updated: "Order updated",
+        reorder_disabled_search: "Reorder disabled while searching",
         undo: "Undo",
         import_file: "Import file",
         import_invalid: "Unsupported file",
@@ -370,6 +552,7 @@ const LANG = {
         share_invalid: "Invalid link",
         share_missing: "Note not found",
         share_title: "Link",
+        collab_enabled: "Collaborative mode enabled",
         mic_unsupported: "Microphone not supported",
         mic_denied: "Microphone access denied",
         recording: "Recording...",
@@ -379,7 +562,14 @@ const LANG = {
         confirm_account: "Switch account?",
         confirm_delete_folder: "Delete folder?",
         confirm_default: "Confirm",
+        photo_editor_hint: "Open the photo editor from the modal button",
         auth_unavailable: "Authentication unavailable",
+        login_failed: "Sign in failed",
+        logout_failed: "Sign out failed",
+        auth_popup_closed: "Sign-in cancelled",
+        auth_network_failed: "Network error",
+        auth_popup_cancelled: "Request cancelled",
+        auth_unknown: "Sign-in error",
         move_toolbar: "Move toolbar",
         toolbar_show: "Show toolbar",
         toolbar_hide: "Hide toolbar",
@@ -433,22 +623,13 @@ const LANG = {
         theme_light: "Light",
         theme_dark: "Dark",
         theme_system: "System",
-        theme_high_contrast: "High Contrast",
-        theme_oled: "OLED",
-        theme_monochrome: "Monochrome",
-        theme_pastel: "Pastel",
-        theme_warm: "Warm",
-        theme_cold: "Cold",
-        theme_minimal: "Minimal",
-        theme_compact: "Compact",
-        theme_spacious: "Spacious",
-        theme_accessibility: "Accessibility",
-        theme_glass: "Glass",
-        theme_matte: "Matte",
-        theme_neon: "Neon",
-        theme_paper: "Paper",
-        theme_sunrise: "Sunrise",
-        theme_ocean: "Ocean"
+        theme_graphite: "Graphite",
+        theme_neon_cyan: "Neon Cyan",
+        theme_emerald_calm: "Emerald Calm",
+        theme_violet_pulse: "Violet Pulse",
+        theme_ocean_deep: "Ocean Deep",
+        theme_oled_pure: "OLED Pure",
+        theme_manual: "Manual"
     }
 }
 
@@ -456,11 +637,11 @@ const ThemeManager = {
     themes: {
         light: {
             p: "#2563eb",
-            bg: "#f8fafc",
-            t: "#0b1220",
-            border: "rgba(2, 6, 23, 0.12)",
-            blur: 12,
-            motion: 1.0,
+            bg: "#f7f9fc",
+            t: "#111827",
+            border: "rgba(15, 23, 42, 0.12)",
+            blur: 8,
+            motion: 0.9,
             density: 1,
             radius: 12,
             radiusScale: 1,
@@ -468,19 +649,19 @@ const ThemeManager = {
             hitSize: 44,
             typeScale: 1.0,
             spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.72,
+            editorPadding: 28,
+            editorLineHeight: 1.7,
             editorLetterSpacing: "0px",
-            shadow: "0 20px 35px rgba(2, 6, 23, 0.18)",
-            shadowSmall: "0 10px 18px rgba(2, 6, 23, 0.12)",
-            toolbarBg: "rgba(2, 6, 23, 0.04)",
-            toolbarBorder: "rgba(2, 6, 23, 0.08)",
-            toolbarShadow: "0 18px 28px rgba(2, 6, 23, 0.08)"
+            shadow: "0 18px 32px rgba(15, 23, 42, 0.16)",
+            shadowSmall: "0 8px 16px rgba(15, 23, 42, 0.1)",
+            toolbarBg: "rgba(15, 23, 42, 0.04)",
+            toolbarBorder: "rgba(15, 23, 42, 0.08)",
+            toolbarShadow: "0 16px 24px rgba(15, 23, 42, 0.08)"
         },
         dark: {
             p: "#00f2ff",
-            bg: "#050505",
-            t: "#ffffff",
+            bg: "#05060c",
+            t: "#f6f9ff",
             border: "rgba(255, 255, 255, 0.1)",
             blur: 18,
             motion: 1.0,
@@ -494,152 +675,150 @@ const ThemeManager = {
             editorPadding: 30,
             editorLineHeight: 1.7,
             editorLetterSpacing: "0px",
-            shadow: "0 20px 40px rgba(0, 0, 0, 0.55)",
-            shadowSmall: "0 10px 18px rgba(0, 0, 0, 0.4)",
-            toolbarBg: "rgba(255, 255, 255, 0.03)",
-            toolbarBorder: "rgba(255, 255, 255, 0.08)",
-            toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.55)"
+            shadow: "0 22px 44px rgba(0, 0, 0, 0.6)",
+            shadowSmall: "0 10px 20px rgba(0, 0, 0, 0.45)",
+            toolbarBg: "rgba(255, 255, 255, 0.04)",
+            toolbarBorder: "rgba(255, 255, 255, 0.09)",
+            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.55)"
         },
         system: { preset: "system" },
-
-        purple: {
-            p: "#a855f7",
-            bg: "#07050b",
-            t: "#f8f7ff",
-            border: "rgba(248, 247, 255, 0.1)",
-            blur: 20,
-            motion: 1.04,
+        graphite: {
+            p: "#9ca3af",
+            bg: "#0b0d12",
+            t: "#e6e7eb",
+            border: "rgba(255, 255, 255, 0.08)",
+            blur: 10,
+            motion: 0.95,
+            density: 1.05,
+            radius: 10,
+            radiusScale: 0.98,
+            fontBase: 15.5,
+            hitSize: 42,
+            typeScale: 0.98,
+            spaceUnit: 11,
+            editorPadding: 26,
+            editorLineHeight: 1.66,
+            editorLetterSpacing: "0px",
+            shadow: "0 18px 34px rgba(0, 0, 0, 0.5)",
+            shadowSmall: "0 8px 16px rgba(0, 0, 0, 0.38)",
+            toolbarBg: "rgba(255, 255, 255, 0.03)",
+            toolbarBorder: "rgba(255, 255, 255, 0.06)",
+            toolbarShadow: "0 14px 24px rgba(0, 0, 0, 0.55)"
+        },
+        neon_cyan: {
+            p: "#22f5ff",
+            bg: "#03040d",
+            t: "#f5fdff",
+            border: "rgba(226, 242, 255, 0.16)",
+            blur: 26,
+            motion: 1.08,
             density: 1,
-            radius: 13,
-            radiusScale: 1.05,
+            radius: 14,
+            radiusScale: 1.08,
             fontBase: 16,
             hitSize: 44,
-            typeScale: 1.02,
-            spaceUnit: 12,
-            editorPadding: 32,
+            typeScale: 1.04,
+            spaceUnit: 13,
+            editorPadding: 34,
             editorLineHeight: 1.74,
-            editorLetterSpacing: "0.1px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(168, 85, 247, 0.10)",
-            toolbarBorder: "rgba(248, 247, 255, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
+            editorLetterSpacing: "0.2px",
+            shadow: "0 30px 60px rgba(0, 0, 0, 0.72)",
+            shadowSmall: "0 14px 24px rgba(0, 0, 0, 0.55)",
+            toolbarBg: "rgba(34, 245, 255, 0.12)",
+            toolbarBorder: "rgba(226, 242, 255, 0.2)",
+            toolbarShadow: "0 20px 34px rgba(0, 0, 0, 0.72)"
         },
-        green: {
-            p: "#22c55e",
-            bg: "#040a06",
-            t: "#f6fff9",
-            border: "rgba(246, 255, 249, 0.1)",
-            blur: 18,
+        emerald_calm: {
+            p: "#34d399",
+            bg: "#050b09",
+            t: "#edfff7",
+            border: "rgba(237, 255, 247, 0.12)",
+            blur: 16,
             motion: 1.02,
             density: 1,
             radius: 12,
-            radiusScale: 1.03,
+            radiusScale: 1.02,
             fontBase: 16,
             hitSize: 44,
             typeScale: 1.01,
             spaceUnit: 12,
             editorPadding: 30,
-            editorLineHeight: 1.72,
+            editorLineHeight: 1.7,
             editorLetterSpacing: "0px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.62)",
+            shadow: "0 24px 48px rgba(0, 0, 0, 0.58)",
             shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.42)",
-            toolbarBg: "rgba(34, 197, 94, 0.08)",
-            toolbarBorder: "rgba(246, 255, 249, 0.14)",
+            toolbarBg: "rgba(52, 211, 153, 0.09)",
+            toolbarBorder: "rgba(237, 255, 247, 0.16)",
             toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.6)"
         },
-        red: {
-            p: "#ef4444",
-            bg: "#0b0505",
-            t: "#fff7f7",
-            border: "rgba(255, 247, 247, 0.1)",
-            blur: 20,
-            motion: 1.03,
+        violet_pulse: {
+            p: "#b26bff",
+            bg: "#080612",
+            t: "#f8f5ff",
+            border: "rgba(248, 245, 255, 0.14)",
+            blur: 22,
+            motion: 1.06,
             density: 1,
-            radius: 12,
-            radiusScale: 1.06,
+            radius: 14,
+            radiusScale: 1.12,
             fontBase: 16,
             hitSize: 44,
-            typeScale: 1.01,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.72,
-            editorLetterSpacing: "0px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(239, 68, 68, 0.10)",
-            toolbarBorder: "rgba(255, 247, 247, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
+            typeScale: 1.03,
+            spaceUnit: 13,
+            editorPadding: 34,
+            editorLineHeight: 1.75,
+            editorLetterSpacing: "0.18px",
+            shadow: "0 28px 54px rgba(0, 0, 0, 0.68)",
+            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.5)",
+            toolbarBg: "rgba(178, 107, 255, 0.12)",
+            toolbarBorder: "rgba(248, 245, 255, 0.2)",
+            toolbarShadow: "0 20px 32px rgba(0, 0, 0, 0.65)"
         },
-        blue: {
-            p: "#3b82f6",
-            bg: "#04070f",
-            t: "#f5f9ff",
-            border: "rgba(245, 249, 255, 0.1)",
+        ocean_deep: {
+            p: "#4aa6ff",
+            bg: "#030914",
+            t: "#e8f3ff",
+            border: "rgba(232, 243, 255, 0.12)",
             blur: 20,
-            motion: 1.05,
+            motion: 1.04,
             density: 1,
             radius: 12,
             radiusScale: 1.04,
             fontBase: 16,
             hitSize: 44,
             typeScale: 1.02,
-            spaceUnit: 13,
+            spaceUnit: 12,
             editorPadding: 32,
-            editorLineHeight: 1.75,
-            editorLetterSpacing: "0.15px",
-            shadow: "0 26px 50px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(59, 130, 246, 0.10)",
-            toolbarBorder: "rgba(245, 249, 255, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
+            editorLineHeight: 1.73,
+            editorLetterSpacing: "0.12px",
+            shadow: "0 26px 52px rgba(0, 0, 0, 0.66)",
+            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.48)",
+            toolbarBg: "rgba(74, 166, 255, 0.1)",
+            toolbarBorder: "rgba(232, 243, 255, 0.18)",
+            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.65)"
         },
-
-        oled: {
-            p: "#00f2ff",
+        oled_pure: {
+            p: "#00e7ff",
             bg: "#000000",
             t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.12)",
-            blur: 16,
-            motion: 1.0,
+            border: "rgba(255, 255, 255, 0.16)",
+            blur: 12,
+            motion: 0.98,
             density: 1,
-            radius: 12,
-            radiusScale: 1,
+            radius: 10,
+            radiusScale: 0.98,
             fontBase: 16,
             hitSize: 44,
             typeScale: 1.0,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.7,
+            spaceUnit: 11,
+            editorPadding: 28,
+            editorLineHeight: 1.68,
             editorLetterSpacing: "0px",
-            shadow: "0 22px 44px rgba(0, 0, 0, 0.7)",
-            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.55)",
-            toolbarBg: "rgba(255, 255, 255, 0.03)",
-            toolbarBorder: "rgba(255, 255, 255, 0.1)",
-            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.7)"
-        },
-        neon: {
-            p: "#00f2ff",
-            bg: "#04040a",
-            t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.1)",
-            blur: 22,
-            motion: 1.06,
-            density: 1,
-            radius: 13,
-            radiusScale: 1.08,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.03,
-            spaceUnit: 13,
-            editorPadding: 32,
-            editorLineHeight: 1.74,
-            editorLetterSpacing: "0.15px",
-            shadow: "0 28px 56px rgba(0, 0, 0, 0.7)",
-            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.5)",
-            toolbarBg: "rgba(0, 242, 255, 0.10)",
-            toolbarBorder: "rgba(226, 242, 255, 0.18)",
-            toolbarShadow: "0 18px 34px rgba(0, 0, 0, 0.7)"
+            shadow: "0 20px 40px rgba(0, 0, 0, 0.75)",
+            shadowSmall: "0 10px 20px rgba(0, 0, 0, 0.6)",
+            toolbarBg: "rgba(255, 255, 255, 0.04)",
+            toolbarBorder: "rgba(255, 255, 255, 0.12)",
+            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.75)"
         }
     },
 
@@ -801,23 +980,24 @@ const ThemeManager = {
             light: dict.theme_light || "Light",
             dark: dict.theme_dark || "Dark",
             system: dict.theme_system || "System",
-            oled: dict.theme_oled || "OLED",
-            neon: dict.theme_neon || "Neon",
-            purple: "Purple",
-            green: "Green",
-            red: "Red",
-            blue: "Blue"
+            graphite: dict.theme_graphite || "Graphite",
+            neon_cyan: dict.theme_neon_cyan || "Neon Cyan",
+            emerald_calm: dict.theme_emerald_calm || "Emerald Calm",
+            violet_pulse: dict.theme_violet_pulse || "Violet Pulse",
+            ocean_deep: dict.theme_ocean_deep || "Ocean Deep",
+            oled_pure: dict.theme_oled_pure || "OLED Pure",
+            manual: dict.theme_manual || "Manual"
         }
 
-        const ordered = ["system", "dark", "light", "purple", "blue", "green", "red", "neon", "oled"]
+        const ordered = ["system", "dark", "graphite", "neon_cyan", "emerald_calm", "violet_pulse", "ocean_deep", "oled_pure", "light", "manual"]
 
         const current = localStorage.getItem("app-theme-settings")
         const parsed = current ? JSON.parse(current) : null
-        const activeKey = parsed?.preset ? parsed.preset : null
+        const activeKey = parsed?.preset ? parsed.preset : "manual"
 
         ordered.forEach((key) => {
             const t = this.themes[key]
-            if (!t) return
+            if (!t && key !== "manual") return
 
             const wrapper = document.createElement("div")
             wrapper.className = "theme-item-wrapper"
@@ -825,7 +1005,7 @@ const ThemeManager = {
             const dot = document.createElement("div")
             dot.className = "theme-dot"
 
-            const color = t.p || (key === "system" ? "#6366f1" : "#00f2ff")
+            const color = key === "manual" ? (parsed?.p || this.themes.dark.p) : (t.p || (key === "system" ? "#6366f1" : "#00f2ff"))
             dot.style.background = color
 
             const glow = Utils.hexToRgb(color)
@@ -839,7 +1019,15 @@ const ThemeManager = {
             label.textContent = labels[key] || key.charAt(0).toUpperCase() + key.slice(1)
 
             dot.onclick = () => {
-                this.applyPreset(key)
+                if (key === "manual") {
+                    const saved = JSON.parse(localStorage.getItem("app-theme-settings")) || {}
+                    const p = saved.p || this.themes.dark.p
+                    const bg = saved.bg || this.themes.dark.bg
+                    const t = saved.t || this.themes.dark.t
+                    this.setManual(p, bg, t)
+                } else {
+                    this.applyPreset(key)
+                }
                 root.querySelectorAll(".theme-dot").forEach(d => d.classList.remove("active"))
                 dot.classList.add("active")
             }
@@ -922,7 +1110,7 @@ const Auth = {
             this.resetSession()
         } catch {
             this.applySignedInUI(state.user)
-            if (typeof UI !== "undefined") UI.showToast("Ошибка при выходе")
+            if (typeof UI !== "undefined") UI.showToast(UI.getText("logout_failed", "Sign out failed"))
         }
     },
 
@@ -935,18 +1123,19 @@ const Auth = {
             await this.login()
         } catch {
             this.applySignedInUI(state.user)
-            if (typeof UI !== "undefined") UI.showToast("Ошибка входа")
+            if (typeof UI !== "undefined") UI.showToast(UI.getText("login_failed", "Sign in failed"))
         }
     },
 
     handleAuthError(e) {
         const code = e && e.code ? e.code : "auth/unknown"
+        const getText = (typeof UI !== "undefined" && UI.getText) ? UI.getText.bind(UI) : ((_, fallback) => fallback || "")
         const messages = {
-            "auth/popup-closed-by-user": "Вход отменен",
-            "auth/network-request-failed": "Нет соединения с интернетом",
-            "auth/cancelled-popup-request": "Запрос отменен"
+            "auth/popup-closed-by-user": getText("auth_popup_closed", "Sign-in cancelled"),
+            "auth/network-request-failed": getText("auth_network_failed", "Network error"),
+            "auth/cancelled-popup-request": getText("auth_popup_cancelled", "Request cancelled")
         }
-        const msg = messages[code] || `Ошибка входа: ${code}`
+        const msg = messages[code] || getText("auth_unknown", "Sign-in error")
         if (typeof UI !== "undefined") UI.showToast(msg)
         else alert(msg)
     },

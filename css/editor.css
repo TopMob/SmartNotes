@@ -212,7 +212,7 @@
 }
 
 .media-context-menu {
-    position: absolute;
+    position: fixed;
     display: flex;
     gap: 10px;
     padding: 10px;
@@ -283,6 +283,11 @@
     align-items: center;
     gap: 10px;
     margin: 6px 0;
+}
+
+.task-text {
+    flex: 1;
+    min-width: 0;
 }
 
 .task-item.completed {
