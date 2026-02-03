@@ -7,9 +7,11 @@
   <meta name="theme-color" content="#050505">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <title>SmartNotes</title>
+
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="Logo.png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,63 +26,67 @@
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js" defer></script>
-
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
 
-  <script defer>
+  <script>
+    window.firebaseConfig = {
+      apiKey: "REPLACE_ME",
+      authDomain: "REPLACE_ME.firebaseapp.com",
+      projectId: "REPLACE_ME",
+      storageBucket: "REPLACE_ME.appspot.com",
+      messagingSenderId: "REPLACE_ME",
+      appId: "REPLACE_ME"
+    }
+  </script>
+
+  <script>
     (function () {
-      function safeInitFirebase() {
-        try {
-          var cfg = window.firebaseConfig
-          if (!cfg) return
-          if (!window.firebase || !firebase.initializeApp) return
-          if (firebase.apps && firebase.apps.length) return
-          firebase.initializeApp(cfg)
-          if (firebase.firestore) window.db = firebase.firestore()
-        } catch (_) {
-        }
+      function init() {
+        if (!window.firebaseConfig) return
+        if (!window.firebase || !firebase.initializeApp) return
+        if (firebase.apps && firebase.apps.length) return
+        firebase.initializeApp(window.firebaseConfig)
+        if (firebase.firestore) window.db = firebase.firestore()
       }
-      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", safeInitFirebase)
-      else safeInitFirebase()
+      document.addEventListener("DOMContentLoaded", init)
     })()
   </script>
 
-<script src="js/core/utils.js" defer></script>
-<script src="js/core/state.js" defer></script>
+  <script src="js/core/utils.js" defer></script>
+  <script src="js/core/state.js" defer></script>
 
-<script src="js/ui/ui.toast.js" defer></script>
-<script src="js/ui/ui.modals.js" defer></script>
+  <script src="js/ui/ui.toast.js" defer></script>
+  <script src="js/ui/ui.modals.js" defer></script>
 
-<script src="js/core/auth.js" defer></script>
-<script src="js/index.bootstrap.js" defer></script>
-<script src="js/app.runtime.js" defer></script>
+  <script src="js/core/auth.js" defer></script>
+  <script src="js/index.bootstrap.js" defer></script>
+  <script src="js/app.runtime.js" defer></script>
 
-<script src="js/ui/ui.core.js" defer></script>
-<script src="js/ui/ui.sidebar.js" defer></script>
-<script src="js/ui/ui.settings.js" defer></script>
+  <script src="js/ui/ui.core.js" defer></script>
+  <script src="js/ui/ui.sidebar.js" defer></script>
+  <script src="js/ui/ui.settings.js" defer></script>
+  <script src="js/ui/ui.note-state.js" defer></script>
+  <script src="js/ui/ui.note-actions.js" defer></script>
+  <script src="js/ui/ui.note-visibility.js" defer></script>
 
-<script src="js/ui/ui.note-state.js" defer></script>
-<script src="js/ui/ui.note-actions.js" defer></script>
-<script src="js/ui/ui.note-visibility.js" defer></script>
+  <script src="js/editor/editor.core.js" defer></script>
+  <script src="js/editor/editor.media.js" defer></script>
+  <script src="js/editor/editor.tasks.js" defer></script>
 
-<script src="js/editor/editor.core.js" defer></script>
-<script src="js/editor/editor.media.js" defer></script>
-<script src="js/editor/editor.tasks.js" defer></script>
+  <script src="js/features/smart-search.js" defer></script>
+  <script src="js/features/tags.js" defer></script>
+  <script src="js/features/share.js" defer></script>
+  <script src="js/features/lock.js" defer></script>
+  <script src="js/features/folders.auto.js" defer></script>
+  <script src="js/features/survey.js" defer></script>
 
-<script src="js/features/smart-search.js" defer></script>
-<script src="js/features/tags.js" defer></script>
-<script src="js/features/share.js" defer></script>
-<script src="js/integrations/export.js" defer></script>
-<script src="js/features/lock.js" defer></script>
+  <script src="js/integrations/export.js" defer></script>
+  <script src="js/integrations/voice.js" defer></script>
+  <script src="js/integrations/sketch.js" defer></script>
+  <script src="js/integrations/drive.js" defer></script>
 
-<script src="js/core/theme.js" defer></script>
-<script src="js/features/folders.auto.js" defer></script>
-<script src="js/features/survey.js" defer></script>
-<script src="js/integrations/voice.js" defer></script>
-<script src="js/integrations/sketch.js" defer></script>
-<script src="js/integrations/drive.js" defer></script>
-
+  <script src="js/core/theme.js" defer></script>
 </head>
 
 <body>
