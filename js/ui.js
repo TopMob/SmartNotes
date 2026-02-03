@@ -5,6 +5,7 @@ const UI = {
     dragTargetId: null,
     dragPosition: null,
     visibleNotes: [],
+    settingsPage: null,
 
     init() {
         this.els = {
@@ -18,7 +19,6 @@ const UI = {
             folderList: document.getElementById("folder-list-root")
         }
         this.bindEvents()
-        this.bindSettings()
         this.applyAppearanceSettings()
         this.updatePrimaryActionLabel()
         this.routeShare()
@@ -40,6 +40,7 @@ const UI = {
         ThemeManager.renderPicker()
         this.syncSettingsUI()
         this.renderEditorSettings()
+        this.renderSettingsPage()
     },
 
     applyLangToDom() {
@@ -60,11 +61,21 @@ const UI = {
 
     bindEvents() {
         document.addEventListener("click", (e) => {
+            const actionEl = e.target.closest("[data-action]")
+            if (actionEl) {
+                this.handleAction(actionEl, e)
+            }
+
             if (this.els.sidebar?.classList.contains("active") && !this.els.sidebar.contains(e.target) && !e.target.closest("#menu-toggle")) {
                 this.toggleSidebar(false)
             }
             if (this.els.userMenu?.classList.contains("active") && !e.target.closest(".user-avatar-wrapper")) {
                 this.toggleUserMenu(false)
+            }
+
+            const overlay = e.target.closest(".modal-overlay")
+            if (overlay && e.target === overlay && !overlay.dataset.modalStatic) {
+                this.closeModal(overlay.id)
             }
         })
 
@@ -87,10 +98,17 @@ const UI = {
             }
         }
 
+        const search = document.getElementById("search-input")
+        if (search) {
+            search.addEventListener("input", (e) => {
+                filterAndRender(e.target.value)
+            })
+        }
+
         this.els.grid?.addEventListener("click", async (e) => {
-            const card = e.target.closest(".note-card")
             const action = e.target.closest(".action-btn")
             if (action) return
+            const card = e.target.closest(".note-card")
             if (!card) return
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
             const note = state.notes.find(n => n.id === id)
@@ -100,6 +118,11 @@ const UI = {
         this.els.grid?.addEventListener("dragstart", (e) => {
             const card = e.target.closest(".note-card")
             if (!card) return
+            if (state.searchQuery.trim()) {
+                e.preventDefault()
+                this.showToast(this.getText("reorder_search_disabled", "Reordering is disabled while searching"))
+                return
+            }
             this.draggedNoteId = decodeURIComponent(card.dataset.noteId)
             card.classList.add("dragging")
             e.dataTransfer.effectAllowed = "move"
@@ -137,49 +160,138 @@ const UI = {
 
         const noteImport = document.getElementById("note-import")
         if (noteImport) noteImport.addEventListener("change", (e) => this.handleNoteImport(e))
-
-        const shareModal = document.getElementById("share-modal")
-        if (shareModal) shareModal.addEventListener("click", (e) => { if (e.target === shareModal) this.closeModal("share-modal") })
-
-        const collabModal = document.getElementById("collab-modal")
-        if (collabModal) collabModal.addEventListener("click", (e) => { if (e.target === collabModal) this.closeModal("collab-modal") })
-
-        const lockModal = document.getElementById("lock-modal")
-        if (lockModal) lockModal.addEventListener("click", (e) => { if (e.target === lockModal) this.closeModal("lock-modal") })
-
-        const settingsModal = document.getElementById("settings-modal")
-        if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) this.closeModal("settings-modal") })
-
-        const shareFallbackModal = document.getElementById("share-fallback-modal")
-        if (shareFallbackModal) shareFallbackModal.addEventListener("click", (e) => { if (e.target === shareFallbackModal) this.closeModal("share-fallback-modal") })
     },
 
-    bindSettings() {
-        const langSelect = document.getElementById("settings-language")
-        if (langSelect) {
-            langSelect.addEventListener("change", (e) => {
-                this.setLang(e.target.value)
-            })
-        }
+    handleAction(el, e) {
+        const action = el.dataset.action
+        if (!action) return
 
-        const folderSelect = document.getElementById("settings-folder-view")
-        if (folderSelect) {
-            folderSelect.addEventListener("change", (e) => {
-                const next = e.target.value === "full" ? "full" : "compact"
-                state.config.folderViewMode = next
-                this.savePreferences()
-                this.renderFolders()
-                filterAndRender(document.getElementById("search-input")?.value || "")
-            })
-        }
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder"])
+        if (stopFor.has(action)) e.stopPropagation()
 
-        const reduceToggle = document.getElementById("settings-reduce-motion")
-        if (reduceToggle) {
-            reduceToggle.addEventListener("change", (e) => {
-                state.config.reduceMotion = !!e.target.checked
-                this.savePreferences()
-                ThemeManager.revertToLastSaved()
-            })
+        switch (action) {
+            case "login":
+                Auth.login()
+                break
+            case "toggle-sidebar": {
+                const forceAttr = el.dataset.force
+                const force = typeof forceAttr === "string" ? forceAttr === "true" : undefined
+                this.toggleSidebar(force)
+                break
+            }
+            case "switch-view":
+                switchView(el.dataset.view)
+                break
+            case "open-folder":
+                switchView("folder", el.dataset.folderId)
+                break
+            case "delete-folder":
+                deleteFolder(el.dataset.folderId)
+                break
+            case "primary-action":
+                this.primaryAction()
+                break
+            case "open-modal":
+                this.openModal(el.dataset.modal)
+                break
+            case "close-modal":
+                this.closeModal(el.dataset.modal)
+                break
+            case "open-settings":
+                this.openSettings()
+                break
+            case "settings-back":
+                this.backSettingsPage()
+                break
+            case "open-settings-page":
+                this.openSettingsPage(el.dataset.page)
+                break
+            case "toggle-user-menu":
+                this.toggleUserMenu()
+                break
+            case "switch-account":
+                this.showConfirm("account", () => Auth.switchAccount())
+                break
+            case "logout":
+                this.showConfirm("exit", () => Auth.logout())
+                break
+            case "trigger-import":
+                this.triggerImport()
+                break
+            case "copy-share-link":
+                this.copyToClipboard("share-link")
+                break
+            case "copy-collab-link":
+                this.copyToClipboard("collab-link")
+                break
+            case "editor-undo":
+                Editor.undo()
+                break
+            case "editor-redo":
+                Editor.redo()
+                break
+            case "editor-delete":
+                Editor.deleteCurrent()
+                break
+            case "editor-save":
+                Editor.save()
+                break
+            case "close-editor":
+                Editor.close()
+                break
+            case "toggle-toolbar":
+                Editor.toggleToolbar()
+                break
+            case "note-pin":
+                togglePin(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-favorite":
+                toggleFavorite(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-menu":
+                openNoteActions(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "download-note":
+                this.downloadSelectedNote()
+                break
+            case "upload-note":
+                this.uploadSelectedNote()
+                break
+            case "submit-feedback":
+                this.submitFeedback()
+                break
+            case "media-reset":
+                Editor.resetMediaTransform()
+                break
+            case "media-align":
+                Editor.alignMediaOrText(el.dataset.align)
+                break
+            case "media-draw":
+                Editor.drawOnSelectedMedia()
+                break
+            case "media-delete":
+                Editor.deleteSelectedMedia()
+                break
+            case "sketch-undo":
+                SketchService.undo()
+                break
+            case "sketch-clear":
+                SketchService.clear()
+                break
+            case "sketch-save":
+                SketchService.save()
+                break
+            case "photo-undo":
+                PhotoEditor.undo()
+                break
+            case "photo-clear":
+                PhotoEditor.clear()
+                break
+            case "photo-save":
+                PhotoEditor.save()
+                break
+            default:
+                break
         }
     },
 
@@ -198,6 +310,12 @@ const UI = {
         if (!input) return
         input.value = ""
         input.click()
+    },
+
+    copyToClipboard(id) {
+        const input = document.getElementById(id)
+        if (!input || !navigator.clipboard) return
+        navigator.clipboard.writeText(input.value || "").catch(() => null)
     },
 
     async handleNoteImport(e) {
@@ -310,15 +428,160 @@ const UI = {
         const el = document.getElementById(id)
         if (!el) return
         el.classList.remove("active")
-        if (id === "appearance-modal") ThemeManager.revertToLastSaved()
     },
 
     openSettings() {
+        this.settingsPage = null
         this.openModal("settings-modal")
-        this.syncSettingsUI()
-        this.renderEditorSettings()
-        ThemeManager.renderPicker()
-        ThemeManager.setupColorInputs()
+        this.renderSettingsPage()
+    },
+
+    openSettingsPage(page) {
+        this.settingsPage = page
+        this.renderSettingsPage()
+    },
+
+    backSettingsPage() {
+        this.settingsPage = null
+        this.renderSettingsPage()
+    },
+
+    renderSettingsPage() {
+        const root = document.getElementById("settings-content")
+        const title = document.getElementById("settings-title")
+        const backBtn = document.querySelector(".settings-back")
+        if (!root || !title || !backBtn) return
+        const page = this.settingsPage
+        const dict = LANG[state.config.lang] || LANG.ru
+        if (!page) {
+            title.textContent = dict.settings_menu_title || dict.settings || "Settings"
+            backBtn.classList.add("is-hidden")
+            root.innerHTML = `
+                <div class="settings-menu-list">
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="general">
+                        <div class="settings-menu-meta">
+                            <span class="settings-menu-title">${dict.settings_general || "General"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_general_desc || ""}</span>
+                        </div>
+                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                    </button>
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="appearance">
+                        <div class="settings-menu-meta">
+                            <span class="settings-menu-title">${dict.settings_appearance || "Appearance"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_appearance_desc || ""}</span>
+                        </div>
+                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                    </button>
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="editor_tools">
+                        <div class="settings-menu-meta">
+                            <span class="settings-menu-title">${dict.settings_editor_tools || "Editor Tools"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_editor_tools_desc || ""}</span>
+                        </div>
+                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                    </button>
+                </div>
+            `
+            return
+        }
+
+        backBtn.classList.remove("is-hidden")
+        if (page === "general") {
+            title.textContent = dict.settings_general || dict.general || "General"
+            root.innerHTML = `
+                <div class="settings-group">
+                    <div class="settings-grid">
+                        <div class="field">
+                            <span class="field-label">${dict.language || "Language"}</span>
+                            <select id="settings-language" class="input-area" aria-label="${dict.language || "Language"}">
+                                <option value="ru">Русский</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.folder_view_mode || "Display"}</span>
+                            <select id="settings-folder-view" class="input-area" aria-label="${dict.folder_view_mode || "Display"}">
+                                <option value="compact">${dict.folder_view_compact || "Sidebar list"}</option>
+                                <option value="full">${dict.folder_view_full || "Full view"}</option>
+                            </select>
+                        </div>
+                        <label class="row-left">
+                            <input type="checkbox" id="settings-reduce-motion" aria-label="${dict.reduce_motion || "Reduce motion"}">
+                            <span>${dict.reduce_motion || "Reduce motion"}</span>
+                        </label>
+                    </div>
+                </div>
+            `
+            this.bindSettingsControls()
+            this.syncSettingsUI()
+            return
+        }
+
+        if (page === "appearance") {
+            title.textContent = dict.settings_appearance || dict.appearance || "Appearance"
+            root.innerHTML = `
+                <div class="settings-group">
+                    <div class="field">
+                        <span class="field-label">${dict.presets || "Presets"}</span>
+                        <div id="theme-picker-root" class="settings-theme-grid"></div>
+                    </div>
+                    <div class="field">
+                        <span class="field-label">${dict.manual || "Manual"}</span>
+                        <div class="settings-color-grid">
+                            <label class="field">
+                                <span class="field-label">${dict.c_accent || "Accent"}</span>
+                                <input type="color" id="cp-primary" class="color-input" aria-label="${dict.color_accent || "Accent color"}">
+                            </label>
+                            <label class="field">
+                                <span class="field-label">${dict.c_bg || "Background"}</span>
+                                <input type="color" id="cp-bg" class="color-input" aria-label="${dict.color_bg || "Background color"}">
+                            </label>
+                            <label class="field">
+                                <span class="field-label">${dict.c_text || "Text"}</span>
+                                <input type="color" id="cp-text" class="color-input" aria-label="${dict.color_text || "Text color"}">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `
+            ThemeManager.revertToLastSaved()
+            ThemeManager.setupColorInputs()
+            return
+        }
+
+        if (page === "editor_tools") {
+            title.textContent = dict.settings_editor_tools || dict.editor_settings || "Editor tools"
+            root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
+            this.renderEditorSettings()
+        }
+    },
+
+    bindSettingsControls() {
+        const langSelect = document.getElementById("settings-language")
+        if (langSelect) {
+            langSelect.addEventListener("change", (e) => {
+                this.setLang(e.target.value)
+            })
+        }
+
+        const folderSelect = document.getElementById("settings-folder-view")
+        if (folderSelect) {
+            folderSelect.addEventListener("change", (e) => {
+                const next = e.target.value === "full" ? "full" : "compact"
+                state.config.folderViewMode = next
+                this.savePreferences()
+                this.renderFolders()
+                filterAndRender(document.getElementById("search-input")?.value || "")
+            })
+        }
+
+        const reduceToggle = document.getElementById("settings-reduce-motion")
+        if (reduceToggle) {
+            reduceToggle.addEventListener("change", (e) => {
+                state.config.reduceMotion = !!e.target.checked
+                this.savePreferences()
+                ThemeManager.revertToLastSaved()
+            })
+        }
     },
 
     showToast(msg, options = {}) {
@@ -373,7 +636,11 @@ const UI = {
 
         this.els.confirmModal.classList.add("active")
         const cancel = document.getElementById("confirm-cancel")
-        if (cancel) cancel.onclick = () => this.els.confirmModal.classList.remove("active")
+        if (cancel) {
+            const cancelClone = cancel.cloneNode(true)
+            cancel.parentNode.replaceChild(cancelClone, cancel)
+            cancelClone.onclick = () => this.els.confirmModal.classList.remove("active")
+        }
     },
 
     showPrompt(title, placeholder, cb) {
@@ -396,8 +663,11 @@ const UI = {
         const okClone = ok.cloneNode(true)
         ok.parentNode.replaceChild(okClone, ok)
 
+        const cancelClone = cancel.cloneNode(true)
+        cancel.parentNode.replaceChild(cancelClone, cancel)
+
         okClone.onclick = () => finish(String(input.value || "").trim())
-        cancel.onclick = () => modal.classList.remove("active")
+        cancelClone.onclick = () => modal.classList.remove("active")
 
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)
@@ -453,6 +723,7 @@ const UI = {
     },
 
     clearDragIndicators() {
+        if (!this.els.grid) return
         this.els.grid.querySelectorAll(".note-card").forEach(card => {
             card.classList.remove("drop-before", "drop-after")
         })
@@ -467,22 +738,46 @@ const UI = {
         else if (cursorY > rect.bottom - threshold) container.scrollBy({ top: 12, behavior: "smooth" })
     },
 
+    getReorderScope() {
+        let list = state.notes.slice()
+        if (state.view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
+        if (state.view === "archive") list = list.filter(n => !!n.isArchived)
+        if (state.view === "notes") list = list.filter(n => !n.isArchived)
+        if (state.view === "folder") list = list.filter(n => !n.isArchived && n.folderId === state.activeFolderId)
+        return list
+    },
+
     reorderNotes(draggedId, targetId, position) {
         if (!db || !state.user) return
         if (draggedId === targetId) return
-        const visibleIds = this.visibleNotes.map(n => n.id)
-        const fromIndex = visibleIds.indexOf(draggedId)
-        const toIndex = visibleIds.indexOf(targetId)
+        if (state.searchQuery.trim()) {
+            this.showToast(this.getText("reorder_search_disabled", "Reordering is disabled while searching"))
+            return
+        }
+        const draggedNote = state.notes.find(n => n.id === draggedId)
+        const targetNote = state.notes.find(n => n.id === targetId)
+        if (!draggedNote || !targetNote) return
+        if (!!draggedNote.isPinned !== !!targetNote.isPinned) {
+            this.showToast(this.getText("reorder_pinned_blocked", "Pinned notes reorder separately"))
+            return
+        }
+        const groupIds = this.visibleNotes.filter(n => !!n.isPinned === !!draggedNote.isPinned).map(n => n.id)
+        const fromIndex = groupIds.indexOf(draggedId)
+        const toIndex = groupIds.indexOf(targetId)
         if (fromIndex === -1 || toIndex === -1) return
-        visibleIds.splice(fromIndex, 1)
+        groupIds.splice(fromIndex, 1)
         const insertIndex = position === "after" ? toIndex + 1 : toIndex
-        visibleIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId)
+        groupIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId)
 
-        const previous = this.visibleNotes.map(n => ({ id: n.id, order: n.order || 0 }))
-        state.orderHistory.push(previous)
+        const previous = groupIds.map(id => {
+            const note = state.notes.find(n => n.id === id)
+            return { id, order: note?.order || 0 }
+        })
+        const scopeKey = `${state.view}:${state.activeFolderId || "all"}:${draggedNote.isPinned ? "pinned" : "unpinned"}`
+        state.orderHistory.push({ scope: scopeKey, items: previous })
         if (state.orderHistory.length > 20) state.orderHistory.shift()
 
-        const updates = visibleIds.map((id, index) => ({ id, order: index + 1 }))
+        const updates = groupIds.map((id, index) => ({ id, order: index + 1 }))
         updates.forEach(update => {
             const note = state.notes.find(n => n.id === update.id)
             if (note) note.order = update.order
@@ -506,7 +801,7 @@ const UI = {
         const last = state.orderHistory.pop()
         if (!last) return
         const batch = db.batch()
-        last.forEach(item => {
+        last.items.forEach(item => {
             const note = state.notes.find(n => n.id === item.id)
             if (note) note.order = item.order
             const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(item.id)
@@ -533,10 +828,10 @@ const UI = {
             return
         }
         root.innerHTML = state.folders.map(f => `
-            <button type="button" class="nav-item ${state.activeFolderId === f.id ? "active" : ""}" onclick="switchView('folder', '${f.id}')">
+            <button type="button" class="nav-item ${state.activeFolderId === f.id ? "active" : ""}" data-action="open-folder" data-folder-id="${f.id}">
                 <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
-                <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
+                <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" data-action="delete-folder" data-folder-id="${f.id}" aria-hidden="true">close</i>
             </button>
         `).join("")
     },
@@ -549,7 +844,7 @@ const UI = {
             const count = state.notes.filter(note => note.folderId === folder.id && !note.isArchived).length
             const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
             return `
-                <div class="folder-card" onclick="switchView('folder', '${folder.id}')">
+                <div class="folder-card" data-action="open-folder" data-folder-id="${folder.id}">
                     <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
                     <div class="folder-meta">${count} ${label}</div>
                 </div>
@@ -567,11 +862,22 @@ const UI = {
         if (!state.pendingShare || !state.user) return
         if (!state.notes.length) return
         const payload = state.pendingShare
-        const note = state.notes.find(n => n.id === payload.noteId)
         state.pendingShare = null
+        if (payload.error) {
+            return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
+        }
+        const note = state.notes.find(n => n.id === payload.noteId)
         if (!note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
-        if (payload.mode === "collab") this.showToast("Совместный режим включен")
+        if (payload.mode === "collab") this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
         Editor.openFromList(note)
+    },
+
+    captureShareFromHash() {
+        const rawHash = String(location.hash || "")
+        const parsed = ShareService.parseHash(rawHash)
+        if (!parsed) return
+        state.pendingShare = parsed
+        history.replaceState({}, "", ShareService.base())
     },
 
     routeShare() {
@@ -584,13 +890,66 @@ const UI = {
             }
             return
         }
-        if (parsed.error) {
-            state.pendingShare = null
-            history.replaceState({}, "", ShareService.base())
-            return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
-        }
         state.pendingShare = parsed
         history.replaceState({}, "", ShareService.base())
         this.handlePendingShare()
+    },
+
+    async submitFeedback() {
+        if (!db || !state.user) {
+            this.showToast(this.getText("feedback_failed", "Unable to send feedback"))
+            return
+        }
+        if (!state.tempRating) {
+            this.showToast(this.getText("rate_required", "Please rate first"))
+            return
+        }
+        const text = String(document.getElementById("feedback-text")?.value || "")
+        const payload = {
+            uid: state.user.uid,
+            email: state.user.email || "",
+            displayName: state.user.displayName || "",
+            rating: state.tempRating,
+            text: text.trim(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            userAgent: navigator.userAgent || "",
+            appVersion: "web",
+            language: state.config.lang
+        }
+        try {
+            await db.collection("feedback").add(payload)
+            state.tempRating = 0
+            document.querySelectorAll(".star").forEach(s => {
+                s.textContent = "star_border"
+                s.classList.remove("active")
+            })
+            const feedbackInput = document.getElementById("feedback-text")
+            if (feedbackInput) feedbackInput.value = ""
+            this.showToast(this.getText("feedback_thanks", "Thanks!"))
+            this.closeModal("rate-modal")
+        } catch {
+            this.showToast(this.getText("feedback_failed", "Unable to send feedback"))
+        }
+    },
+
+    downloadSelectedNote() {
+        const note = state.notes.find(n => n.id === this.currentNoteActionId)
+        if (!note) return
+        const data = NoteIO.exportNote(note)
+        const blob = new Blob([data], { type: "application/json" })
+        const a = document.createElement("a")
+        a.href = URL.createObjectURL(blob)
+        a.download = NoteIO.fileNameFor(note)
+        a.click()
+        URL.revokeObjectURL(a.href)
+        this.showToast(this.getText("download_success", "File saved"))
+        this.closeModal("note-actions-modal")
+    },
+
+    uploadSelectedNote() {
+        const note = state.notes.find(n => n.id === this.currentNoteActionId)
+        if (!note) return
+        DriveService.uploadNote(note)
+        this.closeModal("note-actions-modal")
     }
 }

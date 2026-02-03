@@ -591,3 +591,64 @@
     border: 1px solid rgba(255, 59, 48, 0.25);
     color: #ffb4ae;
 }
+
+.settings-menu-list {
+    display: grid;
+    gap: 12px;
+}
+
+.settings-menu-item {
+    width: 100%;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    transition: transform var(--animation-duration) var(--ease-out), background var(--animation-duration) var(--ease-out), border-color var(--animation-duration) var(--ease-out);
+}
+
+.settings-menu-item:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.18);
+}
+
+.settings-menu-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-menu-title {
+    font-weight: 600;
+}
+
+.settings-menu-desc {
+    font-size: 13px;
+    opacity: 0.7;
+}
+
+.settings-back.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.settings-group {
+    display: grid;
+    gap: 16px;
+}
+
+.settings-group-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.settings-grid {
+    display: grid;
+    gap: 14px;
+}
