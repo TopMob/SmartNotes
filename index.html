@@ -519,11 +519,11 @@
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .catch(() => null);
-            });
+        if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("./sw.js", { scope: "./" })
+                    .catch(() => null)
+            })
         }
     </script>
 </body>

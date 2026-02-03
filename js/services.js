@@ -13,8 +13,8 @@ const NoteIO = {
             isPinned: !!safe.isPinned,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
             order: typeof safe.order === "number" ? safe.order : Date.now(),
-            createdAt: safe.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: safe.updatedAt || firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: safe.createdAt || Utils.serverTimestamp(),
+            updatedAt: safe.updatedAt || Utils.serverTimestamp()
         }
     },
     exportNote(note) {

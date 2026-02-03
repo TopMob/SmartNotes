@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-notes-v3';
+const CACHE_NAME = 'smart-notes-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -38,6 +38,15 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => res)
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
   
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {

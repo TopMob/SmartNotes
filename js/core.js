@@ -61,6 +61,12 @@ const Utils = {
         if (!/^[0-9a-fA-F]{6}$/.test(c)) return null
         const num = parseInt(c, 16)
         return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
+    },
+    serverTimestamp: () => {
+        if (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue) {
+            return firebase.firestore.FieldValue.serverTimestamp()
+        }
+        return Date.now()
     }
 }
 
@@ -167,8 +173,11 @@ const LANG = {
         archive_note: "Архивировать",
         untitled_note: "Без названия",
         empty_note: "Нет содержимого",
+        locked_note: "Защищено",
         new_folder: "Новая папка",
         folder_placeholder: "Название...",
+        folder_empty: "Введите название папки",
+        folder_exists: "Папка уже существует",
         folder_limit: "Лимит папок достигнут",
         archived: "В архиве",
         restored: "Восстановлено",
@@ -197,6 +206,7 @@ const LANG = {
         confirm_account: "Сменить аккаунт?",
         confirm_delete_folder: "Удалить папку?",
         confirm_default: "Подтвердите",
+        auth_unavailable: "Авторизация недоступна",
         move_toolbar: "Переместить панель",
         toolbar_show: "Показать панель инструментов",
         toolbar_hide: "Скрыть панель инструментов",
@@ -318,8 +328,11 @@ const LANG = {
         archive_note: "Archive",
         untitled_note: "Untitled",
         empty_note: "No content",
+        locked_note: "Locked",
         new_folder: "New folder",
         folder_placeholder: "Folder name",
+        folder_empty: "Enter a folder name",
+        folder_exists: "Folder already exists",
         folder_limit: "Folder limit reached",
         archived: "Archived",
         restored: "Restored",
@@ -348,6 +361,7 @@ const LANG = {
         confirm_account: "Switch account?",
         confirm_delete_folder: "Delete folder?",
         confirm_default: "Confirm",
+        auth_unavailable: "Authentication unavailable",
         move_toolbar: "Move toolbar",
         toolbar_show: "Show toolbar",
         toolbar_hide: "Hide toolbar",
@@ -860,6 +874,12 @@ const ThemeManager = {
 
 const Auth = {
     async login() {
+        if (!auth || typeof firebase === "undefined") {
+            const msg = (typeof UI !== "undefined" && UI.getText) ? UI.getText("auth_unavailable", "Authentication unavailable") : "Authentication unavailable"
+            if (typeof UI !== "undefined" && UI.showToast) UI.showToast(msg)
+            else alert(msg)
+            return
+        }
         const provider = new firebase.auth.GoogleAuthProvider()
         provider.setCustomParameters({ prompt: "select_account" })
         try {
@@ -870,6 +890,7 @@ const Auth = {
     },
 
     async logout() {
+        if (!auth) return
         try {
             await auth.signOut()
             window.location.reload()
@@ -879,6 +900,7 @@ const Auth = {
     },
 
     async switchAccount() {
+        if (!auth) return
         try {
             await auth.signOut()
             await this.login()

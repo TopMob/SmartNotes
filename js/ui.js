@@ -201,9 +201,14 @@ const UI = {
         if (state.view === "folders") {
             if (state.folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
             this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+                const trimmed = String(name || "").trim()
+                if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+                if (state.folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+                    return this.showToast(this.getText("folder_exists", "Folder already exists"))
+                }
                 if (!db || !state.user) return
                 await db.collection("users").doc(state.user.uid).collection("folders").add({
-                    name,
+                    name: trimmed,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 })
             })

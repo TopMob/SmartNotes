@@ -205,7 +205,7 @@ const Editor = {
         const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
             id: Utils.generateId(),
             folderId: state.view === "folder" ? state.activeFolderId : null,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: Utils.serverTimestamp(),
             order: Date.now()
         })
         state.currentNote = JSON.parse(JSON.stringify(n))
