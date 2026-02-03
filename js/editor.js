@@ -236,9 +236,12 @@ const Editor = {
 
     open(note = null) {
         const current = StateStore.read()
+        const folderId = current.view === "folder" ? current.activeFolderId : null
+        const folderOrder = folderId ? this.nextFolderOrder(folderId, null) : 0
         const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
             id: Utils.generateId(),
-            folderId: current.view === "folder" ? current.activeFolderId : null,
+            folderId,
+            folderOrder,
             createdAt: Utils.serverTimestamp(),
             order: Date.now()
         })
@@ -250,6 +253,12 @@ const Editor = {
         this.els.wrapper.classList.add("active")
         setTimeout(() => this.els.content?.focus(), 90)
         UI.toggleSidebar(false)
+    },
+    nextFolderOrder(folderId, excludeId) {
+        const notes = StateStore.read().notes || []
+        const items = notes.filter(n => n.folderId === folderId && n.id !== excludeId)
+        const max = items.reduce((acc, n) => Math.max(acc, typeof n.folderOrder === "number" ? n.folderOrder : 0), 0)
+        return max + 1
     },
 
     async maybeUnlock(note) {
@@ -508,6 +517,14 @@ const Editor = {
         if (!updated.folderId) {
             const id = SmartSearch.suggestFolderId(updated, StateStore.read().folders)
             if (id) updated.folderId = id
+        }
+        if (updated.folderId) {
+            const changedFolder = updated.folderId !== n.folderId
+            if (changedFolder || typeof updated.folderOrder !== "number") {
+                updated.folderOrder = this.nextFolderOrder(updated.folderId, updated.id)
+            }
+        } else {
+            updated.folderOrder = 0
         }
         const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(updated.id)
         const payload = NoteIO.normalizeNote(updated)
