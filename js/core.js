@@ -61,6 +61,12 @@ const Utils = {
         if (!/^[0-9a-fA-F]{6}$/.test(c)) return null
         const num = parseInt(c, 16)
         return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
+    },
+    serverTimestamp: () => {
+        if (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue) {
+            return firebase.firestore.FieldValue.serverTimestamp()
+        }
+        return Date.now()
     }
 }
 
@@ -96,14 +102,15 @@ const state = {
     searchQuery: "",
     currentNote: null,
     tempRating: 0,
-    config: { lang: "ru", folderViewMode: "compact", reduceMotion: false },
+    config: { lang: "ru", folderViewMode: "compact", reduceMotion: false, editorTools: {} },
     driveToken: null,
     recording: false,
     mediaRecorder: null,
     audioChunks: [],
     editorDirty: false,
     lastSaved: null,
-    orderHistory: []
+    orderHistory: [],
+    pendingShare: null
 }
 
 window.state = state
@@ -154,6 +161,8 @@ const LANG = {
         folder_view_compact: "В боковой панели",
         folder_view_full: "Полный экран",
         reduce_motion: "Уменьшить анимации",
+        visual_effects: "Визуальные эффекты",
+        editor_settings: "Настройки редактора",
         view_notes: "Все записи",
         view_favorites: "Важное",
         view_archive: "Архив",
@@ -167,8 +176,11 @@ const LANG = {
         archive_note: "Архивировать",
         untitled_note: "Без названия",
         empty_note: "Нет содержимого",
+        locked_note: "Защищено",
         new_folder: "Новая папка",
         folder_placeholder: "Название...",
+        folder_empty: "Введите название папки",
+        folder_exists: "Папка уже существует",
         folder_limit: "Лимит папок достигнут",
         archived: "В архиве",
         restored: "Восстановлено",
@@ -188,6 +200,9 @@ const LANG = {
         drive_unavailable: "Сервис Drive недоступен",
         drive_saved: "Загружено в Drive",
         drive_error: "Ошибка синхронизации",
+        share_invalid: "Ссылка недействительна",
+        share_missing: "Заметка не найдена",
+        share_title: "Ссылка",
         mic_unsupported: "Микрофон не поддерживается",
         mic_denied: "Нет доступа к микрофону",
         recording: "Запись...",
@@ -197,9 +212,18 @@ const LANG = {
         confirm_account: "Сменить аккаунт?",
         confirm_delete_folder: "Удалить папку?",
         confirm_default: "Подтвердите",
+        auth_unavailable: "Авторизация недоступна",
         move_toolbar: "Переместить панель",
         toolbar_show: "Показать панель инструментов",
         toolbar_hide: "Скрыть панель инструментов",
+        tool_bold: "Жирный",
+        tool_italic: "Курсив",
+        tool_underline: "Подчеркнуть",
+        tool_bullets: "Маркированный список",
+        tool_numbered: "Нумерованный список",
+        tool_task: "Задача",
+        tool_image: "Изображение",
+        tool_clear: "Очистить формат",
         task_item: "Задача",
         system_override: "System Override",
         close_menu: "Закрыть меню",
@@ -225,7 +249,6 @@ const LANG = {
         sketch_width: "Толщина кисти",
         sketch_undo: "Отменить штрих",
         sketch_clear: "Очистить",
-        text_size: "Размер шрифта",
         align_left: "По левому краю",
         align_center: "По центру",
         align_right: "По правому краю",
@@ -305,6 +328,8 @@ const LANG = {
         folder_view_compact: "Sidebar list",
         folder_view_full: "Full view",
         reduce_motion: "Reduce motion",
+        visual_effects: "Visual effects",
+        editor_settings: "Editor settings",
         view_notes: "All Notes",
         view_favorites: "Important",
         view_archive: "Archive",
@@ -318,8 +343,11 @@ const LANG = {
         archive_note: "Archive",
         untitled_note: "Untitled",
         empty_note: "No content",
+        locked_note: "Locked",
         new_folder: "New folder",
         folder_placeholder: "Folder name",
+        folder_empty: "Enter a folder name",
+        folder_exists: "Folder already exists",
         folder_limit: "Folder limit reached",
         archived: "Archived",
         restored: "Restored",
@@ -339,6 +367,9 @@ const LANG = {
         drive_unavailable: "Drive unavailable",
         drive_saved: "Uploaded to Drive",
         drive_error: "Drive upload failed",
+        share_invalid: "Invalid link",
+        share_missing: "Note not found",
+        share_title: "Link",
         mic_unsupported: "Microphone not supported",
         mic_denied: "Microphone access denied",
         recording: "Recording...",
@@ -348,9 +379,18 @@ const LANG = {
         confirm_account: "Switch account?",
         confirm_delete_folder: "Delete folder?",
         confirm_default: "Confirm",
+        auth_unavailable: "Authentication unavailable",
         move_toolbar: "Move toolbar",
         toolbar_show: "Show toolbar",
         toolbar_hide: "Hide toolbar",
+        tool_bold: "Bold",
+        tool_italic: "Italic",
+        tool_underline: "Underline",
+        tool_bullets: "Bulleted list",
+        tool_numbered: "Numbered list",
+        tool_task: "Task",
+        tool_image: "Image",
+        tool_clear: "Clear formatting",
         task_item: "Task",
         system_override: "System Override",
         close_menu: "Close menu",
@@ -376,7 +416,6 @@ const LANG = {
         sketch_width: "Brush width",
         sketch_undo: "Undo stroke",
         sketch_clear: "Clear",
-        text_size: "Text size",
         align_left: "Align left",
         align_center: "Align center",
         align_right: "Align right",
@@ -860,6 +899,12 @@ const ThemeManager = {
 
 const Auth = {
     async login() {
+        if (!auth || typeof firebase === "undefined") {
+            const msg = (typeof UI !== "undefined" && UI.getText) ? UI.getText("auth_unavailable", "Authentication unavailable") : "Authentication unavailable"
+            if (typeof UI !== "undefined" && UI.showToast) UI.showToast(msg)
+            else alert(msg)
+            return
+        }
         const provider = new firebase.auth.GoogleAuthProvider()
         provider.setCustomParameters({ prompt: "select_account" })
         try {
@@ -870,20 +915,27 @@ const Auth = {
     },
 
     async logout() {
+        if (!auth) return
         try {
+            this.applySignedOutUI()
             await auth.signOut()
-            window.location.reload()
+            this.resetSession()
         } catch {
+            this.applySignedInUI(state.user)
             if (typeof UI !== "undefined") UI.showToast("Ошибка при выходе")
         }
     },
 
     async switchAccount() {
+        if (!auth) return
         try {
+            this.applySignedOutUI()
             await auth.signOut()
+            this.resetSession()
             await this.login()
         } catch {
-            window.location.reload()
+            this.applySignedInUI(state.user)
+            if (typeof UI !== "undefined") UI.showToast("Ошибка входа")
         }
     },
 
@@ -897,6 +949,89 @@ const Auth = {
         const msg = messages[code] || `Ошибка входа: ${code}`
         if (typeof UI !== "undefined") UI.showToast(msg)
         else alert(msg)
+    },
+
+    clearState() {
+        state.user = null
+        state.notes = []
+        state.folders = []
+        state.view = "notes"
+        state.activeFolderId = null
+        state.searchQuery = ""
+        state.currentNote = null
+        state.tempRating = 0
+        state.driveToken = null
+        state.recording = false
+        state.mediaRecorder = null
+        state.audioChunks = []
+        state.editorDirty = false
+        state.lastSaved = null
+        state.orderHistory = []
+        if (typeof UI !== "undefined") {
+            UI.visibleNotes = []
+            UI.currentNoteActionId = null
+            UI.draggedNoteId = null
+            UI.dragTargetId = null
+            UI.dragPosition = null
+            UI.closeAllModals()
+            UI.renderFolders()
+            UI.updateViewTitle()
+            UI.updatePrimaryActionLabel()
+        }
+        const search = document.getElementById("search-input")
+        if (search) search.value = ""
+        if (typeof Editor !== "undefined") Editor.close()
+    },
+
+    applySignedInUI(user) {
+        if (!user) return
+        const loginScreen = document.getElementById("login-screen")
+        const appScreen = document.getElementById("app")
+        const userPhoto = document.getElementById("user-photo")
+        const userName = document.getElementById("user-name")
+
+        if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
+        if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
+
+        if (loginScreen) {
+            loginScreen.style.opacity = "0"
+            setTimeout(() => {
+                loginScreen.style.display = "none"
+                loginScreen.classList.remove("active")
+            }, 320)
+        }
+
+        if (appScreen) {
+            appScreen.style.display = "flex"
+            setTimeout(() => {
+                appScreen.style.opacity = "1"
+                appScreen.classList.add("active")
+            }, 30)
+        }
+    },
+
+    applySignedOutUI() {
+        const loginScreen = document.getElementById("login-screen")
+        const appScreen = document.getElementById("app")
+        if (appScreen) {
+            appScreen.style.opacity = "0"
+            setTimeout(() => {
+                appScreen.style.display = "none"
+                appScreen.classList.remove("active")
+            }, 220)
+        }
+        if (loginScreen) {
+            loginScreen.style.display = "flex"
+            setTimeout(() => {
+                loginScreen.classList.add("active")
+                loginScreen.style.opacity = "1"
+            }, 30)
+        }
+    },
+
+    resetSession() {
+        this.clearState()
+        this.applySignedOutUI()
     }
 }
 
@@ -904,54 +1039,19 @@ if (auth) {
     auth.onAuthStateChanged(user => {
         state.user = user || null
 
-        const loginScreen = document.getElementById("login-screen")
-        const appScreen = document.getElementById("app")
-        const userPhoto = document.getElementById("user-photo")
-        const userName = document.getElementById("user-name")
-
         if (user) {
-            if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
-            if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
-
-            if (loginScreen) {
-                loginScreen.style.opacity = "0"
-                setTimeout(() => {
-                    loginScreen.style.display = "none"
-                    loginScreen.classList.remove("active")
-                }, 320)
-            }
-
-            if (appScreen) {
-                appScreen.style.display = "flex"
-                setTimeout(() => {
-                    appScreen.style.opacity = "1"
-                    appScreen.classList.add("active")
-                }, 30)
-            }
+            Auth.applySignedInUI(user)
 
             if (typeof window.initApp === "function") window.initApp()
         } else {
-            if (appScreen) {
-                appScreen.style.opacity = "0"
-                setTimeout(() => {
-                    appScreen.style.display = "none"
-                    appScreen.classList.remove("active")
-                }, 220)
-            }
-
-            if (loginScreen) {
-                loginScreen.style.display = "flex"
-                setTimeout(() => {
-                    loginScreen.classList.add("active")
-                    loginScreen.style.opacity = "1"
-                }, 30)
-            }
+            Auth.resetSession()
         }
     })
 }
 
 document.addEventListener("DOMContentLoaded", () => {
     ThemeManager.init()
+    if (!state.user) Auth.applySignedOutUI()
 
     document.addEventListener("dblclick", (event) => {
         event.preventDefault()

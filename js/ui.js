@@ -18,9 +18,11 @@ const UI = {
             folderList: document.getElementById("folder-list-root")
         }
         this.bindEvents()
+        this.bindSettings()
         this.applyAppearanceSettings()
         this.updatePrimaryActionLabel()
         this.routeShare()
+        window.addEventListener("hashchange", () => this.routeShare())
     },
 
     getText(key, fallback = "") {
@@ -36,6 +38,8 @@ const UI = {
         this.updateViewTitle()
         this.updatePrimaryActionLabel()
         ThemeManager.renderPicker()
+        this.syncSettingsUI()
+        this.renderEditorSettings()
     },
 
     applyLangToDom() {
@@ -142,6 +146,41 @@ const UI = {
 
         const lockModal = document.getElementById("lock-modal")
         if (lockModal) lockModal.addEventListener("click", (e) => { if (e.target === lockModal) this.closeModal("lock-modal") })
+
+        const settingsModal = document.getElementById("settings-modal")
+        if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) this.closeModal("settings-modal") })
+
+        const shareFallbackModal = document.getElementById("share-fallback-modal")
+        if (shareFallbackModal) shareFallbackModal.addEventListener("click", (e) => { if (e.target === shareFallbackModal) this.closeModal("share-fallback-modal") })
+    },
+
+    bindSettings() {
+        const langSelect = document.getElementById("settings-language")
+        if (langSelect) {
+            langSelect.addEventListener("change", (e) => {
+                this.setLang(e.target.value)
+            })
+        }
+
+        const folderSelect = document.getElementById("settings-folder-view")
+        if (folderSelect) {
+            folderSelect.addEventListener("change", (e) => {
+                const next = e.target.value === "full" ? "full" : "compact"
+                state.config.folderViewMode = next
+                this.savePreferences()
+                this.renderFolders()
+                filterAndRender(document.getElementById("search-input")?.value || "")
+            })
+        }
+
+        const reduceToggle = document.getElementById("settings-reduce-motion")
+        if (reduceToggle) {
+            reduceToggle.addEventListener("change", (e) => {
+                state.config.reduceMotion = !!e.target.checked
+                this.savePreferences()
+                ThemeManager.revertToLastSaved()
+            })
+        }
     },
 
     toggleSidebar(force) {
@@ -201,9 +240,14 @@ const UI = {
         if (state.view === "folders") {
             if (state.folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
             this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+                const trimmed = String(name || "").trim()
+                if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+                if (state.folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+                    return this.showToast(this.getText("folder_exists", "Folder already exists"))
+                }
                 if (!db || !state.user) return
                 await db.collection("users").doc(state.user.uid).collection("folders").add({
-                    name,
+                    name: trimmed,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 })
             })
@@ -218,6 +262,7 @@ const UI = {
         state.config.reduceMotion = !!saved.reduceMotion
         ThemeManager.revertToLastSaved()
         this.renderFolders()
+        this.syncSettingsUI()
     },
 
     updateViewTitle() {
@@ -269,8 +314,11 @@ const UI = {
     },
 
     openSettings() {
-        const modal = document.getElementById("settings-modal")
-        if (modal) modal.classList.add("active")
+        this.openModal("settings-modal")
+        this.syncSettingsUI()
+        this.renderEditorSettings()
+        ThemeManager.renderPicker()
+        ThemeManager.setupColorInputs()
     },
 
     showToast(msg, options = {}) {
@@ -298,6 +346,10 @@ const UI = {
             div.classList.remove("show")
             setTimeout(() => div.remove(), 300)
         }, options.duration || 2500)
+    },
+
+    showConfirm(type, cb) {
+        this.confirm(type, cb)
     },
 
     confirm(type, cb) {
@@ -349,6 +401,50 @@ const UI = {
 
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)
+    },
+
+    syncSettingsUI() {
+        const langSelect = document.getElementById("settings-language")
+        if (langSelect) langSelect.value = state.config.lang === "en" ? "en" : "ru"
+        const folderSelect = document.getElementById("settings-folder-view")
+        if (folderSelect) folderSelect.value = state.config.folderViewMode === "full" ? "full" : "compact"
+        const reduceToggle = document.getElementById("settings-reduce-motion")
+        if (reduceToggle) reduceToggle.checked = !!state.config.reduceMotion
+    },
+
+    renderEditorSettings() {
+        const root = document.getElementById("editor-tools-list")
+        if (!root || typeof Editor === "undefined") return
+        const tools = Editor.getToolList()
+        const enabled = Editor.getEnabledTools()
+        root.innerHTML = ""
+        tools.forEach(tool => {
+            const row = document.createElement("div")
+            row.className = "settings-toggle-item"
+            const label = document.createElement("span")
+            label.textContent = this.getText(tool.label, tool.label)
+            const input = document.createElement("input")
+            input.type = "checkbox"
+            input.checked = enabled[tool.id] !== false
+            input.setAttribute("aria-label", label.textContent)
+            input.addEventListener("change", () => {
+                Editor.setToolEnabled(tool.id, input.checked)
+            })
+            row.append(label, input)
+            root.appendChild(row)
+        })
+    },
+
+    savePreferences() {
+        const prefs = {
+            folderViewMode: state.config.folderViewMode,
+            reduceMotion: state.config.reduceMotion
+        }
+        localStorage.setItem("app-preferences", JSON.stringify(prefs))
+    },
+
+    closeAllModals() {
+        document.querySelectorAll(".modal-overlay.active").forEach(el => el.classList.remove("active"))
     },
 
     setDropIndicator(card, position) {
@@ -461,33 +557,40 @@ const UI = {
         }).join("")
     },
 
+    showShareFallback(message) {
+        const text = document.getElementById("share-fallback-message")
+        if (text) text.textContent = message
+        this.openModal("share-fallback-modal")
+    },
+
+    handlePendingShare() {
+        if (!state.pendingShare || !state.user) return
+        if (!state.notes.length) return
+        const payload = state.pendingShare
+        const note = state.notes.find(n => n.id === payload.noteId)
+        state.pendingShare = null
+        if (!note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
+        if (payload.mode === "collab") this.showToast("Совместный режим включен")
+        Editor.openFromList(note)
+    },
+
     routeShare() {
-        const h = String(location.hash || "")
-        const m1 = h.match(/^#share\/([A-Za-z0-9]+)$/)
-        const m2 = h.match(/^#collab\/([A-Za-z0-9]+)$/)
-        const token = m1 ? m1[1] : m2 ? m2[1] : null
-        if (!token) return
-        const payload = ShareService.consume(token)
-        history.replaceState({}, "", "#")
-        if (!payload) return this.showToast("Ссылка недействительна")
-
-        const openWhenReady = () => {
-            const note = state.notes.find(n => n.id === payload.noteId)
-            if (!note) return this.showToast("Заметка не найдена")
-            if (payload.mode === "read") return Editor.openFromList(note)
-            if (payload.mode === "collab") {
-                this.showToast("Совместный режим включен")
-                return Editor.openFromList(note)
+        const rawHash = String(location.hash || "")
+        const parsed = ShareService.parseHash(rawHash)
+        if (!parsed) {
+            if (/^#(share|collab)(\/|$)/.test(rawHash)) {
+                history.replaceState({}, "", ShareService.base())
+                return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
             }
+            return
         }
-
-        const int = setInterval(() => {
-            if (state.user && state.notes.length) {
-                clearInterval(int)
-                openWhenReady()
-            }
-        }, 120)
-
-        setTimeout(() => clearInterval(int), 6000)
+        if (parsed.error) {
+            state.pendingShare = null
+            history.replaceState({}, "", ShareService.base())
+            return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
+        }
+        state.pendingShare = parsed
+        history.replaceState({}, "", ShareService.base())
+        this.handlePendingShare()
     }
 }

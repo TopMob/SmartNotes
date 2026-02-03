@@ -13,8 +13,8 @@ const NoteIO = {
             isPinned: !!safe.isPinned,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
             order: typeof safe.order === "number" ? safe.order : Date.now(),
-            createdAt: safe.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: safe.updatedAt || firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: safe.createdAt || Utils.serverTimestamp(),
+            updatedAt: safe.updatedAt || Utils.serverTimestamp()
         }
     },
     exportNote(note) {
@@ -184,32 +184,42 @@ const ShareService = {
         const u = new URL(window.location.href)
         u.hash = ""
         u.search = ""
-        return u.toString().replace(/\/$/, "")
+        if (u.pathname.endsWith("/index.html")) {
+            u.pathname = u.pathname.replace(/\/index\.html$/, "/")
+        }
+        if (!u.pathname.endsWith("/")) {
+            u.pathname = `${u.pathname}/`
+        }
+        return u.toString()
     },
-    token(bytes = 18) {
-        const arr = new Uint8Array(bytes)
-        crypto.getRandomValues(arr)
-        return btoa(String.fromCharCode(...arr)).replace(/[+/=]/g, "").slice(0, 26)
+    encodeId(id) {
+        return encodeURIComponent(String(id || "").trim())
+    },
+    decodeId(raw) {
+        if (!raw) return null
+        try {
+            const decoded = decodeURIComponent(raw)
+            return decoded.trim() || null
+        } catch {
+            return null
+        }
     },
     makeShareLink(noteId) {
-        const t = this.token()
-        localStorage.setItem(`share:${t}`, JSON.stringify({ noteId, mode: "read", exp: Date.now() + 1000 * 60 * 60 * 24 * 30 }))
-        return `${this.base()}/#share/${t}`
+        const id = this.encodeId(noteId)
+        return `${this.base()}#share/${id}`
     },
     makeCollabLink(noteId) {
-        const t = this.token()
-        localStorage.setItem(`share:${t}`, JSON.stringify({ noteId, mode: "collab", exp: Date.now() + 1000 * 60 * 30 }))
-        return `${this.base()}/#collab/${t}`
+        const id = this.encodeId(noteId)
+        return `${this.base()}#collab/${id}`
     },
-    consume(token) {
-        const raw = localStorage.getItem(`share:${token}`)
-        if (!raw) return null
-        let parsed = null
-        try { parsed = JSON.parse(raw) } catch { parsed = null }
-        localStorage.removeItem(`share:${token}`)
-        if (!parsed || !parsed.noteId || !parsed.exp) return null
-        if (Date.now() > parsed.exp) return null
-        return parsed
+    parseHash(hash) {
+        const h = String(hash || "")
+        const match = h.match(/^#(share|collab)\/(.+)$/)
+        if (!match) return null
+        const mode = match[1] === "collab" ? "collab" : "read"
+        const noteId = this.decodeId(match[2])
+        if (!noteId) return { error: "invalid" }
+        return { mode, noteId }
     }
 }
 

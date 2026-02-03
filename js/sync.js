@@ -8,7 +8,7 @@ const SyncService = {
   queue: new Map(),
 
   init() {
-    if (!auth) return;
+    if (!auth || !db) return;
     auth.onAuthStateChanged(user => {
       if (user) this.listen(user);
     });
@@ -76,7 +76,7 @@ const SyncService = {
       tags: Array.isArray(data?.tags) ? data.tags.join(", ") : "",
       folder: folderName,
       isPinned: data?.isPinned ? "Да" : "Нет",
-      isImportant: data?.isImportant ? "Да" : "Нет",
+      isImportant: data?.isFavorite ? "Да" : "Нет",
       isArchived: data?.isArchived ? "Да" : "Нет",
       isTrash: isDeleted ? "Да" : "Нет",
       attachments

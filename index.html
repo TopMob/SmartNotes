@@ -232,10 +232,6 @@
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора"></div>
 
-                <div id="text-size-popup" class="text-size-popup hidden" role="dialog" aria-label="Размер текста">
-                    <input type="range" id="font-size-range" min="12" max="28" step="1" value="16" aria-label="Размер шрифта">
-                </div>
-
                 <div id="note-content-editable" class="note-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
 
                 <div class="tags-row" aria-label="Теги">
@@ -457,6 +453,93 @@
         </div>
     </div>
 
+    <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Настройки">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="settings">Настройки</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('settings-modal')" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3 class="settings-section-title" data-lang="general">Общие</h3>
+                    <div class="field">
+                        <span class="field-label" data-lang="language">Язык</span>
+                        <select id="settings-language" class="input-area" aria-label="Язык" data-lang-aria="language">
+                            <option value="ru">Русский</option>
+                            <option value="en">English</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <span class="field-label" data-lang="folder_view_mode">Отображение</span>
+                        <select id="settings-folder-view" class="input-area" aria-label="Отображение папок" data-lang-aria="folder_view_mode">
+                            <option value="compact" data-lang="folder_view_compact">В боковой панели</option>
+                            <option value="full" data-lang="folder_view_full">Полный экран</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title" data-lang="visual_effects">Визуальные эффекты</h3>
+                    <label class="row-left">
+                        <input type="checkbox" id="settings-reduce-motion" aria-label="Уменьшить анимации" data-lang-aria="reduce_motion">
+                        <span data-lang="reduce_motion">Уменьшить анимации</span>
+                    </label>
+
+                    <div class="field">
+                        <span class="field-label" data-lang="presets">Пресеты</span>
+                        <div id="theme-picker-root" class="settings-theme-grid"></div>
+                    </div>
+
+                    <div class="field">
+                        <span class="field-label" data-lang="manual">Ручная настройка</span>
+                        <div class="settings-color-grid">
+                            <label class="field">
+                                <span class="field-label" data-lang="c_accent">Акцент</span>
+                                <input type="color" id="cp-primary" class="color-input" aria-label="Акцентный цвет" data-lang-aria="color_accent">
+                            </label>
+                            <label class="field">
+                                <span class="field-label" data-lang="c_bg">Фон</span>
+                                <input type="color" id="cp-bg" class="color-input" aria-label="Цвет фона" data-lang-aria="color_bg">
+                            </label>
+                            <label class="field">
+                                <span class="field-label" data-lang="c_text">Текст</span>
+                                <input type="color" id="cp-text" class="color-input" aria-label="Цвет текста" data-lang-aria="color_text">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title" data-lang="editor_settings">Настройки редактора</h3>
+                    <div id="editor-tools-list" class="settings-toggle-list"></div>
+                </div>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="UI.closeModal('settings-modal')" data-lang="close">Закрыть</button>
+            </footer>
+        </div>
+    </div>
+
+    <div id="share-fallback-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Ссылка">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="share_title">Ссылка</h2>
+                <button type="button" class="btn-icon" onclick="UI.closeModal('share-fallback-modal')" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <p id="share-fallback-message" class="muted" data-lang="share_invalid">Ссылка недействительна</p>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-primary" onclick="UI.closeModal('share-fallback-modal')" data-lang="close">Закрыть</button>
+            </footer>
+        </div>
+    </div>
+
     <div id="about-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
@@ -519,11 +602,11 @@
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
     <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .catch(() => null);
-            });
+        if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("./sw.js", { scope: "./" })
+                    .catch(() => null)
+            })
         }
     </script>
 </body>

@@ -14,10 +14,9 @@ const Editor = {
             toolbar: document.getElementById("editor-toolbar"),
             tagsInput: document.getElementById("note-tags-input"),
             tagsContainer: document.getElementById("note-tags-container"),
-            textSizePopup: document.getElementById("text-size-popup"),
-            fontRange: document.getElementById("font-size-range"),
             ctxMenu: document.getElementById("media-context-menu") || document.getElementById("media-context-menu")
         }
+        this.loadToolSettings()
         this.buildToolbar()
         this.bind()
     },
@@ -108,17 +107,8 @@ const Editor = {
     buildToolbar() {
         const root = this.els.toolbar
         if (!root) return
-        const tools = [
-            { i: "format_bold", cmd: () => document.execCommand("bold") },
-            { i: "format_italic", cmd: () => document.execCommand("italic") },
-            { i: "format_underlined", cmd: () => document.execCommand("underline") },
-            { i: "format_list_bulleted", cmd: () => document.execCommand("insertUnorderedList") },
-            { i: "format_list_numbered", cmd: () => document.execCommand("insertOrderedList") },
-            { i: "checklist", cmd: () => this.insertChecklistLine() },
-            { i: "image", cmd: () => document.getElementById("img-upload")?.click() },
-            { i: "title", cmd: () => this.toggleTextSizePopup() },
-            { i: "format_clear", cmd: () => document.execCommand("removeFormat") }
-        ]
+        const enabled = this.getEnabledTools()
+        const tools = this.getToolList().filter(t => enabled[t.id] !== false)
         root.innerHTML = tools.map((t, idx) => `
             <span class="tool-wrapper">
                 <button type="button" class="tool-btn" data-tool="${idx}" aria-label="${t.i}">
@@ -136,30 +126,51 @@ const Editor = {
                 this.els.content?.focus()
             })
         })
-        if (this.els.fontRange) {
-            this.els.fontRange.addEventListener("input", () => {
-                const v = parseInt(this.els.fontRange.value, 10)
-                const px = 10 + v * 2
-                document.execCommand("fontSize", false, "7")
-                const fonts = this.els.content.querySelectorAll("font[size='7']")
-                fonts.forEach(f => {
-                    f.removeAttribute("size")
-                    f.style.fontSize = `${px}px`
-                })
-                this.queueSnapshot()
-            })
-        }
     },
 
-    toggleTextSizePopup() {
-        const p = this.els.textSizePopup
-        if (!p) return
-        p.classList.toggle("hidden")
+    getToolList() {
+        return [
+            { id: "bold", i: "format_bold", label: "tool_bold", cmd: () => document.execCommand("bold") },
+            { id: "italic", i: "format_italic", label: "tool_italic", cmd: () => document.execCommand("italic") },
+            { id: "underline", i: "format_underlined", label: "tool_underline", cmd: () => document.execCommand("underline") },
+            { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => document.execCommand("insertUnorderedList") },
+            { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => document.execCommand("insertOrderedList") },
+            { id: "task", i: "checklist", label: "tool_task", cmd: () => this.insertChecklistLine() },
+            { id: "image", i: "image", label: "tool_image", cmd: () => document.getElementById("img-upload")?.click() },
+            { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
+        ]
+    },
+
+    getEnabledTools() {
+        return state.config.editorTools || {}
+    },
+
+    loadToolSettings() {
+        const defaults = {}
+        this.getToolList().forEach(tool => {
+            defaults[tool.id] = true
+        })
+        let stored = null
+        try {
+            stored = JSON.parse(localStorage.getItem("editor-tools"))
+        } catch {
+            stored = null
+        }
+        const next = { ...defaults, ...(stored || {}) }
+        state.config.editorTools = next
+        localStorage.setItem("editor-tools", JSON.stringify(next))
+    },
+
+    setToolEnabled(id, enabled) {
+        const current = this.getEnabledTools()
+        current[id] = !!enabled
+        state.config.editorTools = { ...current }
+        localStorage.setItem("editor-tools", JSON.stringify(state.config.editorTools))
+        this.buildToolbar()
     },
 
     insertChecklistLine() {
-        const html = `<div class="task-item"><input class="task-checkbox" type="checkbox" onchange="Editor.toggleTask(this)"><span>${Utils.escapeHtml((LANG[state.config.lang]||LANG.ru).task_item || "Задача")}</span></div>`
-        document.execCommand("insertHTML", false, html)
+        document.execCommand("strikeThrough")
     },
 
     toggleTask(el) {
@@ -205,7 +216,7 @@ const Editor = {
         const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
             id: Utils.generateId(),
             folderId: state.view === "folder" ? state.activeFolderId : null,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: Utils.serverTimestamp(),
             order: Date.now()
         })
         state.currentNote = JSON.parse(JSON.stringify(n))
@@ -311,7 +322,7 @@ const Editor = {
         if (!n) return
         n.title = String(this.els.title.value || "")
         n.content = String(this.els.content.innerHTML || "")
-        n.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
+        n.updatedAt = Utils.serverTimestamp()
         this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
         if (this.history.length > 80) this.history.shift()
         this.future = []

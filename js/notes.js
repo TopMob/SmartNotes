@@ -27,7 +27,8 @@ function renderNotes(list) {
     grid.innerHTML = list.map(n => {
         const title = n.title ? n.title : UI.getText("untitled_note", "Untitled")
         const preview = Utils.stripHtml(n.content || "").trim() || UI.getText("empty_note", "No content")
-        const lock = n.lock && n.lock.hidden ? `<span class="lock-badge"><i class="material-icons-round" aria-hidden="true" style="font-size:16px">lock</i><span>Locked</span></span>` : ""
+        const lockLabel = UI.getText("locked_note", "Locked")
+        const lock = n.lock && n.lock.hidden ? `<span class="lock-badge"><i class="material-icons-round" aria-hidden="true" style="font-size:16px">lock</i><span>${Utils.escapeHtml(lockLabel)}</span></span>` : ""
         const pinCls = n.isPinned ? "pinned" : ""
         const tagLine = Array.isArray(n.tags) && n.tags.length ? n.tags.slice(0, 3).map(t => `#${Utils.escapeHtml(String(t))}`).join(" ") : ""
         const date = Utils.formatDate(n.updatedAt || n.createdAt || Date.now())
@@ -54,6 +55,7 @@ function renderNotes(list) {
 function filterAndRender(query) {
     state.searchQuery = String(query || "")
     const q = state.searchQuery.trim()
+    if (state.view === "folder" && !state.activeFolderId) state.view = "notes"
     let list = state.notes.slice()
 
     if (state.view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
@@ -170,6 +172,7 @@ async function initApp() {
         .onSnapshot(snap => {
             state.notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
             filterAndRender(document.getElementById("search-input")?.value || "")
+            if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
         })
 
     const search = document.getElementById("search-input")
