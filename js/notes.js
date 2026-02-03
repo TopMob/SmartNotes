@@ -35,9 +35,9 @@ function renderNotes(list) {
         return `
             <div class="note-card ${pinCls}" draggable="true" data-note-id="${encodeURIComponent(n.id)}">
                 <div class="card-actions">
-                    <button type="button" class="action-btn" aria-label="Pin" onclick="event.stopPropagation(); togglePin('${n.id}')"><i class="material-icons-round" aria-hidden="true">push_pin</i></button>
-                    <button type="button" class="action-btn" aria-label="Star" onclick="event.stopPropagation(); toggleFavorite('${n.id}')"><i class="material-icons-round" aria-hidden="true">star</i></button>
-                    <button type="button" class="action-btn" aria-label="Menu" onclick="event.stopPropagation(); openNoteActions('${n.id}')"><i class="material-icons-round" aria-hidden="true">more_horiz</i></button>
+                    <button type="button" class="action-btn" data-action="pin-note" aria-label="${Utils.escapeHtml(UI.getText("pin_note", "Pin"))}"><i class="material-icons-round" aria-hidden="true">push_pin</i></button>
+                    <button type="button" class="action-btn" data-action="favorite-note" aria-label="${Utils.escapeHtml(UI.getText("favorite_note", "Favorite"))}"><i class="material-icons-round" aria-hidden="true">star</i></button>
+                    <button type="button" class="action-btn" data-action="note-actions" aria-label="${Utils.escapeHtml(UI.getText("note_actions", "Actions"))}"><i class="material-icons-round" aria-hidden="true">more_horiz</i></button>
                 </div>
                 <h3>${Utils.escapeHtml(title)}</h3>
                 <p>${Utils.escapeHtml(preview)}</p>
@@ -111,7 +111,7 @@ async function deleteFolder(folderId) {
             state.activeFolderId = null
             state.view = "notes"
         }
-        UI.showToast("Папка удалена")
+        UI.showToast(UI.getText("folder_deleted", "Folder deleted"))
     })
 }
 

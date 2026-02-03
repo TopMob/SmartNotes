@@ -539,6 +539,49 @@
     opacity: 0.9;
 }
 
+.settings-menu-list {
+    display: grid;
+    gap: 12px;
+}
+
+.settings-menu-item {
+    display: grid;
+    gap: 6px;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.settings-menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-menu-title {
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.settings-menu-desc {
+    font-size: 13px;
+    opacity: 0.75;
+}
+
+.settings-page-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.settings-page-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
 .settings-toggle-list {
     display: grid;
     gap: 10px;

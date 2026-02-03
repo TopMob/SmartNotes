@@ -34,6 +34,84 @@ const Utils = {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#39;")
     },
+    sanitizeHtml: (html) => {
+        if (!html) return ""
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(`<div>${html}</div>`, "text/html")
+        const allowedTags = new Set(["b","strong","i","em","u","br","p","div","ul","ol","li","span","img","a","input"])
+        const safeClasses = new Set(["task-item","task-text","task-checkbox","completed","media-wrapper","media-resize-handle","media-left","media-right"])
+        const walk = (node) => {
+            Array.from(node.childNodes).forEach(child => {
+                if (child.nodeType === 8) {
+                    child.remove()
+                    return
+                }
+                if (child.nodeType !== 1) return
+                const tag = child.tagName.toLowerCase()
+                if (!allowedTags.has(tag)) {
+                    const text = doc.createTextNode(child.textContent || "")
+                    child.replaceWith(text)
+                    return
+                }
+                Array.from(child.attributes).forEach(attr => {
+                    const name = attr.name.toLowerCase()
+                    if (name.startsWith("on") || name === "style") {
+                        child.removeAttribute(attr.name)
+                        return
+                    }
+                    if (name === "class") {
+                        const filtered = String(attr.value || "")
+                            .split(/\s+/)
+                            .map(x => x.trim())
+                            .filter(x => safeClasses.has(x))
+                        if (filtered.length) child.setAttribute("class", filtered.join(" "))
+                        else child.removeAttribute("class")
+                        return
+                    }
+                    const allowedForTag = {
+                        a: ["href"],
+                        img: ["src","alt"],
+                        div: ["data-width","data-height","data-scale"],
+                        span: [],
+                        p: [],
+                        ul: [],
+                        ol: [],
+                        li: [],
+                        input: ["type","checked"]
+                    }
+                    const allowed = allowedForTag[tag] || []
+                    if (!allowed.includes(name)) child.removeAttribute(attr.name)
+                })
+                if (tag === "a") {
+                    const href = child.getAttribute("href")
+                    if (!href || !/^(https?:|mailto:)/i.test(href)) {
+                        child.removeAttribute("href")
+                    } else if (/^https?:/i.test(href)) {
+                        child.setAttribute("target", "_blank")
+                        child.setAttribute("rel", "noopener noreferrer")
+                    }
+                }
+                if (tag === "img") {
+                    const src = child.getAttribute("src") || ""
+                    if (!/^https:\/\//i.test(src) && !/^data:image\//i.test(src)) {
+                        child.remove()
+                        return
+                    }
+                }
+                if (tag === "input") {
+                    const type = String(child.getAttribute("type") || "").toLowerCase()
+                    const cls = child.getAttribute("class") || ""
+                    if (type !== "checkbox" || !cls.split(/\s+/).includes("task-checkbox")) {
+                        child.remove()
+                        return
+                    }
+                }
+                walk(child)
+            })
+        }
+        walk(doc.body)
+        return doc.body.innerHTML
+    },
     adjustColor: (col, amt) => {
         if (!col) return "#000000"
         let c = String(col).trim()
@@ -134,6 +212,8 @@ const LANG = {
         empty: "Здесь пока пусто",
         general: "Общие",
         language: "Язык",
+        lang_ru: "Русский",
+        lang_en: "English",
         appearance: "Внешний вид",
         presets: "Пресеты",
         manual: "Ручная настройка",
@@ -186,7 +266,7 @@ const LANG = {
         restored: "Восстановлено",
         saving: "Сохранение...",
         saved: "Сохранено",
-        rate_required: "Поставьте оценку",
+        rate_required: "Сначала поставьте оценку",
         feedback_thanks: "Спасибо!",
         order_updated: "Порядок обновлен",
         undo: "Отменить",
@@ -203,6 +283,11 @@ const LANG = {
         share_invalid: "Ссылка недействительна",
         share_missing: "Заметка не найдена",
         share_title: "Ссылка",
+        share_modal_title: "Поделиться",
+        share_modal_hint: "Ссылка будет сгенерирована и появится здесь",
+        collab_modal_title: "Совместное редактирование",
+        collab_modal_hint: "Одноразовая ссылка будет сгенерирована и появится здесь",
+        copy: "Копировать",
         mic_unsupported: "Микрофон не поддерживается",
         mic_denied: "Нет доступа к микрофону",
         recording: "Запись...",
@@ -213,6 +298,12 @@ const LANG = {
         confirm_delete_folder: "Удалить папку?",
         confirm_default: "Подтвердите",
         auth_unavailable: "Авторизация недоступна",
+        auth_popup_closed: "Вход отменен",
+        auth_network_failed: "Нет соединения с интернетом",
+        auth_popup_cancelled: "Запрос отменен",
+        auth_error: "Ошибка входа",
+        auth_signout_error: "Ошибка при выходе",
+        auth_switch_error: "Ошибка входа",
         move_toolbar: "Переместить панель",
         toolbar_show: "Показать панель инструментов",
         toolbar_hide: "Скрыть панель инструментов",
@@ -229,6 +320,11 @@ const LANG = {
         close_menu: "Закрыть меню",
         add_folder: "Создать папку",
         open_menu: "Открыть меню",
+        login_aria: "Авторизация",
+        nav_aria: "Навигация",
+        sections_aria: "Разделы",
+        user_menu: "Пользователь",
+        user_avatar: "Пользователь",
         search_aria: "Поиск заметок",
         create_note: "Создать заметку",
         create_folder: "Создать папку",
@@ -238,6 +334,10 @@ const LANG = {
         delete_note: "Удалить заметку",
         note_title_aria: "Заголовок заметки",
         note_body_aria: "Текст заметки",
+        notes_list_aria: "Список заметок",
+        editor_actions_aria: "Действия редактора",
+        editor_tools_aria: "Инструменты редактора",
+        tags_aria: "Теги",
         note_tags_aria: "Добавить тег",
         save_note: "Сохранить",
         prompt_title: "Ввод",
@@ -258,30 +358,50 @@ const LANG = {
         photo_color: "Цвет кисти",
         photo_width: "Толщина кисти",
         clear: "Очистить",
+        smart_features: "УМНЫЕ ФУНКЦИИ",
+        lock_center: "Защита заметок",
+        lock_center_title: "Защита заметок",
+        lock_center_hint: "Тут будут фильтры скрытых заметок и быстрые действия",
+        lock_modal_title: "Блокировка",
+        lock_password: "Пароль",
+        lock_apply: "Применить",
+        lock_empty: "Пароль пустой",
+        lock_saved: "Заметка скрыта",
+        lock_invalid: "Неверный пароль",
+        note_deleted: "Удалено",
+        folder_deleted: "Папка удалена",
+        media_menu: "Меню изображения",
+        share: "Поделиться",
+        collab: "Совместное редактирование",
+        lock_note: "Заблокировать заметку",
+        rating_aria: "Оценка",
+        feedback_error: "Не удалось отправить отзыв",
+        collab_enabled: "Совместный режим включен",
+        reorder_disabled_search: "Перетаскивание отключено во время поиска",
+        photo_editor_hint: "Откройте редактор фото из панели",
+        settings_menu_title: "Настройки",
+        settings_general: "Общие",
+        settings_appearance: "Внешний вид",
+        settings_editor_tools: "Инструменты редактора",
+        settings_back: "Назад",
+        settings_category_general_desc: "Язык, вид папок и анимации",
+        settings_category_appearance_desc: "Пресеты и цвета интерфейса",
+        settings_category_editor_tools_desc: "Показать или скрыть инструменты",
         folder_view_aria: "Режим отображения папок",
         color_text: "Цвет текста",
         color_accent: "Акцентный цвет",
         color_bg: "Цвет фона",
         feedback_aria: "Ваш отзыв",
-        theme_light: "Светлая",
-        theme_dark: "Темная",
+        theme_dark_default: "Тёмная по умолчанию",
         theme_system: "Системная",
-        theme_high_contrast: "Высокий контраст",
-        theme_oled: "OLED",
-        theme_monochrome: "Монохром",
-        theme_pastel: "Пастель",
-        theme_warm: "Теплая",
-        theme_cold: "Холодная",
-        theme_minimal: "Минимал",
-        theme_compact: "Компактная",
-        theme_spacious: "Просторная",
-        theme_accessibility: "Доступность",
-        theme_glass: "Стекло",
-        theme_matte: "Матовая",
-        theme_neon: "Неон",
-        theme_paper: "Бумага",
-        theme_sunrise: "Рассвет",
-        theme_ocean: "Океан"
+        theme_light: "Светлая",
+        theme_graphite: "Графит",
+        theme_neon_cyan: "Неоновый циан",
+        theme_emerald_calm: "Изумрудный покой",
+        theme_violet_pulse: "Фиолетовый импульс",
+        theme_ocean_deep: "Глубокий океан",
+        theme_oled_pure: "OLED чистый",
+        theme_manual: "Ручная"
     },
     en: {
         app_name: "SmartNotes",
@@ -301,6 +421,8 @@ const LANG = {
         empty: "Nothing here yet",
         general: "General",
         language: "Language",
+        lang_ru: "Russian",
+        lang_en: "English",
         appearance: "Appearance",
         presets: "Presets",
         manual: "Manual Config",
@@ -353,7 +475,7 @@ const LANG = {
         restored: "Restored",
         saving: "Saving...",
         saved: "Saved",
-        rate_required: "Please rate the app",
+        rate_required: "Please rate first",
         feedback_thanks: "Thanks!",
         order_updated: "Order updated",
         undo: "Undo",
@@ -370,6 +492,11 @@ const LANG = {
         share_invalid: "Invalid link",
         share_missing: "Note not found",
         share_title: "Link",
+        share_modal_title: "Share",
+        share_modal_hint: "A link will be generated and appear here",
+        collab_modal_title: "Collaborative editing",
+        collab_modal_hint: "A one-time link will be generated and appear here",
+        copy: "Copy",
         mic_unsupported: "Microphone not supported",
         mic_denied: "Microphone access denied",
         recording: "Recording...",
@@ -380,6 +507,12 @@ const LANG = {
         confirm_delete_folder: "Delete folder?",
         confirm_default: "Confirm",
         auth_unavailable: "Authentication unavailable",
+        auth_popup_closed: "Sign-in canceled",
+        auth_network_failed: "No internet connection",
+        auth_popup_cancelled: "Request canceled",
+        auth_error: "Sign-in error",
+        auth_signout_error: "Sign-out failed",
+        auth_switch_error: "Sign-in failed",
         move_toolbar: "Move toolbar",
         toolbar_show: "Show toolbar",
         toolbar_hide: "Hide toolbar",
@@ -396,6 +529,11 @@ const LANG = {
         close_menu: "Close menu",
         add_folder: "Create folder",
         open_menu: "Open menu",
+        login_aria: "Sign in",
+        nav_aria: "Navigation",
+        sections_aria: "Sections",
+        user_menu: "User",
+        user_avatar: "User",
         search_aria: "Search notes",
         create_note: "Create note",
         create_folder: "Create folder",
@@ -405,6 +543,10 @@ const LANG = {
         delete_note: "Delete note",
         note_title_aria: "Note title",
         note_body_aria: "Note body",
+        notes_list_aria: "Notes list",
+        editor_actions_aria: "Editor actions",
+        editor_tools_aria: "Editor tools",
+        tags_aria: "Tags",
         note_tags_aria: "Add tag",
         save_note: "Save",
         prompt_title: "Input",
@@ -425,41 +567,61 @@ const LANG = {
         photo_color: "Brush color",
         photo_width: "Brush width",
         clear: "Clear",
+        smart_features: "SMART FEATURES",
+        lock_center: "Note security",
+        lock_center_title: "Note security",
+        lock_center_hint: "Hidden note filters and quick actions will appear here",
+        lock_modal_title: "Lock",
+        lock_password: "Password",
+        lock_apply: "Apply",
+        lock_empty: "Password is empty",
+        lock_saved: "Note hidden",
+        lock_invalid: "Wrong password",
+        note_deleted: "Deleted",
+        folder_deleted: "Folder deleted",
+        media_menu: "Image menu",
+        share: "Share",
+        collab: "Collaborative editing",
+        lock_note: "Lock note",
+        rating_aria: "Rating",
+        feedback_error: "Could not send feedback",
+        collab_enabled: "Collaboration enabled",
+        reorder_disabled_search: "Reorder disabled while searching",
+        photo_editor_hint: "Open the photo editor from the toolbar",
+        settings_menu_title: "Settings",
+        settings_general: "General",
+        settings_appearance: "Appearance",
+        settings_editor_tools: "Editor tools",
+        settings_back: "Back",
+        settings_category_general_desc: "Language, folder view, and motion",
+        settings_category_appearance_desc: "Presets and interface colors",
+        settings_category_editor_tools_desc: "Show or hide toolbar tools",
         folder_view_aria: "Folder view mode",
         color_text: "Text color",
         color_accent: "Accent color",
         color_bg: "Background color",
         feedback_aria: "Your feedback",
-        theme_light: "Light",
-        theme_dark: "Dark",
+        theme_dark_default: "Dark default",
         theme_system: "System",
-        theme_high_contrast: "High Contrast",
-        theme_oled: "OLED",
-        theme_monochrome: "Monochrome",
-        theme_pastel: "Pastel",
-        theme_warm: "Warm",
-        theme_cold: "Cold",
-        theme_minimal: "Minimal",
-        theme_compact: "Compact",
-        theme_spacious: "Spacious",
-        theme_accessibility: "Accessibility",
-        theme_glass: "Glass",
-        theme_matte: "Matte",
-        theme_neon: "Neon",
-        theme_paper: "Paper",
-        theme_sunrise: "Sunrise",
-        theme_ocean: "Ocean"
+        theme_light: "Light",
+        theme_graphite: "Graphite",
+        theme_neon_cyan: "Neon cyan",
+        theme_emerald_calm: "Emerald calm",
+        theme_violet_pulse: "Violet pulse",
+        theme_ocean_deep: "Ocean deep",
+        theme_oled_pure: "OLED pure",
+        theme_manual: "Manual"
     }
 }
 
 const ThemeManager = {
     themes: {
-        light: {
-            p: "#2563eb",
-            bg: "#f8fafc",
-            t: "#0b1220",
-            border: "rgba(2, 6, 23, 0.12)",
-            blur: 12,
+        dark: {
+            p: "#00f2ff",
+            bg: "#050508",
+            t: "#fefeff",
+            border: "rgba(255, 255, 255, 0.12)",
+            blur: 18,
             motion: 1.0,
             density: 1,
             radius: 12,
@@ -471,19 +633,20 @@ const ThemeManager = {
             editorPadding: 30,
             editorLineHeight: 1.72,
             editorLetterSpacing: "0px",
-            shadow: "0 20px 35px rgba(2, 6, 23, 0.18)",
-            shadowSmall: "0 10px 18px rgba(2, 6, 23, 0.12)",
-            toolbarBg: "rgba(2, 6, 23, 0.04)",
-            toolbarBorder: "rgba(2, 6, 23, 0.08)",
-            toolbarShadow: "0 18px 28px rgba(2, 6, 23, 0.08)"
+            shadow: "0 22px 44px rgba(0, 0, 0, 0.6)",
+            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.45)",
+            toolbarBg: "rgba(255, 255, 255, 0.04)",
+            toolbarBorder: "rgba(255, 255, 255, 0.08)",
+            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.6)"
         },
-        dark: {
-            p: "#00f2ff",
-            bg: "#050505",
-            t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.1)",
-            blur: 18,
-            motion: 1.0,
+        system: { preset: "system" },
+        light: {
+            p: "#2563eb",
+            bg: "#f8fafc",
+            t: "#0b1220",
+            border: "rgba(2, 6, 23, 0.12)",
+            blur: 10,
+            motion: 0.95,
             density: 1,
             radius: 12,
             radiusScale: 1,
@@ -491,47 +654,68 @@ const ThemeManager = {
             hitSize: 44,
             typeScale: 1.0,
             spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.7,
+            editorPadding: 28,
+            editorLineHeight: 1.68,
             editorLetterSpacing: "0px",
-            shadow: "0 20px 40px rgba(0, 0, 0, 0.55)",
-            shadowSmall: "0 10px 18px rgba(0, 0, 0, 0.4)",
-            toolbarBg: "rgba(255, 255, 255, 0.03)",
-            toolbarBorder: "rgba(255, 255, 255, 0.08)",
-            toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.55)"
+            shadow: "0 20px 35px rgba(2, 6, 23, 0.16)",
+            shadowSmall: "0 10px 18px rgba(2, 6, 23, 0.12)",
+            toolbarBg: "rgba(2, 6, 23, 0.05)",
+            toolbarBorder: "rgba(2, 6, 23, 0.12)",
+            toolbarShadow: "0 18px 28px rgba(2, 6, 23, 0.12)"
         },
-        system: { preset: "system" },
-
-        purple: {
-            p: "#a855f7",
-            bg: "#07050b",
-            t: "#f8f7ff",
-            border: "rgba(248, 247, 255, 0.1)",
-            blur: 20,
-            motion: 1.04,
+        graphite: {
+            p: "#9aa3b2",
+            bg: "#0b0d12",
+            t: "#e6e9ef",
+            border: "rgba(230, 233, 239, 0.08)",
+            blur: 12,
+            motion: 0.9,
+            density: 0.95,
+            radius: 10,
+            radiusScale: 0.95,
+            fontBase: 16,
+            hitSize: 42,
+            typeScale: 0.98,
+            spaceUnit: 11,
+            editorPadding: 26,
+            editorLineHeight: 1.65,
+            editorLetterSpacing: "0px",
+            shadow: "0 16px 30px rgba(0, 0, 0, 0.5)",
+            shadowSmall: "0 8px 16px rgba(0, 0, 0, 0.4)",
+            toolbarBg: "rgba(255, 255, 255, 0.02)",
+            toolbarBorder: "rgba(255, 255, 255, 0.06)",
+            toolbarShadow: "0 14px 26px rgba(0, 0, 0, 0.5)"
+        },
+        neon: {
+            p: "#00f2ff",
+            bg: "#03050c",
+            t: "#f7fbff",
+            border: "rgba(221, 244, 255, 0.16)",
+            blur: 26,
+            motion: 1.08,
             density: 1,
-            radius: 13,
-            radiusScale: 1.05,
+            radius: 14,
+            radiusScale: 1.1,
             fontBase: 16,
             hitSize: 44,
-            typeScale: 1.02,
-            spaceUnit: 12,
-            editorPadding: 32,
-            editorLineHeight: 1.74,
-            editorLetterSpacing: "0.1px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(168, 85, 247, 0.10)",
-            toolbarBorder: "rgba(248, 247, 255, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
+            typeScale: 1.04,
+            spaceUnit: 13,
+            editorPadding: 34,
+            editorLineHeight: 1.78,
+            editorLetterSpacing: "0.2px",
+            shadow: "0 30px 60px rgba(0, 0, 0, 0.7)",
+            shadowSmall: "0 14px 26px rgba(0, 0, 0, 0.55)",
+            toolbarBg: "rgba(0, 242, 255, 0.12)",
+            toolbarBorder: "rgba(199, 244, 255, 0.22)",
+            toolbarShadow: "0 20px 36px rgba(0, 0, 0, 0.7)"
         },
-        green: {
+        emerald: {
             p: "#22c55e",
-            bg: "#040a06",
-            t: "#f6fff9",
-            border: "rgba(246, 255, 249, 0.1)",
+            bg: "#040a08",
+            t: "#f2fff7",
+            border: "rgba(242, 255, 247, 0.12)",
             blur: 18,
-            motion: 1.02,
+            motion: 1.0,
             density: 1,
             radius: 12,
             radiusScale: 1.03,
@@ -542,17 +726,40 @@ const ThemeManager = {
             editorPadding: 30,
             editorLineHeight: 1.72,
             editorLetterSpacing: "0px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.62)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.42)",
+            shadow: "0 24px 44px rgba(0, 0, 0, 0.62)",
+            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
             toolbarBg: "rgba(34, 197, 94, 0.08)",
-            toolbarBorder: "rgba(246, 255, 249, 0.14)",
+            toolbarBorder: "rgba(226, 255, 238, 0.16)",
             toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.6)"
         },
-        red: {
-            p: "#ef4444",
-            bg: "#0b0505",
-            t: "#fff7f7",
-            border: "rgba(255, 247, 247, 0.1)",
+        violet: {
+            p: "#a855f7",
+            bg: "#07050d",
+            t: "#f8f5ff",
+            border: "rgba(248, 245, 255, 0.14)",
+            blur: 22,
+            motion: 1.05,
+            density: 1,
+            radius: 14,
+            radiusScale: 1.12,
+            fontBase: 16,
+            hitSize: 44,
+            typeScale: 1.03,
+            spaceUnit: 13,
+            editorPadding: 34,
+            editorLineHeight: 1.76,
+            editorLetterSpacing: "0.15px",
+            shadow: "0 28px 52px rgba(0, 0, 0, 0.68)",
+            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.5)",
+            toolbarBg: "rgba(168, 85, 247, 0.12)",
+            toolbarBorder: "rgba(248, 245, 255, 0.18)",
+            toolbarShadow: "0 20px 34px rgba(0, 0, 0, 0.68)"
+        },
+        ocean: {
+            p: "#3b82f6",
+            bg: "#030816",
+            t: "#f0f6ff",
+            border: "rgba(227, 240, 255, 0.12)",
             blur: 20,
             motion: 1.03,
             density: 1,
@@ -560,86 +767,39 @@ const ThemeManager = {
             radiusScale: 1.06,
             fontBase: 16,
             hitSize: 44,
-            typeScale: 1.01,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.72,
-            editorLetterSpacing: "0px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(239, 68, 68, 0.10)",
-            toolbarBorder: "rgba(255, 247, 247, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
-        },
-        blue: {
-            p: "#3b82f6",
-            bg: "#04070f",
-            t: "#f5f9ff",
-            border: "rgba(245, 249, 255, 0.1)",
-            blur: 20,
-            motion: 1.05,
-            density: 1,
-            radius: 12,
-            radiusScale: 1.04,
-            fontBase: 16,
-            hitSize: 44,
             typeScale: 1.02,
             spaceUnit: 13,
             editorPadding: 32,
             editorLineHeight: 1.75,
-            editorLetterSpacing: "0.15px",
-            shadow: "0 26px 50px rgba(0, 0, 0, 0.65)",
+            editorLetterSpacing: "0.12px",
+            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
             shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(59, 130, 246, 0.10)",
-            toolbarBorder: "rgba(245, 249, 255, 0.14)",
+            toolbarBg: "rgba(59, 130, 246, 0.1)",
+            toolbarBorder: "rgba(227, 240, 255, 0.18)",
             toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
         },
-
         oled: {
             p: "#00f2ff",
             bg: "#000000",
             t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.12)",
-            blur: 16,
-            motion: 1.0,
+            border: "rgba(255, 255, 255, 0.16)",
+            blur: 8,
+            motion: 0.95,
             density: 1,
-            radius: 12,
-            radiusScale: 1,
+            radius: 10,
+            radiusScale: 0.9,
             fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.0,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.7,
+            hitSize: 42,
+            typeScale: 0.98,
+            spaceUnit: 11,
+            editorPadding: 26,
+            editorLineHeight: 1.64,
             editorLetterSpacing: "0px",
-            shadow: "0 22px 44px rgba(0, 0, 0, 0.7)",
-            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.55)",
-            toolbarBg: "rgba(255, 255, 255, 0.03)",
-            toolbarBorder: "rgba(255, 255, 255, 0.1)",
-            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.7)"
-        },
-        neon: {
-            p: "#00f2ff",
-            bg: "#04040a",
-            t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.1)",
-            blur: 22,
-            motion: 1.06,
-            density: 1,
-            radius: 13,
-            radiusScale: 1.08,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.03,
-            spaceUnit: 13,
-            editorPadding: 32,
-            editorLineHeight: 1.74,
-            editorLetterSpacing: "0.15px",
-            shadow: "0 28px 56px rgba(0, 0, 0, 0.7)",
-            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.5)",
-            toolbarBg: "rgba(0, 242, 255, 0.10)",
-            toolbarBorder: "rgba(226, 242, 255, 0.18)",
-            toolbarShadow: "0 18px 34px rgba(0, 0, 0, 0.7)"
+            shadow: "0 18px 36px rgba(0, 0, 0, 0.75)",
+            shadowSmall: "0 10px 18px rgba(0, 0, 0, 0.6)",
+            toolbarBg: "rgba(255, 255, 255, 0.02)",
+            toolbarBorder: "rgba(255, 255, 255, 0.12)",
+            toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.75)"
         }
     },
 
@@ -798,26 +958,32 @@ const ThemeManager = {
 
         const dict = LANG[state.config.lang] || LANG.ru
         const labels = {
-            light: dict.theme_light || "Light",
-            dark: dict.theme_dark || "Dark",
+            dark: dict.theme_dark_default || "Dark default",
             system: dict.theme_system || "System",
-            oled: dict.theme_oled || "OLED",
-            neon: dict.theme_neon || "Neon",
-            purple: "Purple",
-            green: "Green",
-            red: "Red",
-            blue: "Blue"
+            light: dict.theme_light || "Light",
+            graphite: dict.theme_graphite || "Graphite",
+            neon: dict.theme_neon_cyan || "Neon cyan",
+            emerald: dict.theme_emerald_calm || "Emerald calm",
+            violet: dict.theme_violet_pulse || "Violet pulse",
+            ocean: dict.theme_ocean_deep || "Ocean deep",
+            oled: dict.theme_oled_pure || "OLED pure",
+            manual: dict.theme_manual || "Manual"
         }
 
-        const ordered = ["system", "dark", "light", "purple", "blue", "green", "red", "neon", "oled"]
+        const ordered = ["system", "dark", "graphite", "neon", "emerald", "violet", "ocean", "oled", "light", "manual"]
 
         const current = localStorage.getItem("app-theme-settings")
         const parsed = current ? JSON.parse(current) : null
-        const activeKey = parsed?.preset ? parsed.preset : null
+        const activeKey = parsed?.preset ? parsed.preset : "manual"
+        const manual = parsed?.preset ? null : {
+            p: typeof parsed?.p === "string" ? parsed.p : this.themes.dark.p,
+            bg: typeof parsed?.bg === "string" ? parsed.bg : this.themes.dark.bg,
+            t: typeof parsed?.t === "string" ? parsed.t : this.themes.dark.t
+        }
 
         ordered.forEach((key) => {
-            const t = this.themes[key]
-            if (!t) return
+            const t = key === "manual" ? null : this.themes[key]
+            if (key !== "manual" && !t) return
 
             const wrapper = document.createElement("div")
             wrapper.className = "theme-item-wrapper"
@@ -825,24 +991,29 @@ const ThemeManager = {
             const dot = document.createElement("div")
             dot.className = "theme-dot"
 
-            const color = t.p || (key === "system" ? "#6366f1" : "#00f2ff")
+            const color = key === "manual" && manual ? manual.p : (t?.p || (key === "system" ? "#6366f1" : "#00f2ff"))
             dot.style.background = color
 
             const glow = Utils.hexToRgb(color)
             if (glow) dot.style.boxShadow = `0 0 0 1px rgba(255,255,255,0.14), 0 10px 22px rgba(${glow.r},${glow.g},${glow.b},0.28)`
 
-            const isActive = activeKey ? activeKey === key : key === "dark"
+            const isActive = activeKey === key
             if (isActive) dot.classList.add("active")
 
             const label = document.createElement("span")
             label.className = "theme-label"
             label.textContent = labels[key] || key.charAt(0).toUpperCase() + key.slice(1)
 
-            dot.onclick = () => {
-                this.applyPreset(key)
+            dot.addEventListener("click", () => {
+                if (key === "manual") {
+                    const base = manual || { p: this.themes.dark.p, bg: this.themes.dark.bg, t: this.themes.dark.t }
+                    this.setManual(base.p, base.bg, base.t)
+                } else {
+                    this.applyPreset(key)
+                }
                 root.querySelectorAll(".theme-dot").forEach(d => d.classList.remove("active"))
                 dot.classList.add("active")
-            }
+            })
 
             wrapper.append(dot, label)
             root.appendChild(wrapper)
@@ -922,7 +1093,7 @@ const Auth = {
             this.resetSession()
         } catch {
             this.applySignedInUI(state.user)
-            if (typeof UI !== "undefined") UI.showToast("Ошибка при выходе")
+            if (typeof UI !== "undefined") UI.showToast(UI.getText("auth_signout_error", "Sign-out failed"))
         }
     },
 
@@ -935,19 +1106,20 @@ const Auth = {
             await this.login()
         } catch {
             this.applySignedInUI(state.user)
-            if (typeof UI !== "undefined") UI.showToast("Ошибка входа")
+            if (typeof UI !== "undefined") UI.showToast(UI.getText("auth_switch_error", "Sign-in failed"))
         }
     },
 
     handleAuthError(e) {
         const code = e && e.code ? e.code : "auth/unknown"
         const messages = {
-            "auth/popup-closed-by-user": "Вход отменен",
-            "auth/network-request-failed": "Нет соединения с интернетом",
-            "auth/cancelled-popup-request": "Запрос отменен"
+            "auth/popup-closed-by-user": "auth_popup_closed",
+            "auth/network-request-failed": "auth_network_failed",
+            "auth/cancelled-popup-request": "auth_popup_cancelled"
         }
-        const msg = messages[code] || `Ошибка входа: ${code}`
-        if (typeof UI !== "undefined") UI.showToast(msg)
+        const key = messages[code] || "auth_error"
+        const msg = (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, key) : key
+        if (typeof UI !== "undefined") UI.showToast(code && !messages[code] ? `${msg}: ${code}` : msg)
         else alert(msg)
     },
 

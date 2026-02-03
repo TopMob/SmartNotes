@@ -4,6 +4,7 @@ const UI = {
     draggedNoteId: null,
     dragTargetId: null,
     dragPosition: null,
+    settingsPage: null,
     visibleNotes: [],
 
     init() {
@@ -37,9 +38,9 @@ const UI = {
         this.applyLangToDom()
         this.updateViewTitle()
         this.updatePrimaryActionLabel()
+        this.renderSettingsPage()
         ThemeManager.renderPicker()
         this.syncSettingsUI()
-        this.renderEditorSettings()
     },
 
     applyLangToDom() {
@@ -56,10 +57,93 @@ const UI = {
             const k = el.getAttribute("data-lang-aria")
             if (k && dict[k]) el.setAttribute("aria-label", dict[k])
         })
+        document.querySelectorAll("[data-lang-alt]").forEach(el => {
+            const k = el.getAttribute("data-lang-alt")
+            if (k && dict[k]) el.setAttribute("alt", dict[k])
+        })
+        this.updateViewTitle()
+        this.updatePrimaryActionLabel()
+        if (document.getElementById("settings-modal")?.classList.contains("active")) {
+            this.renderSettingsPage()
+        }
     },
 
     bindEvents() {
         document.addEventListener("click", (e) => {
+            const actionEl = e.target.closest("[data-action]")
+            if (actionEl) {
+                const action = actionEl.dataset.action
+                if (["pin-note","favorite-note","note-actions","delete-folder"].includes(action)) {
+                    e.stopPropagation()
+                }
+                if (action === "login") Auth.login()
+                if (action === "toggle-sidebar") {
+                    if (actionEl.dataset.force === "close") this.toggleSidebar(false)
+                    else if (actionEl.dataset.force === "open") this.toggleSidebar(true)
+                    else this.toggleSidebar()
+                }
+                if (action === "switch-view") {
+                    switchView(actionEl.dataset.view)
+                    this.toggleSidebar(false)
+                }
+                if (action === "open-folder") {
+                    switchView("folder", actionEl.dataset.folderId)
+                    this.toggleSidebar(false)
+                }
+                if (action === "primary-action") {
+                    this.primaryAction()
+                    this.toggleSidebar(false)
+                }
+                if (action === "open-modal") this.openModal(actionEl.dataset.modal)
+                if (action === "close-modal") this.closeModal(actionEl.dataset.modal)
+                if (action === "open-settings") this.openSettings()
+                if (action === "toggle-user-menu") this.toggleUserMenu()
+                if (action === "switch-account") this.showConfirm("account", () => Auth.switchAccount())
+                if (action === "logout") this.showConfirm("exit", () => Auth.logout())
+                if (action === "trigger-import") this.triggerImport()
+                if (action === "editor-close") Editor.close()
+                if (action === "editor-undo") Editor.undo()
+                if (action === "editor-redo") Editor.redo()
+                if (action === "editor-delete") Editor.deleteCurrent()
+                if (action === "editor-save") Editor.save()
+                if (action === "download-note") this.downloadSelectedNote()
+                if (action === "upload-note") this.uploadSelectedNote()
+                if (action === "media-reset") Editor.resetMediaTransform()
+                if (action === "media-align-left") Editor.alignMediaOrText("left")
+                if (action === "media-align-right") Editor.alignMediaOrText("right")
+                if (action === "media-draw") Editor.drawOnSelectedMedia()
+                if (action === "media-delete") Editor.deleteSelectedMedia()
+                if (action === "copy-link") {
+                    const input = document.getElementById(actionEl.dataset.target || "")
+                    const val = input ? input.value : ""
+                    if (navigator.clipboard && val) navigator.clipboard.writeText(val)
+                }
+                if (action === "submit-feedback") this.submitFeedback()
+                if (action === "settings-back") this.backSettingsPage()
+                if (action === "open-settings-page") this.openSettingsPage(actionEl.dataset.page)
+                if (action === "sketch-undo") SketchService.undo()
+                if (action === "sketch-clear") SketchService.clear()
+                if (action === "sketch-save") SketchService.save()
+                if (action === "photo-undo") PhotoEditor.undo()
+                if (action === "photo-clear") PhotoEditor.clear()
+                if (action === "photo-save") PhotoEditor.save()
+                if (action === "note-actions") {
+                    const card = actionEl.closest(".note-card")
+                    if (card?.dataset.noteId) openNoteActions(decodeURIComponent(card.dataset.noteId))
+                }
+                if (action === "pin-note") {
+                    const card = actionEl.closest(".note-card")
+                    if (card?.dataset.noteId) togglePin(decodeURIComponent(card.dataset.noteId))
+                }
+                if (action === "favorite-note") {
+                    const card = actionEl.closest(".note-card")
+                    if (card?.dataset.noteId) toggleFavorite(decodeURIComponent(card.dataset.noteId))
+                }
+                if (action === "delete-folder") {
+                    const folderId = actionEl.dataset.folderId
+                    if (folderId) deleteFolder(folderId)
+                }
+            }
             if (this.els.sidebar?.classList.contains("active") && !this.els.sidebar.contains(e.target) && !e.target.closest("#menu-toggle")) {
                 this.toggleSidebar(false)
             }
@@ -89,7 +173,7 @@ const UI = {
 
         this.els.grid?.addEventListener("click", async (e) => {
             const card = e.target.closest(".note-card")
-            const action = e.target.closest(".action-btn")
+            const action = e.target.closest("[data-action]")
             if (action) return
             if (!card) return
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
@@ -100,6 +184,11 @@ const UI = {
         this.els.grid?.addEventListener("dragstart", (e) => {
             const card = e.target.closest(".note-card")
             if (!card) return
+            if (state.searchQuery && state.searchQuery.trim()) {
+                e.preventDefault()
+                this.showToast(this.getText("reorder_disabled_search", "Reorder disabled while searching"))
+                return
+            }
             this.draggedNoteId = decodeURIComponent(card.dataset.noteId)
             card.classList.add("dragging")
             e.dataTransfer.effectAllowed = "move"
@@ -133,25 +222,23 @@ const UI = {
             if (card) card.classList.remove("dragging")
             this.clearDragIndicators()
             this.draggedNoteId = null
+            this.dragTargetId = null
+            this.dragPosition = null
         })
+
+        const search = document.getElementById("search-input")
+        if (search) {
+            search.addEventListener("input", (e) => filterAndRender(e.target.value))
+        }
 
         const noteImport = document.getElementById("note-import")
         if (noteImport) noteImport.addEventListener("change", (e) => this.handleNoteImport(e))
 
-        const shareModal = document.getElementById("share-modal")
-        if (shareModal) shareModal.addEventListener("click", (e) => { if (e.target === shareModal) this.closeModal("share-modal") })
-
-        const collabModal = document.getElementById("collab-modal")
-        if (collabModal) collabModal.addEventListener("click", (e) => { if (e.target === collabModal) this.closeModal("collab-modal") })
-
-        const lockModal = document.getElementById("lock-modal")
-        if (lockModal) lockModal.addEventListener("click", (e) => { if (e.target === lockModal) this.closeModal("lock-modal") })
-
-        const settingsModal = document.getElementById("settings-modal")
-        if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) this.closeModal("settings-modal") })
-
-        const shareFallbackModal = document.getElementById("share-fallback-modal")
-        if (shareFallbackModal) shareFallbackModal.addEventListener("click", (e) => { if (e.target === shareFallbackModal) this.closeModal("share-fallback-modal") })
+        document.querySelectorAll(".modal-overlay[data-close-on-overlay='true']").forEach(modal => {
+            modal.addEventListener("click", (e) => {
+                if (e.target === modal) this.closeModal(modal.id)
+            })
+        })
     },
 
     bindSettings() {
@@ -310,15 +397,164 @@ const UI = {
         const el = document.getElementById(id)
         if (!el) return
         el.classList.remove("active")
-        if (id === "appearance-modal") ThemeManager.revertToLastSaved()
     },
 
     openSettings() {
+        this.settingsPage = null
         this.openModal("settings-modal")
+        this.renderSettingsPage()
         this.syncSettingsUI()
-        this.renderEditorSettings()
-        ThemeManager.renderPicker()
-        ThemeManager.setupColorInputs()
+    },
+
+    openSettingsPage(page) {
+        this.settingsPage = page || null
+        this.renderSettingsPage()
+    },
+
+    backSettingsPage() {
+        this.settingsPage = null
+        this.renderSettingsPage()
+    },
+
+    renderSettingsPage() {
+        const root = document.getElementById("settings-content")
+        if (!root) return
+        const lang = state.config.lang
+        const dict = LANG[lang] || LANG.ru
+        if (!this.settingsPage) {
+            root.innerHTML = `
+                <div class="settings-menu-list">
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="general">
+                        <div class="settings-menu-title">${dict.settings_general || "General"}</div>
+                        <div class="settings-menu-desc">${dict.settings_category_general_desc || ""}</div>
+                    </button>
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="appearance">
+                        <div class="settings-menu-title">${dict.settings_appearance || "Appearance"}</div>
+                        <div class="settings-menu-desc">${dict.settings_category_appearance_desc || ""}</div>
+                    </button>
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="editor_tools">
+                        <div class="settings-menu-title">${dict.settings_editor_tools || "Editor tools"}</div>
+                        <div class="settings-menu-desc">${dict.settings_category_editor_tools_desc || ""}</div>
+                    </button>
+                </div>
+            `
+            return
+        }
+        if (this.settingsPage === "general") {
+            root.innerHTML = `
+                <div class="settings-page-header">
+                    <button type="button" class="btn-icon" data-action="settings-back" aria-label="${dict.settings_back || "Back"}">
+                        <i class="material-icons-round" aria-hidden="true">arrow_back</i>
+                    </button>
+                    <div class="settings-page-title">${dict.settings_general || "General"}</div>
+                </div>
+                <div class="settings-section">
+                    <div class="field">
+                        <span class="field-label">${dict.language || "Language"}</span>
+                        <select id="settings-language" class="input-area" aria-label="${dict.language || "Language"}">
+                            <option value="ru">${dict.lang_ru || "Русский"}</option>
+                            <option value="en">${dict.lang_en || "English"}</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <span class="field-label">${dict.folder_view_mode || "Display"}</span>
+                        <select id="settings-folder-view" class="input-area" aria-label="${dict.folder_view_aria || "Folder view mode"}">
+                            <option value="compact">${dict.folder_view_compact || "Sidebar list"}</option>
+                            <option value="full">${dict.folder_view_full || "Full view"}</option>
+                        </select>
+                    </div>
+                    <label class="row-left">
+                        <input type="checkbox" id="settings-reduce-motion" aria-label="${dict.reduce_motion || "Reduce motion"}">
+                        <span>${dict.reduce_motion || "Reduce motion"}</span>
+                    </label>
+                </div>
+            `
+            this.bindSettings()
+            this.syncSettingsUI()
+            return
+        }
+        if (this.settingsPage === "appearance") {
+            root.innerHTML = `
+                <div class="settings-page-header">
+                    <button type="button" class="btn-icon" data-action="settings-back" aria-label="${dict.settings_back || "Back"}">
+                        <i class="material-icons-round" aria-hidden="true">arrow_back</i>
+                    </button>
+                    <div class="settings-page-title">${dict.settings_appearance || "Appearance"}</div>
+                </div>
+                <div class="settings-section">
+                    <span class="field-label">${dict.presets || "Presets"}</span>
+                    <div id="theme-picker-root" class="settings-theme-grid"></div>
+                </div>
+                <div class="settings-section">
+                    <span class="field-label">${dict.manual || "Manual"}</span>
+                    <div class="settings-color-grid">
+                        <label class="field">
+                            <span class="field-label">${dict.c_accent || "Accent"}</span>
+                            <input type="color" id="cp-primary" class="color-input" aria-label="${dict.color_accent || "Accent color"}">
+                        </label>
+                        <label class="field">
+                            <span class="field-label">${dict.c_bg || "Background"}</span>
+                            <input type="color" id="cp-bg" class="color-input" aria-label="${dict.color_bg || "Background color"}">
+                        </label>
+                        <label class="field">
+                            <span class="field-label">${dict.c_text || "Text"}</span>
+                            <input type="color" id="cp-text" class="color-input" aria-label="${dict.color_text || "Text color"}">
+                        </label>
+                    </div>
+                </div>
+            `
+            ThemeManager.renderPicker()
+            ThemeManager.setupColorInputs()
+            return
+        }
+        if (this.settingsPage === "editor_tools") {
+            root.innerHTML = `
+                <div class="settings-page-header">
+                    <button type="button" class="btn-icon" data-action="settings-back" aria-label="${dict.settings_back || "Back"}">
+                        <i class="material-icons-round" aria-hidden="true">arrow_back</i>
+                    </button>
+                    <div class="settings-page-title">${dict.settings_editor_tools || "Editor tools"}</div>
+                </div>
+                <div id="editor-tools-list" class="settings-toggle-list"></div>
+            `
+            this.renderEditorSettings()
+        }
+    },
+
+    async submitFeedback() {
+        if (!db || !state.user) return
+        const rating = Number(state.tempRating || 0)
+        if (!rating) {
+            this.showToast(this.getText("rate_required", "Please rate first"))
+            return
+        }
+        const text = String(document.getElementById("feedback-text")?.value || "").trim()
+        const user = state.user
+        const payload = {
+            uid: user.uid,
+            email: user.email || "",
+            displayName: user.displayName || "",
+            rating: Utils.clamp(rating, 1, 5),
+            text,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            userAgent: navigator.userAgent || "",
+            appVersion: "web",
+            language: state.config.lang || "ru"
+        }
+        try {
+            await db.collection("users").doc(user.uid).collection("feedback").add(payload)
+            state.tempRating = 0
+            document.querySelectorAll(".star").forEach(s => {
+                s.textContent = "star_border"
+                s.classList.remove("active")
+            })
+            const field = document.getElementById("feedback-text")
+            if (field) field.value = ""
+            this.showToast(this.getText("feedback_thanks", "Thanks!"))
+            this.closeModal("rate-modal")
+        } catch {
+            this.showToast(this.getText("feedback_error", "Could not send feedback"))
+        }
     },
 
     showToast(msg, options = {}) {
@@ -373,7 +609,11 @@ const UI = {
 
         this.els.confirmModal.classList.add("active")
         const cancel = document.getElementById("confirm-cancel")
-        if (cancel) cancel.onclick = () => this.els.confirmModal.classList.remove("active")
+        if (cancel) {
+            const cancelClone = cancel.cloneNode(true)
+            cancel.parentNode.replaceChild(cancelClone, cancel)
+            cancelClone.onclick = () => this.els.confirmModal.classList.remove("active")
+        }
     },
 
     showPrompt(title, placeholder, cb) {
@@ -395,9 +635,11 @@ const UI = {
 
         const okClone = ok.cloneNode(true)
         ok.parentNode.replaceChild(okClone, ok)
+        const cancelClone = cancel.cloneNode(true)
+        cancel.parentNode.replaceChild(cancelClone, cancel)
 
         okClone.onclick = () => finish(String(input.value || "").trim())
-        cancel.onclick = () => modal.classList.remove("active")
+        cancelClone.onclick = () => modal.classList.remove("active")
 
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)
@@ -469,20 +711,37 @@ const UI = {
 
     reorderNotes(draggedId, targetId, position) {
         if (!db || !state.user) return
+        if (state.searchQuery && state.searchQuery.trim()) {
+            this.showToast(this.getText("reorder_disabled_search", "Reorder disabled while searching"))
+            return
+        }
         if (draggedId === targetId) return
-        const visibleIds = this.visibleNotes.map(n => n.id)
-        const fromIndex = visibleIds.indexOf(draggedId)
-        const toIndex = visibleIds.indexOf(targetId)
-        if (fromIndex === -1 || toIndex === -1) return
-        visibleIds.splice(fromIndex, 1)
-        const insertIndex = position === "after" ? toIndex + 1 : toIndex
-        visibleIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId)
+        const scopeNotes = this.visibleNotes.slice()
+        const dragged = scopeNotes.find(n => n.id === draggedId)
+        const target = scopeNotes.find(n => n.id === targetId)
+        if (!dragged || !target) return
+        if (!!dragged.isPinned !== !!target.isPinned) return
+        const reorderGroup = (list) => {
+            const ids = list.map(n => n.id)
+            const fromIndex = ids.indexOf(draggedId)
+            const toIndex = ids.indexOf(targetId)
+            if (fromIndex === -1 || toIndex === -1) return list
+            ids.splice(fromIndex, 1)
+            const insertIndex = position === "after" ? toIndex + 1 : toIndex
+            ids.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId)
+            return ids.map(id => list.find(n => n.id === id)).filter(Boolean)
+        }
+        const pinned = scopeNotes.filter(n => n.isPinned)
+        const regular = scopeNotes.filter(n => !n.isPinned)
+        const nextPinned = dragged.isPinned ? reorderGroup(pinned) : pinned
+        const nextRegular = dragged.isPinned ? regular : reorderGroup(regular)
+        const combined = [...nextPinned, ...nextRegular]
 
-        const previous = this.visibleNotes.map(n => ({ id: n.id, order: n.order || 0 }))
-        state.orderHistory.push(previous)
+        const previous = scopeNotes.map(n => ({ id: n.id, order: n.order || 0 }))
+        state.orderHistory.push({ items: previous })
         if (state.orderHistory.length > 20) state.orderHistory.shift()
 
-        const updates = visibleIds.map((id, index) => ({ id, order: index + 1 }))
+        const updates = combined.map((note, index) => ({ id: note.id, order: index + 1 }))
         updates.forEach(update => {
             const note = state.notes.find(n => n.id === update.id)
             if (note) note.order = update.order
@@ -505,8 +764,9 @@ const UI = {
         if (!db || !state.user) return
         const last = state.orderHistory.pop()
         if (!last) return
+        const items = last.items || last
         const batch = db.batch()
-        last.forEach(item => {
+        items.forEach(item => {
             const note = state.notes.find(n => n.id === item.id)
             if (note) note.order = item.order
             const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(item.id)
@@ -533,10 +793,12 @@ const UI = {
             return
         }
         root.innerHTML = state.folders.map(f => `
-            <button type="button" class="nav-item ${state.activeFolderId === f.id ? "active" : ""}" onclick="switchView('folder', '${f.id}')">
+            <button type="button" class="nav-item ${state.activeFolderId === f.id ? "active" : ""}" data-action="open-folder" data-folder-id="${Utils.escapeHtml(f.id)}">
                 <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
-                <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" onclick="event.stopPropagation(); deleteFolder('${f.id}')">close</i>
+                <span class="folder-delete" data-action="delete-folder" data-folder-id="${Utils.escapeHtml(f.id)}" aria-label="${Utils.escapeHtml(this.getText("delete", "Delete"))}" role="button" tabindex="0">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </span>
             </button>
         `).join("")
     },
@@ -549,7 +811,7 @@ const UI = {
             const count = state.notes.filter(note => note.folderId === folder.id && !note.isArchived).length
             const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
             return `
-                <div class="folder-card" onclick="switchView('folder', '${folder.id}')">
+                <div class="folder-card" data-action="open-folder" data-folder-id="${Utils.escapeHtml(folder.id)}">
                     <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
                     <div class="folder-meta">${count} ${label}</div>
                 </div>
@@ -570,7 +832,7 @@ const UI = {
         const note = state.notes.find(n => n.id === payload.noteId)
         state.pendingShare = null
         if (!note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
-        if (payload.mode === "collab") this.showToast("Совместный режим включен")
+        if (payload.mode === "collab") this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
         Editor.openFromList(note)
     },
 
