@@ -5,9 +5,12 @@
 
   const ensure = () => {
     if (container) return
-    container = document.createElement("div")
-    container.className = "toast-container"
-    document.body.appendChild(container)
+    container = document.getElementById("toast-container")
+    if (!container) {
+      container = document.createElement("div")
+      container.className = "toast-container"
+      document.body.appendChild(container)
+    }
   }
 
   const show = (text, type = "default", timeout = 2500) => {

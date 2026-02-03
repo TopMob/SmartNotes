@@ -10,11 +10,13 @@
     activeFolderId: null,
     searchQuery: "",
     currentNote: null,
+    selectedNote: null,
     tempRating: 0,
     config: {
       lang: localStorage.getItem("app-lang") || "ru",
       folderViewMode: "compact",
-      reduceMotion: false
+      reduceMotion: false,
+      theme: localStorage.getItem("theme") || "dark"
     },
     driveToken: null,
     recording: false,

@@ -24,6 +24,21 @@
       const a = btn.dataset.noteAction
 
       if (a === "archive") note.archived = !note.archived
+      if (a === "favorite") note.favorite = !note.favorite
+      if (a === "pin") note.pinned = !note.pinned
+      if (a === "delete") {
+        if (window.UI?.confirm) {
+          UI.confirm("Удалить заметку?").then((ok) => {
+            if (!ok) return
+            state.notes = state.notes.filter((n) => n.id !== note.id)
+            state.selectedNote = null
+            localStorage.setItem("smartnotes:data:v1", JSON.stringify({ notes: state.notes, folders: state.folders, config: state.config }))
+            if (window.UI) UI.render()
+          })
+          return
+        }
+      }
+
       if (a === "download" && window.NoteExport) NoteExport.download(note)
 
       if (a === "cloud") {
@@ -31,6 +46,8 @@
         else if (window.UIToast) UIToast.show("Drive недоступен", "error")
       }
 
+      note.updatedAt = Date.now()
+      localStorage.setItem("smartnotes:data:v1", JSON.stringify({ notes: state.notes, folders: state.folders, config: state.config }))
       if (window.UI) UI.render()
     })
   }

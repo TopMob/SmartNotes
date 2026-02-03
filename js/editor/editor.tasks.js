@@ -9,15 +9,19 @@
     while (node && node.nodeType !== 1) node = node.parentElement
     if (!node) return
 
-    const active = node.dataset.task === "true"
-    if (active) {
-      delete node.dataset.task
-      node.classList.remove("task-item")
-    } else {
-      node.dataset.task = "true"
-      node.classList.add("task-item")
+    const taskItem = node.closest(".task-item")
+    if (taskItem) {
+      const checkbox = taskItem.querySelector(".task-checkbox")
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked
+        taskItem.classList.toggle("completed", checkbox.checked)
+        if (window.Editor) Editor.queueSnapshot()
+      }
+      return
     }
 
+    const html = `<div class="task-item" data-task="true"><input type="checkbox" class="task-checkbox"><span>Новая задача</span></div><br>`
+    document.execCommand("insertHTML", false, html)
     if (window.Editor) Editor.queueSnapshot()
   }
 

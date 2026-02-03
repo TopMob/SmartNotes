@@ -26,6 +26,7 @@
   const apply = (key) => {
     const preset = presets[key] || presets.dark
     applyVars(preset)
+    document.documentElement.setAttribute("data-theme", key)
     localStorage.setItem("theme", key)
   }
 

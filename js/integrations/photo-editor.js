@@ -1,24 +1,37 @@
 ;(() => {
-  if (window.SketchService) return
+  if (window.PhotoEditor) return
 
   let canvas = null
   let ctx = null
+  let baseImage = null
   let drawing = false
   let history = []
+  let onSaveCallback = null
 
   const resizeCanvas = () => {
-    if (!canvas) return
+    if (!canvas || !baseImage) return
     const rect = canvas.getBoundingClientRect()
     const ratio = window.devicePixelRatio || 1
     canvas.width = rect.width * ratio
     canvas.height = rect.height * ratio
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+    drawBase()
     redrawFromHistory()
+  }
+
+  const drawBase = () => {
+    if (!ctx || !baseImage) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const ratio = Math.min(canvas.width / baseImage.width, canvas.height / baseImage.height)
+    const w = baseImage.width * ratio
+    const h = baseImage.height * ratio
+    const x = (canvas.width - w) / 2
+    const y = (canvas.height - h) / 2
+    ctx.drawImage(baseImage, x, y, w, h)
   }
 
   const redrawFromHistory = () => {
     if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
     if (!history.length) return
     ctx.putImageData(history[history.length - 1], 0, 0)
   }
@@ -64,37 +77,45 @@
     ctx.lineCap = "round"
   }
 
-  const open = () => {
-    canvas = document.getElementById("sketch-canvas")
+  const open = (src, onSave) => {
+    canvas = document.getElementById("photo-editor-canvas")
     if (!canvas) return
     ctx = canvas.getContext("2d")
     history = []
-    resizeCanvas()
-    const color = document.getElementById("sketch-color-picker")?.value || "#00f2ff"
-    const width = parseInt(document.getElementById("sketch-width-picker")?.value || "3", 10)
+    onSaveCallback = onSave
+    baseImage = new Image()
+    baseImage.onload = () => {
+      resizeCanvas()
+      pushHistory()
+    }
+    baseImage.src = src
+    const color = document.getElementById("photo-color-picker")?.value || "#00f2ff"
+    const width = parseInt(document.getElementById("photo-width-picker")?.value || "3", 10)
     setBrush(color, width)
     bind()
   }
 
   const undo = () => {
-    if (!history.length) return
+    if (history.length <= 1) return
     history.pop()
+    drawBase()
     redrawFromHistory()
   }
 
   const clear = () => {
     history = []
-    redrawFromHistory()
+    drawBase()
+    pushHistory()
   }
 
   const save = () => {
     if (!canvas) return
     const dataUrl = canvas.toDataURL("image/png")
-    if (window.Editor) Editor.insertMedia(dataUrl)
-    if (window.UIModals) UIModals.close("sketch-modal")
+    if (onSaveCallback) onSaveCallback(dataUrl)
+    if (window.UIModals) UIModals.close("photo-editor-modal")
   }
 
-  window.SketchService = {
+  window.PhotoEditor = {
     open,
     undo,
     clear,

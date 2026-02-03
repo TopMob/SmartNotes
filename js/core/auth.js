@@ -16,13 +16,21 @@
   function showAppShell() {
     setVisibility("login-screen", false)
     const app = document.getElementById("app")
-    if (app) app.setAttribute("aria-hidden", "false")
+    if (app) {
+      app.setAttribute("aria-hidden", "false")
+      app.classList.add("active")
+    }
+    document.body.classList.add("is-authenticated")
   }
 
   function showLoginShell() {
     setVisibility("login-screen", true)
     const app = document.getElementById("app")
-    if (app) app.setAttribute("aria-hidden", "true")
+    if (app) {
+      app.setAttribute("aria-hidden", "true")
+      app.classList.remove("active")
+    }
+    document.body.classList.remove("is-authenticated")
   }
 
   function toast(message) {
@@ -34,6 +42,31 @@
     if (!window.firebase || !firebase.auth) return null
     try {
       return firebase.auth()
+    } catch {
+      return null
+    }
+  }
+
+  function ensureGuestSession() {
+    if (!window.state) window.state = {}
+    const existing = localStorage.getItem("smartnotes:guest")
+    if (existing) {
+      window.state.user = safeParse(existing)
+      return window.state.user
+    }
+    const guest = {
+      uid: `guest-${Utils.generateId()}`,
+      displayName: "Гость",
+      isGuest: true
+    }
+    window.state.user = guest
+    localStorage.setItem("smartnotes:guest", JSON.stringify(guest))
+    return guest
+  }
+
+  function safeParse(value) {
+    try {
+      return JSON.parse(value)
     } catch {
       return null
     }
@@ -80,8 +113,9 @@
     bindAuthState() {
       const auth = ensureFirebaseAuth()
       if (!auth) {
-        showLoginShell()
-        if (window.state) window.state.user = null
+        const guest = ensureGuestSession()
+        showAppShell()
+        if (window.UI && typeof UI.onAuthReady === "function") UI.onAuthReady(guest)
         return
       }
 

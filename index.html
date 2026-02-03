@@ -66,6 +66,7 @@
 
   <script src="js/ui/ui.core.js" defer></script>
   <script src="js/ui/ui.sidebar.js" defer></script>
+  <script src="js/ui/ui.folders.js" defer></script>
   <script src="js/ui/ui.settings.js" defer></script>
   <script src="js/ui/ui.note-state.js" defer></script>
   <script src="js/ui/ui.note-actions.js" defer></script>
@@ -85,6 +86,7 @@
   <script src="js/integrations/export.js" defer></script>
   <script src="js/integrations/voice.js" defer></script>
   <script src="js/integrations/sketch.js" defer></script>
+  <script src="js/integrations/photo-editor.js" defer></script>
   <script src="js/integrations/drive.js" defer></script>
 
   <script src="js/core/theme.js" defer></script>
@@ -146,6 +148,10 @@
         <div class="nav-group">
           <div class="nav-title" data-lang="folders">ПАПКИ</div>
           <div id="folder-list-root" class="folder-list-root"></div>
+          <button type="button" class="nav-item" data-action="create-folder">
+            <i class="material-icons-round" aria-hidden="true">create_new_folder</i>
+            <span>Создать папку</span>
+          </button>
         </div>
 
         <div class="nav-group">
@@ -426,8 +432,10 @@
         </button>
       </header>
       <div class="modal-body">
-        <p class="muted">Тут будут фильтры скрытых заметок и быстрые действия</p>
+        <p class="muted">Введите пароль для просмотра защищенных заметок</p>
+        <input id="unlock-password" type="password" class="input-area" placeholder="Пароль" autocomplete="current-password" aria-label="Пароль">
         <div class="modal-actions-grid">
+          <button type="button" class="btn-primary" id="unlock-apply">Разблокировать</button>
           <button type="button" class="btn-secondary" onclick="window.UIModals && UIModals.close && UIModals.close('lock-center-modal')">Закрыть</button>
         </div>
       </div>
@@ -556,6 +564,34 @@
       <footer class="modal-footer">
         <button type="button" class="btn-primary" onclick="window.UI && UI.submitFeedback && UI.submitFeedback()" data-lang="send">Отправить</button>
       </footer>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Настройки">
+    <div class="modal-card">
+      <header class="modal-header">
+        <h2 data-lang="settings">Настройки</h2>
+        <button type="button" class="btn-icon" onclick="window.UIModals && UIModals.close && UIModals.close('settings-modal')" aria-label="Закрыть">
+          <i class="material-icons-round" aria-hidden="true">close</i>
+        </button>
+      </header>
+      <div class="modal-body">
+        <label class="field">
+          <span class="field-label">Тема</span>
+          <select id="theme-select" class="input-area" aria-label="Тема">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="purple">Purple</option>
+            <option value="green">Green</option>
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+          </select>
+        </label>
+        <label class="row-left">
+          <input type="checkbox" id="reduce-motion-toggle" aria-label="Уменьшить анимации">
+          <span>Уменьшить анимации</span>
+        </label>
+      </div>
     </div>
   </div>
 
