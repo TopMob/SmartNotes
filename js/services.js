@@ -5,7 +5,7 @@ const NoteIO = {
         return {
             id: safe.id ? String(safe.id) : Utils.generateId(),
             title: safe.title ? String(safe.title) : "",
-            content: safe.content ? String(safe.content) : "",
+            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
             tags,
             folderId: safe.folderId ? String(safe.folderId) : null,
             isArchived: !!safe.isArchived,

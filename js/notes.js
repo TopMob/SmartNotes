@@ -32,12 +32,15 @@ function renderNotes(list) {
         const pinCls = n.isPinned ? "pinned" : ""
         const tagLine = Array.isArray(n.tags) && n.tags.length ? n.tags.slice(0, 3).map(t => `#${Utils.escapeHtml(String(t))}`).join(" ") : ""
         const date = Utils.formatDate(n.updatedAt || n.createdAt || Date.now())
+        const pinLabel = UI.getText("pin_note", "Pin")
+        const favLabel = UI.getText("favorite_note", "Favorite")
+        const menuLabel = UI.getText("note_actions", "Actions")
         return `
             <div class="note-card ${pinCls}" draggable="true" data-note-id="${encodeURIComponent(n.id)}">
                 <div class="card-actions">
-                    <button type="button" class="action-btn" aria-label="Pin" onclick="event.stopPropagation(); togglePin('${n.id}')"><i class="material-icons-round" aria-hidden="true">push_pin</i></button>
-                    <button type="button" class="action-btn" aria-label="Star" onclick="event.stopPropagation(); toggleFavorite('${n.id}')"><i class="material-icons-round" aria-hidden="true">star</i></button>
-                    <button type="button" class="action-btn" aria-label="Menu" onclick="event.stopPropagation(); openNoteActions('${n.id}')"><i class="material-icons-round" aria-hidden="true">more_horiz</i></button>
+                    <button type="button" class="action-btn" aria-label="${Utils.escapeHtml(pinLabel)}" data-action="pin-note" data-note-id="${Utils.escapeHtml(n.id)}"><i class="material-icons-round" aria-hidden="true">push_pin</i></button>
+                    <button type="button" class="action-btn" aria-label="${Utils.escapeHtml(favLabel)}" data-action="favorite-note" data-note-id="${Utils.escapeHtml(n.id)}"><i class="material-icons-round" aria-hidden="true">star</i></button>
+                    <button type="button" class="action-btn" aria-label="${Utils.escapeHtml(menuLabel)}" data-action="note-actions" data-note-id="${Utils.escapeHtml(n.id)}"><i class="material-icons-round" aria-hidden="true">more_horiz</i></button>
                 </div>
                 <h3>${Utils.escapeHtml(title)}</h3>
                 <p>${Utils.escapeHtml(preview)}</p>
@@ -111,7 +114,7 @@ async function deleteFolder(folderId) {
             state.activeFolderId = null
             state.view = "notes"
         }
-        UI.showToast("Папка удалена")
+        UI.showToast(UI.getText("folder_deleted", "Folder deleted"))
     })
 }
 
