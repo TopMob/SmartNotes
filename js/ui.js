@@ -761,10 +761,17 @@ const UI = {
         const draggedNote = StateStore.read().notes.find(n => n.id === draggedId)
         const targetNote = StateStore.read().notes.find(n => n.id === targetId)
         if (!draggedNote || !targetNote) return
+        const { view, activeFolderId } = StateStore.read()
+        const isFolderView = view === "folder" && !!activeFolderId
+        if (!isFolderView && (draggedNote.folderId || targetNote.folderId)) {
+            this.showToast(this.getText("reorder_folder_disabled", "Reordering is available only inside folders or for notes without folders"))
+            return
+        }
         if (!!draggedNote.isPinned !== !!targetNote.isPinned) {
             this.showToast(this.getText("reorder_pinned_blocked", "Pinned notes reorder separately"))
             return
         }
+        const orderKey = isFolderView ? "folderOrder" : "order"
         const groupIds = this.visibleNotes.filter(n => !!n.isPinned === !!draggedNote.isPinned).map(n => n.id)
         const fromIndex = groupIds.indexOf(draggedId)
         const toIndex = groupIds.indexOf(targetId)
@@ -775,24 +782,24 @@ const UI = {
 
         const previous = groupIds.map(id => {
             const note = StateStore.read().notes.find(n => n.id === id)
-            return { id, order: note?.order || 0 }
+            return { id, value: typeof note?.[orderKey] === "number" ? note[orderKey] : 0 }
         })
-        const { view, activeFolderId, orderHistory } = StateStore.read()
+        const { orderHistory } = StateStore.read()
         const scopeKey = `${view}:${activeFolderId || "all"}:${draggedNote.isPinned ? "pinned" : "unpinned"}`
-        const nextHistory = [...orderHistory, { scope: scopeKey, items: previous }].slice(-20)
+        const nextHistory = [...orderHistory, { scope: scopeKey, orderKey, items: previous }].slice(-20)
         StateActions.setOrderHistory(nextHistory)
 
-        const updates = groupIds.map((id, index) => ({ id, order: index + 1 }))
+        const updates = groupIds.map((id, index) => ({ id, value: index + 1 }))
         const updatedNotes = StateStore.read().notes.map(note => {
             const update = updates.find(item => item.id === note.id)
-            return update ? { ...note, order: update.order } : note
+            return update ? { ...note, [orderKey]: update.value } : note
         })
         StateActions.setNotes(updatedNotes)
 
         const batch = db.batch()
         updates.forEach(update => {
             const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(update.id)
-            batch.update(ref, { order: update.order })
+            batch.update(ref, { [orderKey]: update.value })
         })
         batch.commit()
         this.showToast(this.getText("order_updated", "Order updated"), {
@@ -808,14 +815,15 @@ const UI = {
         if (!last) return
         StateActions.setOrderHistory(StateStore.read().orderHistory.slice(0, -1))
         const batch = db.batch()
+        const orderKey = last.orderKey || "order"
         const updatedNotes = StateStore.read().notes.map(note => {
             const item = last.items.find(entry => entry.id === note.id)
-            return item ? { ...note, order: item.order } : note
+            return item ? { ...note, [orderKey]: item.value } : note
         })
         StateActions.setNotes(updatedNotes)
         last.items.forEach(item => {
             const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(item.id)
-            batch.update(ref, { order: item.order })
+            batch.update(ref, { [orderKey]: item.value })
         })
         batch.commit()
         filterAndRender(document.getElementById("search-input")?.value || "")

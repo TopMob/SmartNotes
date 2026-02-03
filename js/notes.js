@@ -1,11 +1,11 @@
-function normalizeVisibleNotes(list) {
+function normalizeVisibleNotes(list, orderKey = "order") {
     const arr = (list || []).filter(Boolean).map(n => NoteIO.normalizeNote(n))
     arr.sort((a, b) => {
         const ap = a.isPinned ? 1 : 0
         const bp = b.isPinned ? 1 : 0
         if (bp !== ap) return bp - ap
-        const ao = typeof a.order === "number" ? a.order : 0
-        const bo = typeof b.order === "number" ? b.order : 0
+        const ao = typeof a[orderKey] === "number" ? a[orderKey] : 0
+        const bo = typeof b[orderKey] === "number" ? b[orderKey] : 0
         return ao - bo
     })
     return arr
@@ -78,7 +78,8 @@ function filterAndRender(query) {
         list = scored.map(x => x.n)
     }
 
-    list = normalizeVisibleNotes(list)
+    const orderKey = view === "folder" ? "folderOrder" : "order"
+    list = normalizeVisibleNotes(list, orderKey)
     if (StateStore.read().view === "folders") {
         UI.renderFolderGrid()
         UI.updateViewTitle()

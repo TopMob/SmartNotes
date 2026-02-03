@@ -8,6 +8,7 @@ const NoteIO = {
             content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
             tags,
             folderId: safe.folderId ? String(safe.folderId) : null,
+            folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : (safe.folderId ? (typeof safe.order === "number" ? safe.order : Date.now()) : 0),
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
             isPinned: !!safe.isPinned,
