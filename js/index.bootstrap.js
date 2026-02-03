@@ -17,6 +17,24 @@
       if (window.UIModals) UIModals.open("auth-modal")
     }
   }
+firebase.auth().onAuthStateChanged((user) => {
+  if (window.state) state.user = user || null
+
+  const login = document.getElementById("login-screen")
+  const app = document.getElementById("app")
+
+  if (user) {
+    login?.classList.remove("active")
+    app?.classList.add("active")
+    document.body.classList.add("is-authenticated")
+
+    if (window.UI) UI.render()
+  } else {
+    login?.classList.add("active")
+    app?.classList.remove("active")
+    document.body.classList.remove("is-authenticated")
+  }
+})
 
   const bootstrapSmartNotes = () => {
     document.addEventListener("DOMContentLoaded", () => {
@@ -33,3 +51,4 @@
   window.bootstrapSmartNotes = bootstrapSmartNotes
   bootstrapSmartNotes()
 })()
+
