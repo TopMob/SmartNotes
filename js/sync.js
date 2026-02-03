@@ -62,7 +62,7 @@ const SyncService = {
 
   buildPayload(id, data, user, isDeleted) {
     const folderName =
-      window.state?.folders?.find(f => f.id === data?.folderId)?.name ||
+      StateStore.read()?.folders?.find(f => f.id === data?.folderId)?.name ||
       "Общее";
 
     const cleanText = this.toPlainText(data?.content || "");
