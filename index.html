@@ -85,8 +85,10 @@
   <script src="js/integrations/export.js" defer></script>
   <script src="js/integrations/voice.js" defer></script>
   <script src="js/integrations/sketch.js" defer></script>
+  <script src="js/integrations/photo-editor.js" defer></script>
   <script src="js/integrations/drive.js" defer></script>
 
+  <script src="js/core/app.js" defer></script>
   <script src="js/core/theme.js" defer></script>
 </head>
 
@@ -555,6 +557,40 @@
       </div>
       <footer class="modal-footer">
         <button type="button" class="btn-primary" onclick="window.UI && UI.submitFeedback && UI.submitFeedback()" data-lang="send">Отправить</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Настройки">
+    <div class="modal-card">
+      <header class="modal-header">
+        <h2 data-lang="settings">Настройки</h2>
+        <button type="button" class="btn-icon" onclick="window.UIModals && UIModals.close && UIModals.close('settings-modal')" aria-label="Закрыть">
+          <i class="material-icons-round" aria-hidden="true">close</i>
+        </button>
+      </header>
+      <div class="modal-body">
+        <label class="field">
+          <span class="field-label">Тема</span>
+          <select id="settings-theme" class="input-area">
+            <option value="dark">Тёмная</option>
+            <option value="light">Светлая</option>
+            <option value="purple">Фиолетовая</option>
+            <option value="green">Зелёная</option>
+            <option value="red">Красная</option>
+            <option value="blue">Синяя</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Снизить анимацию</span>
+          <select id="settings-reduce-motion" class="input-area">
+            <option value="false">Нет</option>
+            <option value="true">Да</option>
+          </select>
+        </label>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn-primary" onclick="window.UIModals && UIModals.close && UIModals.close('settings-modal')">Готово</button>
       </footer>
     </div>
   </div>

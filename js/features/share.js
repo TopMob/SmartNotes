@@ -3,18 +3,23 @@
 
   const createLink = (note) => {
     const payload = {
-      id: note.id,
-      owner: state.user?.uid,
-      t: Date.now()
+      t: Date.now(),
+      data: {
+        title: note.title || "",
+        content: note.content || "",
+        tags: Array.isArray(note.tags) ? note.tags : []
+      }
     }
-    return `${location.origin}${location.pathname}?share=${btoa(JSON.stringify(payload))}`
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    return `${location.origin}${location.pathname}?share=${encoded}`
   }
 
   const readLink = () => {
     const q = new URLSearchParams(location.search)
     if (!q.has("share")) return null
     try {
-      return JSON.parse(atob(q.get("share")))
+      const raw = decodeURIComponent(escape(atob(q.get("share"))))
+      return JSON.parse(raw)
     } catch {
       return null
     }

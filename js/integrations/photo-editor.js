@@ -1,30 +1,42 @@
 ;(() => {
-  if (window.SketchService) return
+  if (window.PhotoEditor) return
 
-  let ctx = null
   let canvas = null
+  let ctx = null
   let drawing = false
   let history = []
+  let onSave = null
+  let baseImage = null
   let bound = false
   let resizeBound = false
 
   const ensureCanvas = () => {
-    canvas = document.getElementById("sketch-canvas")
+    canvas = document.getElementById("photo-editor-canvas")
     if (!canvas) return null
     ctx = canvas.getContext("2d")
     ctx.lineCap = "round"
-    resizeCanvas()
     return canvas
   }
 
   const resizeCanvas = () => {
-    if (!canvas) return
+    if (!canvas || !baseImage) return
     const rect = canvas.getBoundingClientRect()
     const ratio = window.devicePixelRatio || 1
     canvas.width = rect.width * ratio
     canvas.height = rect.height * ratio
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
-    redraw()
+    drawBase()
+  }
+
+  const drawBase = () => {
+    if (!canvas || !baseImage) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const ratio = Math.min(canvas.width / baseImage.width, canvas.height / baseImage.height)
+    const w = baseImage.width * ratio
+    const h = baseImage.height * ratio
+    const x = (canvas.width - w) / 2
+    const y = (canvas.height - h) / 2
+    ctx.drawImage(baseImage, x, y, w, h)
   }
 
   const snapshot = () => {
@@ -34,8 +46,8 @@
   }
 
   const redraw = () => {
-    if (!canvas || !history.length) {
-      ctx?.clearRect(0, 0, canvas?.width || 0, canvas?.height || 0)
+    if (!history.length) {
+      drawBase()
       return
     }
     const img = new Image()
@@ -44,6 +56,13 @@
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     }
     img.src = history[history.length - 1]
+  }
+
+  const applyStyle = () => {
+    const colorPicker = document.getElementById("photo-color-picker")
+    const widthPicker = document.getElementById("photo-width-picker")
+    if (colorPicker) ctx.strokeStyle = colorPicker.value
+    if (widthPicker) ctx.lineWidth = parseInt(widthPicker.value, 10) || 3
   }
 
   const bind = () => {
@@ -63,34 +82,26 @@
       ctx.stroke()
     })
 
-    document.addEventListener("pointerup", () => {
-      drawing = false
-    })
+    document.addEventListener("pointerup", () => drawing = false)
   }
 
-  const open = () => {
-    const modal = document.getElementById("sketch-modal")
-    if (!modal) return
-    if (window.UIModals) UIModals.open("sketch-modal")
+  const open = (src, onSaveCallback) => {
+    if (!src) return
+    if (window.UIModals) UIModals.open("photo-editor-modal")
     ensureCanvas()
     history = []
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    const colorPicker = document.getElementById("sketch-color-picker")
-    const widthPicker = document.getElementById("sketch-width-picker")
-    if (colorPicker) ctx.strokeStyle = colorPicker.value
-    if (widthPicker) ctx.lineWidth = parseInt(widthPicker.value, 10) || 3
-    bind()
+    onSave = onSaveCallback
+    baseImage = new Image()
+    baseImage.onload = () => {
+      resizeCanvas()
+      applyStyle()
+      bind()
+    }
+    baseImage.src = src
     if (!resizeBound) {
       window.addEventListener("resize", resizeCanvas)
       resizeBound = true
     }
-  }
-
-  const applyStyle = () => {
-    const colorPicker = document.getElementById("sketch-color-picker")
-    const widthPicker = document.getElementById("sketch-width-picker")
-    if (colorPicker) ctx.strokeStyle = colorPicker.value
-    if (widthPicker) ctx.lineWidth = parseInt(widthPicker.value, 10) || 3
   }
 
   const undo = () => {
@@ -101,21 +112,21 @@
 
   const clear = () => {
     history = []
-    ctx?.clearRect(0, 0, canvas?.width || 0, canvas?.height || 0)
+    drawBase()
   }
 
   const save = () => {
     if (!canvas) return
     const data = canvas.toDataURL("image/png")
-    if (window.Editor?.insertMedia) Editor.insertMedia(data)
-    if (window.UIModals) UIModals.close("sketch-modal")
+    if (onSave) onSave(data)
+    if (window.UIModals) UIModals.close("photo-editor-modal")
   }
 
   document.addEventListener("input", (e) => {
-    if (e.target?.id === "sketch-color-picker" || e.target?.id === "sketch-width-picker") {
+    if (e.target?.id === "photo-color-picker" || e.target?.id === "photo-width-picker") {
       applyStyle()
     }
   })
 
-  window.SketchService = { open, undo, clear, save }
+  window.PhotoEditor = { open, undo, clear, save }
 })()

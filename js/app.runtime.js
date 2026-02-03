@@ -8,7 +8,7 @@
   const bindGlobalGuards = () => {
     document.addEventListener("click", (e) => {
       const inEditor = e.target.closest("#note-editor")
-      const inModal = e.target.closest(".modal-layer")
+      const inModal = e.target.closest(".modal-overlay")
       if (inModal) return
       if (inEditor) return
     })

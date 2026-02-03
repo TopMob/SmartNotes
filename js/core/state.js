@@ -10,6 +10,7 @@
     activeFolderId: null,
     searchQuery: "",
     currentNote: null,
+    selectedNote: null,
     tempRating: 0,
     config: {
       lang: localStorage.getItem("app-lang") || "ru",

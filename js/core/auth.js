@@ -80,8 +80,10 @@
     bindAuthState() {
       const auth = ensureFirebaseAuth()
       if (!auth) {
-        showLoginShell()
-        if (window.state) window.state.user = null
+        if (!window.state) window.state = {}
+        window.state.user = { uid: "guest", displayName: "Гость", photoURL: "" }
+        showAppShell()
+        if (window.UI && typeof UI.onAuthReady === "function") UI.onAuthReady(window.state.user)
         return
       }
 

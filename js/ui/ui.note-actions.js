@@ -23,7 +23,6 @@
 
       const a = btn.dataset.noteAction
 
-      if (a === "archive") note.archived = !note.archived
       if (a === "download" && window.NoteExport) NoteExport.download(note)
 
       if (a === "cloud") {
@@ -31,7 +30,9 @@
         else if (window.UIToast) UIToast.show("Drive недоступен", "error")
       }
 
-      if (window.UI) UI.render()
+      if (a === "download" || a === "cloud") {
+        if (window.UI) UI.render()
+      }
     })
   }
 

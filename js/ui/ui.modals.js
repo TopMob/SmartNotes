@@ -22,7 +22,7 @@
   }
 
   document.addEventListener("click", (e) => {
-    const layer = e.target.closest(".modal-layer")
+    const layer = e.target.closest(".modal-overlay")
     if (layer && e.target === layer) close(layer.id)
   })
 

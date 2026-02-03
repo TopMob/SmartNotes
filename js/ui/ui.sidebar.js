@@ -18,10 +18,10 @@
 
       if (a === "create-note" && window.Editor?.create) Editor.create()
       if (a === "create-folder" && window.UIFolders?.create) UIFolders.create()
-      if (a === "view-notes") state.view = "notes"
-      if (a === "view-favorites") state.view = "favorites"
-      if (a === "view-archive") state.view = "archive"
-      if (a === "view-folders") state.view = "folders"
+      if (a === "view-notes" && window.switchView) return switchView("notes")
+      if (a === "view-favorites" && window.switchView) return switchView("favorites")
+      if (a === "view-archive" && window.switchView) return switchView("archive")
+      if (a === "view-folders" && window.switchView) return switchView("folders")
 
       if (a === "open-settings" && window.UIModals) UIModals.open("settings-modal")
       if (a === "logout" && window.Auth) Auth.logout()
