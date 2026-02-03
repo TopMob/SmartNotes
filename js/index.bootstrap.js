@@ -1,22 +1,31 @@
 ;(() => {
-  const existing = window.bootstrapSmartNotes
-  if (existing) return
+  if (window.bootstrapSmartNotes) return
+
+  const safeCall = (fn) => {
+    try { fn() } catch {}
+  }
+
+  const handleAuthState = (user) => {
+    if (window.state) state.user = user || null
+
+    if (user) {
+      document.body.classList.add("is-authenticated")
+      if (window.UIModals) UIModals.close("auth-modal")
+      if (window.UI) UI.render()
+    } else {
+      document.body.classList.remove("is-authenticated")
+      if (window.UIModals) UIModals.open("auth-modal")
+    }
+  }
 
   const bootstrapSmartNotes = () => {
-    const safeCall = (fn) => {
-      try { fn() } catch {}
-    }
-
     document.addEventListener("DOMContentLoaded", () => {
-      safeCall(() => window.ThemeManager && ThemeManager.init && ThemeManager.init())
-      safeCall(() => window.UI && UI.init && UI.init())
-      safeCall(() => window.Editor && Editor.init && Editor.init())
+      safeCall(() => ThemeManager?.init?.())
+      safeCall(() => UI?.init?.())
+      safeCall(() => Editor?.init?.())
 
-      if (window.firebase && firebase.auth) {
-        firebase.auth().onAuthStateChanged((user) => {
-          if (window.state) state.user = user || null
-          if (user && typeof window.initApp === "function") safeCall(() => window.initApp())
-        })
+      if (window.firebase?.auth) {
+        firebase.auth().onAuthStateChanged(handleAuthState)
       }
     })
   }
