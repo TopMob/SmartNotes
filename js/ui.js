@@ -39,6 +39,7 @@ const UI = {
         this.updatePrimaryActionLabel()
         ThemeManager.renderPicker()
         this.syncSettingsUI()
+        this.renderEditorSettings()
     },
 
     applyLangToDom() {
@@ -315,6 +316,7 @@ const UI = {
     openSettings() {
         this.openModal("settings-modal")
         this.syncSettingsUI()
+        this.renderEditorSettings()
         ThemeManager.renderPicker()
         ThemeManager.setupColorInputs()
     },
@@ -408,6 +410,29 @@ const UI = {
         if (folderSelect) folderSelect.value = state.config.folderViewMode === "full" ? "full" : "compact"
         const reduceToggle = document.getElementById("settings-reduce-motion")
         if (reduceToggle) reduceToggle.checked = !!state.config.reduceMotion
+    },
+
+    renderEditorSettings() {
+        const root = document.getElementById("editor-tools-list")
+        if (!root || typeof Editor === "undefined") return
+        const tools = Editor.getToolList()
+        const enabled = Editor.getEnabledTools()
+        root.innerHTML = ""
+        tools.forEach(tool => {
+            const row = document.createElement("div")
+            row.className = "settings-toggle-item"
+            const label = document.createElement("span")
+            label.textContent = this.getText(tool.label, tool.label)
+            const input = document.createElement("input")
+            input.type = "checkbox"
+            input.checked = enabled[tool.id] !== false
+            input.setAttribute("aria-label", label.textContent)
+            input.addEventListener("change", () => {
+                Editor.setToolEnabled(tool.id, input.checked)
+            })
+            row.append(label, input)
+            root.appendChild(row)
+        })
     },
 
     savePreferences() {
