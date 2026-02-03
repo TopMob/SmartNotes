@@ -151,7 +151,7 @@
 }
 
 .hidden-color-input {
-    position: absolute;
+    position: fixed;
     inset: 0;
     opacity: 0;
     cursor: pointer;
@@ -212,7 +212,7 @@
 }
 
 .media-context-menu {
-    position: absolute;
+    position: fixed;
     display: flex;
     gap: 10px;
     padding: 10px;
@@ -323,4 +323,14 @@
 
 .context-menu .divider-vertical {
     margin: 0 2px;
+}
+
+.media-wrapper.align-left {
+    float: left;
+    margin: 6px 14px 6px 0;
+}
+
+.media-wrapper.align-right {
+    float: right;
+    margin: 6px 0 6px 14px;
 }

@@ -67,6 +67,93 @@ const Utils = {
             return firebase.firestore.FieldValue.serverTimestamp()
         }
         return Date.now()
+    },
+    sanitizeHtml: (html) => {
+        const allowedTags = new Set(["b","strong","i","em","u","br","p","div","ul","ol","li","span","img","a","input"])
+        const allowedClasses = new Set(["task-item","task-checkbox","task-text","completed","media-wrapper","media-resize-handle","align-left","align-right"])
+        const allowAttrs = {
+            a: new Set(["href"]),
+            img: new Set(["src","alt"]),
+            input: new Set(["type","checked"])
+        }
+        const wrapper = document.createElement("div")
+        wrapper.innerHTML = String(html || "")
+
+        const isSafeUrl = (value) => {
+            const v = String(value || "").trim()
+            if (!v) return false
+            if (v.startsWith("data:image")) return true
+            if (v.startsWith("https://")) return true
+            if (v.startsWith("http://")) return true
+            if (v.startsWith("mailto:")) return true
+            return false
+        }
+
+        const walk = (node) => {
+            const children = Array.from(node.childNodes)
+            children.forEach(child => {
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    const tag = child.tagName.toLowerCase()
+                    if (!allowedTags.has(tag)) {
+                        const textNode = document.createTextNode(child.textContent || "")
+                        child.replaceWith(textNode)
+                        return
+                    }
+
+                    Array.from(child.attributes).forEach(attr => {
+                        const name = attr.name.toLowerCase()
+                        if (name.startsWith("on") || name === "style") {
+                            child.removeAttribute(attr.name)
+                            return
+                        }
+                        if (name === "class") {
+                            const safe = String(attr.value || "")
+                                .split(/\s+/)
+                                .filter(cls => allowedClasses.has(cls))
+                            if (safe.length) child.setAttribute("class", safe.join(" "))
+                            else child.removeAttribute("class")
+                            return
+                        }
+                        const allowed = allowAttrs[tag]
+                        if (!allowed || !allowed.has(name)) {
+                            child.removeAttribute(attr.name)
+                        }
+                    })
+
+                    if (tag === "a") {
+                        const href = child.getAttribute("href")
+                        if (!isSafeUrl(href) || href.startsWith("data:")) {
+                            child.removeAttribute("href")
+                        } else if (href.startsWith("http")) {
+                            child.setAttribute("rel", "noopener noreferrer")
+                            child.setAttribute("target", "_blank")
+                        }
+                    }
+
+                    if (tag === "img") {
+                        const src = child.getAttribute("src")
+                        if (!isSafeUrl(src) || (src.startsWith("data:") && !src.startsWith("data:image")) || src.startsWith("http:")) {
+                            child.removeAttribute("src")
+                        }
+                    }
+
+                    if (tag === "input") {
+                        const type = child.getAttribute("type")
+                        if (String(type || "").toLowerCase() !== "checkbox") {
+                            child.removeAttribute("type")
+                        }
+                        if (child.hasAttribute("checked")) {
+                            child.setAttribute("checked", "")
+                        }
+                    }
+
+                    walk(child)
+                }
+            })
+        }
+
+        walk(wrapper)
+        return wrapper.innerHTML
     }
 }
 
@@ -281,7 +368,64 @@ const LANG = {
         theme_neon: "Неон",
         theme_paper: "Бумага",
         theme_sunrise: "Рассвет",
-        theme_ocean: "Океан"
+        theme_ocean: "Океан",
+        settings_menu_title: "Настройки",
+        settings_general: "Общие",
+        settings_appearance: "Внешний вид",
+        settings_editor_tools: "Инструменты редактора",
+        settings_back: "Назад",
+        settings_category_general_desc: "Язык, папки и анимация",
+        settings_category_appearance_desc: "Темы и цвета интерфейса",
+        settings_category_editor_tools_desc: "Панель инструментов",
+        smart_features: "УМНЫЕ ФУНКЦИИ",
+        lock_center: "Защита заметок",
+        lock_center_desc: "Тут будут фильтры скрытых заметок и быстрые действия",
+        share_desc: "Ссылка будет сгенерирована и появится здесь",
+        share_modal_title: "Поделиться",
+        collab_title: "Совместное редактирование",
+        collab_desc: "Одноразовая ссылка будет сгенерирована и появится здесь",
+        copy: "Копировать",
+        apply: "Применить",
+        lock_title: "Блокировка",
+        lock_password: "Пароль",
+        lock_password_empty: "Пароль пустой",
+        lock_invalid_password: "Неверный пароль",
+        lock_hidden: "Заметка скрыта",
+        note_deleted: "Удалено",
+        folder_deleted: "Папка удалена",
+        feedback_failed: "Не удалось отправить отзыв",
+        reorder_search_disabled: "Сортировка недоступна при поиске",
+        reorder_pinned_blocked: "Закрепленные заметки сортируются отдельно",
+        collab_enabled: "Совместный режим включен",
+        share_note: "Поделиться заметкой",
+        collab_note: "Совместное редактирование",
+        lock_note: "Заблокировать заметку",
+        nav_aria: "Навигация",
+        sections_aria: "Разделы",
+        notes_list_aria: "Список заметок",
+        user_menu: "Пользователь",
+        editor_actions: "Действия редактора",
+        editor_toolbar: "Инструменты редактора",
+        tags_aria: "Теги",
+        media_menu: "Меню изображения",
+        rating_aria: "Оценка",
+        login_aria: "Авторизация",
+        theme_dark_default: "Темная",
+        theme_graphite: "Графит",
+        theme_neon_cyan: "Неоновый циан",
+        theme_emerald_calm: "Изумрудный покой",
+        theme_violet_pulse: "Фиолетовый импульс",
+        theme_ocean_deep: "Глубокий океан",
+        theme_oled_pure: "OLED черный",
+        theme_manual: "Вручную",
+        auth_popup_closed: "Вход отменен",
+        auth_network_failed: "Нет соединения с интернетом",
+        auth_cancelled: "Запрос отменен",
+        logout_failed: "Ошибка при выходе",
+        login_failed: "Ошибка входа",
+        draw_photo_hint: "Откройте редактор фото",
+        password_title: "Пароль",
+        password_prompt: "Введите пароль"
     },
     en: {
         app_name: "SmartNotes",
@@ -448,40 +592,76 @@ const LANG = {
         theme_neon: "Neon",
         theme_paper: "Paper",
         theme_sunrise: "Sunrise",
-        theme_ocean: "Ocean"
+        theme_ocean: "Ocean",
+        settings_menu_title: "Settings",
+        settings_general: "General",
+        settings_appearance: "Appearance",
+        settings_editor_tools: "Editor Tools",
+        settings_back: "Back",
+        settings_category_general_desc: "Language, folders, motion",
+        settings_category_appearance_desc: "Themes and interface colors",
+        settings_category_editor_tools_desc: "Toolbar tools",
+        smart_features: "SMART FEATURES",
+        lock_center: "Note Protection",
+        lock_center_desc: "Hidden notes filters and quick actions will appear here",
+        share_desc: "A link will be generated and appear here",
+        share_modal_title: "Share",
+        collab_title: "Collaboration",
+        collab_desc: "A one-time link will be generated and appear here",
+        copy: "Copy",
+        apply: "Apply",
+        lock_title: "Lock",
+        lock_password: "Password",
+        lock_password_empty: "Password is empty",
+        lock_invalid_password: "Invalid password",
+        lock_hidden: "Note hidden",
+        note_deleted: "Deleted",
+        folder_deleted: "Folder deleted",
+        feedback_failed: "Unable to send feedback",
+        reorder_search_disabled: "Reordering is disabled while searching",
+        reorder_pinned_blocked: "Pinned notes reorder separately",
+        collab_enabled: "Collaboration enabled",
+        share_note: "Share note",
+        collab_note: "Collaborate",
+        lock_note: "Lock note",
+        nav_aria: "Navigation",
+        sections_aria: "Sections",
+        notes_list_aria: "Notes list",
+        user_menu: "User menu",
+        editor_actions: "Editor actions",
+        editor_toolbar: "Editor toolbar",
+        tags_aria: "Tags",
+        media_menu: "Image menu",
+        rating_aria: "Rating",
+        login_aria: "Authentication",
+        theme_dark_default: "Dark Default",
+        theme_graphite: "Graphite",
+        theme_neon_cyan: "Neon Cyan",
+        theme_emerald_calm: "Emerald Calm",
+        theme_violet_pulse: "Violet Pulse",
+        theme_ocean_deep: "Ocean Deep",
+        theme_oled_pure: "OLED Pure",
+        theme_manual: "Manual",
+        auth_popup_closed: "Sign-in canceled",
+        auth_network_failed: "No internet connection",
+        auth_cancelled: "Request canceled",
+        logout_failed: "Sign out failed",
+        login_failed: "Sign-in failed",
+        draw_photo_hint: "Open the photo editor",
+        password_title: "Password",
+        password_prompt: "Enter password"
     }
 }
 
 const ThemeManager = {
     themes: {
-        light: {
-            p: "#2563eb",
-            bg: "#f8fafc",
-            t: "#0b1220",
-            border: "rgba(2, 6, 23, 0.12)",
-            blur: 12,
-            motion: 1.0,
-            density: 1,
-            radius: 12,
-            radiusScale: 1,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.0,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.72,
-            editorLetterSpacing: "0px",
-            shadow: "0 20px 35px rgba(2, 6, 23, 0.18)",
-            shadowSmall: "0 10px 18px rgba(2, 6, 23, 0.12)",
-            toolbarBg: "rgba(2, 6, 23, 0.04)",
-            toolbarBorder: "rgba(2, 6, 23, 0.08)",
-            toolbarShadow: "0 18px 28px rgba(2, 6, 23, 0.08)"
-        },
         dark: {
             p: "#00f2ff",
             bg: "#050505",
             t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.1)",
+            surface: "#0d0d10",
+            surfaceTransparent: "rgba(8, 8, 12, 0.72)",
+            border: "rgba(255, 255, 255, 0.12)",
             blur: 18,
             motion: 1.0,
             density: 1,
@@ -501,106 +681,14 @@ const ThemeManager = {
             toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.55)"
         },
         system: { preset: "system" },
-
-        purple: {
-            p: "#a855f7",
-            bg: "#07050b",
-            t: "#f8f7ff",
-            border: "rgba(248, 247, 255, 0.1)",
-            blur: 20,
-            motion: 1.04,
-            density: 1,
-            radius: 13,
-            radiusScale: 1.05,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.02,
-            spaceUnit: 12,
-            editorPadding: 32,
-            editorLineHeight: 1.74,
-            editorLetterSpacing: "0.1px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(168, 85, 247, 0.10)",
-            toolbarBorder: "rgba(248, 247, 255, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
-        },
-        green: {
-            p: "#22c55e",
-            bg: "#040a06",
-            t: "#f6fff9",
-            border: "rgba(246, 255, 249, 0.1)",
-            blur: 18,
-            motion: 1.02,
-            density: 1,
-            radius: 12,
-            radiusScale: 1.03,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.01,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.72,
-            editorLetterSpacing: "0px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.62)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.42)",
-            toolbarBg: "rgba(34, 197, 94, 0.08)",
-            toolbarBorder: "rgba(246, 255, 249, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.6)"
-        },
-        red: {
-            p: "#ef4444",
-            bg: "#0b0505",
-            t: "#fff7f7",
-            border: "rgba(255, 247, 247, 0.1)",
-            blur: 20,
-            motion: 1.03,
-            density: 1,
-            radius: 12,
-            radiusScale: 1.06,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.01,
-            spaceUnit: 12,
-            editorPadding: 30,
-            editorLineHeight: 1.72,
-            editorLetterSpacing: "0px",
-            shadow: "0 26px 48px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(239, 68, 68, 0.10)",
-            toolbarBorder: "rgba(255, 247, 247, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
-        },
-        blue: {
-            p: "#3b82f6",
-            bg: "#04070f",
-            t: "#f5f9ff",
-            border: "rgba(245, 249, 255, 0.1)",
-            blur: 20,
-            motion: 1.05,
-            density: 1,
-            radius: 12,
-            radiusScale: 1.04,
-            fontBase: 16,
-            hitSize: 44,
-            typeScale: 1.02,
-            spaceUnit: 13,
-            editorPadding: 32,
-            editorLineHeight: 1.75,
-            editorLetterSpacing: "0.15px",
-            shadow: "0 26px 50px rgba(0, 0, 0, 0.65)",
-            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.45)",
-            toolbarBg: "rgba(59, 130, 246, 0.10)",
-            toolbarBorder: "rgba(245, 249, 255, 0.14)",
-            toolbarShadow: "0 18px 30px rgba(0, 0, 0, 0.62)"
-        },
-
-        oled: {
-            p: "#00f2ff",
-            bg: "#000000",
-            t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.12)",
-            blur: 16,
+        light: {
+            p: "#2563eb",
+            bg: "#f8fafc",
+            t: "#0b1220",
+            surface: "#ffffff",
+            surfaceTransparent: "rgba(255, 255, 255, 0.72)",
+            border: "rgba(2, 6, 23, 0.12)",
+            blur: 10,
             motion: 1.0,
             density: 1,
             radius: 12,
@@ -610,36 +698,163 @@ const ThemeManager = {
             typeScale: 1.0,
             spaceUnit: 12,
             editorPadding: 30,
-            editorLineHeight: 1.7,
+            editorLineHeight: 1.68,
             editorLetterSpacing: "0px",
-            shadow: "0 22px 44px rgba(0, 0, 0, 0.7)",
-            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.55)",
-            toolbarBg: "rgba(255, 255, 255, 0.03)",
-            toolbarBorder: "rgba(255, 255, 255, 0.1)",
-            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.7)"
+            shadow: "0 18px 30px rgba(2, 6, 23, 0.16)",
+            shadowSmall: "0 10px 18px rgba(2, 6, 23, 0.12)",
+            toolbarBg: "rgba(2, 6, 23, 0.04)",
+            toolbarBorder: "rgba(2, 6, 23, 0.08)",
+            toolbarShadow: "0 14px 24px rgba(2, 6, 23, 0.08)"
         },
-        neon: {
+        graphite: {
+            p: "#9ca3af",
+            bg: "#0a0b0d",
+            t: "#f3f4f6",
+            surface: "#111316",
+            surfaceTransparent: "rgba(15, 17, 20, 0.78)",
+            border: "rgba(148, 163, 184, 0.18)",
+            blur: 8,
+            motion: 0.9,
+            density: 0.95,
+            radius: 10,
+            radiusScale: 0.95,
+            fontBase: 15,
+            hitSize: 42,
+            typeScale: 0.98,
+            spaceUnit: 11,
+            editorPadding: 28,
+            editorLineHeight: 1.65,
+            editorLetterSpacing: "0.2px",
+            shadow: "0 16px 26px rgba(0, 0, 0, 0.6)",
+            shadowSmall: "0 8px 14px rgba(0, 0, 0, 0.45)",
+            toolbarBg: "rgba(156, 163, 175, 0.06)",
+            toolbarBorder: "rgba(148, 163, 184, 0.18)",
+            toolbarShadow: "0 12px 20px rgba(0, 0, 0, 0.55)"
+        },
+        neon_cyan: {
             p: "#00f2ff",
-            bg: "#04040a",
+            bg: "#03040a",
             t: "#ffffff",
-            border: "rgba(255, 255, 255, 0.1)",
-            blur: 22,
-            motion: 1.06,
-            density: 1,
-            radius: 13,
+            surface: "#0b0e1c",
+            surfaceTransparent: "rgba(4, 8, 18, 0.7)",
+            border: "rgba(0, 242, 255, 0.22)",
+            blur: 24,
+            motion: 1.08,
+            density: 1.02,
+            radius: 14,
             radiusScale: 1.08,
             fontBase: 16,
-            hitSize: 44,
+            hitSize: 46,
             typeScale: 1.03,
+            spaceUnit: 13,
+            editorPadding: 34,
+            editorLineHeight: 1.76,
+            editorLetterSpacing: "0.2px",
+            shadow: "0 30px 60px rgba(0, 0, 0, 0.72)",
+            shadowSmall: "0 14px 24px rgba(0, 0, 0, 0.55)",
+            toolbarBg: "rgba(0, 242, 255, 0.12)",
+            toolbarBorder: "rgba(191, 255, 255, 0.24)",
+            toolbarShadow: "0 20px 36px rgba(0, 0, 0, 0.72)"
+        },
+        emerald_calm: {
+            p: "#22c55e",
+            bg: "#040a06",
+            t: "#f4fff8",
+            surface: "#0a1410",
+            surfaceTransparent: "rgba(6, 14, 10, 0.74)",
+            border: "rgba(34, 197, 94, 0.18)",
+            blur: 16,
+            motion: 0.96,
+            density: 1,
+            radius: 12,
+            radiusScale: 1.02,
+            fontBase: 16,
+            hitSize: 44,
+            typeScale: 1.01,
+            spaceUnit: 12,
+            editorPadding: 30,
+            editorLineHeight: 1.72,
+            editorLetterSpacing: "0.05px",
+            shadow: "0 22px 44px rgba(0, 0, 0, 0.6)",
+            shadowSmall: "0 12px 20px rgba(0, 0, 0, 0.42)",
+            toolbarBg: "rgba(34, 197, 94, 0.08)",
+            toolbarBorder: "rgba(180, 255, 210, 0.16)",
+            toolbarShadow: "0 16px 26px rgba(0, 0, 0, 0.58)"
+        },
+        violet_pulse: {
+            p: "#a855f7",
+            bg: "#07050b",
+            t: "#f8f7ff",
+            surface: "#120d1f",
+            surfaceTransparent: "rgba(12, 8, 24, 0.7)",
+            border: "rgba(168, 85, 247, 0.2)",
+            blur: 22,
+            motion: 1.05,
+            density: 1.02,
+            radius: 14,
+            radiusScale: 1.12,
+            fontBase: 16,
+            hitSize: 46,
+            typeScale: 1.02,
+            spaceUnit: 13,
+            editorPadding: 34,
+            editorLineHeight: 1.75,
+            editorLetterSpacing: "0.15px",
+            shadow: "0 28px 54px rgba(0, 0, 0, 0.68)",
+            shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.48)",
+            toolbarBg: "rgba(168, 85, 247, 0.12)",
+            toolbarBorder: "rgba(248, 247, 255, 0.18)",
+            toolbarShadow: "0 20px 32px rgba(0, 0, 0, 0.62)"
+        },
+        ocean_deep: {
+            p: "#3b82f6",
+            bg: "#03060f",
+            t: "#f0f6ff",
+            surface: "#0b1222",
+            surfaceTransparent: "rgba(5, 9, 20, 0.72)",
+            border: "rgba(59, 130, 246, 0.2)",
+            blur: 20,
+            motion: 1.02,
+            density: 1.01,
+            radius: 12,
+            radiusScale: 1.04,
+            fontBase: 16,
+            hitSize: 44,
+            typeScale: 1.02,
             spaceUnit: 13,
             editorPadding: 32,
             editorLineHeight: 1.74,
-            editorLetterSpacing: "0.15px",
-            shadow: "0 28px 56px rgba(0, 0, 0, 0.7)",
+            editorLetterSpacing: "0.12px",
+            shadow: "0 26px 50px rgba(0, 0, 0, 0.7)",
             shadowSmall: "0 12px 22px rgba(0, 0, 0, 0.5)",
-            toolbarBg: "rgba(0, 242, 255, 0.10)",
-            toolbarBorder: "rgba(226, 242, 255, 0.18)",
-            toolbarShadow: "0 18px 34px rgba(0, 0, 0, 0.7)"
+            toolbarBg: "rgba(59, 130, 246, 0.1)",
+            toolbarBorder: "rgba(208, 226, 255, 0.18)",
+            toolbarShadow: "0 18px 32px rgba(0, 0, 0, 0.65)"
+        },
+        oled_pure: {
+            p: "#00f2ff",
+            bg: "#000000",
+            t: "#ffffff",
+            surface: "#050505",
+            surfaceTransparent: "rgba(0, 0, 0, 0.82)",
+            border: "rgba(255, 255, 255, 0.16)",
+            blur: 12,
+            motion: 0.9,
+            density: 0.96,
+            radius: 10,
+            radiusScale: 0.95,
+            fontBase: 15,
+            hitSize: 42,
+            typeScale: 0.98,
+            spaceUnit: 11,
+            editorPadding: 28,
+            editorLineHeight: 1.62,
+            editorLetterSpacing: "0.3px",
+            shadow: "0 18px 32px rgba(0, 0, 0, 0.82)",
+            shadowSmall: "0 10px 18px rgba(0, 0, 0, 0.7)",
+            toolbarBg: "rgba(255, 255, 255, 0.02)",
+            toolbarBorder: "rgba(255, 255, 255, 0.12)",
+            toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.82)"
         }
     },
 
@@ -798,26 +1013,27 @@ const ThemeManager = {
 
         const dict = LANG[state.config.lang] || LANG.ru
         const labels = {
-            light: dict.theme_light || "Light",
-            dark: dict.theme_dark || "Dark",
+            dark: dict.theme_dark_default || dict.theme_dark || "Dark",
             system: dict.theme_system || "System",
-            oled: dict.theme_oled || "OLED",
-            neon: dict.theme_neon || "Neon",
-            purple: "Purple",
-            green: "Green",
-            red: "Red",
-            blue: "Blue"
+            light: dict.theme_light || "Light",
+            graphite: dict.theme_graphite || "Graphite",
+            neon_cyan: dict.theme_neon_cyan || "Neon Cyan",
+            emerald_calm: dict.theme_emerald_calm || "Emerald Calm",
+            violet_pulse: dict.theme_violet_pulse || "Violet Pulse",
+            ocean_deep: dict.theme_ocean_deep || "Ocean Deep",
+            oled_pure: dict.theme_oled_pure || "OLED",
+            manual: dict.theme_manual || dict.manual || "Manual"
         }
 
-        const ordered = ["system", "dark", "light", "purple", "blue", "green", "red", "neon", "oled"]
+        const ordered = ["system", "dark", "graphite", "neon_cyan", "emerald_calm", "violet_pulse", "ocean_deep", "oled_pure", "light", "manual"]
 
         const current = localStorage.getItem("app-theme-settings")
         const parsed = current ? JSON.parse(current) : null
-        const activeKey = parsed?.preset ? parsed.preset : null
+        const activeKey = parsed?.preset ? parsed.preset : "manual"
 
         ordered.forEach((key) => {
             const t = this.themes[key]
-            if (!t) return
+            if (!t && key !== "manual") return
 
             const wrapper = document.createElement("div")
             wrapper.className = "theme-item-wrapper"
@@ -825,7 +1041,7 @@ const ThemeManager = {
             const dot = document.createElement("div")
             dot.className = "theme-dot"
 
-            const color = t.p || (key === "system" ? "#6366f1" : "#00f2ff")
+            const color = key === "manual" ? (parsed?.p || this.themes.dark.p) : (t.p || (key === "system" ? "#6366f1" : "#00f2ff"))
             dot.style.background = color
 
             const glow = Utils.hexToRgb(color)
@@ -838,11 +1054,19 @@ const ThemeManager = {
             label.className = "theme-label"
             label.textContent = labels[key] || key.charAt(0).toUpperCase() + key.slice(1)
 
-            dot.onclick = () => {
-                this.applyPreset(key)
+            dot.addEventListener("click", () => {
+                if (key === "manual") {
+                    const base = parsed || {}
+                    const p = typeof base.p === "string" ? base.p : this.themes.dark.p
+                    const bg = typeof base.bg === "string" ? base.bg : this.themes.dark.bg
+                    const t = typeof base.t === "string" ? base.t : this.themes.dark.t
+                    this.setManual(p, bg, t)
+                } else {
+                    this.applyPreset(key)
+                }
                 root.querySelectorAll(".theme-dot").forEach(d => d.classList.remove("active"))
                 dot.classList.add("active")
-            }
+            })
 
             wrapper.append(dot, label)
             root.appendChild(wrapper)
@@ -922,7 +1146,7 @@ const Auth = {
             this.resetSession()
         } catch {
             this.applySignedInUI(state.user)
-            if (typeof UI !== "undefined") UI.showToast("Ошибка при выходе")
+            if (typeof UI !== "undefined") UI.showToast(UI.getText("logout_failed", "Sign out failed"))
         }
     },
 
@@ -935,18 +1159,19 @@ const Auth = {
             await this.login()
         } catch {
             this.applySignedInUI(state.user)
-            if (typeof UI !== "undefined") UI.showToast("Ошибка входа")
+            if (typeof UI !== "undefined") UI.showToast(UI.getText("login_failed", "Sign-in failed"))
         }
     },
 
     handleAuthError(e) {
         const code = e && e.code ? e.code : "auth/unknown"
+        const t = (typeof UI !== "undefined" && UI.getText) ? UI.getText.bind(UI) : (k, f) => f || k
         const messages = {
-            "auth/popup-closed-by-user": "Вход отменен",
-            "auth/network-request-failed": "Нет соединения с интернетом",
-            "auth/cancelled-popup-request": "Запрос отменен"
+            "auth/popup-closed-by-user": t("auth_popup_closed", "Sign-in canceled"),
+            "auth/network-request-failed": t("auth_network_failed", "No internet connection"),
+            "auth/cancelled-popup-request": t("auth_cancelled", "Request canceled")
         }
-        const msg = messages[code] || `Ошибка входа: ${code}`
+        const msg = messages[code] || `${t("login_failed", "Sign-in failed")}: ${code}`
         if (typeof UI !== "undefined") UI.showToast(msg)
         else alert(msg)
     },
@@ -1051,6 +1276,7 @@ if (auth) {
 
 document.addEventListener("DOMContentLoaded", () => {
     ThemeManager.init()
+    if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
     if (!state.user) Auth.applySignedOutUI()
 
     document.addEventListener("dblclick", (event) => {

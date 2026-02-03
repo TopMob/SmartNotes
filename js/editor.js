@@ -14,7 +14,8 @@ const Editor = {
             toolbar: document.getElementById("editor-toolbar"),
             tagsInput: document.getElementById("note-tags-input"),
             tagsContainer: document.getElementById("note-tags-container"),
-            ctxMenu: document.getElementById("media-context-menu") || document.getElementById("media-context-menu")
+            scrollArea: document.querySelector(".editor-scroll-area"),
+            ctxMenu: document.getElementById("media-context-menu")
         }
         this.loadToolSettings()
         this.buildToolbar()
@@ -33,6 +34,11 @@ const Editor = {
                 }
                 this.deselectMedia()
             })
+            this.els.content.addEventListener("change", (e) => {
+                if (e.target.matches(".task-checkbox")) {
+                    this.toggleTask(e.target)
+                }
+            })
             this.els.content.addEventListener("pointerdown", (e) => {
                 const handle = e.target.closest(".media-resize-handle")
                 if (!handle) return
@@ -47,6 +53,9 @@ const Editor = {
                 document.addEventListener("pointerup", this.stopResize, { passive: true })
             })
         }
+        if (this.els.scrollArea) {
+            this.els.scrollArea.addEventListener("scroll", () => this.deselectMedia())
+        }
         if (this.els.tagsInput) {
             this.els.tagsInput.addEventListener("keydown", (e) => {
                 if (e.key !== "Enter") return
@@ -56,6 +65,21 @@ const Editor = {
                 const tag = v.startsWith("#") ? v.slice(1) : v
                 this.addTag(tag)
                 this.els.tagsInput.value = ""
+            })
+        }
+        if (this.els.tagsContainer) {
+            this.els.tagsContainer.addEventListener("click", (e) => {
+                const remove = e.target.closest("[data-action='remove-tag']")
+                if (remove) {
+                    const raw = remove.dataset.tag || ""
+                    this.removeTag(decodeURIComponent(raw))
+                    return
+                }
+                const add = e.target.closest("[data-action='add-tag']")
+                if (add) {
+                    const raw = add.dataset.tag || ""
+                    this.addTag(decodeURIComponent(raw))
+                }
             })
         }
 
@@ -70,36 +94,15 @@ const Editor = {
             })
         }
 
-        const toolbarToggle = document.getElementById("toolbar-toggle")
-        if (toolbarToggle) {
-            toolbarToggle.addEventListener("click", () => {
-                const tb = this.els.toolbar
-                if (!tb) return
-                tb.classList.toggle("is-hidden")
-            })
-        }
-
         const lockApply = document.getElementById("lock-apply")
         if (lockApply) {
             lockApply.addEventListener("click", async () => {
                 const pass = document.getElementById("lock-password")?.value || ""
                 if (!state.currentNote) return
-                if (!pass.trim()) return UI.showToast("Пароль пустой")
+                if (!pass.trim()) return UI.showToast(UI.getText("lock_password_empty", "Password is empty"))
                 await LockService.setLock(state.currentNote, pass.trim())
                 UI.closeModal("lock-modal")
-                UI.showToast("Заметка скрыта")
-            })
-        }
-
-        const surveySubmit = document.getElementById("survey-submit")
-        if (surveySubmit) {
-            surveySubmit.addEventListener("click", async () => {
-                const q1 = String(document.getElementById("survey-q1")?.value || "").trim()
-                const q2 = String(document.getElementById("survey-q2")?.value || "").trim()
-                const q3 = String(document.getElementById("survey-q3")?.value || "").trim()
-                localStorage.setItem("survey:v1", JSON.stringify({ q1, q2, q3, ts: Date.now() }))
-                UI.closeModal("survey-modal")
-                UI.showToast("Спасибо")
+                UI.showToast(UI.getText("lock_hidden", "Note hidden"))
             })
         }
     },
@@ -170,7 +173,22 @@ const Editor = {
     },
 
     insertChecklistLine() {
-        document.execCommand("strikeThrough")
+        const html = '<div class="task-item"><input class="task-checkbox" type="checkbox"><span class="task-text"></span></div>'
+        document.execCommand("insertHTML", false, html)
+        const items = this.els.content.querySelectorAll(".task-item")
+        const last = items[items.length - 1]
+        if (last) {
+            const span = last.querySelector(".task-text")
+            if (span) {
+                const range = document.createRange()
+                range.selectNodeContents(span)
+                range.collapse(true)
+                const sel = window.getSelection()
+                sel.removeAllRanges()
+                sel.addRange(range)
+            }
+        }
+        this.queueSnapshot()
     },
 
     toggleTask(el) {
@@ -223,6 +241,7 @@ const Editor = {
         this.history = []
         this.future = []
         this.renderState()
+        this.history = [this.captureSnapshot()]
         this.els.wrapper.classList.add("active")
         setTimeout(() => this.els.content?.focus(), 90)
         UI.toggleSidebar(false)
@@ -231,9 +250,9 @@ const Editor = {
     async maybeUnlock(note) {
         if (!note.lock || !note.lock.hash) return true
         return await new Promise((resolve) => {
-            UI.showPrompt("Пароль", "Введите пароль", async (val) => {
+            UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
                 const ok = await LockService.verify(note, val)
-                if (!ok) UI.showToast("Неверный пароль")
+                if (!ok) UI.showToast(UI.getText("lock_invalid_password", "Invalid password"))
                 resolve(ok)
             })
         })
@@ -255,9 +274,18 @@ const Editor = {
         const n = state.currentNote
         if (!n) return
         this.els.title.value = n.title || ""
-        this.els.content.innerHTML = n.content || ""
+        this.els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
         this.renderTags()
         this.makeMediaDraggable()
+        this.syncTaskStates()
+    },
+
+    syncTaskStates() {
+        if (!this.els.content) return
+        this.els.content.querySelectorAll(".task-checkbox").forEach(cb => {
+            const item = cb.closest(".task-item")
+            if (item) item.classList.toggle("completed", !!cb.checked)
+        })
     },
 
     addTag(tag) {
@@ -287,7 +315,7 @@ const Editor = {
         if (!n || !this.els.tagsContainer) return
         const tags = Array.isArray(n.tags) ? n.tags : []
         const html = tags.map(t => `
-            <span class="tag-chip" onclick="Editor.removeTag('${Utils.escapeHtml(String(t))}')">
+            <span class="tag-chip" data-action="remove-tag" data-tag="${encodeURIComponent(String(t))}">
                 <i class="material-icons-round" aria-hidden="true">tag</i>
                 <span>${Utils.escapeHtml(String(t))}</span>
             </span>
@@ -304,7 +332,8 @@ const Editor = {
                 const b = document.createElement("span")
                 b.className = "tag-suggest"
                 b.textContent = `#${t}`
-                b.onclick = () => this.addTag(t)
+                b.dataset.action = "add-tag"
+                b.dataset.tag = encodeURIComponent(t)
                 wrap.appendChild(b)
             })
             this.els.tagsContainer.appendChild(wrap)
@@ -317,27 +346,50 @@ const Editor = {
         this.snapshotTimer = setTimeout(() => this.snapshot(), 260)
     },
 
+    captureSnapshot() {
+        return {
+            title: String(this.els.title.value || ""),
+            content: String(this.els.content.innerHTML || ""),
+            tags: Array.isArray(state.currentNote?.tags) ? [...state.currentNote.tags] : []
+        }
+    },
+
+    snapshotsEqual(a, b) {
+        if (!a || !b) return false
+        return a.title === b.title && a.content === b.content && JSON.stringify(a.tags || []) === JSON.stringify(b.tags || [])
+    },
+
     snapshot() {
         const n = state.currentNote
         if (!n) return
         n.title = String(this.els.title.value || "")
         n.content = String(this.els.content.innerHTML || "")
         n.updatedAt = Utils.serverTimestamp()
-        this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
+        const next = this.captureSnapshot()
+        const last = this.history[this.history.length - 1]
+        if (last && this.snapshotsEqual(last, next)) return
+        this.history.push(JSON.parse(JSON.stringify(next)))
         if (this.history.length > 80) this.history.shift()
         this.future = []
+    },
+
+    applySnapshot(snapshot) {
+        const n = state.currentNote
+        if (!n || !snapshot) return
+        n.title = snapshot.title
+        n.content = snapshot.content
+        n.tags = snapshot.tags
+        this.renderState()
     },
 
     undo() {
         const n = state.currentNote
         if (!n) return
-        if (!this.history.length) return
-        const last = this.history.pop()
-        this.future.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
-        n.title = last.title
-        n.content = last.content
-        n.tags = last.tags
-        this.renderState()
+        if (this.history.length <= 1) return
+        const current = this.history.pop()
+        this.future.push(current)
+        const prev = this.history[this.history.length - 1]
+        this.applySnapshot(prev)
     },
 
     redo() {
@@ -345,11 +397,8 @@ const Editor = {
         if (!n) return
         const next = this.future.pop()
         if (!next) return
-        this.history.push(JSON.parse(JSON.stringify({ title: n.title, content: n.content, tags: n.tags })))
-        n.title = next.title
-        n.content = next.content
-        n.tags = next.tags
-        this.renderState()
+        this.history.push(next)
+        this.applySnapshot(next)
     },
 
     insertMedia(src, type) {
@@ -368,6 +417,7 @@ const Editor = {
         if (!root) return
         root.querySelectorAll(".media-wrapper").forEach(w => {
             w.setAttribute("draggable", "true")
+            w.setAttribute("contenteditable", "false")
         })
     },
 
@@ -379,10 +429,12 @@ const Editor = {
         const menu = this.els.ctxMenu
         if (!menu) return
         menu.classList.remove("hidden")
-        const top = rect.top + window.scrollY - 56
-        const left = rect.left + window.scrollX + rect.width / 2 - menu.offsetWidth / 2
-        menu.style.top = `${Math.max(10, top)}px`
-        menu.style.left = `${Math.max(10, left)}px`
+        const top = rect.top - 56
+        const left = rect.left + rect.width / 2 - menu.offsetWidth / 2
+        const safeTop = Math.max(10, top)
+        const safeLeft = Math.max(10, Math.min(window.innerWidth - menu.offsetWidth - 10, left))
+        menu.style.top = `${safeTop}px`
+        menu.style.left = `${safeLeft}px`
     },
 
     deselectMedia() {
@@ -413,13 +465,20 @@ const Editor = {
     alignMediaOrText(side) {
         if (!this.selectedMedia) return
         const w = this.selectedMedia
-        w.style.float = side === "left" ? "left" : side === "right" ? "right" : ""
-        w.style.margin = side === "left" ? "6px 14px 6px 0" : side === "right" ? "6px 0 6px 14px" : ""
+        w.classList.remove("align-left", "align-right")
+        if (side === "left") w.classList.add("align-left")
+        if (side === "right") w.classList.add("align-right")
         this.queueSnapshot()
     },
 
     drawOnSelectedMedia() {
-        UI.showToast("Открой редактор фото из кнопки в модалке")
+        UI.showToast(UI.getText("draw_photo_hint", "Use the photo editor"))
+    },
+
+    toggleToolbar() {
+        const tb = this.els.toolbar
+        if (!tb) return
+        tb.classList.toggle("is-hidden")
     },
 
     async save() {
@@ -427,7 +486,7 @@ const Editor = {
         const n = state.currentNote
         if (!n) return
         n.title = String(this.els.title.value || "")
-        n.content = String(this.els.content.innerHTML || "")
+        n.content = Utils.sanitizeHtml(String(this.els.content.innerHTML || ""))
         if (!Array.isArray(n.tags)) n.tags = []
         const auto = SmartSearch.suggestTags(n.title, n.content)
         auto.forEach(t => {
@@ -452,7 +511,7 @@ const Editor = {
         UI.confirm("delete", async () => {
             if (!db || !state.user) return
             await db.collection("users").doc(state.user.uid).collection("notes").doc(n.id).delete()
-            UI.showToast("Удалено")
+            UI.showToast(UI.getText("note_deleted", "Deleted"))
             this.close()
         })
     }
