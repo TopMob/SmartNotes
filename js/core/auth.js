@@ -1,80 +1,109 @@
 (() => {
   if (window.Auth) return
 
-  function showApp() {
-    const login = document.getElementById("login-screen")
-    const app = document.getElementById("app")
-    if (login) {
-      login.classList.remove("active")
-      login.setAttribute("aria-hidden", "true")
-    }
-    if (app) {
-      app.setAttribute("aria-hidden", "false")
+  function setVisibility(id, isVisible) {
+    const el = document.getElementById(id)
+    if (!el) return
+    if (isVisible) {
+      el.classList.add("active")
+      el.setAttribute("aria-hidden", "false")
+    } else {
+      el.classList.remove("active")
+      el.setAttribute("aria-hidden", "true")
     }
   }
 
-  function showLogin() {
-    const login = document.getElementById("login-screen")
+  function showAppShell() {
+    setVisibility("login-screen", false)
     const app = document.getElementById("app")
-    if (login) {
-      login.classList.add("active")
-      login.setAttribute("aria-hidden", "false")
-    }
-    if (app) {
-      app.setAttribute("aria-hidden", "true")
+    if (app) app.setAttribute("aria-hidden", "false")
+  }
+
+  function showLoginShell() {
+    setVisibility("login-screen", true)
+    const app = document.getElementById("app")
+    if (app) app.setAttribute("aria-hidden", "true")
+  }
+
+  function toast(message) {
+    if (window.UI && typeof UI.showToast === "function") UI.showToast(message)
+    else alert(message)
+  }
+
+  function ensureFirebaseAuth() {
+    if (!window.firebase || !firebase.auth) return null
+    try {
+      return firebase.auth()
+    } catch {
+      return null
     }
   }
 
   const Auth = {
     async login() {
-      if (!window.firebase || !firebase.auth) {
-        alert("Firebase не загружен")
+      const auth = ensureFirebaseAuth()
+      if (!auth) {
+        toast("Firebase Auth не инициализирован")
         return
       }
       const provider = new firebase.auth.GoogleAuthProvider()
       provider.setCustomParameters({ prompt: "select_account" })
       try {
-        await firebase.auth().signInWithPopup(provider)
+        await auth.signInWithPopup(provider)
       } catch (e) {
-        const code = e && e.code ? e.code : "auth/unknown"
+        const code = e && e.code ? String(e.code) : "auth/unknown"
         const map = {
+          "auth/popup-blocked": "Браузер заблокировал окно входа",
           "auth/popup-closed-by-user": "Вход отменен",
-          "auth/network-request-failed": "Нет соединения с интернетом",
-          "auth/cancelled-popup-request": "Запрос отменен"
+          "auth/cancelled-popup-request": "Запрос входа отменен",
+          "auth/network-request-failed": "Нет соединения с интернетом"
         }
-        const msg = map[code] || `Ошибка входа: ${code}`
-        if (window.UI && UI.showToast) UI.showToast(msg)
-        else alert(msg)
+        toast(map[code] || `Ошибка входа: ${code}`)
       }
     },
 
     async logout() {
-      if (!window.firebase || !firebase.auth) return
+      const auth = ensureFirebaseAuth()
+      if (!auth) return
       try {
-        await firebase.auth().signOut()
+        await auth.signOut()
       } catch {
-        if (window.UI && UI.showToast) UI.showToast("Ошибка при выходе")
+        toast("Ошибка при выходе")
       }
     },
 
     async switchAccount() {
       await this.logout()
       await this.login()
+    },
+
+    bindAuthState() {
+      const auth = ensureFirebaseAuth()
+      if (!auth) {
+        showLoginShell()
+        if (window.state) window.state.user = null
+        return
+      }
+
+      auth.onAuthStateChanged(user => {
+        if (!window.state) window.state = {}
+        window.state.user = user || null
+
+        if (user) {
+          showAppShell()
+          if (window.UI && typeof UI.onAuthReady === "function") UI.onAuthReady(user)
+        } else {
+          showLoginShell()
+        }
+      })
     }
   }
 
   window.Auth = Auth
 
-  if (window.firebase && firebase.auth) {
-    firebase.auth().onAuthStateChanged(user => {
-      window.state.user = user || null
-
-      if (user) {
-        showApp()
-        if (window.UI && UI.onAuthReady) UI.onAuthReady(user)
-      } else {
-        showLogin()
-      }
-    })
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => Auth.bindAuthState())
+  } else {
+    Auth.bindAuthState()
   }
 })()
