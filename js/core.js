@@ -69,12 +69,12 @@ const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b","strong","i","em","u","br","p","div","ul","ol","li","span","img","a","input"])
-        const allowedClasses = new Set(["task-item","task-checkbox","task-text","completed","media-wrapper","media-resize-handle","align-left","align-right"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "input"])
+        const allowedClasses = new Set(["task-item", "task-checkbox", "task-text", "completed", "media-wrapper", "media-resize-handle", "align-left", "align-right"])
         const allowAttrs = {
             a: new Set(["href"]),
-            img: new Set(["src","alt"]),
-            input: new Set(["type","checked"])
+            img: new Set(["src", "alt"]),
+            input: new Set(["type", "checked"])
         }
         const wrapper = document.createElement("div")
         wrapper.innerHTML = String(html || "")
@@ -92,63 +92,58 @@ const Utils = {
         const walk = (node) => {
             const children = Array.from(node.childNodes)
             children.forEach(child => {
-                if (child.nodeType === Node.ELEMENT_NODE) {
-                    const tag = child.tagName.toLowerCase()
-                    if (!allowedTags.has(tag)) {
-                        const textNode = document.createTextNode(child.textContent || "")
-                        child.replaceWith(textNode)
+                if (child.nodeType !== Node.ELEMENT_NODE) return
+
+                const tag = child.tagName.toLowerCase()
+                if (!allowedTags.has(tag)) {
+                    const textNode = document.createTextNode(child.textContent || "")
+                    child.replaceWith(textNode)
+                    return
+                }
+
+                Array.from(child.attributes).forEach(attr => {
+                    const name = attr.name.toLowerCase()
+                    if (name.startsWith("on") || name === "style") {
+                        child.removeAttribute(attr.name)
                         return
                     }
-
-                    Array.from(child.attributes).forEach(attr => {
-                        const name = attr.name.toLowerCase()
-                        if (name.startsWith("on") || name === "style") {
-                            child.removeAttribute(attr.name)
-                            return
-                        }
-                        if (name === "class") {
-                            const safe = String(attr.value || "")
-                                .split(/\s+/)
-                                .filter(cls => allowedClasses.has(cls))
-                            if (safe.length) child.setAttribute("class", safe.join(" "))
-                            else child.removeAttribute("class")
-                            return
-                        }
-                        const allowed = allowAttrs[tag]
-                        if (!allowed || !allowed.has(name)) {
-                            child.removeAttribute(attr.name)
-                        }
-                    })
-
-                    if (tag === "a") {
-                        const href = child.getAttribute("href")
-                        if (!isSafeUrl(href) || href.startsWith("data:")) {
-                            child.removeAttribute("href")
-                        } else if (href.startsWith("http")) {
-                            child.setAttribute("rel", "noopener noreferrer")
-                            child.setAttribute("target", "_blank")
-                        }
+                    if (name === "class") {
+                        const safe = String(attr.value || "")
+                            .split(/\s+/)
+                            .filter(cls => allowedClasses.has(cls))
+                        if (safe.length) child.setAttribute("class", safe.join(" "))
+                        else child.removeAttribute("class")
+                        return
                     }
+                    const allowed = allowAttrs[tag]
+                    if (!allowed || !allowed.has(name)) child.removeAttribute(attr.name)
+                })
 
-                    if (tag === "img") {
-                        const src = child.getAttribute("src")
-                        if (!isSafeUrl(src) || (src.startsWith("data:") && !src.startsWith("data:image")) || src.startsWith("http:")) {
-                            child.removeAttribute("src")
-                        }
+                if (tag === "a") {
+                    const href = child.getAttribute("href")
+                    if (!isSafeUrl(href) || String(href || "").startsWith("data:")) {
+                        child.removeAttribute("href")
+                    } else if (String(href || "").startsWith("http")) {
+                        child.setAttribute("rel", "noopener noreferrer")
+                        child.setAttribute("target", "_blank")
                     }
-
-                    if (tag === "input") {
-                        const type = child.getAttribute("type")
-                        if (String(type || "").toLowerCase() !== "checkbox") {
-                            child.removeAttribute("type")
-                        }
-                        if (child.hasAttribute("checked")) {
-                            child.setAttribute("checked", "")
-                        }
-                    }
-
-                    walk(child)
                 }
+
+                if (tag === "img") {
+                    const src = child.getAttribute("src")
+                    const s = String(src || "")
+                    if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:image")) || s.startsWith("http:")) {
+                        child.removeAttribute("src")
+                    }
+                }
+
+                if (tag === "input") {
+                    const type = String(child.getAttribute("type") || "").toLowerCase()
+                    if (type !== "checkbox") child.removeAttribute("type")
+                    if (child.hasAttribute("checked")) child.setAttribute("checked", "")
+                }
+
+                walk(child)
             })
         }
 
@@ -179,6 +174,13 @@ if (typeof firebase !== "undefined") {
     db = firebase.firestore()
     db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 }
+
+window.Utils = Utils
+window.auth = auth
+window.db = db
+window.DRIVE_CLIENT_ID = DRIVE_CLIENT_ID
+window.DRIVE_SCOPES = DRIVE_SCOPES
+
 
 const LANG = {
     ru: {
@@ -854,336 +856,68 @@ const ThemeManager = {
         }
     },
 
-    motionAllowed() {
-        const reduce = !!StateStore.read()?.config?.reduceMotion
-        return !reduce && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    },
-
-    blurAllowed() {
-        const reduce = !!StateStore.read()?.config?.reduceMotion
-        return !reduce
-    },
-
-    buildGradients(primary, bg) {
-        const rgb = Utils.hexToRgb(primary) || { r: 0, g: 242, b: 255 }
-        const glow = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55)`
-        const glowSoft = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.22)`
-        const primaryGradient = `linear-gradient(135deg, ${primary}, ${Utils.adjustColor(primary, 30)})`
-        const bgRadial = `radial-gradient(circle at 22% 18%, ${glowSoft}, transparent 45%), radial-gradient(circle at 78% 28%, rgba(255,255,255,0.06), transparent 40%), radial-gradient(circle at 50% 80%, rgba(255,255,255,0.04), transparent 42%)`
-        const bgBlend = `linear-gradient(180deg, ${Utils.adjustColor(bg, 8)}, ${bg})`
-        return { glow, glowSoft, primaryGradient, bgRadial, bgBlend, rgb }
-    },
-
-    applyThemeVars(theme) {
-        const root = document.documentElement
-        const bg = theme.bg
-        const surface = theme.surface || Utils.adjustColor(bg, 10)
-        const surfaceLight = theme.surfaceLight || Utils.adjustColor(bg, 20)
-        const border = theme.border || "rgba(255, 255, 255, 0.1)"
-        const density = typeof theme.density === "number" ? theme.density : 1
-        const radiusBase = typeof theme.radius === "number" ? theme.radius : 12
-        const radiusScale = typeof theme.radiusScale === "number" ? theme.radiusScale : 1
-        const radiusMd = Math.round(radiusBase * radiusScale)
-        const radiusSm = Math.max(4, Math.round(radiusMd * 0.6))
-        const radiusLg = Math.round(radiusMd * 1.5)
-        const radiusXl = Math.round(radiusMd * 2.2)
-        const typeScale = typeof theme.typeScale === "number" ? theme.typeScale : 1
-        const spaceUnit = typeof theme.spaceUnit === "number" ? theme.spaceUnit : 12
-        const editorPadding = typeof theme.editorPadding === "number" ? theme.editorPadding : Math.round(spaceUnit * 2.5)
-        const editorLineHeight = typeof theme.editorLineHeight === "number" ? theme.editorLineHeight : 1.7
-        const editorLetterSpacing = theme.editorLetterSpacing || "0px"
-        const motionScale = typeof theme.motion === "number" ? theme.motion : 1
-        const motionEnabled = this.motionAllowed() && motionScale > 0
-        const blurStrength = this.blurAllowed() ? (typeof theme.blur === "number" ? theme.blur : 0) : 0
-        const fontBase = typeof theme.fontBase === "number" ? theme.fontBase : 16
-        const hitSize = typeof theme.hitSize === "number" ? theme.hitSize : 44
-
-        const g = this.buildGradients(theme.p, bg)
-
-        root.style.setProperty("--primary", theme.p)
-        root.style.setProperty("--primary-rgb", `${g.rgb.r}, ${g.rgb.g}, ${g.rgb.b}`)
-        root.style.setProperty("--primary-gradient", g.primaryGradient)
-        root.style.setProperty("--glow", g.glow)
-        root.style.setProperty("--bg", bg)
-        root.style.setProperty("--surface", surface)
-        root.style.setProperty("--surface-light", surfaceLight)
-        root.style.setProperty("--surface-transparent", theme.surfaceTransparent || surface)
-        root.style.setProperty("--border", border)
-        root.style.setProperty("--text", theme.t)
-
-        root.style.setProperty("--radius-sm", `${radiusSm}px`)
-        root.style.setProperty("--radius-md", `${radiusMd}px`)
-        root.style.setProperty("--radius-lg", `${radiusLg}px`)
-        root.style.setProperty("--radius-xl", `${radiusXl}px`)
-
-        root.style.setProperty("--font-base", `${fontBase}px`)
-        root.style.setProperty("--type-scale", `${typeScale}`)
-        root.style.setProperty("--hit-size", `${hitSize}px`)
-        root.style.setProperty("--density", `${density}`)
-        root.style.setProperty("--blur-strength", `${blurStrength}px`)
-        root.style.setProperty("--motion-enabled", motionEnabled ? `${motionScale}` : "0")
-        root.style.setProperty("--animation-duration", motionEnabled ? "0.3s" : "0s")
-
-        root.style.setProperty("--space-unit", `${spaceUnit}px`)
-        root.style.setProperty("--editor-padding", `${editorPadding}px`)
-        root.style.setProperty("--editor-line-height", `${editorLineHeight}`)
-        root.style.setProperty("--editor-letter-spacing", `${editorLetterSpacing}`)
-
-        if (theme.shadow) root.style.setProperty("--shadow-lg", theme.shadow)
-        if (theme.shadowSmall) root.style.setProperty("--shadow-sm", theme.shadowSmall)
-        if (theme.toolbarBg) root.style.setProperty("--editor-toolbar-bg", theme.toolbarBg)
-        if (theme.toolbarBorder) root.style.setProperty("--editor-toolbar-border", theme.toolbarBorder)
-        if (theme.toolbarShadow) root.style.setProperty("--editor-toolbar-shadow", theme.toolbarShadow)
-
-        root.style.setProperty("--bg-aurora", `${g.bgRadial}, ${g.bgBlend}`)
-    },
-
-    syncInputs(p, bg, t) {
-        const setVal = (id, val) => {
-            const el = document.getElementById(id)
-            if (el) el.value = val
-        }
-        setVal("cp-primary", p)
-        setVal("cp-bg", bg)
-        setVal("cp-text", t)
-    },
-
-    getSavedSettings() {
-        const saved = JSON.parse(localStorage.getItem("app-theme-settings")) || {}
-        if (saved.preset && this.themes[saved.preset]) return { preset: saved.preset }
-        return {
-            preset: "manual",
-            p: typeof saved.p === "string" ? saved.p : this.themes.dark.p,
-            bg: typeof saved.bg === "string" ? saved.bg : this.themes.dark.bg,
-            t: typeof saved.t === "string" ? saved.t : this.themes.dark.t
-        }
-    },
-
-    getDefaultSettings() {
-        return { preset: "dark" }
-    },
-
-    resolvePreset(key) {
-        if (key === "system") {
-            const isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-            return isDark ? this.themes.dark : this.themes.light
-        }
-        return this.themes[key] || this.themes.dark
-    },
-
-    buildManualTheme(primary, bg, text) {
-        const base = this.themes.dark
-        return {
-            ...base,
-            p: primary,
-            bg,
-            t: text,
-            surface: Utils.adjustColor(bg, 10),
-            surfaceLight: Utils.adjustColor(bg, 20)
-        }
-    },
-
-    applySettings(settings, persist = false) {
-        if (settings && settings.preset && settings.preset !== "manual") {
-            const preset = this.resolvePreset(settings.preset)
-            this.applyThemeVars({ ...preset })
-            if (persist) localStorage.setItem("app-theme-settings", JSON.stringify({ preset: settings.preset }))
-            this.syncInputs(preset.p, preset.bg, preset.t)
-            return
-        }
-        const primary = settings?.p || this.themes.dark.p
-        const bg = settings?.bg || this.themes.dark.bg
-        const text = settings?.t || this.themes.dark.t
-        const theme = this.buildManualTheme(primary, bg, text)
-        this.applyThemeVars(theme)
-        if (persist) localStorage.setItem("app-theme-settings", JSON.stringify({ p: primary, bg: bg, t: text }))
-        this.syncInputs(primary, bg, text)
-    },
-
-    setManual(primary, bg, text) {
-        this.applySettings({ preset: "manual", p: primary, bg, t: text }, true)
-    },
-
-    applyPreset(key) {
-        if (!this.themes[key]) return
-        this.applySettings({ preset: key }, true)
-    },
-
-    updateManual(type, val) {
-        const current = this.getSavedSettings()
-        const base = current.preset && current.preset !== "manual" ? this.resolvePreset(current.preset) : this.themes.dark
-        const manual = {
-            p: typeof current.p === "string" ? current.p : base.p,
-            bg: typeof current.bg === "string" ? current.bg : base.bg,
-            t: typeof current.t === "string" ? current.t : base.t
-        }
-        manual[type] = val
-        this.setManual(manual.p, manual.bg, manual.t)
-    },
-
-    setupColorInputs(onInput) {
-        const bind = (id, type) => {
-            const el = document.getElementById(id)
-            if (!el) return
-            el.oninput = (e) => {
-                if (typeof onInput === "function") onInput(type, e.target.value)
-                else this.updateManual(type, e.target.value)
-            }
-        }
-        bind("cp-primary", "p")
-        bind("cp-bg", "bg")
-        bind("cp-text", "t")
-    },
-
-    renderPicker(options = {}) {
-        const root = document.getElementById("theme-picker-root")
-        if (!root) return
-        root.innerHTML = ""
-
-        const dict = LANG[StateStore.read().config.lang] || LANG.ru
-        const labels = {
-            dark: dict.theme_dark_default || dict.theme_dark || "Dark",
-            system: dict.theme_system || "System",
-            light: dict.theme_light || "Light",
-            graphite: dict.theme_graphite || "Graphite",
-            neon_cyan: dict.theme_neon_cyan || "Neon Cyan",
-            emerald_calm: dict.theme_emerald_calm || "Emerald Calm",
-            violet_pulse: dict.theme_violet_pulse || "Violet Pulse",
-            ocean_deep: dict.theme_ocean_deep || "Ocean Deep",
-            oled_pure: dict.theme_oled_pure || "OLED",
-            manual: dict.theme_manual || dict.manual || "Manual"
-        }
-
-        const ordered = ["system", "dark", "graphite", "neon_cyan", "emerald_calm", "violet_pulse", "ocean_deep", "oled_pure", "light", "manual"]
-
-        const current = localStorage.getItem("app-theme-settings")
-        const parsed = current ? JSON.parse(current) : null
-        const activeKey = options.activeKey || (parsed?.preset ? parsed.preset : "manual")
-
-        ordered.forEach((key) => {
-            const t = this.themes[key]
-            if (!t && key !== "manual") return
-
-            const wrapper = document.createElement("div")
-            wrapper.className = "theme-item-wrapper"
-
-            const dot = document.createElement("div")
-            dot.className = "theme-dot"
-
-            const color = key === "manual"
-                ? (options.manualColor || parsed?.p || this.themes.dark.p)
-                : (t.p || (key === "system" ? "#6366f1" : "#00f2ff"))
-            dot.style.background = color
-
-            const glow = Utils.hexToRgb(color)
-            if (glow) dot.style.boxShadow = `0 0 0 1px rgba(255,255,255,0.14), 0 10px 22px rgba(${glow.r},${glow.g},${glow.b},0.28)`
-
-            const isActive = activeKey ? activeKey === key : key === "dark"
-            if (isActive) dot.classList.add("active")
-
-            const label = document.createElement("span")
-            label.className = "theme-label"
-            label.textContent = labels[key] || key.charAt(0).toUpperCase() + key.slice(1)
-
-            dot.addEventListener("click", () => {
-                if (typeof options.onSelect === "function") {
-                    options.onSelect(key)
-                } else if (key === "manual") {
-                    const base = parsed || {}
-                    const p = typeof base.p === "string" ? base.p : this.themes.dark.p
-                    const bg = typeof base.bg === "string" ? base.bg : this.themes.dark.bg
-                    const t = typeof base.t === "string" ? base.t : this.themes.dark.t
-                    this.setManual(p, bg, t)
-                } else {
-                    this.applyPreset(key)
-                }
-                root.querySelectorAll(".theme-dot").forEach(d => d.classList.remove("active"))
-                dot.classList.add("active")
-            })
-
-            wrapper.append(dot, label)
-            root.appendChild(wrapper)
-        })
-    },
-
-    reset() {
-        this.applyPreset("dark")
-        this.renderPicker()
-    },
-
-    revertToLastSaved() {
-        const saved = JSON.parse(localStorage.getItem("app-theme-settings")) || { preset: "dark" }
-        if (saved.preset) {
-            this.applyPreset(saved.preset)
-            this.renderPicker()
-            return
-        }
-        const p = typeof saved.p === "string" ? saved.p : this.themes.dark.p
-        const bg = typeof saved.bg === "string" ? saved.bg : this.themes.dark.bg
-        const t = typeof saved.t === "string" ? saved.t : this.themes.dark.t
-        this.setManual(p, bg, t)
-        this.renderPicker()
-    },
-
-    init() {
-        const saved = JSON.parse(localStorage.getItem("app-theme-settings"))
-        if (saved) {
-            const preset = saved.preset && this.themes[saved.preset] ? saved.preset : null
-            if (preset) this.applyPreset(preset)
-            else this.setManual(saved.p || this.themes.dark.p, saved.bg || this.themes.dark.bg, saved.t || this.themes.dark.t)
-        } else {
-            this.applyPreset("dark")
-        }
-
-        const media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null
-        if (media && media.addEventListener) {
-            media.addEventListener("change", () => {
-                const current = JSON.parse(localStorage.getItem("app-theme-settings"))
-                if (current?.preset === "system") this.applyPreset("system")
-            })
-        }
-
-        const observer = new MutationObserver(() => {
-            const root = document.getElementById("theme-picker-root")
-            if (root && root.innerHTML.trim() === "") {
-                this.renderPicker()
-                this.setupColorInputs()
-            }
-        })
-        observer.observe(document.body, { childList: true, subtree: true })
-    }
-}
-
 const Auth = {
+    _mobileEnv() {
+        const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
+        const ua = (navigator.userAgent || "").toLowerCase()
+        const mobileUa = /android|iphone|ipad|ipod|iemobile|opera mini|mobile/.test(ua)
+        return !!(coarse || mobileUa)
+    },
+
+    _t(key, fallback) {
+        return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
+    },
+
+    _toast(text) {
+        if (typeof UI !== "undefined" && UI.showToast) UI.showToast(text)
+        else alert(text)
+    },
+
+    _provider() {
+        const p = new firebase.auth.GoogleAuthProvider()
+        p.setCustomParameters({ prompt: "select_account" })
+        return p
+    },
+
+    handleAuthError(e) {
+        const code = e && e.code ? e.code : "auth/unknown"
+        const map = {
+            "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
+            "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
+            "auth/cancelled-popup-request": this._t("auth_cancelled", "Request canceled")
+        }
+        const msg = map[code] || `${this._t("login_failed", "Sign-in failed")}: ${code}`
+        this._toast(msg)
+    },
+
     async login() {
         if (!auth || typeof firebase === "undefined") {
-            const msg = (typeof UI !== "undefined" && UI.getText) ? UI.getText("auth_unavailable", "Authentication unavailable") : "Authentication unavailable"
-            if (typeof UI !== "undefined" && UI.showToast) UI.showToast(msg)
-            else alert(msg)
+            this._toast(this._t("auth_unavailable", "Authentication unavailable"))
             return
         }
-        const provider = new firebase.auth.GoogleAuthProvider()
-        provider.setCustomParameters({ prompt: "select_account" })
-        const isMobile = (() => {
-            const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
-            const ua = (navigator.userAgent || "").toLowerCase()
-            const mobileUa = /android|iphone|ipad|ipod|iemobile|opera mini|mobile/.test(ua)
-            return coarse || mobileUa
-        })()
-        const startRedirect = async () => {
+
+        const provider = this._provider()
+
+        const redirect = async () => {
             await auth.signInWithRedirect(provider)
         }
+
         try {
-            if (isMobile) {
-                await startRedirect()
+            if (this._mobileEnv()) {
+                await redirect()
                 return
             }
             await auth.signInWithPopup(provider)
         } catch (e) {
             const code = e && e.code ? e.code : ""
             if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
-                await startRedirect()
-                return
+                try {
+                    await redirect()
+                    return
+                } catch (err) {
+                    this.handleAuthError(err)
+                    return
+                }
             }
             this.handleAuthError(e)
         }
@@ -1192,61 +926,48 @@ const Auth = {
     async logout() {
         if (!auth) return
         try {
-            this.applySignedOutUI()
             await auth.signOut()
-            this.resetSession()
-        } catch {
-            this.applySignedInUI(StateStore.read().user)
-            if (typeof UI !== "undefined") UI.showToast(UI.getText("logout_failed", "Sign out failed"))
+        } catch (e) {
+            this._toast(this._t("logout_failed", "Sign out failed"))
         }
     },
 
     async switchAccount() {
         if (!auth) return
         try {
-            this.applySignedOutUI()
             await auth.signOut()
-            this.resetSession()
             await this.login()
-        } catch {
-            this.applySignedInUI(StateStore.read().user)
-            if (typeof UI !== "undefined") UI.showToast(UI.getText("login_failed", "Sign-in failed"))
+        } catch (e) {
+            this.handleAuthError(e)
         }
-    },
-
-    handleAuthError(e) {
-        const code = e && e.code ? e.code : "auth/unknown"
-        const t = (typeof UI !== "undefined" && UI.getText) ? UI.getText.bind(UI) : (k, f) => f || k
-        const messages = {
-            "auth/popup-closed-by-user": t("auth_popup_closed", "Sign-in canceled"),
-            "auth/network-request-failed": t("auth_network_failed", "No internet connection"),
-            "auth/cancelled-popup-request": t("auth_cancelled", "Request canceled")
-        }
-        const msg = messages[code] || `${t("login_failed", "Sign-in failed")}: ${code}`
-        if (typeof UI !== "undefined") UI.showToast(msg)
-        else alert(msg)
     },
 
     clearState() {
-        StateStore.resetSession()
+        if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
+
         if (typeof UI !== "undefined") {
             UI.visibleNotes = []
             UI.currentNoteActionId = null
             UI.draggedNoteId = null
             UI.dragTargetId = null
             UI.dragPosition = null
-            UI.closeAllModals()
-            UI.renderFolders()
-            UI.updateViewTitle()
-            UI.updatePrimaryActionLabel()
+            if (UI.closeAllModals) UI.closeAllModals()
+            if (UI.renderFolders) UI.renderFolders()
+            if (UI.updateViewTitle) UI.updateViewTitle()
+            if (UI.updatePrimaryActionLabel) UI.updatePrimaryActionLabel()
         }
+
         const search = document.getElementById("search-input")
         if (search) search.value = ""
-        if (typeof Editor !== "undefined") Editor.close()
+
+        if (typeof Editor !== "undefined" && Editor && typeof Editor.close === "function") {
+            try { Editor.close() } catch {}
+        }
     },
 
     applySignedInUI(user) {
         if (!user) return
+
         const loginScreen = document.getElementById("login-screen")
         const appScreen = document.getElementById("app")
         const userPhoto = document.getElementById("user-photo")
@@ -1275,6 +996,7 @@ const Auth = {
     applySignedOutUI() {
         const loginScreen = document.getElementById("login-screen")
         const appScreen = document.getElementById("app")
+
         if (appScreen) {
             appScreen.style.opacity = "0"
             setTimeout(() => {
@@ -1282,6 +1004,7 @@ const Auth = {
                 appScreen.classList.remove("active")
             }, 220)
         }
+
         if (loginScreen) {
             loginScreen.style.display = "flex"
             setTimeout(() => {
@@ -1294,28 +1017,40 @@ const Auth = {
     resetSession() {
         this.clearState()
         this.applySignedOutUI()
+    },
+
+    async init() {
+        if (!auth) return
+
+        try {
+            await auth.getRedirectResult()
+        } catch (e) {
+            this.handleAuthError(e)
+        }
+
+        auth.onAuthStateChanged(user => {
+            if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
+
+            if (user) {
+                this.applySignedInUI(user)
+                if (typeof window.initApp === "function") window.initApp()
+                return
+            }
+
+            this.resetSession()
+        })
     }
 }
 
-if (auth) {
-    auth.getRedirectResult().catch(e => Auth.handleAuthError(e))
-    auth.onAuthStateChanged(user => {
-        StateStore.update("user", user || null)
-
-        if (user) {
-            Auth.applySignedInUI(user)
-
-            if (typeof window.initApp === "function") window.initApp()
-        } else {
-            Auth.resetSession()
-        }
-    })
-}
+window.Auth = Auth
 
 document.addEventListener("DOMContentLoaded", () => {
-    ThemeManager.init()
+    if (typeof ThemeManager !== "undefined" && ThemeManager && typeof ThemeManager.init === "function") {
+        ThemeManager.init()
+    }
     if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
     if (!StateStore.read().user) Auth.applySignedOutUI()
+    Auth.init().catch(() => null)
 
     document.addEventListener("dblclick", (event) => {
         event.preventDefault()
