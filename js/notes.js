@@ -52,10 +52,20 @@ const NotesRenderer = (() => {
         const tagsSpan = el("span", [])
         tagsSpan.style.marginLeft = "auto"
         tagsSpan.style.opacity = "0.8"
+        const tags = Array.isArray(note.tags) ? note.tags.slice(0, 3) : []
+        tagsSpan.textContent = (isLockedView && isLockedNote) ? "" : (tags.length ? tags.map(t => `#${t}`).join(" ") : "")
         meta.append(dateSpan, tagsSpan)
 
         const lockContainer = el("div")
         lockContainer.style.marginTop = "8px"
+        if (note.lock && note.lock.hidden) {
+            const badge = el("span", ["lock-badge"])
+            const i = createIcon("lock")
+            i.style.fontSize = "16px"
+            const txt = el("span", [], UI.getText("locked_note", "Locked"))
+            badge.append(i, txt)
+            lockContainer.appendChild(badge)
+        }
 
         if (actions) card.append(actions)
         card.append(h3, p, meta, lockContainer)
@@ -95,7 +105,7 @@ const NotesRenderer = (() => {
 
         const tagsStr = JSON.stringify(note.tags)
         const prevTags = JSON.stringify(data.tags)
-        if (tagsStr !== prevTags) {
+        if (tagsStr !== prevTags || isLockedView) {
             const tags = Array.isArray(note.tags) ? note.tags.slice(0, 3) : []
             refs.tagsSpan.textContent = (isLockedView && isLockedNote) ? "" : (tags.length ? tags.map(t => `#${t}`).join(" ") : "")
         }
@@ -162,7 +172,7 @@ function normalizeVisibleNotes(list, orderKey = "order") {
     if (!Array.isArray(list)) return []
     const arr = list.map(n => NoteIO.normalizeNote(n))
     arr.sort((a, b) => {
-        if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? 1 : -1
+        if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? -1 : 1
         const vA = typeof a[orderKey] === "number" ? a[orderKey] : 0
         const vB = typeof b[orderKey] === "number" ? b[orderKey] : 0
         return vA - vB
@@ -192,11 +202,13 @@ function filterAndRender(query) {
     }
 
     const q = queryValue.trim()
-    const view = current.view
-    const activeFolderId = current.activeFolderId
+    let view = current.view
+    let activeFolderId = current.activeFolderId
 
     if (view === "folder" && !activeFolderId) {
         StateStore.update("view", "notes")
+        view = "notes"
+        activeFolderId = null
     }
 
     let list = current.notes.slice()
