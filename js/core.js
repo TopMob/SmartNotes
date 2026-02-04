@@ -352,13 +352,20 @@ const Auth = {
     async init() {
         if (!auth) return
 
-        try {
-            await auth.getRedirectResult()
-        } catch (e) {
+        const redirectPromise = auth.getRedirectResult().catch(e => {
             this.handleAuthError(e)
-        }
+            return null
+        })
 
-        auth.onAuthStateChanged(user => {
+        let initialCheck = true
+
+        auth.onAuthStateChanged(async user => {
+            if (initialCheck) {
+                await redirectPromise
+                user = auth.currentUser
+                initialCheck = false
+            }
+
             if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
 
             if (user) {
@@ -379,7 +386,6 @@ document.addEventListener("DOMContentLoaded", () => {
         ThemeManager.init()
     }
     if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
-    if (!StateStore.read().user) Auth.applySignedOutUI()
     Auth.init().catch(() => null)
 
     document.addEventListener("dblclick", (event) => {
