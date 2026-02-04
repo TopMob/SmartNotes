@@ -177,6 +177,7 @@ window.DRIVE_SCOPES = DRIVE_SCOPES
 
 const Auth = {
     _loginInProgress: false,
+    _persistenceReady: false,
     _mobileEnv() {
         const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
         const ua = (navigator.userAgent || "").toLowerCase()
@@ -210,6 +211,27 @@ const Auth = {
         const msg = map[code] || (serviceUnavailable ? this._t("auth_service_unavailable", "Service temporarily unavailable") : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
         this._toast(msg)
     },
+    async _ensurePersistence() {
+        if (this._persistenceReady || !auth) return
+        try {
+            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+            this._persistenceReady = true
+            return
+        } catch {}
+        try {
+            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+            this._persistenceReady = true
+        } catch {}
+    },
+    async _getRedirectResultSafe() {
+        if (!auth) return null
+        try {
+            return await auth.getRedirectResult()
+        } catch (e) {
+            this.handleAuthError(e)
+            return null
+        }
+    },
     async login() {
         if (!auth || typeof firebase === "undefined") {
             this._toast(this._t("auth_unavailable", "Authentication unavailable"))
@@ -217,6 +239,7 @@ const Auth = {
         }
         if (this._loginInProgress) return
         this._loginInProgress = true
+        await this._ensurePersistence()
         const provider = this._provider()
         const redirect = async () => {
             try {
@@ -329,23 +352,19 @@ const Auth = {
     },
     async init() {
         if (!auth) return
-        try {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        } catch {}
+        await this._ensurePersistence()
         let redirectAttempted = false
         try {
             redirectAttempted = sessionStorage.getItem("authRedirect") === "1"
             sessionStorage.removeItem("authRedirect")
         } catch {}
-        const redirectPromise = auth.getRedirectResult().catch(e => {
-            this.handleAuthError(e)
-            return null
-        })
+        const redirectResult = await this._getRedirectResultSafe()
+        const redirectUser = redirectResult && redirectResult.user ? redirectResult.user : null
+        this._loginInProgress = false
         let initialCheck = true
         auth.onAuthStateChanged(async user => {
             if (initialCheck) {
-                await redirectPromise
-                user = auth.currentUser
+                user = auth.currentUser || redirectUser
                 initialCheck = false
             }
             if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
@@ -355,8 +374,14 @@ const Auth = {
                 return
             }
             if (redirectAttempted) {
-                this._toast(this._t("login_failed", "Sign-in failed"))
                 redirectAttempted = false
+                setTimeout(() => {
+                    if (!auth.currentUser) {
+                        this._toast(this._t("login_failed", "Sign-in failed"))
+                        this.resetSession()
+                    }
+                }, 1200)
+                return
             }
             this.resetSession()
         })
