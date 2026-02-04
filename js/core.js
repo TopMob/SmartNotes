@@ -176,6 +176,7 @@ window.DRIVE_CLIENT_ID = DRIVE_CLIENT_ID
 window.DRIVE_SCOPES = DRIVE_SCOPES
 
 const Auth = {
+    _loginInProgress: false,
     _mobileEnv() {
         const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
         const ua = (navigator.userAgent || "").toLowerCase()
@@ -214,8 +215,13 @@ const Auth = {
             this._toast(this._t("auth_unavailable", "Authentication unavailable"))
             return
         }
+        if (this._loginInProgress) return
+        this._loginInProgress = true
         const provider = this._provider()
         const redirect = async () => {
+            try {
+                sessionStorage.setItem("authRedirect", "1")
+            } catch {}
             await auth.signInWithRedirect(provider)
         }
         try {
@@ -236,6 +242,8 @@ const Auth = {
                 }
             }
             this.handleAuthError(e)
+        } finally {
+            this._loginInProgress = false
         }
     },
     async logout() {
@@ -321,6 +329,14 @@ const Auth = {
     },
     async init() {
         if (!auth) return
+        try {
+            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        } catch {}
+        let redirectAttempted = false
+        try {
+            redirectAttempted = sessionStorage.getItem("authRedirect") === "1"
+            sessionStorage.removeItem("authRedirect")
+        } catch {}
         const redirectPromise = auth.getRedirectResult().catch(e => {
             this.handleAuthError(e)
             return null
@@ -337,6 +353,10 @@ const Auth = {
                 this.applySignedInUI(user)
                 if (typeof window.initApp === "function") window.initApp()
                 return
+            }
+            if (redirectAttempted) {
+                this._toast(this._t("login_failed", "Sign-in failed"))
+                redirectAttempted = false
             }
             this.resetSession()
         })
