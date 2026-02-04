@@ -4,7 +4,6 @@ const Editor = (() => {
     let future = []
     let selectedMedia = null
     let resizeState = null
-    let snapshotTimer = null
     let observer = null
     let abortController = null
     let recordingStream = null
@@ -63,11 +62,6 @@ const Editor = (() => {
             }, { signal })
 
             els.content.addEventListener("pointerdown", handleResizeStart, { signal })
-            
-            // Mobile formatting bar support if needed
-            els.content.addEventListener("selectionchange", () => {
-                // Future: update toolbar state based on selection
-            }, { signal })
         }
 
         if (els.scrollArea) {
@@ -460,25 +454,10 @@ const Editor = (() => {
         }
     }
 
-    const getSelectionRange = () => {
-        const sel = window.getSelection()
-        if (sel.rangeCount === 0) return null
-        return sel.getRangeAt(0).cloneRange()
-    }
-
-    const restoreSelectionRange = (range) => {
-        if (!range) return
-        const sel = window.getSelection()
-        sel.removeAllRanges()
-        sel.addRange(range)
-    }
-
     const captureSnapshot = () => ({
         title: els.title.value || "",
         content: els.content.innerHTML || "",
-        tags: [...(StateStore.read().currentNote?.tags || [])],
-        // Basic cursor restoration attempt (store length for rough validation)
-        length: els.content.textContent.length
+        tags: [...(StateStore.read().currentNote?.tags || [])]
     })
 
     const snapshotsEqual = (a, b) => 

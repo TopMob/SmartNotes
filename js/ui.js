@@ -210,10 +210,10 @@ const UI = {
                 this.toggleUserMenu()
                 break
             case "switch-account":
-                this.showConfirm("account", () => Auth.switchAccount())
+                this.confirm("account", () => Auth.switchAccount())
                 break
             case "logout":
-                this.showConfirm("exit", () => Auth.logout())
+                this.confirm("exit", () => Auth.logout())
                 break
             case "trigger-import":
                 this.triggerImport()
@@ -714,10 +714,6 @@ const UI = {
             div.classList.remove("show")
             setTimeout(() => div.remove(), 300)
         }, options.duration || 2500)
-    },
-
-    showConfirm(type, cb) {
-        this.confirm(type, cb)
     },
 
     confirm(type, cb) {
