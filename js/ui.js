@@ -6,6 +6,8 @@ const UI = {
     dragPosition: null,
     visibleNotes: [],
     settingsPage: null,
+    _authTapAt: 0,
+    _lastTouchAt: 0,
 
     init() {
         this.els = {
@@ -19,6 +21,8 @@ const UI = {
             folderList: document.getElementById("folder-list-root")
         }
         this.bindEvents()
+        this.bindAuthHandlers()
+        this.bindAuthButtons()
         this.applyAppearanceSettings()
         this.updatePrimaryActionLabel()
         this.routeShare()
@@ -162,6 +166,36 @@ const UI = {
         if (noteImport) noteImport.addEventListener("change", (e) => this.handleNoteImport(e))
     },
 
+    bindAuthButtons() {
+        const loginButton = document.querySelector("[data-action='login']")
+        if (!loginButton) return
+        const handler = (e) => {
+            const now = Date.now()
+            if (e.type === "touchend") {
+                this._lastTouchAt = now
+            }
+            if (e.type === "click" && now - this._lastTouchAt < 700) return
+            if (now - this._authTapAt < 800) return
+            this._authTapAt = now
+            e.preventDefault()
+            this.triggerLogin()
+        }
+        loginButton.addEventListener("pointerup", handler, { passive: false })
+        loginButton.addEventListener("touchend", handler, { passive: false })
+        loginButton.addEventListener("click", handler)
+    },
+
+    bindAuthHandlers() {
+        if (typeof Auth === "undefined") return
+        Auth.onStateChange((user) => this.handleAuthState(user))
+        Auth.onError((info) => this.showAuthError(info))
+    },
+
+    triggerLogin() {
+        if (typeof Auth === "undefined") return
+        Auth.login()
+    },
+
     handleAction(el, e) {
         const action = el.dataset.action
         if (!action) return
@@ -171,7 +205,7 @@ const UI = {
 
         switch (action) {
             case "login":
-                Auth.login()
+                this.triggerLogin()
                 break
             case "toggle-sidebar": {
                 const forceAttr = el.dataset.force
@@ -320,6 +354,131 @@ const UI = {
             default:
                 break
         }
+    },
+
+    handleAuthState(user) {
+        if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
+        if (user) {
+            this.applySignedInUI(user)
+            if (typeof window.initApp === "function") window.initApp()
+            return
+        }
+        this.resetSession()
+    },
+
+    resetSession() {
+        if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
+        this.visibleNotes = []
+        this.currentNoteActionId = null
+        this.draggedNoteId = null
+        this.dragTargetId = null
+        this.dragPosition = null
+        this.closeAllModals()
+        this.renderFolders()
+        this.updateViewTitle()
+        this.updatePrimaryActionLabel()
+        const search = document.getElementById("search-input")
+        if (search) search.value = ""
+        if (typeof Editor !== "undefined" && Editor && typeof Editor.close === "function") {
+            try { Editor.close() } catch {}
+        }
+        this.applySignedOutUI()
+    },
+
+    applySignedInUI(user) {
+        if (!user) return
+        const loginScreen = document.getElementById("login-screen")
+        const appScreen = document.getElementById("app")
+        const userPhoto = document.getElementById("user-photo")
+        const userName = document.getElementById("user-name")
+        if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
+        if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
+        if (loginScreen) {
+            loginScreen.style.opacity = "0"
+            setTimeout(() => {
+                loginScreen.style.display = "none"
+                loginScreen.classList.remove("active")
+            }, 320)
+        }
+        if (appScreen) {
+            appScreen.style.display = "flex"
+            setTimeout(() => {
+                appScreen.style.opacity = "1"
+                appScreen.classList.add("active")
+            }, 30)
+        }
+    },
+
+    applySignedOutUI() {
+        const loginScreen = document.getElementById("login-screen")
+        const appScreen = document.getElementById("app")
+        if (appScreen) {
+            appScreen.style.opacity = "0"
+            setTimeout(() => {
+                appScreen.style.display = "none"
+                appScreen.classList.remove("active")
+            }, 220)
+        }
+        if (loginScreen) {
+            loginScreen.style.display = "flex"
+            setTimeout(() => {
+                loginScreen.classList.add("active")
+                loginScreen.style.opacity = "1"
+            }, 30)
+        }
+    },
+
+    showAuthError(info) {
+        const modal = document.getElementById("auth-error-modal")
+        const messageEl = document.getElementById("auth-error-message")
+        const titleEl = document.getElementById("auth-error-title")
+        const code = info && info.code ? String(info.code) : "auth/unknown"
+        const message = info && info.message ? String(info.message) : ""
+        const map = {
+            "auth/popup-closed-by-user": this.getText("auth_popup_closed", "Sign-in canceled"),
+            "auth/network-request-failed": this.getText("auth_network_failed", "No internet connection"),
+            "auth/cancelled-popup-request": this.getText("auth_cancelled", "Request canceled"),
+            "auth/popup-blocked": this.getText("auth_popup_blocked", "Popup blocked"),
+            "auth/operation-not-supported-in-this-environment": this.getText("auth_env_unsupported", "Sign-in is not supported in this environment"),
+            "auth/web-storage-unsupported": this.getText("auth_env_unsupported", "Sign-in is not supported in this environment"),
+            "auth/redirect-failed": this.getText("auth_redirect_failed", "Sign-in did not complete"),
+            "auth/unavailable": this.getText("auth_unavailable", "Authentication unavailable")
+        }
+        const fallback = this.getText("login_failed", "Sign-in failed")
+        const text = map[code] || (message ? `${fallback}: ${message}` : fallback)
+        if (titleEl) titleEl.textContent = this.getText("auth_error_title", "Sign-in issue")
+        if (messageEl) messageEl.textContent = text
+        if (!modal) {
+            this.showToast(text, { actionLabel: this.getText("auth_retry", "Retry"), onAction: () => this.triggerLogin() })
+            return
+        }
+        const retryBtn = document.getElementById("auth-retry")
+        const switchBtn = document.getElementById("auth-switch")
+        const externalBtn = document.getElementById("auth-external")
+        if (retryBtn && retryBtn.parentNode) {
+            const retryClone = retryBtn.cloneNode(true)
+            retryBtn.parentNode.replaceChild(retryClone, retryBtn)
+            retryClone.onclick = () => {
+                modal.classList.remove("active")
+                this.triggerLogin()
+            }
+        }
+        if (switchBtn && switchBtn.parentNode) {
+            const switchClone = switchBtn.cloneNode(true)
+            switchBtn.parentNode.replaceChild(switchClone, switchBtn)
+            switchClone.onclick = () => {
+                modal.classList.remove("active")
+                if (typeof Auth !== "undefined") Auth.switchAccount()
+            }
+        }
+        if (externalBtn && externalBtn.parentNode) {
+            const externalClone = externalBtn.cloneNode(true)
+            externalBtn.parentNode.replaceChild(externalClone, externalBtn)
+            externalClone.onclick = () => {
+                if (typeof Auth !== "undefined") Auth.openExternalBrowser()
+            }
+        }
+        modal.classList.add("active")
     },
 
     toggleSidebar(force) {

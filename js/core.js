@@ -178,38 +178,112 @@ window.DRIVE_SCOPES = DRIVE_SCOPES
 const Auth = {
     _loginInProgress: false,
     _persistenceReady: false,
-    _mobileEnv() {
-        const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
-        const ua = (navigator.userAgent || "").toLowerCase()
-        const mobileUa = /android|iphone|ipad|ipod|iemobile|opera mini|mobile/.test(ua)
-        const touchDevice = typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1
-        const uaMobile = navigator.userAgentData && navigator.userAgentData.mobile
-        return !!(coarse || mobileUa || touchDevice || uaMobile)
-    },
-    _t(key, fallback) {
-        return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
-    },
-    _toast(text) {
-        if (typeof UI !== "undefined" && UI.showToast) UI.showToast(text)
-        else alert(text)
-    },
+    _listeners: new Set(),
+    _errorListeners: new Set(),
+    _currentUser: null,
+    _redirectKey: "sn-auth-redirect-v2",
+    _redirectTtl: 5 * 60 * 1000,
+    _redirectVersion: 2,
     _provider() {
         const p = new firebase.auth.GoogleAuthProvider()
         p.setCustomParameters({ prompt: "select_account" })
         return p
     },
-    handleAuthError(e) {
-        const code = e && e.code ? e.code : "auth/unknown"
-        const message = e && e.message ? String(e.message) : ""
-        const map = {
-            "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
-            "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
-            "auth/cancelled-popup-request": this._t("auth_cancelled", "Request canceled"),
-            "-40": this._t("auth_network_failed", "No internet connection")
+    onStateChange(cb) {
+        if (typeof cb === "function") {
+            this._listeners.add(cb)
+            cb(this._currentUser)
         }
-        const serviceUnavailable = message.includes("503") || message.toLowerCase().includes("unavailable")
-        const msg = map[code] || (serviceUnavailable ? this._t("auth_service_unavailable", "Service temporarily unavailable") : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
-        this._toast(msg)
+        return () => this._listeners.delete(cb)
+    },
+    onError(cb) {
+        if (typeof cb === "function") this._errorListeners.add(cb)
+        return () => this._errorListeners.delete(cb)
+    },
+    _emitState(user) {
+        this._currentUser = user || null
+        this._listeners.forEach(cb => {
+            try { cb(this._currentUser) } catch {}
+        })
+    },
+    _emitError(info) {
+        this._errorListeners.forEach(cb => {
+            try { cb(info) } catch {}
+        })
+    },
+    getCurrentUser() {
+        return this._currentUser
+    },
+    _normalizeError(e) {
+        const code = e && e.code ? String(e.code) : "auth/unknown"
+        const message = e && e.message ? String(e.message) : ""
+        return { code, message }
+    },
+    _storageAvailable() {
+        try {
+            const key = "__sn_ls_test__"
+            localStorage.setItem(key, "1")
+            localStorage.removeItem(key)
+            return true
+        } catch {
+            return false
+        }
+    },
+    _readRedirectMarker() {
+        if (!this._storageAvailable()) return null
+        try {
+            const raw = localStorage.getItem(this._redirectKey)
+            if (!raw) return null
+            const data = JSON.parse(raw)
+            if (!data || data.v !== this._redirectVersion) {
+                localStorage.removeItem(this._redirectKey)
+                return null
+            }
+            if (!data.ts || Date.now() - data.ts > this._redirectTtl) {
+                localStorage.removeItem(this._redirectKey)
+                return null
+            }
+            return data
+        } catch {
+            return null
+        }
+    },
+    _writeRedirectMarker() {
+        if (!this._storageAvailable()) return
+        try {
+            localStorage.setItem(this._redirectKey, JSON.stringify({ v: this._redirectVersion, ts: Date.now() }))
+        } catch {}
+    },
+    _clearRedirectMarker() {
+        if (!this._storageAvailable()) return
+        try {
+            localStorage.removeItem(this._redirectKey)
+        } catch {}
+    },
+    async detectEnvironment() {
+        const ua = String(navigator.userAgent || "")
+        const uaLower = ua.toLowerCase()
+        const isIOS = /iphone|ipad|ipod/.test(uaLower)
+        const isAndroid = /android/.test(uaLower)
+        const isMobile = isIOS || isAndroid || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches)
+        const isIOSStandalone = !!(navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches))
+        const isIOSSafari = isIOS && /safari/.test(uaLower) && !/crios|fxios|opios|edgios|brave/.test(uaLower)
+        const isIOSWebView = isIOS && /applewebkit/.test(uaLower) && !/safari/.test(uaLower)
+        const isAndroidWebView = /\bwv\b/.test(uaLower) || /; wv\)/.test(uaLower) || (isAndroid && /version\/\d+\.\d+/.test(uaLower) && /chrome/.test(uaLower) && !/samsungbrowser|opr\/|opera|edg/.test(uaLower))
+        const isFirefox = /firefox/.test(uaLower)
+        const isEdge = /edg/.test(uaLower)
+        const isOpera = /opera|opr\//.test(uaLower)
+        let isBrave = false
+        try {
+            if (navigator.brave && typeof navigator.brave.isBrave === "function") {
+                isBrave = await navigator.brave.isBrave()
+            }
+        } catch {}
+        if (!isBrave && /brave/.test(uaLower)) isBrave = true
+        const isChromium = /chrome|crios|chromium/.test(uaLower) && !isEdge && !isOpera
+        const isWebView = isIOSWebView || isAndroidWebView
+        const cookiesEnabled = typeof navigator.cookieEnabled === "boolean" ? navigator.cookieEnabled : true
+        return { isIOS, isAndroid, isMobile, isIOSStandalone, isIOSSafari, isWebView, isFirefox, isEdge, isOpera, isChromium, isBrave, cookiesEnabled }
     },
     async _ensurePersistence() {
         if (this._persistenceReady || !auth) return
@@ -228,45 +302,79 @@ const Auth = {
         try {
             return await auth.getRedirectResult()
         } catch (e) {
-            this.handleAuthError(e)
+            this._emitError(this._normalizeError(e))
             return null
         }
     },
     async login() {
         if (!auth || typeof firebase === "undefined") {
-            this._toast(this._t("auth_unavailable", "Authentication unavailable"))
+            this._emitError({ code: "auth/unavailable", message: "" })
             return
         }
         if (this._loginInProgress) return
         this._loginInProgress = true
         await this._ensurePersistence()
+        const env = await this.detectEnvironment()
         const provider = this._provider()
-        const redirect = async () => {
-            try {
-                sessionStorage.setItem("authRedirect", "1")
-            } catch {}
-            await auth.signInWithRedirect(provider)
-        }
         try {
-            if (this._mobileEnv()) {
-                await redirect()
-                return
+            const preferRedirect = env.isMobile || env.isWebView || env.isIOSStandalone || env.isIOSSafari
+            const canPopup = !env.isWebView && !env.isIOSStandalone && !env.isIOSSafari && !env.isMobile
+            const attemptRedirect = async () => {
+                this._writeRedirectMarker()
+                await auth.signInWithRedirect(provider)
             }
-            await auth.signInWithPopup(provider)
-        } catch (e) {
-            const code = e && e.code ? e.code : ""
-            if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+            const attemptPopup = async () => {
+                await auth.signInWithPopup(provider)
+            }
+            if (preferRedirect) {
                 try {
-                    await redirect()
+                    await attemptRedirect()
                     return
                 } catch (err) {
-                    this.handleAuthError(err)
+                    if (canPopup) {
+                        await attemptPopup()
+                        return
+                    }
+                    this._emitError(this._normalizeError(err))
                     return
                 }
             }
-            this.handleAuthError(e)
+            try {
+                await attemptPopup()
+            } catch (e) {
+                const code = e && e.code ? String(e.code) : ""
+                const fallbackCodes = new Set([
+                    "auth/popup-blocked",
+                    "auth/operation-not-supported-in-this-environment",
+                    "auth/cancelled-popup-request",
+                    "auth/popup-closed-by-user",
+                    "auth/web-storage-unsupported"
+                ])
+                if (fallbackCodes.has(code)) {
+                    try {
+                        await attemptRedirect()
+                        return
+                    } catch (err) {
+                        this._emitError(this._normalizeError(err))
+                        return
+                    }
+                }
+                this._emitError(this._normalizeError(e))
+            }
         } finally {
             this._loginInProgress = false
+        }
+    },
+    openExternalBrowser() {
+        const url = window.location.href
+        let opened = null
+        try {
+            opened = window.open(url, "_blank", "noopener,noreferrer")
+        } catch {}
+        if (!opened) {
+            try {
+                window.location.href = url
+            } catch {}
         }
     },
     async logout() {
@@ -274,7 +382,7 @@ const Auth = {
         try {
             await auth.signOut()
         } catch (e) {
-            this._toast(this._t("logout_failed", "Sign out failed"))
+            this._emitError(this._normalizeError(e))
         }
     },
     async switchAccount() {
@@ -283,83 +391,16 @@ const Auth = {
             await auth.signOut()
             await this.login()
         } catch (e) {
-            this.handleAuthError(e)
+            this._emitError(this._normalizeError(e))
         }
-    },
-    clearState() {
-        if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
-        if (typeof UI !== "undefined") {
-            UI.visibleNotes = []
-            UI.currentNoteActionId = null
-            UI.draggedNoteId = null
-            UI.dragTargetId = null
-            UI.dragPosition = null
-            if (UI.closeAllModals) UI.closeAllModals()
-            if (UI.renderFolders) UI.renderFolders()
-            if (UI.updateViewTitle) UI.updateViewTitle()
-            if (UI.updatePrimaryActionLabel) UI.updatePrimaryActionLabel()
-        }
-        const search = document.getElementById("search-input")
-        if (search) search.value = ""
-        if (typeof Editor !== "undefined" && Editor && typeof Editor.close === "function") {
-            try { Editor.close() } catch {}
-        }
-    },
-    applySignedInUI(user) {
-        if (!user) return
-        const loginScreen = document.getElementById("login-screen")
-        const appScreen = document.getElementById("app")
-        const userPhoto = document.getElementById("user-photo")
-        const userName = document.getElementById("user-name")
-        if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
-        if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
-        if (loginScreen) {
-            loginScreen.style.opacity = "0"
-            setTimeout(() => {
-                loginScreen.style.display = "none"
-                loginScreen.classList.remove("active")
-            }, 320)
-        }
-        if (appScreen) {
-            appScreen.style.display = "flex"
-            setTimeout(() => {
-                appScreen.style.opacity = "1"
-                appScreen.classList.add("active")
-            }, 30)
-        }
-    },
-    applySignedOutUI() {
-        const loginScreen = document.getElementById("login-screen")
-        const appScreen = document.getElementById("app")
-        if (appScreen) {
-            appScreen.style.opacity = "0"
-            setTimeout(() => {
-                appScreen.style.display = "none"
-                appScreen.classList.remove("active")
-            }, 220)
-        }
-        if (loginScreen) {
-            loginScreen.style.display = "flex"
-            setTimeout(() => {
-                loginScreen.classList.add("active")
-                loginScreen.style.opacity = "1"
-            }, 30)
-        }
-    },
-    resetSession() {
-        this.clearState()
-        this.applySignedOutUI()
     },
     async init() {
         if (!auth) return
         await this._ensurePersistence()
-        let redirectAttempted = false
-        try {
-            redirectAttempted = sessionStorage.getItem("authRedirect") === "1"
-            sessionStorage.removeItem("authRedirect")
-        } catch {}
+        const redirectMarker = this._readRedirectMarker()
         const redirectResult = await this._getRedirectResultSafe()
         const redirectUser = redirectResult && redirectResult.user ? redirectResult.user : null
+        if (redirectMarker) this._clearRedirectMarker()
         this._loginInProgress = false
         let initialCheck = true
         auth.onAuthStateChanged(async user => {
@@ -367,23 +408,15 @@ const Auth = {
                 user = auth.currentUser || redirectUser
                 initialCheck = false
             }
-            if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
-            if (user) {
-                this.applySignedInUI(user)
-                if (typeof window.initApp === "function") window.initApp()
-                return
-            }
-            if (redirectAttempted) {
-                redirectAttempted = false
+            this._emitState(user || null)
+            if (!user && redirectMarker) {
                 setTimeout(() => {
                     if (!auth.currentUser) {
-                        this._toast(this._t("login_failed", "Sign-in failed"))
-                        this.resetSession()
+                        this._emitError({ code: "auth/redirect-failed", message: "" })
+                        this._emitState(null)
                     }
-                }, 1200)
-                return
+                }, 1500)
             }
-            this.resetSession()
         })
     }
 }
@@ -391,16 +424,9 @@ const Auth = {
 window.Auth = Auth
 
 document.addEventListener("DOMContentLoaded", () => {
+    Auth.init().catch(() => null)
+    if (typeof UI !== "undefined" && UI.init) UI.init()
     if (typeof ThemeManager !== "undefined" && ThemeManager && typeof ThemeManager.init === "function") {
         ThemeManager.init()
     }
-    if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
-    const loginButton = document.querySelector("[data-action='login']")
-    if (loginButton) {
-        loginButton.addEventListener("click", () => Auth.login())
-    }
-    Auth.init().catch(() => null)
-    document.addEventListener("dblclick", (event) => {
-        event.preventDefault()
-    }, { passive: false })
 })

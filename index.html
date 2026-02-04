@@ -276,6 +276,18 @@
         </div>
     </div>
 
+    <div id="auth-error-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card confirm-box">
+            <h3 id="auth-error-title" data-lang="auth_error_title">Проблема входа</h3>
+            <p id="auth-error-message" class="muted" data-lang="auth_error_message">Ошибка входа</p>
+            <div class="row-center">
+                <button type="button" class="btn-secondary" id="auth-retry" data-lang="auth_retry">Повторить вход</button>
+                <button type="button" class="btn-secondary" id="auth-external" data-lang="auth_external">Открыть в браузере</button>
+                <button type="button" class="btn-primary" id="auth-switch" data-lang="auth_switch">Сменить аккаунт</button>
+            </div>
+        </div>
+    </div>
+
     <div id="prompt-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card confirm-box">
             <h3 id="prompt-title" data-lang="prompt_title">Ввод</h3>
