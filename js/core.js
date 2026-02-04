@@ -193,7 +193,13 @@ const Auth = {
             await auth.signInWithPopup(provider)
         } catch (e) {
             const code = e && e.code ? e.code : ""
-            if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+            const redirectCodes = new Set([
+                "auth/popup-blocked",
+                "auth/operation-not-supported-in-this-environment",
+                "auth/cancelled-popup-request"
+            ])
+            const shouldRedirect = redirectCodes.has(code) || (this._mobileEnv() && code === "auth/popup-closed-by-user")
+            if (shouldRedirect) {
                 try {
                     await redirect()
                     return

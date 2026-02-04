@@ -207,6 +207,9 @@ const ShareService = {
         u.search = ""
         return u.toString().replace(/\/index\.html\/?$/, "/")
     },
+    base() {
+        return this.getBaseUrl()
+    },
 
     makeShareLink(noteId) {
         return `${this.getBaseUrl()}#share/${encodeURIComponent(noteId)}`
