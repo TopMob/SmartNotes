@@ -1,10 +1,4 @@
-/**
- * js/notes.js
- * Production Ready: Virtual DOM rendering, XSS protection, and optimized sorting.
- */
-
 const NotesRenderer = (() => {
-    // Cache map stores DOM elements by Note ID to avoid recreation
     const cardCache = new Map()
 
     const el = (tag, cls = [], text = null) => {
@@ -35,20 +29,16 @@ const NotesRenderer = (() => {
         card.draggable = true
         card.dataset.noteId = encodeURIComponent(note.id)
 
-        // Actions
         const actions = el("div", ["card-actions"])
         actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
         actions.appendChild(createBtn("note-favorite", "star", UI.getText("favorite_note", "Favorite"), note.id))
         actions.appendChild(createBtn("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
 
-        // Title & Content
         const h3 = el("h3", [], note.title || UI.getText("untitled_note", "Untitled"))
-        
-        // Fast regex strip for preview (safer and faster than creating full DOM parser for just preview)
+
         const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
         const p = el("p", [], rawText || UI.getText("empty_note", "No content"))
 
-        // Meta
         const meta = el("div", ["note-meta"])
         meta.appendChild(createIcon("schedule"))
         const dateSpan = el("span", [], Utils.formatDate(note.updatedAt || note.createdAt || Date.now()))
@@ -57,17 +47,15 @@ const NotesRenderer = (() => {
         tagsSpan.style.opacity = "0.8"
         meta.append(dateSpan, tagsSpan)
 
-        // Lock Badge
         const lockContainer = el("div")
         lockContainer.style.marginTop = "8px"
 
         card.append(actions, h3, p, meta, lockContainer)
 
-        // Cache references for fast updates
         cardCache.set(note.id, {
             el: card,
             refs: { h3, p, dateSpan, tagsSpan, lockContainer, favIcon: actions.children[1].firstChild },
-            data: { ...note } // Snapshot
+            data: { ...note }
         })
 
         return card
@@ -79,7 +67,6 @@ const NotesRenderer = (() => {
 
         const { el: card, refs, data } = cached
 
-        // Diffing Strategy: Update only changed properties
         if (note.title !== data.title) {
             refs.h3.textContent = note.title || UI.getText("untitled_note", "Untitled")
         }
@@ -89,7 +76,6 @@ const NotesRenderer = (() => {
             refs.p.textContent = rawText || UI.getText("empty_note", "No content")
         }
 
-        // Compare timestamps (using seconds for approximate check)
         const t1 = note.updatedAt?.seconds || 0
         const t2 = data.updatedAt?.seconds || 0
         if (t1 !== t2) {
@@ -103,15 +89,10 @@ const NotesRenderer = (() => {
             refs.tagsSpan.textContent = tags.length ? tags.map(t => `#${t}`).join(" ") : ""
         }
 
-        // Pin State
         if (note.isPinned !== data.isPinned) {
             card.classList.toggle("pinned", !!note.isPinned)
         }
 
-        // Favorite State (Visual update if needed, currently icon stays star)
-        // refs.favIcon.textContent = note.isFavorite ? "star" : "star_border" // Uncomment if visual toggle desired
-
-        // Lock State
         const lockHash = note.lock?.hash || ""
         const prevHash = data.lock?.hash || ""
         if (lockHash !== prevHash) {
@@ -126,7 +107,6 @@ const NotesRenderer = (() => {
             }
         }
 
-        // Update Snapshot
         cached.data = { ...note }
         return card
     }
@@ -137,9 +117,8 @@ const NotesRenderer = (() => {
 
         if (!list || !list.length) {
             UI.els.empty.classList.remove("hidden")
-            grid.innerHTML = "" // Clear grid
-            // Optional: retain cache if you expect items to return, otherwise clear
-            cardCache.clear() 
+            grid.innerHTML = ""
+            cardCache.clear()
             return
         }
 
@@ -156,12 +135,10 @@ const NotesRenderer = (() => {
             fragment.appendChild(node)
         })
 
-        // Cleanup removed items from cache
         for (const [id] of cardCache) {
             if (!currentIds.has(id)) cardCache.delete(id)
         }
 
-        // Reconcile DOM (replaceChildren is performant)
         requestAnimationFrame(() => {
             grid.replaceChildren(fragment)
         })
@@ -172,10 +149,7 @@ const NotesRenderer = (() => {
 
 function normalizeVisibleNotes(list, orderKey = "order") {
     if (!Array.isArray(list)) return []
-    // Shallow copy and normalize
     const arr = list.map(n => NoteIO.normalizeNote(n))
-    
-    // Optimized sort: Pinned first, then by orderKey
     arr.sort((a, b) => {
         if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? 1 : -1
         const vA = typeof a[orderKey] === "number" ? a[orderKey] : 0
@@ -186,15 +160,22 @@ function normalizeVisibleNotes(list, orderKey = "order") {
 }
 
 function renderNotes(list) {
-    // Adapter for legacy calls
     NotesRenderer.render(list)
+}
+
+function isHiddenLocked(note) {
+    return !!(note && note.lock && note.lock.hidden)
+}
+
+function getLockedNotes() {
+    const current = StateStore.read()
+    return (current.notes || []).filter(n => isHiddenLocked(n))
 }
 
 function filterAndRender(query) {
     const queryValue = String(query || "")
     const current = StateStore.read()
-    
-    // Update state only if changed to avoid loop
+
     if (current.searchQuery !== queryValue) {
         StateStore.update("searchQuery", queryValue)
     }
@@ -203,29 +184,28 @@ function filterAndRender(query) {
     const view = current.view
     const activeFolderId = current.activeFolderId
 
-    // Auto-switch view if searching inside a folder but context lost
     if (view === "folder" && !activeFolderId) {
         StateStore.update("view", "notes")
     }
 
     let list = current.notes.slice()
 
-    // Filter by View
+    list = list.filter(n => !isHiddenLocked(n))
+
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
-    else list = list.filter(n => !n.isArchived) // "notes" view
+    else list = list.filter(n => !n.isArchived)
 
-    // Filter by Search
     if (q) {
         try {
-            const scored = list.map(n => ({ 
-                n, 
-                score: SmartSearch.score(q, n.title, n.content, n.tags) 
+            const scored = list.map(n => ({
+                n,
+                score: SmartSearch.score(q, n.title, n.content, n.tags)
             }))
-            .filter(item => item.score >= 0.35)
-            .sort((a, b) => b.score - a.score)
-            
+                .filter(item => item.score >= 0.35)
+                .sort((a, b) => b.score - a.score)
+
             list = scored.map(item => item.n)
         } catch (e) {
             console.error("Search failed", e)
@@ -247,16 +227,15 @@ function filterAndRender(query) {
 
 function switchView(view, folderId = null) {
     StateStore.set(prev => ({ ...prev, view, activeFolderId: folderId }))
-    
-    // Update Sidebar Active States
+
     document.querySelectorAll(".nav-item").forEach(btn => {
         const v = btn.dataset.view
         const f = btn.dataset.folderId
-        
+
         let isActive = false
         if (v) isActive = (v === view)
         else if (f) isActive = (view === "folder" && f === folderId)
-        
+
         btn.classList.toggle("active", isActive)
     })
 
@@ -273,7 +252,6 @@ async function deleteFolder(folderId) {
         const notes = StateStore.read().notes.filter(n => n.folderId === folderId)
         const batch = db.batch()
 
-        // Unlink notes instead of deleting
         notes.forEach(n => {
             const ref = db.collection("users").doc(user.uid).collection("notes").doc(n.id)
             batch.update(ref, { folderId: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
@@ -299,14 +277,14 @@ function openNoteActions(noteId) {
 async function toggleFavorite(noteId) {
     const user = StateStore.read().user
     if (!db || !user) return
-    
+
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
+    if (isHiddenLocked(note)) return
 
     const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
-    await ref.update({ 
-        isFavorite: !note.isFavorite, 
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+    await ref.update({
+        isFavorite: !note.isFavorite
     })
 }
 
@@ -316,14 +294,13 @@ async function togglePin(noteId) {
 
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
+    if (isHiddenLocked(note)) return
 
     const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
-    await ref.update({ 
-        isPinned: !note.isPinned, 
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+    await ref.update({
+        isPinned: !note.isPinned
     })
-    
-    // Add visual feedback class to current card instance if it exists
+
     const card = document.querySelector(`.note-card[data-note-id="${encodeURIComponent(noteId)}"]`)
     if (card) {
         card.classList.add("pinning")
@@ -335,12 +312,16 @@ async function toggleArchive(noteId, archive) {
     const user = StateStore.read().user
     if (!db || !user) return
 
+    const note = StateStore.read().notes.find(n => n.id === noteId)
+    if (!note) return
+    if (isHiddenLocked(note)) return
+
     const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
-    await ref.update({ 
-        isArchived: !!archive, 
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+    await ref.update({
+        isArchived: !!archive,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     })
-    
+
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
 }
 
@@ -355,7 +336,6 @@ async function initApp() {
         const user = StateStore.read().user
         if (!db || !user) return
 
-        // Folders Listener
         db.collection("users").doc(user.uid).collection("folders")
             .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
@@ -367,7 +347,6 @@ async function initApp() {
                 }
             })
 
-        // Notes Listener
         db.collection("users").doc(user.uid).collection("notes")
             .orderBy("order", "asc")
             .onSnapshot(snap => {
@@ -377,21 +356,18 @@ async function initApp() {
                 if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
             })
 
-        // Cleanup Loader
         const loader = document.getElementById("app-loader")
         if (loader) loader.classList.add("hidden")
-        
+
         const search = document.getElementById("search-input")
         if (search) search.value = ""
-        
-        switchView("notes")
 
+        switchView("notes")
     } catch (e) {
         console.error("Init Error", e)
     }
 }
 
-// Global Exports
 window.initApp = initApp
 window.switchView = switchView
 window.filterAndRender = filterAndRender
@@ -400,3 +376,4 @@ window.openNoteActions = openNoteActions
 window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive
+window.getLockedNotes = getLockedNotes
