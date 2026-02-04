@@ -304,10 +304,7 @@ export const ThemeManager = {
             dot.className = "theme-dot"
             const color = item.key === "manual" ? (manualColor || this.themes.dark.p) : this.resolvePreset(item.key).p
             dot.style.background = color
-            if (activeKey === item.key) {
-                dot.classList.add("active")
-                wrapper.classList.add("active")
-            }
+            if (activeKey === item.key) dot.classList.add("active")
             const label = document.createElement("span")
             label.className = "theme-label"
             label.textContent = window.UI && UI.getText ? UI.getText(item.labelKey, item.key) : item.key
