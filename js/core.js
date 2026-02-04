@@ -239,6 +239,7 @@ const LANG = {
         pin_note: "Закрепить",
         favorite_note: "Важное",
         archive_note: "Архивировать",
+        restore_note: "Вернуть",
         untitled_note: "Без названия",
         empty_note: "Нет содержимого",
         locked_note: "Защищено",
@@ -358,6 +359,10 @@ const LANG = {
         smart_features: "УМНЫЕ ФУНКЦИИ",
         lock_center: "Защита заметок",
         lock_center_desc: "Тут будут фильтры скрытых заметок и быстрые действия",
+        lock_center_empty: "Нет защищенных заметок",
+        lock_center_masked_title: "Защищенная заметка",
+        move_to_folder: "Переместить",
+        folder_none: "Без папки",
         share_desc: "Ссылка будет сгенерирована и появится здесь",
         share_modal_title: "Поделиться",
         collab_title: "Совместное редактирование",
@@ -369,6 +374,7 @@ const LANG = {
         lock_password_empty: "Пароль пустой",
         lock_invalid_password: "Неверный пароль",
         lock_hidden: "Заметка скрыта",
+        lock_download_blocked: "Заметка заблокирована",
         note_deleted: "Удалено",
         folder_deleted: "Папка удалена",
         feedback_failed: "Не удалось отправить отзыв",
@@ -464,6 +470,7 @@ const LANG = {
         pin_note: "Pin",
         favorite_note: "Favorite",
         archive_note: "Archive",
+        restore_note: "Restore",
         untitled_note: "Untitled",
         empty_note: "No content",
         locked_note: "Locked",
@@ -583,6 +590,10 @@ const LANG = {
         smart_features: "SMART FEATURES",
         lock_center: "Note Protection",
         lock_center_desc: "Hidden notes filters and quick actions will appear here",
+        lock_center_empty: "No protected notes",
+        lock_center_masked_title: "Protected note",
+        move_to_folder: "Move",
+        folder_none: "No folder",
         share_desc: "A link will be generated and appear here",
         share_modal_title: "Share",
         collab_title: "Collaboration",
@@ -594,6 +605,7 @@ const LANG = {
         lock_password_empty: "Password is empty",
         lock_invalid_password: "Invalid password",
         lock_hidden: "Note hidden",
+        lock_download_blocked: "Note is locked",
         note_deleted: "Deleted",
         folder_deleted: "Folder deleted",
         feedback_failed: "Unable to send feedback",
@@ -932,9 +944,32 @@ const ThemeManager = {
         setVal("cp-text", t)
     },
 
-    setManual(primary, bg, text) {
+    getSavedSettings() {
+        const saved = JSON.parse(localStorage.getItem("app-theme-settings")) || {}
+        if (saved.preset && this.themes[saved.preset]) return { preset: saved.preset }
+        return {
+            preset: "manual",
+            p: typeof saved.p === "string" ? saved.p : this.themes.dark.p,
+            bg: typeof saved.bg === "string" ? saved.bg : this.themes.dark.bg,
+            t: typeof saved.t === "string" ? saved.t : this.themes.dark.t
+        }
+    },
+
+    getDefaultSettings() {
+        return { preset: "dark" }
+    },
+
+    resolvePreset(key) {
+        if (key === "system") {
+            const isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+            return isDark ? this.themes.dark : this.themes.light
+        }
+        return this.themes[key] || this.themes.dark
+    },
+
+    buildManualTheme(primary, bg, text) {
         const base = this.themes.dark
-        const theme = {
+        return {
             ...base,
             p: primary,
             bg,
@@ -942,30 +977,37 @@ const ThemeManager = {
             surface: Utils.adjustColor(bg, 10),
             surfaceLight: Utils.adjustColor(bg, 20)
         }
+    },
+
+    applySettings(settings, persist = false) {
+        if (settings && settings.preset && settings.preset !== "manual") {
+            const preset = this.resolvePreset(settings.preset)
+            this.applyThemeVars({ ...preset })
+            if (persist) localStorage.setItem("app-theme-settings", JSON.stringify({ preset: settings.preset }))
+            this.syncInputs(preset.p, preset.bg, preset.t)
+            return
+        }
+        const primary = settings?.p || this.themes.dark.p
+        const bg = settings?.bg || this.themes.dark.bg
+        const text = settings?.t || this.themes.dark.t
+        const theme = this.buildManualTheme(primary, bg, text)
         this.applyThemeVars(theme)
+        if (persist) localStorage.setItem("app-theme-settings", JSON.stringify({ p: primary, bg: bg, t: text }))
         this.syncInputs(primary, bg, text)
-        localStorage.setItem("app-theme-settings", JSON.stringify({ p: primary, bg: bg, t: text }))
+    },
+
+    setManual(primary, bg, text) {
+        this.applySettings({ preset: "manual", p: primary, bg, t: text }, true)
     },
 
     applyPreset(key) {
-        const preset = this.themes[key]
-        if (!preset) return
-        if (preset.preset === "system") {
-            const isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-            const variant = isDark ? this.themes.dark : this.themes.light
-            this.applyThemeVars({ ...variant })
-            localStorage.setItem("app-theme-settings", JSON.stringify({ preset: "system" }))
-            this.syncInputs(variant.p, variant.bg, variant.t)
-            return
-        }
-        this.applyThemeVars({ ...preset })
-        localStorage.setItem("app-theme-settings", JSON.stringify({ preset: key }))
-        this.syncInputs(preset.p, preset.bg, preset.t)
+        if (!this.themes[key]) return
+        this.applySettings({ preset: key }, true)
     },
 
     updateManual(type, val) {
-        const current = JSON.parse(localStorage.getItem("app-theme-settings")) || { preset: "dark" }
-        const base = current.preset && this.themes[current.preset] ? { ...this.themes[current.preset] } : { ...this.themes.dark }
+        const current = this.getSavedSettings()
+        const base = current.preset && current.preset !== "manual" ? this.resolvePreset(current.preset) : this.themes.dark
         const manual = {
             p: typeof current.p === "string" ? current.p : base.p,
             bg: typeof current.bg === "string" ? current.bg : base.bg,
@@ -975,18 +1017,21 @@ const ThemeManager = {
         this.setManual(manual.p, manual.bg, manual.t)
     },
 
-    setupColorInputs() {
+    setupColorInputs(onInput) {
         const bind = (id, type) => {
             const el = document.getElementById(id)
             if (!el) return
-            el.oninput = (e) => this.updateManual(type, e.target.value)
+            el.oninput = (e) => {
+                if (typeof onInput === "function") onInput(type, e.target.value)
+                else this.updateManual(type, e.target.value)
+            }
         }
         bind("cp-primary", "p")
         bind("cp-bg", "bg")
         bind("cp-text", "t")
     },
 
-    renderPicker() {
+    renderPicker(options = {}) {
         const root = document.getElementById("theme-picker-root")
         if (!root) return
         root.innerHTML = ""
@@ -1009,7 +1054,7 @@ const ThemeManager = {
 
         const current = localStorage.getItem("app-theme-settings")
         const parsed = current ? JSON.parse(current) : null
-        const activeKey = parsed?.preset ? parsed.preset : "manual"
+        const activeKey = options.activeKey || (parsed?.preset ? parsed.preset : "manual")
 
         ordered.forEach((key) => {
             const t = this.themes[key]
@@ -1021,7 +1066,9 @@ const ThemeManager = {
             const dot = document.createElement("div")
             dot.className = "theme-dot"
 
-            const color = key === "manual" ? (parsed?.p || this.themes.dark.p) : (t.p || (key === "system" ? "#6366f1" : "#00f2ff"))
+            const color = key === "manual"
+                ? (options.manualColor || parsed?.p || this.themes.dark.p)
+                : (t.p || (key === "system" ? "#6366f1" : "#00f2ff"))
             dot.style.background = color
 
             const glow = Utils.hexToRgb(color)
@@ -1035,7 +1082,9 @@ const ThemeManager = {
             label.textContent = labels[key] || key.charAt(0).toUpperCase() + key.slice(1)
 
             dot.addEventListener("click", () => {
-                if (key === "manual") {
+                if (typeof options.onSelect === "function") {
+                    options.onSelect(key)
+                } else if (key === "manual") {
                     const base = parsed || {}
                     const p = typeof base.p === "string" ? base.p : this.themes.dark.p
                     const bg = typeof base.bg === "string" ? base.bg : this.themes.dark.bg

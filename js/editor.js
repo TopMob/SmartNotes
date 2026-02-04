@@ -7,6 +7,7 @@ const Editor = (() => {
     let snapshotTimer = null
     let observer = null
     let abortController = null
+    let recordingStream = null
 
     const CONFIG = {
         MAX_HISTORY: 100,
@@ -45,6 +46,7 @@ const Editor = (() => {
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
 
             els.content.addEventListener("paste", handlePaste, { signal })
+            els.content.addEventListener("keydown", handleTagLineEnter, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const wrapper = e.target.closest(".media-wrapper")
@@ -143,6 +145,7 @@ const Editor = (() => {
         await LockService.setLock(nextNote, pass.trim())
         StateStore.update("currentNote", nextNote)
         UI.closeModal("lock-modal")
+        await save({ silent: true })
         UI.showToast(UI.getText("lock_hidden", "Note hidden"))
     }
 
@@ -205,6 +208,64 @@ const Editor = (() => {
     const insertChecklistLine = () => {
         const html = '<div class="task-item"><input class="task-checkbox" type="checkbox"><span class="task-text"></span></div>'
         document.execCommand("insertHTML", false, html)
+    }
+
+    const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result || ""))
+        r.onerror = () => reject(new Error("Blob read failed"))
+        r.readAsDataURL(blob)
+    })
+
+    const setRecordingState = (active) => {
+        StateStore.update("recording", !!active)
+        const indicator = document.getElementById("voice-indicator")
+        if (indicator) indicator.classList.toggle("active", !!active)
+    }
+
+    const stopRecording = () => {
+        const recorder = StateStore.read().mediaRecorder
+        if (recorder && recorder.state !== "inactive") recorder.stop()
+        else setRecordingState(false)
+        if (recordingStream) {
+            recordingStream.getTracks().forEach(track => track.stop())
+            recordingStream = null
+        }
+    }
+
+    const startRecording = async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+            UI.showToast(UI.getText("mic_unsupported", "Microphone not supported"))
+            return
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            recordingStream = stream
+            const recorder = new MediaRecorder(stream)
+            const chunks = []
+            recorder.ondataavailable = (e) => {
+                if (e.data && e.data.size) chunks.push(e.data)
+            }
+            recorder.onstop = async () => {
+                setRecordingState(false)
+                const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" })
+                const dataUrl = await blobToDataUrl(blob)
+                insertAudio(dataUrl)
+                StateStore.update("mediaRecorder", null)
+            }
+            StateStore.update("mediaRecorder", recorder)
+            recorder.start()
+            setRecordingState(true)
+        } catch {
+            UI.showToast(UI.getText("mic_denied", "Microphone access denied"))
+            setRecordingState(false)
+        }
+    }
+
+    const toggleRecording = () => {
+        const recording = StateStore.read().recording
+        if (recording) stopRecording()
+        else startRecording()
     }
 
     const toggleTask = (el) => {
@@ -319,6 +380,7 @@ const Editor = (() => {
         els.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
         deselectMedia()
+        stopRecording()
         // Stop observing when closed
         if (observer) observer.disconnect()
     }
@@ -488,6 +550,17 @@ const Editor = (() => {
         makeMediaDraggable()
     }
 
+    const insertAudio = (src) => {
+        const id = Utils.generateId()
+        const html = `
+            <div class="media-wrapper audio-wrapper" id="${id}" contenteditable="false" draggable="true">
+                <audio controls src="${Utils.escapeHtml(src)}"></audio>
+            </div><br>
+        `
+        document.execCommand("insertHTML", false, html)
+        makeMediaDraggable()
+    }
+
     const makeMediaDraggable = () => {
         els.content.querySelectorAll(".media-wrapper").forEach(w => {
             w.setAttribute("draggable", "true")
@@ -539,6 +612,28 @@ const Editor = (() => {
         }
     }
 
+    const getActiveBlock = () => {
+        const sel = window.getSelection()
+        if (!sel || sel.rangeCount === 0) return null
+        let node = sel.anchorNode
+        if (!node) return null
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+        if (!node || node === els.content) return null
+        return node.closest("div, p")
+    }
+
+    const handleTagLineEnter = (e) => {
+        if (e.key !== "Enter") return
+        const block = getActiveBlock()
+        if (!block || block.parentElement !== els.content) return
+        const text = block.textContent.trim()
+        if (/^#[^\s#]+$/.test(text)) {
+            block.classList.add("tag-line")
+        } else {
+            block.classList.remove("tag-line")
+        }
+    }
+
     const deleteSelectedMedia = () => {
         selectedMedia?.remove()
         deselectMedia()
@@ -546,7 +641,7 @@ const Editor = (() => {
 
     const toggleToolbar = () => els.toolbar?.classList.toggle("is-hidden")
 
-    const save = async () => {
+    const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
 
@@ -572,7 +667,7 @@ const Editor = (() => {
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             StateStore.update("editorDirty", false)
-            UI.showToast(UI.getText("saved", "Saved"))
+            if (!options.silent) UI.showToast(UI.getText("saved", "Saved"))
             close()
         } catch (e) {
             UI.showToast("Save failed")
@@ -606,6 +701,7 @@ const Editor = (() => {
         resetMediaTransform,
         alignMediaOrText,
         deleteSelectedMedia,
-        drawOnSelectedMedia: () => UI.showToast(UI.getText("draw_photo_hint", "Use photo editor"))
+        drawOnSelectedMedia: () => UI.showToast(UI.getText("draw_photo_hint", "Use photo editor")),
+        toggleRecording
     }
 })()

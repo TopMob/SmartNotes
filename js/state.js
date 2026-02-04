@@ -16,7 +16,8 @@ const StateStore = (() => {
         editorDirty: false,
         lastSaved: null,
         orderHistory: [],
-        pendingShare: null
+        pendingShare: null,
+        appearanceDraft: null
     }
 
     let state = { ...initialState, config: { ...initialState.config } }
@@ -50,7 +51,8 @@ const StateStore = (() => {
         editorDirty: false,
         lastSaved: null,
         orderHistory: [],
-        pendingShare: null
+        pendingShare: null,
+        appearanceDraft: null
     }))
 
     return {

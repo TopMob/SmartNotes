@@ -288,13 +288,13 @@ async function toggleFavorite(noteId) {
     })
 }
 
-async function togglePin(noteId) {
+async function togglePin(noteId, options = {}) {
     const user = StateStore.read().user
     if (!db || !user) return
 
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
-    if (isHiddenLocked(note)) return
+    if (isHiddenLocked(note) && !options.allowLocked) return
 
     const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
     await ref.update({
@@ -308,13 +308,13 @@ async function togglePin(noteId) {
     }
 }
 
-async function toggleArchive(noteId, archive) {
+async function toggleArchive(noteId, archive, options = {}) {
     const user = StateStore.read().user
     if (!db || !user) return
 
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
-    if (isHiddenLocked(note)) return
+    if (isHiddenLocked(note) && !options.allowLocked) return
 
     const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
     await ref.update({
@@ -323,6 +323,19 @@ async function toggleArchive(noteId, archive) {
     })
 
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
+}
+
+async function moveNoteToFolder(noteId, folderId, options = {}) {
+    const user = StateStore.read().user
+    if (!db || !user) return
+    const note = StateStore.read().notes.find(n => n.id === noteId)
+    if (!note) return
+    if (isHiddenLocked(note) && !options.allowLocked) return
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({
+        folderId: folderId || null,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    })
 }
 
 async function initApp() {
@@ -377,3 +390,4 @@ window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive
 window.getLockedNotes = getLockedNotes
+window.moveNoteToFolder = moveNoteToFolder

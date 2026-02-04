@@ -364,6 +364,11 @@
             </header>
             <div class="modal-body">
                 <p class="muted" data-lang="lock_center_desc">Тут будут фильтры скрытых заметок и быстрые действия</p>
+                <div id="lock-center-empty" class="empty-placeholder hidden">
+                    <i class="material-icons-round" aria-hidden="true">lock_open</i>
+                    <p data-lang="lock_center_empty">Нет защищенных заметок</p>
+                </div>
+                <div id="lock-center-list" class="lock-center-list"></div>
                 <div class="modal-actions-grid">
                     <button type="button" class="btn-secondary" data-action="close-modal" data-modal="lock-center-modal" data-lang="close">Закрыть</button>
                 </div>

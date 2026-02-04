@@ -235,6 +235,9 @@ const UI = {
             case "editor-save":
                 Editor.save()
                 break
+            case "editor-voice":
+                Editor.toggleRecording()
+                break
             case "close-editor":
                 Editor.close()
                 break
@@ -255,6 +258,21 @@ const UI = {
                 break
             case "upload-note":
                 this.uploadSelectedNote()
+                break
+            case "lock-pin":
+                this.toggleLockPin(el.dataset.noteId || "")
+                break
+            case "lock-archive":
+                this.toggleLockArchive(el.dataset.noteId || "")
+                break
+            case "lock-move-folder":
+                this.moveLockNoteToFolder(el.dataset.noteId || "")
+                break
+            case "appearance-reset":
+                this.resetAppearanceDraft()
+                break
+            case "appearance-save":
+                this.saveAppearanceDraft()
                 break
             case "submit-feedback":
                 this.submitFeedback()
@@ -425,6 +443,9 @@ const UI = {
             const n = StateStore.read().currentNote
             if (link && n) link.value = ShareService.makeCollabLink(n.id)
         }
+        if (id === "lock-center-modal") {
+            this.renderLockCenter()
+        }
     },
 
     closeModal(id) {
@@ -545,9 +566,13 @@ const UI = {
                         </div>
                     </div>
                 </div>
+                <div class="settings-actions row-between">
+                    <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
+                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                </div>
             `
-            ThemeManager.revertToLastSaved()
-            ThemeManager.setupColorInputs()
+            this.initAppearanceDraft()
+            this.renderAppearanceDraft()
             return
         }
 
@@ -556,6 +581,72 @@ const UI = {
             root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
             this.renderEditorSettings()
         }
+    },
+
+    initAppearanceDraft() {
+        const saved = ThemeManager.getSavedSettings()
+        if (saved.preset && saved.preset !== "manual") {
+            const preset = ThemeManager.resolvePreset(saved.preset)
+            StateStore.update("appearanceDraft", { preset: saved.preset, p: preset.p, bg: preset.bg, t: preset.t })
+            return
+        }
+        StateStore.update("appearanceDraft", {
+            preset: "manual",
+            p: saved.p || ThemeManager.themes.dark.p,
+            bg: saved.bg || ThemeManager.themes.dark.bg,
+            t: saved.t || ThemeManager.themes.dark.t
+        })
+    },
+
+    renderAppearanceDraft() {
+        let draft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        if (draft.preset && draft.preset !== "manual" && (!draft.p || !draft.bg || !draft.t)) {
+            const preset = ThemeManager.resolvePreset(draft.preset)
+            draft = { ...draft, p: preset.p, bg: preset.bg, t: preset.t }
+            StateStore.update("appearanceDraft", draft)
+        }
+        const activeKey = draft.preset && draft.preset !== "manual" ? draft.preset : "manual"
+        ThemeManager.syncInputs(draft.p, draft.bg, draft.t)
+        const onSelect = (key) => {
+            if (key === "manual") {
+                StateStore.update("appearanceDraft", { ...draft, preset: "manual" })
+            } else {
+                const preset = ThemeManager.resolvePreset(key)
+                StateStore.update("appearanceDraft", { preset: key, p: preset.p, bg: preset.bg, t: preset.t })
+            }
+            this.renderAppearanceDraft()
+        }
+        ThemeManager.renderPicker({ onSelect, activeKey, manualColor: draft.p })
+        ThemeManager.setupColorInputs((type, val) => {
+            const current = StateStore.read().appearanceDraft || draft
+            const next = { ...current, preset: "manual", [type]: val }
+            StateStore.update("appearanceDraft", next)
+            ThemeManager.renderPicker({ onSelect, activeKey: "manual", manualColor: next.p })
+        })
+    },
+
+    resetAppearanceDraft() {
+        const defaults = ThemeManager.getDefaultSettings()
+        if (defaults.preset && defaults.preset !== "manual") {
+            const preset = ThemeManager.resolvePreset(defaults.preset)
+            StateStore.update("appearanceDraft", { preset: defaults.preset, p: preset.p, bg: preset.bg, t: preset.t })
+        } else {
+            StateStore.update("appearanceDraft", {
+                preset: "manual",
+                p: ThemeManager.themes.dark.p,
+                bg: ThemeManager.themes.dark.bg,
+                t: ThemeManager.themes.dark.t
+            })
+        }
+        this.renderAppearanceDraft()
+    },
+
+    saveAppearanceDraft() {
+        const draft = StateStore.read().appearanceDraft
+        if (!draft) return
+        ThemeManager.applySettings(draft, true)
+        this.initAppearanceDraft()
+        this.renderAppearanceDraft()
     },
 
     bindSettingsControls() {
@@ -706,6 +797,81 @@ const UI = {
             row.append(label, input)
             root.appendChild(row)
         })
+    },
+
+    renderLockCenter() {
+        const listRoot = document.getElementById("lock-center-list")
+        const empty = document.getElementById("lock-center-empty")
+        if (!listRoot || !empty) return
+        const notes = getLockedNotes()
+        empty.classList.toggle("hidden", notes.length > 0)
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        const folders = StateStore.read().folders
+        const randomText = () => {
+            const parts = ["скрыто", "данные", "заметка", "защита", "контент", "секрет", "фрагмент", "поля", "шифр", "текст"]
+            const count = 12 + Math.floor(Math.random() * 22)
+            return Array.from({ length: count }, () => parts[Math.floor(Math.random() * parts.length)]).join(" ")
+        }
+        listRoot.innerHTML = notes.map(note => {
+            const id = encodeURIComponent(note.id)
+            const isArchived = !!note.isArchived
+            const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
+            folders.forEach(f => {
+                const selected = note.folderId === f.id ? "selected" : ""
+                folderOptions.push(`<option value="${f.id}" ${selected}>${Utils.escapeHtml(f.name)}</option>`)
+            })
+            return `
+                <div class="lock-center-card" data-note-id="${id}">
+                    <div class="lock-center-header">
+                        <div class="lock-center-title">${dict.lock_center_masked_title || "Protected note"}</div>
+                        <div class="lock-center-meta">${Utils.formatDate(note.updatedAt || note.createdAt || Date.now())}</div>
+                    </div>
+                    <div class="lock-center-preview">${randomText()}</div>
+                    <div class="lock-center-actions">
+                        <button type="button" class="btn-secondary" data-action="lock-pin" data-note-id="${id}">
+                            ${dict.pin_note || "Pin"}
+                        </button>
+                        <button type="button" class="btn-secondary" data-action="lock-archive" data-note-id="${id}">
+                            ${isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")}
+                        </button>
+                        <div class="lock-center-folder">
+                            <select class="input-area lock-center-select" data-note-id="${id}" aria-label="${dict.folder_view_aria || "Folder"}">
+                                ${folderOptions.join("")}
+                            </select>
+                            <button type="button" class="btn-primary" data-action="lock-move-folder" data-note-id="${id}">
+                                ${dict.move_to_folder || "Move"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `
+        }).join("")
+    },
+
+    async toggleLockPin(noteId) {
+        const id = decodeURIComponent(noteId || "")
+        if (!id) return
+        await togglePin(id, { allowLocked: true })
+        this.renderLockCenter()
+    },
+
+    async toggleLockArchive(noteId) {
+        const id = decodeURIComponent(noteId || "")
+        if (!id) return
+        const note = StateStore.read().notes.find(n => n.id === id)
+        if (!note) return
+        await toggleArchive(id, !note.isArchived, { allowLocked: true })
+        this.renderLockCenter()
+    },
+
+    async moveLockNoteToFolder(noteId) {
+        const id = decodeURIComponent(noteId || "")
+        if (!id) return
+        const select = document.querySelector(`.lock-center-select[data-note-id="${encodeURIComponent(id)}"]`)
+        if (!select) return
+        const folderId = select.value || null
+        await moveNoteToFolder(id, folderId, { allowLocked: true })
+        this.renderLockCenter()
     },
 
     savePreferences() {
@@ -957,6 +1123,10 @@ const UI = {
     downloadSelectedNote() {
         const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
         if (!note) return
+        if (note.lock?.hash) {
+            this.showToast(this.getText("lock_download_blocked", "Note is locked"))
+            return
+        }
         const data = NoteIO.exportNote(note)
         const blob = new Blob([data], { type: "application/json" })
         const a = document.createElement("a")
