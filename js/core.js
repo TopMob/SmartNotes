@@ -12,7 +12,7 @@ const Utils = {
     formatDate: (timestamp) => {
         if (!timestamp) return ""
         const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp)
-        const lang = (window.state && window.state.config && window.state.config.lang) || "ru"
+        const lang = (window.StateStore && StateStore.read().config && StateStore.read().config.lang) || "ru"
         try {
             return new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date)
         } catch {
@@ -179,28 +179,6 @@ if (typeof firebase !== "undefined") {
     db = firebase.firestore()
     db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 }
-
-const state = {
-    user: null,
-    notes: [],
-    folders: [],
-    view: "notes",
-    activeFolderId: null,
-    searchQuery: "",
-    currentNote: null,
-    tempRating: 0,
-    config: { lang: "ru", folderViewMode: "compact", reduceMotion: false, editorTools: {} },
-    driveToken: null,
-    recording: false,
-    mediaRecorder: null,
-    audioChunks: [],
-    editorDirty: false,
-    lastSaved: null,
-    orderHistory: [],
-    pendingShare: null
-}
-
-window.state = state
 
 const LANG = {
     ru: {
@@ -396,6 +374,7 @@ const LANG = {
         feedback_failed: "Не удалось отправить отзыв",
         reorder_search_disabled: "Сортировка недоступна при поиске",
         reorder_pinned_blocked: "Закрепленные заметки сортируются отдельно",
+        reorder_folder_disabled: "Сортировка доступна только внутри папки или для заметок без папки",
         collab_enabled: "Совместный режим включен",
         share_note: "Поделиться заметкой",
         collab_note: "Совместное редактирование",
@@ -620,6 +599,7 @@ const LANG = {
         feedback_failed: "Unable to send feedback",
         reorder_search_disabled: "Reordering is disabled while searching",
         reorder_pinned_blocked: "Pinned notes reorder separately",
+        reorder_folder_disabled: "Reordering is available only inside folders or for notes without folders",
         collab_enabled: "Collaboration enabled",
         share_note: "Share note",
         collab_note: "Collaborate",
@@ -1011,7 +991,7 @@ const ThemeManager = {
         if (!root) return
         root.innerHTML = ""
 
-        const dict = LANG[state.config.lang] || LANG.ru
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
         const labels = {
             dark: dict.theme_dark_default || dict.theme_dark || "Dark",
             system: dict.theme_system || "System",
@@ -1145,7 +1125,7 @@ const Auth = {
             await auth.signOut()
             this.resetSession()
         } catch {
-            this.applySignedInUI(state.user)
+            this.applySignedInUI(StateStore.read().user)
             if (typeof UI !== "undefined") UI.showToast(UI.getText("logout_failed", "Sign out failed"))
         }
     },
@@ -1158,7 +1138,7 @@ const Auth = {
             this.resetSession()
             await this.login()
         } catch {
-            this.applySignedInUI(state.user)
+            this.applySignedInUI(StateStore.read().user)
             if (typeof UI !== "undefined") UI.showToast(UI.getText("login_failed", "Sign-in failed"))
         }
     },
@@ -1177,21 +1157,7 @@ const Auth = {
     },
 
     clearState() {
-        state.user = null
-        state.notes = []
-        state.folders = []
-        state.view = "notes"
-        state.activeFolderId = null
-        state.searchQuery = ""
-        state.currentNote = null
-        state.tempRating = 0
-        state.driveToken = null
-        state.recording = false
-        state.mediaRecorder = null
-        state.audioChunks = []
-        state.editorDirty = false
-        state.lastSaved = null
-        state.orderHistory = []
+        StateStore.resetSession()
         if (typeof UI !== "undefined") {
             UI.visibleNotes = []
             UI.currentNoteActionId = null
@@ -1262,7 +1228,7 @@ const Auth = {
 
 if (auth) {
     auth.onAuthStateChanged(user => {
-        state.user = user || null
+        StateStore.update("user", user || null)
 
         if (user) {
             Auth.applySignedInUI(user)
@@ -1277,7 +1243,7 @@ if (auth) {
 document.addEventListener("DOMContentLoaded", () => {
     ThemeManager.init()
     if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
-    if (!state.user) Auth.applySignedOutUI()
+    if (!StateStore.read().user) Auth.applySignedOutUI()
 
     document.addEventListener("dblclick", (event) => {
         event.preventDefault()

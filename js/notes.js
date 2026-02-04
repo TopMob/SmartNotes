@@ -1,11 +1,11 @@
-function normalizeVisibleNotes(list) {
+function normalizeVisibleNotes(list, orderKey = "order") {
     const arr = (list || []).filter(Boolean).map(n => NoteIO.normalizeNote(n))
     arr.sort((a, b) => {
         const ap = a.isPinned ? 1 : 0
         const bp = b.isPinned ? 1 : 0
         if (bp !== ap) return bp - ap
-        const ao = typeof a.order === "number" ? a.order : 0
-        const bo = typeof b.order === "number" ? b.order : 0
+        const ao = typeof a[orderKey] === "number" ? a[orderKey] : 0
+        const bo = typeof b[orderKey] === "number" ? b[orderKey] : 0
         return ao - bo
     })
     return arr
@@ -56,15 +56,19 @@ function renderNotes(list) {
 }
 
 function filterAndRender(query) {
-    state.searchQuery = String(query || "")
-    const q = state.searchQuery.trim()
-    if (state.view === "folder" && !state.activeFolderId) state.view = "notes"
-    let list = state.notes.slice()
+    const queryValue = String(query || "")
+    const current = StateStore.read()
+    StateStore.update("searchQuery", queryValue)
+    const q = queryValue.trim()
+    if (current.view === "folder" && !current.activeFolderId) StateStore.update("view", "notes")
+    let list = current.notes.slice()
 
-    if (state.view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
-    if (state.view === "archive") list = list.filter(n => !!n.isArchived)
-    if (state.view === "notes") list = list.filter(n => !n.isArchived)
-    if (state.view === "folder") list = list.filter(n => !n.isArchived && n.folderId === state.activeFolderId)
+    const view = StateStore.read().view
+    const activeFolderId = StateStore.read().activeFolderId
+    if (view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
+    if (view === "archive") list = list.filter(n => !!n.isArchived)
+    if (view === "notes") list = list.filter(n => !n.isArchived)
+    if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
 
     if (q) {
         const scored = list.map(n => {
@@ -74,8 +78,9 @@ function filterAndRender(query) {
         list = scored.map(x => x.n)
     }
 
-    list = normalizeVisibleNotes(list)
-    if (state.view === "folders") {
+    const orderKey = view === "folder" ? "folderOrder" : "order"
+    list = normalizeVisibleNotes(list, orderKey)
+    if (StateStore.read().view === "folders") {
         UI.renderFolderGrid()
         UI.updateViewTitle()
         UI.updatePrimaryActionLabel()
@@ -87,8 +92,7 @@ function filterAndRender(query) {
 }
 
 function switchView(view, folderId = null) {
-    state.view = view
-    state.activeFolderId = folderId
+    StateStore.set(prev => ({ ...prev, view, activeFolderId: folderId }))
     document.querySelectorAll(".nav-item").forEach(btn => {
         const v = btn.dataset.view
         if (!v) return
@@ -100,19 +104,18 @@ function switchView(view, folderId = null) {
 async function deleteFolder(folderId) {
     if (!folderId) return
     UI.confirm("delete_f", async () => {
-        if (!db || !state.user) return
-        const notes = state.notes.filter(n => n.folderId === folderId)
+        if (!db || !StateStore.read().user) return
+        const notes = StateStore.read().notes.filter(n => n.folderId === folderId)
         const batch = db.batch()
         notes.forEach(n => {
-            const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
+            const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(n.id)
             batch.update(ref, { folderId: null })
         })
-        const folderRef = db.collection("users").doc(state.user.uid).collection("folders").doc(folderId)
+        const folderRef = db.collection("users").doc(StateStore.read().user.uid).collection("folders").doc(folderId)
         batch.delete(folderRef)
         await batch.commit()
-        if (state.activeFolderId === folderId) {
-            state.activeFolderId = null
-            state.view = "notes"
+        if (StateStore.read().activeFolderId === folderId) {
+            StateStore.set(prev => ({ ...prev, activeFolderId: null, view: "notes" }))
         }
         UI.showToast(UI.getText("folder_deleted", "Folder deleted"))
     })
@@ -124,19 +127,19 @@ function openNoteActions(noteId) {
 }
 
 async function toggleFavorite(noteId) {
-    if (!db || !state.user) return
-    const note = state.notes.find(n => n.id === noteId)
+    if (!db || !StateStore.read().user) return
+    const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
-    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId)
+    const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId)
     const next = !note.isFavorite
     await ref.update({ isFavorite: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
 }
 
 async function togglePin(noteId) {
-    if (!db || !state.user) return
-    const note = state.notes.find(n => n.id === noteId)
+    if (!db || !StateStore.read().user) return
+    const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
-    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId)
+    const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId)
     const next = !note.isPinned
     await ref.update({ isPinned: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     const card = document.querySelector(`.note-card[data-note-id="${encodeURIComponent(noteId)}"]`)
@@ -147,8 +150,8 @@ async function togglePin(noteId) {
 }
 
 async function toggleArchive(noteId, archive) {
-    if (!db || !state.user) return
-    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(noteId)
+    if (!db || !StateStore.read().user) return
+    const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId)
     await ref.update({ isArchived: !!archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
 }
@@ -160,20 +163,20 @@ async function initApp() {
     UI.init()
     UI.setLang(localStorage.getItem("app-lang") || "ru")
 
-    if (!db || !state.user) return
+    if (!db || !StateStore.read().user) return
 
-    db.collection("users").doc(state.user.uid).collection("folders")
+    db.collection("users").doc(StateStore.read().user.uid).collection("folders")
         .orderBy("createdAt", "asc")
         .onSnapshot(snap => {
-            state.folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            StateStore.update("folders", snap.docs.map(d => ({ id: d.id, ...d.data() })))
             UI.renderFolders()
-            if (state.view === "folders") filterAndRender(document.getElementById("search-input")?.value || "")
+            if (StateStore.read().view === "folders") filterAndRender(document.getElementById("search-input")?.value || "")
         })
 
-    db.collection("users").doc(state.user.uid).collection("notes")
+    db.collection("users").doc(StateStore.read().user.uid).collection("notes")
         .orderBy("order", "asc")
         .onSnapshot(snap => {
-            state.notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            StateStore.update("notes", snap.docs.map(d => ({ id: d.id, ...d.data() })))
             filterAndRender(document.getElementById("search-input")?.value || "")
             if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
         })

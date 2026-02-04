@@ -98,9 +98,12 @@ const Editor = {
         if (lockApply) {
             lockApply.addEventListener("click", async () => {
                 const pass = document.getElementById("lock-password")?.value || ""
-                if (!state.currentNote) return
+                const currentNote = StateStore.read().currentNote
+                if (!currentNote) return
                 if (!pass.trim()) return UI.showToast(UI.getText("lock_password_empty", "Password is empty"))
-                await LockService.setLock(state.currentNote, pass.trim())
+                const nextNote = { ...currentNote }
+                await LockService.setLock(nextNote, pass.trim())
+                StateStore.update("currentNote", nextNote)
                 UI.closeModal("lock-modal")
                 UI.showToast(UI.getText("lock_hidden", "Note hidden"))
             })
@@ -145,7 +148,7 @@ const Editor = {
     },
 
     getEnabledTools() {
-        return state.config.editorTools || {}
+        return StateStore.read().config.editorTools || {}
     },
 
     loadToolSettings() {
@@ -160,15 +163,16 @@ const Editor = {
             stored = null
         }
         const next = { ...defaults, ...(stored || {}) }
-        state.config.editorTools = next
+        StateStore.updateConfig({ editorTools: next })
         localStorage.setItem("editor-tools", JSON.stringify(next))
     },
 
     setToolEnabled(id, enabled) {
         const current = this.getEnabledTools()
         current[id] = !!enabled
-        state.config.editorTools = { ...current }
-        localStorage.setItem("editor-tools", JSON.stringify(state.config.editorTools))
+        const next = { ...current }
+        StateStore.updateConfig({ editorTools: next })
+        localStorage.setItem("editor-tools", JSON.stringify(next))
         this.buildToolbar()
     },
 
@@ -231,13 +235,17 @@ const Editor = {
     },
 
     open(note = null) {
+        const current = StateStore.read()
+        const folderId = current.view === "folder" ? current.activeFolderId : null
+        const folderOrder = folderId ? this.nextFolderOrder(folderId, null) : 0
         const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
             id: Utils.generateId(),
-            folderId: state.view === "folder" ? state.activeFolderId : null,
+            folderId,
+            folderOrder,
             createdAt: Utils.serverTimestamp(),
             order: Date.now()
         })
-        state.currentNote = JSON.parse(JSON.stringify(n))
+        StateStore.update("currentNote", JSON.parse(JSON.stringify(n)))
         this.history = []
         this.future = []
         this.renderState()
@@ -245,6 +253,12 @@ const Editor = {
         this.els.wrapper.classList.add("active")
         setTimeout(() => this.els.content?.focus(), 90)
         UI.toggleSidebar(false)
+    },
+    nextFolderOrder(folderId, excludeId) {
+        const notes = StateStore.read().notes || []
+        const items = notes.filter(n => n.folderId === folderId && n.id !== excludeId)
+        const max = items.reduce((acc, n) => Math.max(acc, typeof n.folderOrder === "number" ? n.folderOrder : 0), 0)
+        return max + 1
     },
 
     async maybeUnlock(note) {
@@ -266,12 +280,12 @@ const Editor = {
 
     close() {
         this.els.wrapper.classList.remove("active")
-        state.currentNote = null
+        StateStore.update("currentNote", null)
         this.deselectMedia()
     },
 
     renderState() {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n) return
         this.els.title.value = n.title || ""
         this.els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
@@ -291,27 +305,29 @@ const Editor = {
     addTag(tag) {
         const t = String(tag || "").trim()
         if (!t) return
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n) return
         const clean = t.replace(/^#+/, "").trim()
         if (!clean) return
-        n.tags = Array.isArray(n.tags) ? n.tags : []
-        if (n.tags.map(x => String(x).toLowerCase()).includes(clean.toLowerCase())) return
-        n.tags.push(clean)
+        const tags = Array.isArray(n.tags) ? [...n.tags] : []
+        if (tags.map(x => String(x).toLowerCase()).includes(clean.toLowerCase())) return
+        tags.push(clean)
+        StateStore.update("currentNote", { ...n, tags })
         this.renderTags()
         this.queueSnapshot()
     },
 
     removeTag(tag) {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n || !Array.isArray(n.tags)) return
-        n.tags = n.tags.filter(x => String(x).toLowerCase() !== String(tag).toLowerCase())
+        const tags = n.tags.filter(x => String(x).toLowerCase() !== String(tag).toLowerCase())
+        StateStore.update("currentNote", { ...n, tags })
         this.renderTags()
         this.queueSnapshot()
     },
 
     renderTags() {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n || !this.els.tagsContainer) return
         const tags = Array.isArray(n.tags) ? n.tags : []
         const html = tags.map(t => `
@@ -341,7 +357,7 @@ const Editor = {
     },
 
     queueSnapshot() {
-        state.editorDirty = true
+        StateStore.update("editorDirty", true)
         clearTimeout(this.snapshotTimer)
         this.snapshotTimer = setTimeout(() => this.snapshot(), 260)
     },
@@ -350,7 +366,7 @@ const Editor = {
         return {
             title: String(this.els.title.value || ""),
             content: String(this.els.content.innerHTML || ""),
-            tags: Array.isArray(state.currentNote?.tags) ? [...state.currentNote.tags] : []
+            tags: Array.isArray(StateStore.read().currentNote?.tags) ? [...StateStore.read().currentNote.tags] : []
         }
     },
 
@@ -360,11 +376,15 @@ const Editor = {
     },
 
     snapshot() {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n) return
-        n.title = String(this.els.title.value || "")
-        n.content = String(this.els.content.innerHTML || "")
-        n.updatedAt = Utils.serverTimestamp()
+        const updated = {
+            ...n,
+            title: String(this.els.title.value || ""),
+            content: String(this.els.content.innerHTML || ""),
+            updatedAt: Utils.serverTimestamp()
+        }
+        StateStore.update("currentNote", updated)
         const next = this.captureSnapshot()
         const last = this.history[this.history.length - 1]
         if (last && this.snapshotsEqual(last, next)) return
@@ -374,16 +394,15 @@ const Editor = {
     },
 
     applySnapshot(snapshot) {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n || !snapshot) return
-        n.title = snapshot.title
-        n.content = snapshot.content
-        n.tags = snapshot.tags
+        const updated = { ...n, title: snapshot.title, content: snapshot.content, tags: snapshot.tags }
+        StateStore.update("currentNote", updated)
         this.renderState()
     },
 
     undo() {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n) return
         if (this.history.length <= 1) return
         const current = this.history.pop()
@@ -393,7 +412,7 @@ const Editor = {
     },
 
     redo() {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n) return
         const next = this.future.pop()
         if (!next) return
@@ -482,35 +501,47 @@ const Editor = {
     },
 
     async save() {
-        if (!db || !state.user) return
-        const n = state.currentNote
+        if (!db || !StateStore.read().user) return
+        const n = StateStore.read().currentNote
         if (!n) return
-        n.title = String(this.els.title.value || "")
-        n.content = Utils.sanitizeHtml(String(this.els.content.innerHTML || ""))
-        if (!Array.isArray(n.tags)) n.tags = []
-        const auto = SmartSearch.suggestTags(n.title, n.content)
-        auto.forEach(t => {
-            if (!n.tags.map(x => String(x).toLowerCase()).includes(t.toLowerCase())) n.tags.push(t)
-        })
-        if (!n.folderId) {
-            const id = SmartSearch.suggestFolderId(n, state.folders)
-            if (id) n.folderId = id
+        const updated = {
+            ...n,
+            title: String(this.els.title.value || ""),
+            content: Utils.sanitizeHtml(String(this.els.content.innerHTML || "")),
+            tags: Array.isArray(n.tags) ? [...n.tags] : []
         }
-        const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
-        const payload = NoteIO.normalizeNote(n)
+        const auto = SmartSearch.suggestTags(updated.title, updated.content)
+        auto.forEach(t => {
+            if (!updated.tags.map(x => String(x).toLowerCase()).includes(t.toLowerCase())) updated.tags.push(t)
+        })
+        if (!updated.folderId) {
+            const id = SmartSearch.suggestFolderId(updated, StateStore.read().folders)
+            if (id) updated.folderId = id
+        }
+        if (updated.folderId) {
+            const changedFolder = updated.folderId !== n.folderId
+            if (changedFolder || typeof updated.folderOrder !== "number") {
+                updated.folderOrder = this.nextFolderOrder(updated.folderId, updated.id)
+            }
+        } else {
+            updated.folderOrder = 0
+        }
+        const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(updated.id)
+        const payload = NoteIO.normalizeNote(updated)
         payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
         await ref.set(payload, { merge: true })
-        state.editorDirty = false
+        StateStore.update("editorDirty", false)
+        StateStore.update("currentNote", updated)
         UI.showToast(UI.getText("saved", "Saved"))
         this.close()
     },
 
     async deleteCurrent() {
-        const n = state.currentNote
+        const n = StateStore.read().currentNote
         if (!n) return
         UI.confirm("delete", async () => {
-            if (!db || !state.user) return
-            await db.collection("users").doc(state.user.uid).collection("notes").doc(n.id).delete()
+            if (!db || !StateStore.read().user) return
+            await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(n.id).delete()
             UI.showToast(UI.getText("note_deleted", "Deleted"))
             this.close()
         })

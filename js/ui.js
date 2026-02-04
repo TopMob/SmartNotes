@@ -26,14 +26,13 @@ const UI = {
     },
 
     getText(key, fallback = "") {
-        const dict = LANG[state.config.lang] || LANG.ru
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
         return dict[key] || fallback || key
     },
 
     setLang(lang) {
-        const next = lang === "en" ? "en" : "ru"
-        state.config.lang = next
-        localStorage.setItem("app-lang", next)
+        const applied = StateActions.setLanguage(lang)
+        localStorage.setItem("app-lang", applied)
         this.applyLangToDom()
         this.updateViewTitle()
         this.updatePrimaryActionLabel()
@@ -44,7 +43,7 @@ const UI = {
     },
 
     applyLangToDom() {
-        const dict = LANG[state.config.lang] || LANG.ru
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
         document.querySelectorAll("[data-lang]").forEach(el => {
             const k = el.getAttribute("data-lang")
             if (k && dict[k]) el.textContent = dict[k]
@@ -82,7 +81,7 @@ const UI = {
         document.querySelectorAll(".star").forEach(star => {
             star.addEventListener("click", () => {
                 const val = parseInt(star.dataset.val, 10)
-                state.tempRating = val
+                StateActions.setTempRating(val)
                 document.querySelectorAll(".star").forEach(s => {
                     const v = parseInt(s.dataset.val, 10)
                     s.textContent = v <= val ? "star" : "star_border"
@@ -111,14 +110,14 @@ const UI = {
             const card = e.target.closest(".note-card")
             if (!card) return
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
-            const note = state.notes.find(n => n.id === id)
+            const note = StateStore.read().notes.find(n => n.id === id)
             if (note) await Editor.openFromList(note)
         })
 
         this.els.grid?.addEventListener("dragstart", (e) => {
             const card = e.target.closest(".note-card")
             if (!card) return
-            if (state.searchQuery.trim()) {
+            if (StateStore.read().searchQuery.trim()) {
                 e.preventDefault()
                 this.showToast(this.getText("reorder_search_disabled", "Reordering is disabled while searching"))
                 return
@@ -319,7 +318,7 @@ const UI = {
     },
 
     async handleNoteImport(e) {
-        if (!db || !state.user) return
+        if (!db || !StateStore.read().user) return
         const file = e.target.files && e.target.files[0] ? e.target.files[0] : null
         if (!file) return
         if (!String(file.type).includes("json") && !String(file.name).toLowerCase().endsWith(".json")) {
@@ -339,9 +338,10 @@ const UI = {
                 const batch = db.batch()
                 notes.forEach(note => {
                     let n = NoteIO.normalizeNote(note)
-                    if (state.notes.some(x => x.id === n.id)) n.id = Utils.generateId()
-                    if (n.folderId && !state.folders.find(f => f.id === n.folderId)) n.folderId = null
-                    const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(n.id)
+                    const current = StateStore.read()
+                    if (current.notes.some(x => x.id === n.id)) n.id = Utils.generateId()
+                    if (n.folderId && !current.folders.find(f => f.id === n.folderId)) n.folderId = null
+                    const ref = db.collection("users").doc(current.user.uid).collection("notes").doc(n.id)
                     batch.set(ref, n, { merge: true })
                 })
                 await batch.commit()
@@ -355,16 +355,16 @@ const UI = {
     },
 
     primaryAction() {
-        if (state.view === "folders") {
-            if (state.folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
+        if (StateStore.read().view === "folders") {
+            if (StateStore.read().folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
             this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
                 const trimmed = String(name || "").trim()
                 if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
-                if (state.folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+                if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
                     return this.showToast(this.getText("folder_exists", "Folder already exists"))
                 }
-                if (!db || !state.user) return
-                await db.collection("users").doc(state.user.uid).collection("folders").add({
+                if (!db || !StateStore.read().user) return
+                await db.collection("users").doc(StateStore.read().user.uid).collection("folders").add({
                     name: trimmed,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 })
@@ -376,15 +376,17 @@ const UI = {
 
     applyAppearanceSettings() {
         const saved = JSON.parse(localStorage.getItem("app-preferences")) || {}
-        state.config.folderViewMode = saved.folderViewMode || state.config.folderViewMode
-        state.config.reduceMotion = !!saved.reduceMotion
+        StateActions.updateConfig({
+            folderViewMode: saved.folderViewMode || StateStore.read().config.folderViewMode,
+            reduceMotion: !!saved.reduceMotion
+        })
         ThemeManager.revertToLastSaved()
         this.renderFolders()
         this.syncSettingsUI()
     },
 
     updateViewTitle() {
-        const dict = LANG[state.config.lang] || LANG.ru
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
         const titles = {
             notes: dict.view_notes || "Notes",
             favorites: dict.view_favorites || "Favorites",
@@ -392,9 +394,10 @@ const UI = {
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders"
         }
-        let title = titles[state.view] || "SmartNotes"
-        if (state.view === "folder" && state.activeFolderId) {
-            const folder = state.folders.find(f => f.id === state.activeFolderId)
+        const { view, activeFolderId, folders } = StateStore.read()
+        let title = titles[view] || "SmartNotes"
+        if (view === "folder" && activeFolderId) {
+            const folder = folders.find(f => f.id === activeFolderId)
             if (folder) title = folder.name
         }
         const el = document.getElementById("current-view-title")
@@ -403,7 +406,7 @@ const UI = {
 
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
-        const label = state.view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
+        const label = StateStore.read().view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
     },
 
@@ -414,12 +417,12 @@ const UI = {
         this.toggleSidebar(false)
         if (id === "share-modal") {
             const link = document.getElementById("share-link")
-            const n = state.currentNote
+            const n = StateStore.read().currentNote
             if (link && n) link.value = ShareService.makeShareLink(n.id)
         }
         if (id === "collab-modal") {
             const link = document.getElementById("collab-link")
-            const n = state.currentNote
+            const n = StateStore.read().currentNote
             if (link && n) link.value = ShareService.makeCollabLink(n.id)
         }
     },
@@ -452,7 +455,7 @@ const UI = {
         const backBtn = document.querySelector(".settings-back")
         if (!root || !title || !backBtn) return
         const page = this.settingsPage
-        const dict = LANG[state.config.lang] || LANG.ru
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
         if (!page) {
             title.textContent = dict.settings_menu_title || dict.settings || "Settings"
             backBtn.classList.add("is-hidden")
@@ -567,7 +570,7 @@ const UI = {
         if (folderSelect) {
             folderSelect.addEventListener("change", (e) => {
                 const next = e.target.value === "full" ? "full" : "compact"
-                state.config.folderViewMode = next
+                StateActions.updateConfig({ folderViewMode: next })
                 this.savePreferences()
                 this.renderFolders()
                 filterAndRender(document.getElementById("search-input")?.value || "")
@@ -577,7 +580,7 @@ const UI = {
         const reduceToggle = document.getElementById("settings-reduce-motion")
         if (reduceToggle) {
             reduceToggle.addEventListener("change", (e) => {
-                state.config.reduceMotion = !!e.target.checked
+                StateActions.updateConfig({ reduceMotion: !!e.target.checked })
                 this.savePreferences()
                 ThemeManager.revertToLastSaved()
             })
@@ -675,11 +678,11 @@ const UI = {
 
     syncSettingsUI() {
         const langSelect = document.getElementById("settings-language")
-        if (langSelect) langSelect.value = state.config.lang === "en" ? "en" : "ru"
+        if (langSelect) langSelect.value = StateStore.read().config.lang === "en" ? "en" : "ru"
         const folderSelect = document.getElementById("settings-folder-view")
-        if (folderSelect) folderSelect.value = state.config.folderViewMode === "full" ? "full" : "compact"
+        if (folderSelect) folderSelect.value = StateStore.read().config.folderViewMode === "full" ? "full" : "compact"
         const reduceToggle = document.getElementById("settings-reduce-motion")
-        if (reduceToggle) reduceToggle.checked = !!state.config.reduceMotion
+        if (reduceToggle) reduceToggle.checked = !!StateStore.read().config.reduceMotion
     },
 
     renderEditorSettings() {
@@ -707,8 +710,8 @@ const UI = {
 
     savePreferences() {
         const prefs = {
-            folderViewMode: state.config.folderViewMode,
-            reduceMotion: state.config.reduceMotion
+            folderViewMode: StateStore.read().config.folderViewMode,
+            reduceMotion: StateStore.read().config.reduceMotion
         }
         localStorage.setItem("app-preferences", JSON.stringify(prefs))
     },
@@ -739,28 +742,36 @@ const UI = {
     },
 
     getReorderScope() {
-        let list = state.notes.slice()
-        if (state.view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
-        if (state.view === "archive") list = list.filter(n => !!n.isArchived)
-        if (state.view === "notes") list = list.filter(n => !n.isArchived)
-        if (state.view === "folder") list = list.filter(n => !n.isArchived && n.folderId === state.activeFolderId)
+        const { notes, view, activeFolderId } = StateStore.read()
+        let list = notes.slice()
+        if (view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
+        if (view === "archive") list = list.filter(n => !!n.isArchived)
+        if (view === "notes") list = list.filter(n => !n.isArchived)
+        if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
         return list
     },
 
     reorderNotes(draggedId, targetId, position) {
-        if (!db || !state.user) return
+        if (!db || !StateStore.read().user) return
         if (draggedId === targetId) return
-        if (state.searchQuery.trim()) {
+        if (StateStore.read().searchQuery.trim()) {
             this.showToast(this.getText("reorder_search_disabled", "Reordering is disabled while searching"))
             return
         }
-        const draggedNote = state.notes.find(n => n.id === draggedId)
-        const targetNote = state.notes.find(n => n.id === targetId)
+        const draggedNote = StateStore.read().notes.find(n => n.id === draggedId)
+        const targetNote = StateStore.read().notes.find(n => n.id === targetId)
         if (!draggedNote || !targetNote) return
+        const { view, activeFolderId } = StateStore.read()
+        const isFolderView = view === "folder" && !!activeFolderId
+        if (!isFolderView && (draggedNote.folderId || targetNote.folderId)) {
+            this.showToast(this.getText("reorder_folder_disabled", "Reordering is available only inside folders or for notes without folders"))
+            return
+        }
         if (!!draggedNote.isPinned !== !!targetNote.isPinned) {
             this.showToast(this.getText("reorder_pinned_blocked", "Pinned notes reorder separately"))
             return
         }
+        const orderKey = isFolderView ? "folderOrder" : "order"
         const groupIds = this.visibleNotes.filter(n => !!n.isPinned === !!draggedNote.isPinned).map(n => n.id)
         const fromIndex = groupIds.indexOf(draggedId)
         const toIndex = groupIds.indexOf(targetId)
@@ -770,23 +781,25 @@ const UI = {
         groupIds.splice(insertIndex > fromIndex ? insertIndex - 1 : insertIndex, 0, draggedId)
 
         const previous = groupIds.map(id => {
-            const note = state.notes.find(n => n.id === id)
-            return { id, order: note?.order || 0 }
+            const note = StateStore.read().notes.find(n => n.id === id)
+            return { id, value: typeof note?.[orderKey] === "number" ? note[orderKey] : 0 }
         })
-        const scopeKey = `${state.view}:${state.activeFolderId || "all"}:${draggedNote.isPinned ? "pinned" : "unpinned"}`
-        state.orderHistory.push({ scope: scopeKey, items: previous })
-        if (state.orderHistory.length > 20) state.orderHistory.shift()
+        const { orderHistory } = StateStore.read()
+        const scopeKey = `${view}:${activeFolderId || "all"}:${draggedNote.isPinned ? "pinned" : "unpinned"}`
+        const nextHistory = [...orderHistory, { scope: scopeKey, orderKey, items: previous }].slice(-20)
+        StateActions.setOrderHistory(nextHistory)
 
-        const updates = groupIds.map((id, index) => ({ id, order: index + 1 }))
-        updates.forEach(update => {
-            const note = state.notes.find(n => n.id === update.id)
-            if (note) note.order = update.order
+        const updates = groupIds.map((id, index) => ({ id, value: index + 1 }))
+        const updatedNotes = StateStore.read().notes.map(note => {
+            const update = updates.find(item => item.id === note.id)
+            return update ? { ...note, [orderKey]: update.value } : note
         })
+        StateActions.setNotes(updatedNotes)
 
         const batch = db.batch()
         updates.forEach(update => {
-            const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(update.id)
-            batch.update(ref, { order: update.order })
+            const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(update.id)
+            batch.update(ref, { [orderKey]: update.value })
         })
         batch.commit()
         this.showToast(this.getText("order_updated", "Order updated"), {
@@ -797,15 +810,20 @@ const UI = {
     },
 
     undoOrder() {
-        if (!db || !state.user) return
-        const last = state.orderHistory.pop()
+        if (!db || !StateStore.read().user) return
+        const last = StateStore.read().orderHistory[StateStore.read().orderHistory.length - 1]
         if (!last) return
+        StateActions.setOrderHistory(StateStore.read().orderHistory.slice(0, -1))
         const batch = db.batch()
+        const orderKey = last.orderKey || "order"
+        const updatedNotes = StateStore.read().notes.map(note => {
+            const item = last.items.find(entry => entry.id === note.id)
+            return item ? { ...note, [orderKey]: item.value } : note
+        })
+        StateActions.setNotes(updatedNotes)
         last.items.forEach(item => {
-            const note = state.notes.find(n => n.id === item.id)
-            if (note) note.order = item.order
-            const ref = db.collection("users").doc(state.user.uid).collection("notes").doc(item.id)
-            batch.update(ref, { order: item.order })
+            const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(item.id)
+            batch.update(ref, { [orderKey]: item.value })
         })
         batch.commit()
         filterAndRender(document.getElementById("search-input")?.value || "")
@@ -821,14 +839,15 @@ const UI = {
     renderFolders() {
         const root = this.els.folderList
         if (!root) return
-        const hideList = state.config.folderViewMode === "full"
+        const hideList = StateStore.read().config.folderViewMode === "full"
         root.classList.toggle("hidden", hideList)
         if (hideList) {
             root.innerHTML = ""
             return
         }
-        root.innerHTML = state.folders.map(f => `
-            <button type="button" class="nav-item ${state.activeFolderId === f.id ? "active" : ""}" data-action="open-folder" data-folder-id="${f.id}">
+        const { folders, activeFolderId } = StateStore.read()
+        root.innerHTML = folders.map(f => `
+            <button type="button" class="nav-item ${activeFolderId === f.id ? "active" : ""}" data-action="open-folder" data-folder-id="${f.id}">
                 <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
                 <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" data-action="delete-folder" data-folder-id="${f.id}" aria-hidden="true">close</i>
@@ -838,10 +857,11 @@ const UI = {
 
     renderFolderGrid() {
         this.updateEmptyState("folder_open", this.getText("folders_empty", "No folders yet"))
-        this.els.empty.classList.toggle("hidden", state.folders.length > 0)
+        const { folders, notes } = StateStore.read()
+        this.els.empty.classList.toggle("hidden", folders.length > 0)
         this.els.grid.classList.add("folder-grid")
-        this.els.grid.innerHTML = state.folders.map(folder => {
-            const count = state.notes.filter(note => note.folderId === folder.id && !note.isArchived).length
+        this.els.grid.innerHTML = folders.map(folder => {
+            const count = notes.filter(note => note.folderId === folder.id && !note.isArchived).length
             const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
             return `
                 <div class="folder-card" data-action="open-folder" data-folder-id="${folder.id}">
@@ -859,14 +879,15 @@ const UI = {
     },
 
     handlePendingShare() {
-        if (!state.pendingShare || !state.user) return
-        if (!state.notes.length) return
-        const payload = state.pendingShare
-        state.pendingShare = null
+        const { pendingShare, user, notes } = StateStore.read()
+        if (!pendingShare || !user) return
+        if (!notes.length) return
+        const payload = pendingShare
+        StateActions.clearPendingShare()
         if (payload.error) {
             return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
         }
-        const note = state.notes.find(n => n.id === payload.noteId)
+        const note = notes.find(n => n.id === payload.noteId)
         if (!note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
         if (payload.mode === "collab") this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
         Editor.openFromList(note)
@@ -876,7 +897,7 @@ const UI = {
         const rawHash = String(location.hash || "")
         const parsed = ShareService.parseHash(rawHash)
         if (!parsed) return
-        state.pendingShare = parsed
+        StateActions.setPendingShare(parsed)
         history.replaceState({}, "", ShareService.base())
     },
 
@@ -890,35 +911,36 @@ const UI = {
             }
             return
         }
-        state.pendingShare = parsed
+        StateActions.setPendingShare(parsed)
         history.replaceState({}, "", ShareService.base())
         this.handlePendingShare()
     },
 
     async submitFeedback() {
-        if (!db || !state.user) {
+        if (!db || !StateStore.read().user) {
             this.showToast(this.getText("feedback_failed", "Unable to send feedback"))
             return
         }
-        if (!state.tempRating) {
+        if (!StateStore.read().tempRating) {
             this.showToast(this.getText("rate_required", "Please rate first"))
             return
         }
         const text = String(document.getElementById("feedback-text")?.value || "")
+        const { user, tempRating, config } = StateStore.read()
         const payload = {
-            uid: state.user.uid,
-            email: state.user.email || "",
-            displayName: state.user.displayName || "",
-            rating: state.tempRating,
+            uid: user.uid,
+            email: user.email || "",
+            displayName: user.displayName || "",
+            rating: tempRating,
             text: text.trim(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             userAgent: navigator.userAgent || "",
             appVersion: "web",
-            language: state.config.lang
+            language: config.lang
         }
         try {
             await db.collection("feedback").add(payload)
-            state.tempRating = 0
+            StateActions.setTempRating(0)
             document.querySelectorAll(".star").forEach(s => {
                 s.textContent = "star_border"
                 s.classList.remove("active")
@@ -933,7 +955,7 @@ const UI = {
     },
 
     downloadSelectedNote() {
-        const note = state.notes.find(n => n.id === this.currentNoteActionId)
+        const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
         if (!note) return
         const data = NoteIO.exportNote(note)
         const blob = new Blob([data], { type: "application/json" })
@@ -947,7 +969,7 @@ const UI = {
     },
 
     uploadSelectedNote() {
-        const note = state.notes.find(n => n.id === this.currentNoteActionId)
+        const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
         if (!note) return
         DriveService.uploadNote(note)
         this.closeModal("note-actions-modal")
