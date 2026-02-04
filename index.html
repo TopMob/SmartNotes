@@ -104,7 +104,7 @@
 
                 <div class="nav-group">
                     <div class="nav-title" data-lang="smart_features">УМНЫЕ ФУНКЦИИ</div>
-                    <button type="button" class="nav-item" data-action="open-modal" data-modal="lock-center-modal">
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="locked">
                         <i class="material-icons-round" aria-hidden="true">lock</i>
                         <span data-lang="lock_center">Защита заметок</span>
                     </button>
@@ -294,9 +294,7 @@
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
-            <div class="modal-body">
-                <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">Скачать файл</button>
-            </div>
+            <div class="modal-body" id="note-actions-content"></div>
         </div>
     </div>
 

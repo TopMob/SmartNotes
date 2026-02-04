@@ -107,6 +107,7 @@ const UI = {
         this.els.grid?.addEventListener("click", async (e) => {
             const action = e.target.closest(".action-btn")
             if (action) return
+            if (this.els.userMenu?.classList.contains("active")) return
             const card = e.target.closest(".note-card")
             if (!card) return
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
@@ -252,6 +253,15 @@ const UI = {
                 break
             case "note-menu":
                 openNoteActions(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-pin-toggle":
+                this.toggleSelectedPin(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-archive":
+                this.toggleSelectedArchive(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-move-folder":
+                this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "download-note":
                 this.downloadSelectedNote()
@@ -410,7 +420,8 @@ const UI = {
             favorites: dict.view_favorites || "Favorites",
             archive: dict.view_archive || "Archive",
             folder: dict.view_folder || "Folder",
-            folders: dict.view_folders || "Folders"
+            folders: dict.view_folders || "Folders",
+            locked: dict.view_locked || dict.lock_center || "Note Protection"
         }
         const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"
@@ -1118,6 +1129,69 @@ const UI = {
         } catch {
             this.showToast(this.getText("feedback_failed", "Unable to send feedback"))
         }
+    },
+
+    renderNoteActions(noteId) {
+        const note = StateStore.read().notes.find(n => n.id === noteId)
+        const root = document.getElementById("note-actions-content")
+        if (!note || !root) return
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        const folders = StateStore.read().folders
+        const isPinned = !!note.isPinned
+        const isArchived = !!note.isArchived
+        const pinLabel = isPinned ? (dict.unpin_note || "Unpin") : (dict.pin_note || "Pin")
+        const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
+        const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
+        folders.forEach(f => {
+            const selected = note.folderId === f.id ? "selected" : ""
+            folderOptions.push(`<option value="${f.id}" ${selected}>${Utils.escapeHtml(f.name)}</option>`)
+        })
+        root.innerHTML = `
+            <div class="modal-actions-grid">
+                <button type="button" class="btn-secondary" data-action="note-pin-toggle" data-note-id="${encodeURIComponent(note.id)}">
+                    ${pinLabel}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
+                    ${archiveLabel}
+                </button>
+            </div>
+            <div class="lock-center-folder" style="margin-top:12px;">
+                <select class="input-area lock-center-select note-actions-select" data-note-id="${encodeURIComponent(note.id)}" aria-label="${dict.folder_view_aria || "Folder"}">
+                    ${folderOptions.join("")}
+                </select>
+                <button type="button" class="btn-primary" data-action="note-move-folder" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.move_to_folder || "Move"}
+                </button>
+            </div>
+            <div class="modal-actions-grid" style="margin-top:12px;">
+                <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">
+                    ${dict.download_note || "Download"}
+                </button>
+            </div>
+        `
+    },
+
+    async toggleSelectedPin(noteId) {
+        if (!noteId) return
+        await togglePin(noteId)
+        this.closeModal("note-actions-modal")
+    },
+
+    async toggleSelectedArchive(noteId) {
+        if (!noteId) return
+        const note = StateStore.read().notes.find(n => n.id === noteId)
+        if (!note) return
+        await toggleArchive(noteId, !note.isArchived)
+        this.closeModal("note-actions-modal")
+    },
+
+    async moveSelectedNoteToFolder(noteId) {
+        if (!noteId) return
+        const select = document.querySelector(`.note-actions-select[data-note-id="${encodeURIComponent(noteId)}"]`)
+        if (!select) return
+        const folderId = select.value || null
+        await moveNoteToFolder(noteId, folderId)
+        this.closeModal("note-actions-modal")
     },
 
     downloadSelectedNote() {
