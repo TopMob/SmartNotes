@@ -851,12 +851,12 @@ const ThemeManager = {
     },
 
     motionAllowed() {
-        const reduce = !!state?.config?.reduceMotion
+        const reduce = !!StateStore.read()?.config?.reduceMotion
         return !reduce && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
     },
 
     blurAllowed() {
-        const reduce = !!state?.config?.reduceMotion
+        const reduce = !!StateStore.read()?.config?.reduceMotion
         return !reduce
     },
 
