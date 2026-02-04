@@ -81,7 +81,6 @@ const Utils = {
         }
         const wrapper = document.createElement("div")
         wrapper.innerHTML = String(html || "")
-
         const isSafeUrl = (value) => {
             const v = String(value || "").trim()
             if (!v) return false
@@ -91,19 +90,16 @@ const Utils = {
             if (v.startsWith("mailto:")) return true
             return false
         }
-
         const walk = (node) => {
             const children = Array.from(node.childNodes)
             children.forEach(child => {
                 if (child.nodeType !== Node.ELEMENT_NODE) return
-
                 const tag = child.tagName.toLowerCase()
                 if (!allowedTags.has(tag)) {
                     const textNode = document.createTextNode(child.textContent || "")
                     child.replaceWith(textNode)
                     return
                 }
-
                 Array.from(child.attributes).forEach(attr => {
                     const name = attr.name.toLowerCase()
                     if (name.startsWith("on") || name === "style") {
@@ -121,7 +117,6 @@ const Utils = {
                     const allowed = allowAttrs[tag]
                     if (!allowed || !allowed.has(name)) child.removeAttribute(attr.name)
                 })
-
                 if (tag === "a") {
                     const href = child.getAttribute("href")
                     if (!isSafeUrl(href) || String(href || "").startsWith("data:")) {
@@ -131,7 +126,6 @@ const Utils = {
                         child.setAttribute("target", "_blank")
                     }
                 }
-
                 if (tag === "img") {
                     const src = child.getAttribute("src")
                     const s = String(src || "")
@@ -139,17 +133,14 @@ const Utils = {
                         child.removeAttribute("src")
                     }
                 }
-
                 if (tag === "input") {
                     const type = String(child.getAttribute("type") || "").toLowerCase()
                     if (type !== "checkbox") child.removeAttribute("type")
                     if (child.hasAttribute("checked")) child.setAttribute("checked", "")
                 }
-
                 walk(child)
             })
         }
-
         walk(wrapper)
         return wrapper.innerHTML
     }
@@ -193,22 +184,18 @@ const Auth = {
         const uaMobile = navigator.userAgentData && navigator.userAgentData.mobile
         return !!(coarse || mobileUa || touchDevice || uaMobile)
     },
-
     _t(key, fallback) {
         return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
     },
-
     _toast(text) {
         if (typeof UI !== "undefined" && UI.showToast) UI.showToast(text)
         else alert(text)
     },
-
     _provider() {
         const p = new firebase.auth.GoogleAuthProvider()
         p.setCustomParameters({ prompt: "select_account" })
         return p
     },
-
     handleAuthError(e) {
         const code = e && e.code ? e.code : "auth/unknown"
         const map = {
@@ -219,19 +206,15 @@ const Auth = {
         const msg = map[code] || `${this._t("login_failed", "Sign-in failed")}: ${code}`
         this._toast(msg)
     },
-
     async login() {
         if (!auth || typeof firebase === "undefined") {
             this._toast(this._t("auth_unavailable", "Authentication unavailable"))
             return
         }
-
         const provider = this._provider()
-
         const redirect = async () => {
             await auth.signInWithRedirect(provider)
         }
-
         try {
             if (this._mobileEnv()) {
                 await redirect()
@@ -252,7 +235,6 @@ const Auth = {
             this.handleAuthError(e)
         }
     },
-
     async logout() {
         if (!auth) return
         try {
@@ -261,7 +243,6 @@ const Auth = {
             this._toast(this._t("logout_failed", "Sign out failed"))
         }
     },
-
     async switchAccount() {
         if (!auth) return
         try {
@@ -271,10 +252,8 @@ const Auth = {
             this.handleAuthError(e)
         }
     },
-
     clearState() {
         if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
-
         if (typeof UI !== "undefined") {
             UI.visibleNotes = []
             UI.currentNoteActionId = null
@@ -286,26 +265,20 @@ const Auth = {
             if (UI.updateViewTitle) UI.updateViewTitle()
             if (UI.updatePrimaryActionLabel) UI.updatePrimaryActionLabel()
         }
-
         const search = document.getElementById("search-input")
         if (search) search.value = ""
-
         if (typeof Editor !== "undefined" && Editor && typeof Editor.close === "function") {
             try { Editor.close() } catch {}
         }
     },
-
     applySignedInUI(user) {
         if (!user) return
-
         const loginScreen = document.getElementById("login-screen")
         const appScreen = document.getElementById("app")
         const userPhoto = document.getElementById("user-photo")
         const userName = document.getElementById("user-name")
-
         if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
         if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
-
         if (loginScreen) {
             loginScreen.style.opacity = "0"
             setTimeout(() => {
@@ -313,7 +286,6 @@ const Auth = {
                 loginScreen.classList.remove("active")
             }, 320)
         }
-
         if (appScreen) {
             appScreen.style.display = "flex"
             setTimeout(() => {
@@ -322,11 +294,9 @@ const Auth = {
             }, 30)
         }
     },
-
     applySignedOutUI() {
         const loginScreen = document.getElementById("login-screen")
         const appScreen = document.getElementById("app")
-
         if (appScreen) {
             appScreen.style.opacity = "0"
             setTimeout(() => {
@@ -334,7 +304,6 @@ const Auth = {
                 appScreen.classList.remove("active")
             }, 220)
         }
-
         if (loginScreen) {
             loginScreen.style.display = "flex"
             setTimeout(() => {
@@ -343,30 +312,29 @@ const Auth = {
             }, 30)
         }
     },
-
     resetSession() {
         this.clearState()
         this.applySignedOutUI()
     },
-
     async init() {
         if (!auth) return
-
-        try {
-            await auth.getRedirectResult()
-        } catch (e) {
+        const redirectPromise = auth.getRedirectResult().catch(e => {
             this.handleAuthError(e)
-        }
-
-        auth.onAuthStateChanged(user => {
+            return null
+        })
+        let initialCheck = true
+        auth.onAuthStateChanged(async user => {
+            if (initialCheck) {
+                await redirectPromise
+                user = auth.currentUser
+                initialCheck = false
+            }
             if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
-
             if (user) {
                 this.applySignedInUI(user)
                 if (typeof window.initApp === "function") window.initApp()
                 return
             }
-
             this.resetSession()
         })
     }
@@ -379,9 +347,11 @@ document.addEventListener("DOMContentLoaded", () => {
         ThemeManager.init()
     }
     if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
-    if (!StateStore.read().user) Auth.applySignedOutUI()
+    const loginButton = document.querySelector("[data-action='login']")
+    if (loginButton) {
+        loginButton.addEventListener("click", () => Auth.login())
+    }
     Auth.init().catch(() => null)
-
     document.addEventListener("dblclick", (event) => {
         event.preventDefault()
     }, { passive: false })
