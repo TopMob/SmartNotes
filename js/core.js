@@ -181,7 +181,6 @@ window.db = db
 window.DRIVE_CLIENT_ID = DRIVE_CLIENT_ID
 window.DRIVE_SCOPES = DRIVE_SCOPES
 
-
 const LANG = {
     ru: {
         app_name: "SmartNotes",
@@ -854,7 +853,8 @@ const ThemeManager = {
             toolbarBorder: "rgba(255, 255, 255, 0.12)",
             toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.82)"
         }
-    },
+    }
+}
 
 const Auth = {
     _mobileEnv() {
