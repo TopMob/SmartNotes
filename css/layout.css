@@ -131,6 +131,9 @@
     border-bottom: 1px solid var(--border);
     background: var(--surface-transparent);
     backdrop-filter: blur(var(--blur-strength));
+    position: sticky;
+    top: 0;
+    z-index: var(--z-header);
 }
 
 .header-left {

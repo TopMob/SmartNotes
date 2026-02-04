@@ -25,19 +25,26 @@ const NotesRenderer = (() => {
     }
 
     const createCard = (note) => {
+        const isLockedView = StateStore.read().view === "locked"
+        const isLockedNote = isHiddenLocked(note)
         const card = el("div", ["note-card"])
-        card.draggable = true
+        card.draggable = !(isLockedView && isLockedNote)
         card.dataset.noteId = encodeURIComponent(note.id)
 
-        const actions = el("div", ["card-actions"])
-        actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
-        actions.appendChild(createBtn("note-favorite", "star", UI.getText("favorite_note", "Favorite"), note.id))
-        actions.appendChild(createBtn("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
+        let actions = null
+        if (!(isLockedView && isLockedNote)) {
+            actions = el("div", ["card-actions"])
+            actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
+            actions.appendChild(createBtn("note-favorite", "star", UI.getText("favorite_note", "Favorite"), note.id))
+            actions.appendChild(createBtn("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
+        }
 
-        const h3 = el("h3", [], note.title || UI.getText("untitled_note", "Untitled"))
+        const titleText = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || UI.getText("untitled_note", "Untitled"))
+        const h3 = el("h3", [], titleText)
 
         const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-        const p = el("p", [], rawText || UI.getText("empty_note", "No content"))
+        const contentText = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : (rawText || UI.getText("empty_note", "No content"))
+        const p = el("p", [], contentText)
 
         const meta = el("div", ["note-meta"])
         meta.appendChild(createIcon("schedule"))
@@ -50,11 +57,12 @@ const NotesRenderer = (() => {
         const lockContainer = el("div")
         lockContainer.style.marginTop = "8px"
 
-        card.append(actions, h3, p, meta, lockContainer)
+        if (actions) card.append(actions)
+        card.append(h3, p, meta, lockContainer)
 
         cardCache.set(note.id, {
             el: card,
-            refs: { h3, p, dateSpan, tagsSpan, lockContainer, favIcon: actions.children[1].firstChild },
+            refs: { h3, p, dateSpan, tagsSpan, lockContainer, favIcon: actions ? actions.children[1].firstChild : null },
             data: { ...note }
         })
 
@@ -67,13 +75,16 @@ const NotesRenderer = (() => {
 
         const { el: card, refs, data } = cached
 
-        if (note.title !== data.title) {
-            refs.h3.textContent = note.title || UI.getText("untitled_note", "Untitled")
+        const isLockedView = StateStore.read().view === "locked"
+        const isLockedNote = isHiddenLocked(note)
+
+        if (note.title !== data.title || isLockedView) {
+            refs.h3.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || UI.getText("untitled_note", "Untitled"))
         }
 
-        if (note.content !== data.content) {
+        if (note.content !== data.content || isLockedView) {
             const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-            refs.p.textContent = rawText || UI.getText("empty_note", "No content")
+            refs.p.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : (rawText || UI.getText("empty_note", "No content"))
         }
 
         const t1 = note.updatedAt?.seconds || 0
@@ -86,7 +97,7 @@ const NotesRenderer = (() => {
         const prevTags = JSON.stringify(data.tags)
         if (tagsStr !== prevTags) {
             const tags = Array.isArray(note.tags) ? note.tags.slice(0, 3) : []
-            refs.tagsSpan.textContent = tags.length ? tags.map(t => `#${t}`).join(" ") : ""
+            refs.tagsSpan.textContent = (isLockedView && isLockedNote) ? "" : (tags.length ? tags.map(t => `#${t}`).join(" ") : "")
         }
 
         if (note.isPinned !== data.isPinned) {
@@ -190,12 +201,16 @@ function filterAndRender(query) {
 
     let list = current.notes.slice()
 
-    list = list.filter(n => !isHiddenLocked(n))
+    if (view === "locked") {
+        list = list.filter(n => isHiddenLocked(n))
+    } else {
+        list = list.filter(n => !isHiddenLocked(n))
+    }
 
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
-    else list = list.filter(n => !n.isArchived)
+    else if (view !== "locked") list = list.filter(n => !n.isArchived)
 
     if (q) {
         try {
@@ -218,6 +233,11 @@ function filterAndRender(query) {
     if (view === "folders") {
         UI.renderFolderGrid()
     } else {
+        if (view === "locked") {
+            UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))
+        } else {
+            UI.updateEmptyState("note_add", UI.getText("empty", "Nothing here yet"))
+        }
         NotesRenderer.render(list)
     }
 
@@ -270,7 +290,10 @@ async function deleteFolder(folderId) {
 }
 
 function openNoteActions(noteId) {
+    const note = StateStore.read().notes.find(n => n.id === noteId)
+    if (!note || isHiddenLocked(note)) return
     UI.currentNoteActionId = noteId
+    UI.renderNoteActions(noteId)
     UI.openModal("note-actions-modal")
 }
 

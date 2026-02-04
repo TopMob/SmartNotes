@@ -233,10 +233,12 @@ const LANG = {
         view_archive: "Архив",
         view_folder: "Папка",
         view_folders: "Папки",
+        view_locked: "Защита заметок",
         note_single: "заметка",
         note_plural: "заметок",
         folders_empty: "Нет папок",
         pin_note: "Закрепить",
+        unpin_note: "Открепить",
         favorite_note: "Важное",
         archive_note: "Архивировать",
         restore_note: "Вернуть",
@@ -464,10 +466,12 @@ const LANG = {
         view_archive: "Archive",
         view_folder: "Folder",
         view_folders: "Folders",
+        view_locked: "Note Protection",
         note_single: "note",
         note_plural: "notes",
         folders_empty: "No folders yet",
         pin_note: "Pin",
+        unpin_note: "Unpin",
         favorite_note: "Favorite",
         archive_note: "Archive",
         restore_note: "Restore",
@@ -1160,9 +1164,27 @@ const Auth = {
         }
         const provider = new firebase.auth.GoogleAuthProvider()
         provider.setCustomParameters({ prompt: "select_account" })
+        const isMobile = (() => {
+            const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
+            const ua = (navigator.userAgent || "").toLowerCase()
+            const mobileUa = /android|iphone|ipad|ipod|iemobile|opera mini|mobile/.test(ua)
+            return coarse || mobileUa
+        })()
+        const startRedirect = async () => {
+            await auth.signInWithRedirect(provider)
+        }
         try {
+            if (isMobile) {
+                await startRedirect()
+                return
+            }
             await auth.signInWithPopup(provider)
         } catch (e) {
+            const code = e && e.code ? e.code : ""
+            if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+                await startRedirect()
+                return
+            }
             this.handleAuthError(e)
         }
     },
@@ -1276,6 +1298,7 @@ const Auth = {
 }
 
 if (auth) {
+    auth.getRedirectResult().catch(e => Auth.handleAuthError(e))
     auth.onAuthStateChanged(user => {
         StateStore.update("user", user || null)
 
