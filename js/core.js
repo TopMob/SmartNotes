@@ -386,6 +386,10 @@ document.addEventListener("DOMContentLoaded", () => {
         ThemeManager.init()
     }
     if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
+    const loginButton = document.querySelector("[data-action='login']")
+    if (loginButton) {
+        loginButton.addEventListener("click", () => Auth.login())
+    }
     Auth.init().catch(() => null)
 
     document.addEventListener("dblclick", (event) => {
