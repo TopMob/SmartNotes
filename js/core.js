@@ -37,34 +37,6 @@ const Utils = {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#39;")
     },
-    adjustColor: (col, amt) => {
-        if (!col) return "#000000"
-        let c = String(col).trim()
-        let usePound = false
-        if (c[0] === "#") {
-            c = c.slice(1)
-            usePound = true
-        }
-        if (c.length === 3) c = c.split("").map(x => x + x).join("")
-        if (!/^[0-9a-fA-F]{6}$/.test(c)) return (usePound ? "#" : "") + "000000"
-        const num = parseInt(c, 16)
-        let r = (num >> 16) + amt
-        let g = ((num >> 8) & 0x00ff) + amt
-        let b = (num & 0x0000ff) + amt
-        r = Math.min(255, Math.max(0, r))
-        g = Math.min(255, Math.max(0, g))
-        b = Math.min(255, Math.max(0, b))
-        return (usePound ? "#" : "") + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")
-    },
-    hexToRgb: (hex) => {
-        if (!hex) return null
-        let c = String(hex).trim()
-        if (c[0] === "#") c = c.slice(1)
-        if (c.length === 3) c = c.split("").map(x => x + x).join("")
-        if (!/^[0-9a-fA-F]{6}$/.test(c)) return null
-        const num = parseInt(c, 16)
-        return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
-    },
     serverTimestamp: () => {
         if (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue) {
             return firebase.firestore.FieldValue.serverTimestamp()
@@ -156,9 +128,6 @@ const firebaseConfig = {
     clientId: "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com"
 }
 
-const DRIVE_CLIENT_ID = "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com"
-const DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.file"
-
 let auth = null
 let db = null
 
@@ -172,8 +141,6 @@ if (typeof firebase !== "undefined") {
 window.Utils = Utils
 window.auth = auth
 window.db = db
-window.DRIVE_CLIENT_ID = DRIVE_CLIENT_ID
-window.DRIVE_SCOPES = DRIVE_SCOPES
 
 const Auth = {
     _mobileEnv() {
@@ -226,7 +193,13 @@ const Auth = {
             await auth.signInWithPopup(provider)
         } catch (e) {
             const code = e && e.code ? e.code : ""
-            if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+            const redirectCodes = new Set([
+                "auth/popup-blocked",
+                "auth/operation-not-supported-in-this-environment",
+                "auth/cancelled-popup-request"
+            ])
+            const shouldRedirect = redirectCodes.has(code) || (this._mobileEnv() && code === "auth/popup-closed-by-user")
+            if (shouldRedirect) {
                 try {
                     await redirect()
                     return

@@ -180,10 +180,6 @@ function normalizeVisibleNotes(list, orderKey = "order") {
     return arr
 }
 
-function renderNotes(list) {
-    NotesRenderer.render(list)
-}
-
 function isHiddenLocked(note) {
     return !!(note && note.lock && note.lock.hidden)
 }
