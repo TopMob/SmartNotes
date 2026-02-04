@@ -201,6 +201,169 @@ export const ThemeManager = {
             toolbarBorder: "rgba(255, 255, 255, 0.12)",
             toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.82)"
         }
+    },
+    storageKey: "app-theme",
+    init() {
+        const saved = this.getSavedSettings()
+        this.applySettings(saved, false)
+    },
+    getDefaultSettings() {
+        return { preset: "dark" }
+    },
+    getSavedSettings() {
+        const raw = localStorage.getItem(this.storageKey)
+        if (!raw) return this.getDefaultSettings()
+        try {
+            const parsed = JSON.parse(raw)
+            if (parsed && typeof parsed === "object") return parsed
+        } catch {}
+        return this.getDefaultSettings()
+    },
+    saveSettings(settings) {
+        localStorage.setItem(this.storageKey, JSON.stringify(settings))
+    },
+    resolvePreset(key) {
+        if (key === "system") {
+            const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+            return prefersDark ? this.themes.dark : this.themes.light
+        }
+        return this.themes[key] || this.themes.dark
+    },
+    applySettings(settings, persist) {
+        const presetKey = settings?.preset || "dark"
+        let base = presetKey === "manual" ? null : this.resolvePreset(presetKey)
+        if (!base) {
+            const isLight = this.isLightColor(settings?.bg || this.themes.dark.bg)
+            base = isLight ? this.themes.light : this.themes.dark
+        }
+        const applied = {
+            ...base,
+            p: settings?.p || base.p,
+            bg: settings?.bg || base.bg,
+            t: settings?.t || base.t
+        }
+        this.applyToRoot(applied)
+        if (persist) this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t })
+    },
+    applyToRoot(theme) {
+        const root = document.documentElement
+        const rgb = this.hexToRgb(theme.p)
+        const reduceMotion = !!(window.StateStore && StateStore.read()?.config?.reduceMotion)
+        root.style.setProperty("--primary", theme.p)
+        root.style.setProperty("--primary-rgb", rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : "0, 242, 255")
+        root.style.setProperty("--bg", theme.bg)
+        root.style.setProperty("--surface", theme.surface)
+        root.style.setProperty("--surface-light", theme.surface)
+        root.style.setProperty("--surface-transparent", theme.surfaceTransparent)
+        root.style.setProperty("--text", theme.t)
+        root.style.setProperty("--text-dim", this.fadeColor(theme.t, 0.72))
+        root.style.setProperty("--border", theme.border)
+        root.style.setProperty("--radius-sm", `${Math.max(6, theme.radius * 0.6)}px`)
+        root.style.setProperty("--radius-md", `${Math.max(8, theme.radius * 0.85)}px`)
+        root.style.setProperty("--radius-lg", `${Math.max(10, theme.radius)}px`)
+        root.style.setProperty("--radius-xl", `${Math.max(14, theme.radius * 1.4)}px`)
+        root.style.setProperty("--font-base", `${theme.fontBase}px`)
+        root.style.setProperty("--type-scale", `${theme.typeScale}`)
+        root.style.setProperty("--hit-size", `${theme.hitSize}px`)
+        root.style.setProperty("--density", `${theme.density}`)
+        root.style.setProperty("--blur-strength", `${theme.blur}px`)
+        root.style.setProperty("--motion-enabled", reduceMotion ? "0" : `${theme.motion}`)
+        root.style.setProperty("--animation-duration", reduceMotion ? "0.01s" : "0.3s")
+        root.style.setProperty("--shadow-sm", theme.shadowSmall)
+        root.style.setProperty("--shadow-lg", theme.shadow)
+        root.style.setProperty("--space-unit", `${theme.spaceUnit}px`)
+        root.style.setProperty("--editor-padding", `${theme.editorPadding}px`)
+        root.style.setProperty("--editor-line-height", `${theme.editorLineHeight}`)
+        root.style.setProperty("--editor-letter-spacing", `${theme.editorLetterSpacing}`)
+        root.style.setProperty("--editor-toolbar-bg", theme.toolbarBg)
+        root.style.setProperty("--editor-toolbar-border", theme.toolbarBorder)
+        root.style.setProperty("--editor-toolbar-shadow", theme.toolbarShadow)
+    },
+    renderPicker({ onSelect, activeKey, manualColor } = {}) {
+        const root = document.getElementById("theme-picker-root")
+        if (!root) return
+        const items = [
+            { key: "dark", labelKey: "theme_dark_default" },
+            { key: "graphite", labelKey: "theme_graphite" },
+            { key: "neon_cyan", labelKey: "theme_neon_cyan" },
+            { key: "emerald_calm", labelKey: "theme_emerald_calm" },
+            { key: "violet_pulse", labelKey: "theme_violet_pulse" },
+            { key: "ocean_deep", labelKey: "theme_ocean_deep" },
+            { key: "oled_pure", labelKey: "theme_oled_pure" },
+            { key: "light", labelKey: "theme_light" },
+            { key: "system", labelKey: "theme_system" },
+            { key: "manual", labelKey: "theme_manual" }
+        ]
+        root.innerHTML = ""
+        items.forEach(item => {
+            const wrapper = document.createElement("button")
+            wrapper.type = "button"
+            wrapper.className = "theme-item-wrapper"
+            wrapper.dataset.themeKey = item.key
+            const dot = document.createElement("span")
+            dot.className = "theme-dot"
+            const color = item.key === "manual" ? (manualColor || this.themes.dark.p) : this.resolvePreset(item.key).p
+            dot.style.background = color
+            if (activeKey === item.key) {
+                dot.classList.add("active")
+                wrapper.classList.add("active")
+            }
+            const label = document.createElement("span")
+            label.className = "theme-label"
+            label.textContent = window.UI && UI.getText ? UI.getText(item.labelKey, item.key) : item.key
+            wrapper.appendChild(dot)
+            wrapper.appendChild(label)
+            wrapper.addEventListener("click", () => {
+                if (typeof onSelect === "function") onSelect(item.key)
+            })
+            root.appendChild(wrapper)
+        })
+    },
+    setupColorInputs(onChange) {
+        const primary = document.getElementById("cp-primary")
+        const bg = document.getElementById("cp-bg")
+        const text = document.getElementById("cp-text")
+        const bind = (el, type) => {
+            if (!el) return
+            el.addEventListener("input", e => {
+                if (typeof onChange === "function") onChange(type, e.target.value)
+            })
+        }
+        bind(primary, "p")
+        bind(bg, "bg")
+        bind(text, "t")
+    },
+    syncInputs(p, bg, t) {
+        const primary = document.getElementById("cp-primary")
+        const bgInput = document.getElementById("cp-bg")
+        const text = document.getElementById("cp-text")
+        if (primary) primary.value = this.normalizeHex(p)
+        if (bgInput) bgInput.value = this.normalizeHex(bg)
+        if (text) text.value = this.normalizeHex(t)
+    },
+    revertToLastSaved() {
+        const saved = this.getSavedSettings()
+        this.applySettings(saved, false)
+    },
+    normalizeHex(value) {
+        const v = String(value || "").trim()
+        if (/^#[0-9a-fA-F]{6}$/.test(v)) return v
+        if (/^[0-9a-fA-F]{6}$/.test(v)) return `#${v}`
+        return "#000000"
+    },
+    hexToRgb(hex) {
+        const v = this.normalizeHex(hex)
+        const num = parseInt(v.slice(1), 16)
+        return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
+    },
+    fadeColor(hex, alpha) {
+        const rgb = this.hexToRgb(hex)
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+    },
+    isLightColor(hex) {
+        const rgb = this.hexToRgb(hex)
+        const l = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255
+        return l > 0.6
     }
 }
 
