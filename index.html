@@ -10,7 +10,6 @@
 
     <title>SmartNotes</title>
 
-    <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="Logo.png">
 
@@ -36,7 +35,9 @@
 
     <script src="js/state.js" defer></script>
     <script src="js/stateActions.js" defer></script>
-    <script src="js/core.js" defer></script>
+    <script src="js/lang.js" type="module"></script>
+    <script src="js/theme.js" type="module"></script>
+    <script src="js/core.js" type="module"></script>
     <script src="js/services.js" defer></script>
     <script src="js/sync.js" defer></script>
     <script src="js/ui.js" defer></script>
@@ -513,13 +514,5 @@
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
-    <script>
-        if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-            window.addEventListener("load", () => {
-                navigator.serviceWorker.register("./sw.js", { scope: "./" })
-                    .catch(() => null)
-            })
-        }
-    </script>
 </body>
 </html>
