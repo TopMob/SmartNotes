@@ -1,322 +1,293 @@
 /**
- * notes.js - Production Ready Refactor
- * Implements DOM Diffing/Reconciliation for high performance rendering
- * and strict security via DOM APIs instead of innerHTML.
+ * js/notes.js
+ * Production Ready: Virtual DOM rendering, XSS protection, and optimized sorting.
  */
 
 const NotesRenderer = (() => {
-    // Cache for DOM elements to prevent recreation
+    // Cache map stores DOM elements by Note ID to avoid recreation
     const cardCache = new Map()
-    
-    // Create element helper for safety and brevity
-    const el = (tag, classes = [], text = null) => {
+
+    const el = (tag, cls = [], text = null) => {
         const node = document.createElement(tag)
-        if (classes.length) node.className = classes.join(" ")
+        if (cls.length) node.classList.add(...cls)
         if (text !== null) node.textContent = text
         return node
     }
 
-    const createIcon = (iconName) => {
-        const i = el("i", ["material-icons-round"], iconName)
+    const createIcon = (name) => {
+        const i = el("i", ["material-icons-round"], name)
         i.setAttribute("aria-hidden", "true")
         return i
     }
 
-    const createButton = (action, icon, label, noteId) => {
+    const createBtn = (action, icon, label, id) => {
         const btn = el("button", ["action-btn"])
         btn.type = "button"
         btn.setAttribute("aria-label", label)
         btn.dataset.action = action
-        btn.dataset.noteId = noteId
+        btn.dataset.noteId = encodeURIComponent(id)
         btn.appendChild(createIcon(icon))
         return btn
     }
 
-    // Creates a full DOM node for a note card
     const createCard = (note) => {
         const card = el("div", ["note-card"])
         card.draggable = true
-        card.dataset.noteId = note.id
-        
-        // Actions container
-        const actions = el("div", ["card-actions"])
-        actions.appendChild(createButton("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
-        actions.appendChild(createButton("note-favorite", "star", UI.getText("favorite_note", "Favorite"), note.id))
-        actions.appendChild(createButton("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
-        
-        // Content
-        const titleText = note.title || UI.getText("untitled_note", "Untitled")
-        const h3 = el("h3", [], titleText)
-        
-        const previewText = Utils.stripHtml(note.content || "").trim() || UI.getText("empty_note", "No content")
-        const p = el("p", [], previewText)
+        card.dataset.noteId = encodeURIComponent(note.id)
 
-        // Meta data
+        // Actions
+        const actions = el("div", ["card-actions"])
+        actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
+        actions.appendChild(createBtn("note-favorite", "star", UI.getText("favorite_note", "Favorite"), note.id))
+        actions.appendChild(createBtn("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
+
+        // Title & Content
+        const h3 = el("h3", [], note.title || UI.getText("untitled_note", "Untitled"))
+        
+        // Fast regex strip for preview (safer and faster than creating full DOM parser for just preview)
+        const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+        const p = el("p", [], rawText || UI.getText("empty_note", "No content"))
+
+        // Meta
         const meta = el("div", ["note-meta"])
         meta.appendChild(createIcon("schedule"))
-        
         const dateSpan = el("span", [], Utils.formatDate(note.updatedAt || note.createdAt || Date.now()))
-        meta.appendChild(dateSpan)
-
         const tagsSpan = el("span", [])
         tagsSpan.style.marginLeft = "auto"
         tagsSpan.style.opacity = "0.8"
-        
-        // Lock status
-        let lockDiv = null
-        if (note.lock && note.lock.hidden) {
-            lockDiv = el("div")
-            lockDiv.style.marginTop = "8px"
-            const badge = el("span", ["lock-badge"])
-            const lockIcon = createIcon("lock")
-            lockIcon.style.fontSize = "16px"
-            const label = el("span", [], UI.getText("locked_note", "Locked"))
-            badge.append(lockIcon, label)
-            lockDiv.appendChild(badge)
-        }
+        meta.append(dateSpan, tagsSpan)
 
-        // Assemble
-        card.append(actions, h3, p, meta)
-        if (lockDiv) card.appendChild(lockDiv)
+        // Lock Badge
+        const lockContainer = el("div")
+        lockContainer.style.marginTop = "8px"
 
-        // Store references for quick updates
+        card.append(actions, h3, p, meta, lockContainer)
+
+        // Cache references for fast updates
         cardCache.set(note.id, {
             el: card,
-            refs: { h3, p, dateSpan, tagsSpan, lockDiv, container: card },
-            data: { ...note } // Snapshot of data used to render
+            refs: { h3, p, dateSpan, tagsSpan, lockContainer, favIcon: actions.children[1].firstChild },
+            data: { ...note } // Snapshot
         })
 
         return card
     }
 
-    // Updates an existing card DOM only if data changed
     const updateCard = (note) => {
         const cached = cardCache.get(note.id)
         if (!cached) return createCard(note)
 
-        const { refs, data } = cached
-        const { el: cardEl } = cached
+        const { el: card, refs, data } = cached
 
-        // Check Diff for properties that affect rendering
-        const titleChanged = note.title !== data.title
-        const contentChanged = note.content !== data.content
-        const dateChanged = (note.updatedAt?.seconds || 0) !== (data.updatedAt?.seconds || 0)
-        const pinnedChanged = note.isPinned !== data.isPinned
-        const tagsChanged = JSON.stringify(note.tags) !== JSON.stringify(data.tags)
-        
-        if (titleChanged) refs.h3.textContent = note.title || UI.getText("untitled_note", "Untitled")
-        
-        if (contentChanged) {
-            refs.p.textContent = Utils.stripHtml(note.content || "").trim() || UI.getText("empty_note", "No content")
+        // Diffing Strategy: Update only changed properties
+        if (note.title !== data.title) {
+            refs.h3.textContent = note.title || UI.getText("untitled_note", "Untitled")
         }
-        
-        if (dateChanged) {
+
+        if (note.content !== data.content) {
+            const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+            refs.p.textContent = rawText || UI.getText("empty_note", "No content")
+        }
+
+        // Compare timestamps (using seconds for approximate check)
+        const t1 = note.updatedAt?.seconds || 0
+        const t2 = data.updatedAt?.seconds || 0
+        if (t1 !== t2) {
             refs.dateSpan.textContent = Utils.formatDate(note.updatedAt || note.createdAt || Date.now())
         }
 
-        if (tagsChanged) {
-             const tagLine = Array.isArray(note.tags) && note.tags.length 
-                ? note.tags.slice(0, 3).map(t => `#${t}`).join(" ") 
-                : ""
-             refs.tagsSpan.textContent = tagLine
+        const tagsStr = JSON.stringify(note.tags)
+        const prevTags = JSON.stringify(data.tags)
+        if (tagsStr !== prevTags) {
+            const tags = Array.isArray(note.tags) ? note.tags.slice(0, 3) : []
+            refs.tagsSpan.textContent = tags.length ? tags.map(t => `#${t}`).join(" ") : ""
         }
 
-        if (pinnedChanged) {
-            if (note.isPinned) cardEl.classList.add("pinned")
-            else cardEl.classList.remove("pinned")
+        // Pin State
+        if (note.isPinned !== data.isPinned) {
+            card.classList.toggle("pinned", !!note.isPinned)
         }
 
-        // Handle lock state changes (re-create lock div if needed)
-        // Simplified: if lock state changed radically, just return new card
-        if (!!note.lock !== !!data.lock) {
-            return createCard(note)
+        // Favorite State (Visual update if needed, currently icon stays star)
+        // refs.favIcon.textContent = note.isFavorite ? "star" : "star_border" // Uncomment if visual toggle desired
+
+        // Lock State
+        const lockHash = note.lock?.hash || ""
+        const prevHash = data.lock?.hash || ""
+        if (lockHash !== prevHash) {
+            refs.lockContainer.innerHTML = ""
+            if (note.lock && note.lock.hidden) {
+                const badge = el("span", ["lock-badge"])
+                const i = createIcon("lock")
+                i.style.fontSize = "16px"
+                const txt = el("span", [], UI.getText("locked_note", "Locked"))
+                badge.append(i, txt)
+                refs.lockContainer.appendChild(badge)
+            }
         }
 
-        // Update snapshot
+        // Update Snapshot
         cached.data = { ...note }
-        return cardEl
+        return card
     }
 
     const render = (list) => {
         const grid = UI.els.grid
         if (!grid) return
 
-        UI.els.grid.classList.remove("folder-grid")
-        UI.visibleNotes = list
-
-        if (!list.length) {
+        if (!list || !list.length) {
             UI.els.empty.classList.remove("hidden")
-            grid.innerHTML = ""
+            grid.innerHTML = "" // Clear grid
+            // Optional: retain cache if you expect items to return, otherwise clear
+            cardCache.clear() 
             return
         }
+
         UI.els.empty.classList.add("hidden")
+        grid.classList.remove("folder-grid")
+        UI.visibleNotes = list
 
         const fragment = document.createDocumentFragment()
-        const currentIds = new Set(list.map(n => n.id))
+        const currentIds = new Set()
 
-        // 1. Prepare nodes
         list.forEach(note => {
-            let cardNode
-            if (cardCache.has(note.id)) {
-                cardNode = updateCard(note)
-            } else {
-                cardNode = createCard(note)
-                // Initial render props
-                const tagLine = Array.isArray(note.tags) && note.tags.length 
-                    ? note.tags.slice(0, 3).map(t => `#${t}`).join(" ") 
-                    : ""
-                cardNode.querySelector(".note-meta span:last-child").textContent = tagLine
-                if (note.isPinned) cardNode.classList.add("pinned")
-            }
-            fragment.appendChild(cardNode)
+            currentIds.add(note.id)
+            const node = cardCache.has(note.id) ? updateCard(note) : createCard(note)
+            fragment.appendChild(node)
         })
 
-        // 2. Cleanup cache for removed notes
+        // Cleanup removed items from cache
         for (const [id] of cardCache) {
-            if (!currentIds.has(id)) {
-                cardCache.delete(id)
-            }
+            if (!currentIds.has(id)) cardCache.delete(id)
         }
 
-        // 3. Swap DOM (Reconciliation)
-        // Instead of grid.innerHTML = "", we reuse nodes to keep state/animations if possible,
-        // but since sorting might change order, replaceChildren is the most robust native method.
-        grid.replaceChildren(fragment)
+        // Reconcile DOM (replaceChildren is performant)
+        requestAnimationFrame(() => {
+            grid.replaceChildren(fragment)
+        })
     }
 
-    const clearCache = () => cardCache.clear()
-
-    return { render, clearCache }
+    return { render }
 })()
 
-// --- Core Logic ---
-
 function normalizeVisibleNotes(list, orderKey = "order") {
-    const arr = (list || []).filter(Boolean).map(n => NoteIO.normalizeNote(n))
+    if (!Array.isArray(list)) return []
+    // Shallow copy and normalize
+    const arr = list.map(n => NoteIO.normalizeNote(n))
+    
+    // Optimized sort: Pinned first, then by orderKey
     arr.sort((a, b) => {
-        const ap = a.isPinned ? 1 : 0
-        const bp = b.isPinned ? 1 : 0
-        if (bp !== ap) return bp - ap
-        
-        const ao = typeof a[orderKey] === "number" ? a[orderKey] : 0
-        const bo = typeof b[orderKey] === "number" ? b[orderKey] : 0
-        return ao - bo // Ascending order
+        if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? 1 : -1
+        const vA = typeof a[orderKey] === "number" ? a[orderKey] : 0
+        const vB = typeof b[orderKey] === "number" ? b[orderKey] : 0
+        return vA - vB
     })
     return arr
+}
+
+function renderNotes(list) {
+    // Adapter for legacy calls
+    NotesRenderer.render(list)
 }
 
 function filterAndRender(query) {
     const queryValue = String(query || "")
     const current = StateStore.read()
     
-    // Optimistic update for search query input
+    // Update state only if changed to avoid loop
     if (current.searchQuery !== queryValue) {
         StateStore.update("searchQuery", queryValue)
     }
-    
+
     const q = queryValue.trim()
-    
-    // Auto-switch from folder view if searching globally
-    if (current.view === "folder" && !current.activeFolderId) {
+    const view = current.view
+    const activeFolderId = current.activeFolderId
+
+    // Auto-switch view if searching inside a folder but context lost
+    if (view === "folder" && !activeFolderId) {
         StateStore.update("view", "notes")
     }
 
     let list = current.notes.slice()
-    const view = StateStore.read().view
-    const activeFolderId = StateStore.read().activeFolderId
 
-    // View Filtering
-    switch (view) {
-        case "favorites":
-            list = list.filter(n => !!n.isFavorite && !n.isArchived)
-            break
-        case "archive":
-            list = list.filter(n => !!n.isArchived)
-            break
-        case "folder":
-            list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
-            break
-        default: // "notes"
-            list = list.filter(n => !n.isArchived)
-            break
-    }
+    // Filter by View
+    if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
+    else if (view === "archive") list = list.filter(n => n.isArchived)
+    else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
+    else list = list.filter(n => !n.isArchived) // "notes" view
 
-    // Search Filtering
+    // Filter by Search
     if (q) {
-        const scored = list.map(n => {
-            const score = SmartSearch.score(q, n.title, n.content, n.tags)
-            return { n, score }
-        }).filter(x => x.score >= 0.35).sort((a, b) => b.score - a.score)
-        list = scored.map(x => x.n)
+        try {
+            const scored = list.map(n => ({ 
+                n, 
+                score: SmartSearch.score(q, n.title, n.content, n.tags) 
+            }))
+            .filter(item => item.score >= 0.35)
+            .sort((a, b) => b.score - a.score)
+            
+            list = scored.map(item => item.n)
+        } catch (e) {
+            console.error("Search failed", e)
+        }
     }
 
     const orderKey = view === "folder" ? "folderOrder" : "order"
     list = normalizeVisibleNotes(list, orderKey)
 
-    // Render Dispatch
-    if (StateStore.read().view === "folders") {
+    if (view === "folders") {
         UI.renderFolderGrid()
     } else {
-        requestAnimationFrame(() => NotesRenderer.render(list))
+        NotesRenderer.render(list)
     }
 
-    // UI Updates
     UI.updateViewTitle()
     UI.updatePrimaryActionLabel()
 }
 
 function switchView(view, folderId = null) {
-    const prevFolder = StateStore.read().activeFolderId
     StateStore.set(prev => ({ ...prev, view, activeFolderId: folderId }))
     
-    // DOM Updates for Nav
+    // Update Sidebar Active States
     document.querySelectorAll(".nav-item").forEach(btn => {
         const v = btn.dataset.view
-        if (v) btn.classList.toggle("active", v === view)
+        const f = btn.dataset.folderId
         
-        // Handle folder activation visual state
-        const fId = btn.dataset.folderId
-        if (fId) btn.classList.toggle("active", fId === folderId)
+        let isActive = false
+        if (v) isActive = (v === view)
+        else if (f) isActive = (view === "folder" && f === folderId)
+        
+        btn.classList.toggle("active", isActive)
     })
-    
-    // Reset scroll if changing context
-    if (view !== "notes" || folderId !== prevFolder) {
-         const container = document.getElementById("notes-content-area")
-         if (container) container.scrollTop = 0
-    }
 
-    filterAndRender(document.getElementById("search-input")?.value || "")
+    const searchInput = document.getElementById("search-input")
+    filterAndRender(searchInput ? searchInput.value : "")
 }
-
-// --- Actions ---
 
 async function deleteFolder(folderId) {
     if (!folderId) return
     UI.confirm("delete_f", async () => {
-        if (!db || !StateStore.read().user) return
-        
+        const user = StateStore.read().user
+        if (!db || !user) return
+
         const notes = StateStore.read().notes.filter(n => n.folderId === folderId)
         const batch = db.batch()
-        
-        // Unlink notes from folder instead of deleting them
+
+        // Unlink notes instead of deleting
         notes.forEach(n => {
-            const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(n.id)
+            const ref = db.collection("users").doc(user.uid).collection("notes").doc(n.id)
             batch.update(ref, { folderId: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
         })
-        
-        const folderRef = db.collection("users").doc(StateStore.read().user.uid).collection("folders").doc(folderId)
+
+        const folderRef = db.collection("users").doc(user.uid).collection("folders").doc(folderId)
         batch.delete(folderRef)
-        
-        try {
-            await batch.commit()
-            if (StateStore.read().activeFolderId === folderId) {
-                switchView("notes")
-            }
-            UI.showToast(UI.getText("folder_deleted", "Folder deleted"))
-        } catch (e) {
-            console.error(e)
-            UI.showToast("Error deleting folder")
+
+        await batch.commit()
+
+        if (StateStore.read().activeFolderId === folderId) {
+            switchView("notes")
         }
+        UI.showToast(UI.getText("folder_deleted", "Folder deleted"))
     })
 }
 
@@ -326,56 +297,52 @@ function openNoteActions(noteId) {
 }
 
 async function toggleFavorite(noteId) {
-    if (!db || !StateStore.read().user) return
+    const user = StateStore.read().user
+    if (!db || !user) return
+    
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
-    
-    const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId)
-    const next = !note.isFavorite
-    
-    // Optimistic UI update handled by listener, but we can animate button here if needed
-    try {
-        await ref.update({ isFavorite: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    } catch (e) {
-        console.error("Toggle fav failed", e)
-    }
+
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({ 
+        isFavorite: !note.isFavorite, 
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+    })
 }
 
 async function togglePin(noteId) {
-    if (!db || !StateStore.read().user) return
+    const user = StateStore.read().user
+    if (!db || !user) return
+
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
+
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({ 
+        isPinned: !note.isPinned, 
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+    })
     
-    const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId)
-    const next = !note.isPinned
-    
-    try {
-        await ref.update({ isPinned: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        
-        // Add visual feedback
-        const card = document.querySelector(`.note-card[data-note-id="${encodeURIComponent(noteId)}"]`)
-        if (card) {
-            card.classList.add("pinning")
-            setTimeout(() => card.classList.remove("pinning"), 500)
-        }
-    } catch (e) {
-        console.error("Toggle pin failed", e)
+    // Add visual feedback class to current card instance if it exists
+    const card = document.querySelector(`.note-card[data-note-id="${encodeURIComponent(noteId)}"]`)
+    if (card) {
+        card.classList.add("pinning")
+        setTimeout(() => card.classList.remove("pinning"), 520)
     }
 }
 
 async function toggleArchive(noteId, archive) {
-    if (!db || !StateStore.read().user) return
-    const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId)
-    
-    try {
-        await ref.update({ isArchived: !!archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
-    } catch (e) {
-        UI.showToast("Error updating archive status")
-    }
-}
+    const user = StateStore.read().user
+    if (!db || !user) return
 
-// --- Initialization ---
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({ 
+        isArchived: !!archive, 
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+    })
+    
+    UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
+}
 
 async function initApp() {
     try {
@@ -385,23 +352,23 @@ async function initApp() {
         UI.init()
         UI.setLang(localStorage.getItem("app-lang") || "ru")
 
-        if (!db || !StateStore.read().user) return
+        const user = StateStore.read().user
+        if (!db || !user) return
 
         // Folders Listener
-        db.collection("users").doc(StateStore.read().user.uid).collection("folders")
+        db.collection("users").doc(user.uid).collection("folders")
             .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
                 const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                 StateStore.update("folders", folders)
                 UI.renderFolders()
-                // Re-render if we are in folders view to update counts/grid
                 if (StateStore.read().view === "folders") {
                     filterAndRender(document.getElementById("search-input")?.value || "")
                 }
             })
 
         // Notes Listener
-        db.collection("users").doc(StateStore.read().user.uid).collection("notes")
+        db.collection("users").doc(user.uid).collection("notes")
             .orderBy("order", "asc")
             .onSnapshot(snap => {
                 const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -410,23 +377,21 @@ async function initApp() {
                 if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
             })
 
+        // Cleanup Loader
+        const loader = document.getElementById("app-loader")
+        if (loader) loader.classList.add("hidden")
+        
         const search = document.getElementById("search-input")
         if (search) search.value = ""
         
-        // Initial View
         switchView("notes")
-        
-        // Remove loader
-        const loader = document.getElementById("app-loader")
-        if (loader) loader.classList.add("hidden")
-            
+
     } catch (e) {
-        console.error("App Init Failed:", e)
-        UI.showToast("Failed to initialize app")
+        console.error("Init Error", e)
     }
 }
 
-// Expose global functions for UI actions
+// Global Exports
 window.initApp = initApp
 window.switchView = switchView
 window.filterAndRender = filterAndRender
