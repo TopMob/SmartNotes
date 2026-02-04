@@ -393,6 +393,9 @@ async function initApp() {
                 if (StateStore.read().view === "folders") {
                     filterAndRender(document.getElementById("search-input")?.value || "")
                 }
+            }, err => {
+                if (typeof UI !== "undefined") UI.showToast(UI.getText("sync_error", "Sync error"))
+                console.error("Folders sync error", err)
             })
 
         db.collection("users").doc(user.uid).collection("notes")
@@ -402,6 +405,9 @@ async function initApp() {
                 StateStore.update("notes", notes)
                 filterAndRender(document.getElementById("search-input")?.value || "")
                 if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
+            }, err => {
+                if (typeof UI !== "undefined") UI.showToast(UI.getText("sync_error", "Sync error"))
+                console.error("Notes sync error", err)
             })
 
         const loader = document.getElementById("app-loader")

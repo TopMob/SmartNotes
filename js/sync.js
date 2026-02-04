@@ -33,6 +33,9 @@ const SyncService = {
 
           this.schedule(id, this.buildPayload(id, data, user, false));
         });
+      }, err => {
+        if (typeof UI !== "undefined" && UI.showToast) UI.showToast(UI.getText("sync_error", "Sync error"));
+        console.error("Sync listener error", err);
       });
   },
 

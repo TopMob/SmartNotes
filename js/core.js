@@ -198,12 +198,15 @@ const Auth = {
     },
     handleAuthError(e) {
         const code = e && e.code ? e.code : "auth/unknown"
+        const message = e && e.message ? String(e.message) : ""
         const map = {
             "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
             "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
-            "auth/cancelled-popup-request": this._t("auth_cancelled", "Request canceled")
+            "auth/cancelled-popup-request": this._t("auth_cancelled", "Request canceled"),
+            "-40": this._t("auth_network_failed", "No internet connection")
         }
-        const msg = map[code] || `${this._t("login_failed", "Sign-in failed")}: ${code}`
+        const serviceUnavailable = message.includes("503") || message.toLowerCase().includes("unavailable")
+        const msg = map[code] || (serviceUnavailable ? this._t("auth_service_unavailable", "Service temporarily unavailable") : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
         this._toast(msg)
     },
     async login() {
