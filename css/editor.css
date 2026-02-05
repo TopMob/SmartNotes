@@ -363,6 +363,14 @@
 
 .note-content .tag-line {
     color: var(--primary);
-    font-weight: 600;
-    letter-spacing: 0.3px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    background: rgba(var(--primary-rgb), 0.12);
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--primary-rgb), 0.25);
+    display: inline-block;
+    margin: 2px 0;
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.12);
+    text-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2);
 }
