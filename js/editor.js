@@ -684,3 +684,59 @@ const Editor = (() => {
         toggleRecording
     }
 })()
+.tag-chip {
+    /* Градиентный фон с акцентным цветом */
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.15), rgba(var(--primary-rgb), 0.05));
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+    font-size: 13px;
+    
+    /* Эффект стекла и тени */
+    backdrop-filter: blur(5px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Эффект при наведении */
+.tag-chip:hover {
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.25), rgba(var(--primary-rgb), 0.1));
+    border-color: rgba(var(--primary-rgb), 0.6);
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.25);
+    color: #fff;
+}
+
+/* Иконка решетки внутри тега */
+.tag-chip i {
+    font-size: 15px;
+    color: var(--primary); /* Красим иконку в основной цвет */
+    opacity: 1;
+}
+
+/* --- 2. Поле ввода тегов --- */
+/* Замените стили для #note-tags-input */
+#note-tags-input {
+    width: 100%;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    color: var(--text);
+    transition: all 0.25s ease;
+}
+
+/* Подсветка при клике в поле */
+#note-tags-input:focus {
+    background: rgba(15, 15, 17, 0.8);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.1);
+    transform: translateY(-1px);
+}
