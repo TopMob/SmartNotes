@@ -7,7 +7,25 @@ export function createAuthManager({ auth }) {
         loginButton: null
     }
 
+    let activeAuth = auth || null
+
     const manager = {
+        setAuth(nextAuth) {
+            activeAuth = nextAuth || null
+            if (!activeAuth) {
+                state.initialized = false
+            }
+        },
+        async _awaitAuthReady() {
+            if (activeAuth) return activeAuth
+            const coreReady = window.__smartnotesCore?.ready
+            if (coreReady && typeof coreReady.then === "function") {
+                try {
+                    await coreReady
+                } catch {}
+            }
+            return activeAuth
+        },
         _t(key, fallback) {
             return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
         },
@@ -56,10 +74,13 @@ export function createAuthManager({ auth }) {
             console.error("[Auth] login error", code, err)
         },
         async _signInWithRedirect() {
-            await auth.signInWithRedirect(this._provider())
+            const authInstance = await this._awaitAuthReady()
+            if (!authInstance) return
+            await authInstance.signInWithRedirect(this._provider())
         },
         async login() {
-            if (!auth || typeof firebase === "undefined") {
+            const authInstance = await this._awaitAuthReady()
+            if (!authInstance || typeof firebase === "undefined") {
                 console.error("[Auth] Firebase auth is unavailable: SDK not initialized")
                 this._toast(this._t("auth_unavailable", "Authentication unavailable"))
                 return
@@ -74,7 +95,7 @@ export function createAuthManager({ auth }) {
                     return
                 }
 
-                await auth.signInWithPopup(this._provider())
+                await authInstance.signInWithPopup(this._provider())
             } catch (err) {
                 const popupFallbackCodes = new Set([
                     "auth/popup-blocked",
@@ -101,10 +122,11 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
         },
         async logout() {
-            if (!auth) return
+            const authInstance = await this._awaitAuthReady()
+            if (!authInstance) return
             this._setLoginBusy(false)
             try {
-                await auth.signOut()
+                await authInstance.signOut()
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
@@ -168,7 +190,7 @@ export function createAuthManager({ auth }) {
             }
         },
         async _handleAuthState(user) {
-            const normalizedUser = user || auth.currentUser || null
+            const normalizedUser = user || activeAuth?.currentUser || null
             state.currentUser = normalizedUser
             state.authReady = true
             StateActions.setUser(normalizedUser)
@@ -188,13 +210,14 @@ export function createAuthManager({ auth }) {
             this.applySignedOutUI()
         },
         async init() {
-            if (!auth || state.initialized) return
+            const authInstance = await this._awaitAuthReady()
+            if (!authInstance || state.initialized) return
             state.initialized = true
 
             this._setLoginBusy(false)
 
             try {
-                const res = await auth.getRedirectResult()
+                const res = await authInstance.getRedirectResult()
                 if (res && res.user) {
                     await this._handleAuthState(res.user)
                 }
@@ -204,7 +227,7 @@ export function createAuthManager({ auth }) {
                 this._setLoginBusy(false)
             }
 
-            auth.onAuthStateChanged(async user => {
+            authInstance.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
                 await this._handleAuthState(user)
             }, err => {

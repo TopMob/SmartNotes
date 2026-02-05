@@ -10,6 +10,15 @@ export const firebaseConfig = {
 
 let firebaseSingleton = null
 
+export async function waitForFirebaseSDK({ timeoutMs = 12000, intervalMs = 50 } = {}) {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+        if (typeof firebase !== "undefined" && firebase?.auth && firebase?.firestore) return true
+        await new Promise(resolve => setTimeout(resolve, intervalMs))
+    }
+    return typeof firebase !== "undefined" && firebase?.auth && firebase?.firestore
+}
+
 export async function setupAuthPersistence(auth) {
     if (!auth || typeof firebase === "undefined" || !firebase?.auth?.Auth?.Persistence) return
 
