@@ -4,14 +4,18 @@
     z-index: var(--z-editor);
     background: rgba(0, 0, 0, 0.55);
     display: none;
+    overflow: hidden;
 }
 
 .editor-overlay.active {
-    display: block;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
 }
 
 .editor-container {
-    height: 100dvh;
+    height: 100%;
+    max-height: 100dvh;
     width: 100%;
     max-width: 920px;
     margin: 0 auto;
@@ -50,7 +54,9 @@
 
 .editor-scroll-area {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: var(--editor-padding);
     display: flex;
     flex-direction: column;
