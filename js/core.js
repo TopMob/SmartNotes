@@ -151,6 +151,12 @@ const Auth = {
         const uaMobile = navigator.userAgentData && navigator.userAgentData.mobile
         return !!(coarse || mobileUa || touchDevice || uaMobile)
     },
+    _redirectPreferredBrowser() {
+        const ua = (navigator.userAgent || "").toLowerCase()
+        const isSafari = /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg\//.test(ua)
+        const isBrave = !!(navigator.brave && typeof navigator.brave.isBrave === "function")
+        return isSafari || isBrave
+    },
     _t(key, fallback) {
         return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
     },
@@ -186,7 +192,7 @@ const Auth = {
             await auth.signInWithRedirect(provider)
         }
         try {
-            if (this._mobileEnv()) {
+            if (this._mobileEnv() || this._redirectPreferredBrowser()) {
                 await redirect()
                 return
             }
@@ -196,9 +202,13 @@ const Auth = {
             const redirectCodes = new Set([
                 "auth/popup-blocked",
                 "auth/operation-not-supported-in-this-environment",
-                "auth/cancelled-popup-request"
+                "auth/cancelled-popup-request",
+                "auth/popup-closed-by-user",
+                "auth/web-storage-unsupported",
+                "auth/unauthorized-domain",
+                "auth/internal-error"
             ])
-            const shouldRedirect = redirectCodes.has(code) || (this._mobileEnv() && code === "auth/popup-closed-by-user")
+            const shouldRedirect = this._mobileEnv() || this._redirectPreferredBrowser() || redirectCodes.has(code)
             if (shouldRedirect) {
                 try {
                     await redirect()

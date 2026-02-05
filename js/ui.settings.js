@@ -179,12 +179,15 @@ Object.assign(UI, {
         const activeKey = draft.preset && draft.preset !== "manual" ? draft.preset : "manual"
         ThemeManager.syncInputs(draft.p, draft.bg, draft.t)
         const onSelect = (key) => {
+            let nextDraft = null
             if (key === "manual") {
-                StateStore.update("appearanceDraft", { ...draft, preset: "manual" })
+                nextDraft = { ...draft, preset: "manual" }
             } else {
                 const preset = ThemeManager.resolvePreset(key)
-                StateStore.update("appearanceDraft", { preset: key, p: preset.p, bg: preset.bg, t: preset.t })
+                nextDraft = { preset: key, p: preset.p, bg: preset.bg, t: preset.t }
             }
+            StateStore.update("appearanceDraft", nextDraft)
+            ThemeManager.applySettings(nextDraft, false)
             this.renderAppearanceDraft()
         }
         ThemeManager.renderPicker({ onSelect, activeKey, manualColor: draft.p })
@@ -192,6 +195,7 @@ Object.assign(UI, {
             const current = StateStore.read().appearanceDraft || draft
             const next = { ...current, preset: "manual", [type]: val }
             StateStore.update("appearanceDraft", next)
+            ThemeManager.applySettings(next, false)
             ThemeManager.renderPicker({ onSelect, activeKey: "manual", manualColor: next.p })
         })
     },
