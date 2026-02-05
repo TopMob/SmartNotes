@@ -360,7 +360,6 @@ Object.assign(UI, {
             const label = document.createElement("span")
             label.textContent = this.getText(tool.label, tool.label)
             
-            // Создаем структуру переключателя (Toggle Switch)
             const labelSwitch = document.createElement("label")
             labelSwitch.className = "switch"
             

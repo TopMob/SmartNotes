@@ -228,7 +228,6 @@ input:checked + .slider:before {
     background-color: #fff;
 }
 
-/* --- Обновленный стиль Select (для настроек языка и вида) --- */
 select.input-area {
     appearance: none;
     -webkit-appearance: none;
@@ -237,8 +236,7 @@ select.input-area {
     border: 1px solid rgba(255, 255, 255, 0.1);
     cursor: pointer;
     transition: all 0.2s ease;
-    /* Кастомная стрелочка */
-    background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%),
+        background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%),
                       linear-gradient(135deg, var(--text) 50%, transparent 50%);
     background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%;
     background-size: 5px 5px, 5px 5px;

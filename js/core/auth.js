@@ -1,5 +1,8 @@
 export function createAuthManager({ auth }) {
+    const REDIRECT_KEY = "smartnotes.auth.redirect.in.progress"
     return {
+        _appUserId: null,
+        _authObserverAttached: false,
         _t(key, fallback) {
             return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
         },
@@ -11,6 +14,21 @@ export function createAuthManager({ auth }) {
             const p = new firebase.auth.GoogleAuthProvider()
             p.setCustomParameters({ prompt: "select_account" })
             return p
+        },
+        _setRedirectInProgress(value) {
+            try {
+                if (value) sessionStorage.setItem(REDIRECT_KEY, "1")
+                else sessionStorage.removeItem(REDIRECT_KEY)
+            } catch {
+                return
+            }
+        },
+        _isRedirectInProgress() {
+            try {
+                return sessionStorage.getItem(REDIRECT_KEY) === "1"
+            } catch {
+                return false
+            }
         },
         _isEmbeddedContext() {
             return window.self !== window.top
@@ -57,8 +75,10 @@ export function createAuthManager({ auth }) {
             const provider = this._provider()
             await this._setBestPersistence()
             try {
+                this._setRedirectInProgress(true)
                 await auth.signInWithRedirect(provider)
             } catch (e) {
+                this._setRedirectInProgress(false)
                 this.handleAuthError(e)
             }
         },
@@ -66,6 +86,7 @@ export function createAuthManager({ auth }) {
             if (!auth) return
             try {
                 await auth.signOut()
+                this._appUserId = null
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
@@ -132,24 +153,59 @@ export function createAuthManager({ auth }) {
             }
         },
         resetSession() {
+            this._appUserId = null
             this.clearState()
             this.applySignedOutUI()
         },
-        async init() {
-            if (!auth) return
-            auth.getRedirectResult().catch(e => {
+        async _handleRedirectResult() {
+            try {
+                await auth.getRedirectResult()
+            } catch (e) {
                 this.handleAuthError(e)
-                return null
-            })
-            auth.onAuthStateChanged(async user => {
-                if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
-                if (user) {
-                    this.applySignedInUI(user)
-                    if (typeof window.initApp === "function") window.initApp()
+            } finally {
+                this._setRedirectInProgress(false)
+            }
+        },
+        async _bootApp(user) {
+            if (!user || this._appUserId === user.uid) return
+            if (typeof window.initApp === "function") {
+                this._appUserId = user.uid
+                await window.initApp()
+                return
+            }
+            const maxWaitMs = 3000
+            const stepMs = 100
+            let waited = 0
+            while (waited < maxWaitMs) {
+                await new Promise(resolve => setTimeout(resolve, stepMs))
+                waited += stepMs
+                if (typeof window.initApp === "function") {
+                    this._appUserId = user.uid
+                    await window.initApp()
                     return
                 }
-                this.resetSession()
+            }
+        },
+        async _handleAuthState(user) {
+            if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
+            if (user) {
+                this.applySignedInUI(user)
+                await this._bootApp(user)
+                return
+            }
+            this.resetSession()
+        },
+        async init() {
+            if (!auth || this._authObserverAttached) return
+            this._authObserverAttached = true
+            auth.onAuthStateChanged((user) => {
+                this._handleAuthState(user).catch((e) => this.handleAuthError(e))
             })
+            if (this._isRedirectInProgress()) {
+                await this._handleRedirectResult()
+                return
+            }
+            this._setRedirectInProgress(false)
         }
     }
 }

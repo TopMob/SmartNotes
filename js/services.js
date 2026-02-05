@@ -118,7 +118,6 @@ const SmartSearch = {
         for (const qw of qTokens) {
             let maxWordScore = 0
             
-            // Expand synonyms
             const variants = [qw]
             for (const [key, list] of this.synonyms) {
                 if (qw === key || list.includes(qw)) {
@@ -242,7 +241,6 @@ const DriveService = {
     },
     async uploadNote(note) {
         if (!this.ready) return UI.showToast(UI.getText("drive_unavailable", "Drive unavailable"))
-        // Placeholder for actual Drive API implementation
         return UI.showToast(UI.getText("drive_saved", "Uploaded"))
     }
 }
