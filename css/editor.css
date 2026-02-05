@@ -69,6 +69,7 @@
 
 .note-content {
     min-height: 46vh;
+    height: auto;
     padding: 14px 12px;
     border-radius: var(--radius-lg);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -84,6 +85,7 @@
     overflow-wrap: break-word;
     word-break: break-word;
     box-sizing: border-box;
+    display: flow-root;
 }
 
 
@@ -172,6 +174,7 @@
     display: grid;
     gap: 10px;
     min-width: 0;
+    clear: both;
 }
 
 .tags-container {
@@ -231,6 +234,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    clear: both;
+    flex-wrap: wrap;
 }
 
 .media-context-menu {
