@@ -1,13 +1,11 @@
 export function bootstrapCore({ ThemeManager, Auth }) {
     document.addEventListener("DOMContentLoaded", () => {
-        if (typeof ThemeManager !== "undefined" && ThemeManager && typeof ThemeManager.init === "function") {
+        if (ThemeManager && typeof ThemeManager.init === "function") {
             ThemeManager.init()
         }
-        if (typeof UI !== "undefined" && UI.captureShareFromHash) UI.captureShareFromHash()
 
-        const loginButton = document.querySelector("[data-action='login']")
-        if (loginButton) {
-            loginButton.addEventListener("click", () => Auth.login())
+        if (typeof UI !== "undefined" && UI.captureShareFromHash) {
+            UI.captureShareFromHash()
         }
 
         Auth.init().catch(() => null)
@@ -15,5 +13,5 @@ export function bootstrapCore({ ThemeManager, Auth }) {
         document.addEventListener("dblclick", (event) => {
             event.preventDefault()
         }, { passive: false })
-    })
+    }, { once: true })
 }

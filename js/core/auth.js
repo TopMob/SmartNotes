@@ -1,19 +1,17 @@
+const AUTH_REDIRECT_PENDING_KEY = "smartnotes.auth.redirect.pending"
+
 export function createAuthManager({ auth }) {
-    return {
-        _mobileEnv() {
-            const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
-            const ua = (navigator.userAgent || "").toLowerCase()
-            const mobileUa = /android|iphone|ipad|ipod|iemobile|opera mini|mobile/.test(ua)
-            const touchDevice = typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1
-            const uaMobile = navigator.userAgentData && navigator.userAgentData.mobile
-            return !!(coarse || mobileUa || touchDevice || uaMobile)
-        },
-        _redirectPreferredBrowser() {
-            const ua = (navigator.userAgent || "").toLowerCase()
-            const isSafari = /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg\//.test(ua)
-            const isBrave = !!(navigator.brave && typeof navigator.brave.isBrave === "function")
-            return isSafari || isBrave
-        },
+    const state = {
+        initialized: false,
+        isRedirecting: false,
+        redirectHandled: false,
+        authReady: false,
+        currentUser: null,
+        authSub: null,
+        loginButton: null
+    }
+
+    const manager = {
         _t(key, fallback) {
             return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
         },
@@ -22,64 +20,70 @@ export function createAuthManager({ auth }) {
             else alert(text)
         },
         _provider() {
-            const p = new firebase.auth.GoogleAuthProvider()
-            p.setCustomParameters({ prompt: "select_account" })
-            return p
+            const provider = new firebase.auth.GoogleAuthProvider()
+            provider.setCustomParameters({ prompt: "select_account" })
+            return provider
         },
-        handleAuthError(e) {
-            const code = e && e.code ? e.code : "auth/unknown"
-            const message = e && e.message ? String(e.message) : ""
-            const map = {
-                "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
-                "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
-                "auth/cancelled-popup-request": this._t("auth_cancelled", "Request canceled"),
-                "-40": this._t("auth_network_failed", "No internet connection")
+        _setRedirectPending(flag) {
+            try {
+                if (flag) sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, "1")
+                else sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY)
+            } catch {
+                return
             }
-            const serviceUnavailable = message.includes("503") || message.toLowerCase().includes("unavailable")
-            const msg = map[code] || (serviceUnavailable ? this._t("auth_service_unavailable", "Service temporarily unavailable") : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
-            this._toast(msg)
+        },
+        _getRedirectPending() {
+            try {
+                return sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === "1"
+            } catch {
+                return false
+            }
+        },
+        _setLoginBusy(flag) {
+            state.isRedirecting = !!flag
+            if (!state.loginButton) {
+                state.loginButton = document.querySelector("[data-action='login']")
+            }
+            if (!state.loginButton) return
+            state.loginButton.disabled = !!flag
+            state.loginButton.setAttribute("aria-busy", flag ? "true" : "false")
+            state.loginButton.classList.toggle("is-loading", !!flag)
+        },
+        handleAuthError(err) {
+            const code = err && err.code ? err.code : "auth/unknown"
+            const message = err && err.message ? String(err.message).toLowerCase() : ""
+            const map = {
+                "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
+                "auth/web-storage-unsupported": this._t("auth_storage_failed", "Storage is blocked in this browser"),
+                "auth/operation-not-supported-in-this-environment": this._t("auth_env_failed", "Authentication is blocked in this browser")
+            }
+            const serviceUnavailable = message.includes("503") || message.includes("unavailable")
+            const text = map[code] || (serviceUnavailable
+                ? this._t("auth_service_unavailable", "Service temporarily unavailable")
+                : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
+            this._toast(text)
         },
         async login() {
             if (!auth || typeof firebase === "undefined") {
                 this._toast(this._t("auth_unavailable", "Authentication unavailable"))
                 return
             }
-            const provider = this._provider()
-            const redirect = async () => {
-                await auth.signInWithRedirect(provider)
-            }
+            if (state.isRedirecting) return
+
             try {
-                if (this._mobileEnv() || this._redirectPreferredBrowser()) {
-                    await redirect()
-                    return
-                }
-                await auth.signInWithPopup(provider)
-            } catch (e) {
-                const code = e && e.code ? e.code : ""
-                const redirectCodes = new Set([
-                    "auth/popup-blocked",
-                    "auth/operation-not-supported-in-this-environment",
-                    "auth/cancelled-popup-request",
-                    "auth/popup-closed-by-user",
-                    "auth/web-storage-unsupported",
-                    "auth/unauthorized-domain",
-                    "auth/internal-error"
-                ])
-                const shouldRedirect = this._mobileEnv() || this._redirectPreferredBrowser() || redirectCodes.has(code)
-                if (shouldRedirect) {
-                    try {
-                        await redirect()
-                        return
-                    } catch (err) {
-                        this.handleAuthError(err)
-                        return
-                    }
-                }
-                this.handleAuthError(e)
+                this._setLoginBusy(true)
+                this._setRedirectPending(true)
+                await auth.signInWithRedirect(this._provider())
+            } catch (err) {
+                this._setLoginBusy(false)
+                this._setRedirectPending(false)
+                this.handleAuthError(err)
             }
         },
         async logout() {
             if (!auth) return
+            this._setLoginBusy(false)
+            this._setRedirectPending(false)
             try {
                 await auth.signOut()
             } catch {
@@ -87,13 +91,8 @@ export function createAuthManager({ auth }) {
             }
         },
         async switchAccount() {
-            if (!auth) return
-            try {
-                await auth.signOut()
-                await this.login()
-            } catch (e) {
-                this.handleAuthError(e)
-            }
+            await this.logout()
+            await this.login()
         },
         clearState() {
             if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
@@ -115,71 +114,88 @@ export function createAuthManager({ auth }) {
             }
         },
         applySignedInUI(user) {
-            if (!user) return
             const loginScreen = document.getElementById("login-screen")
             const appScreen = document.getElementById("app")
             const userPhoto = document.getElementById("user-photo")
             const userName = document.getElementById("user-name")
+
             if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
+
             if (loginScreen) {
+                loginScreen.classList.remove("active")
                 loginScreen.style.opacity = "0"
-                setTimeout(() => {
-                    loginScreen.style.display = "none"
-                    loginScreen.classList.remove("active")
-                }, 320)
+                loginScreen.style.display = "none"
             }
             if (appScreen) {
                 appScreen.style.display = "flex"
-                setTimeout(() => {
-                    appScreen.style.opacity = "1"
-                    appScreen.classList.add("active")
-                }, 30)
+                appScreen.classList.add("active")
+                appScreen.style.opacity = "1"
             }
         },
         applySignedOutUI() {
             const loginScreen = document.getElementById("login-screen")
             const appScreen = document.getElementById("app")
+
             if (appScreen) {
                 appScreen.style.opacity = "0"
-                setTimeout(() => {
-                    appScreen.style.display = "none"
-                    appScreen.classList.remove("active")
-                }, 220)
+                appScreen.classList.remove("active")
+                appScreen.style.display = "none"
             }
             if (loginScreen) {
                 loginScreen.style.display = "flex"
-                setTimeout(() => {
-                    loginScreen.classList.add("active")
-                    loginScreen.style.opacity = "1"
-                }, 30)
+                loginScreen.classList.add("active")
+                loginScreen.style.opacity = "1"
             }
         },
-        resetSession() {
+        async _processRedirectResultOnce() {
+            if (!auth || state.redirectHandled) return
+            state.redirectHandled = true
+            const pendingRedirect = this._getRedirectPending()
+            if (pendingRedirect) this._setLoginBusy(true)
+
+            try {
+                await auth.getRedirectResult()
+            } catch (err) {
+                this.handleAuthError(err)
+            } finally {
+                this._setRedirectPending(false)
+                this._setLoginBusy(false)
+            }
+        },
+        async _handleAuthState(user) {
+            const normalizedUser = user || auth.currentUser || null
+            state.currentUser = normalizedUser
+            state.authReady = true
+            StateActions.setUser(normalizedUser)
+
+            if (normalizedUser) {
+                this.applySignedInUI(normalizedUser)
+                if (typeof window.startUserSession === "function") {
+                    await window.startUserSession(normalizedUser)
+                }
+                return
+            }
+
+            if (typeof window.stopUserSession === "function") {
+                window.stopUserSession()
+            }
             this.clearState()
             this.applySignedOutUI()
         },
         async init() {
-            if (!auth) return
-            const redirectPromise = auth.getRedirectResult().catch(e => {
-                this.handleAuthError(e)
-                return null
-            })
-            let initialCheck = true
-            auth.onAuthStateChanged(async user => {
-                if (initialCheck) {
-                    await redirectPromise
-                    user = auth.currentUser
-                    initialCheck = false
-                }
-                if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
-                if (user) {
-                    this.applySignedInUI(user)
-                    if (typeof window.initApp === "function") window.initApp()
-                    return
-                }
-                this.resetSession()
+            if (!auth || state.initialized) return
+            state.initialized = true
+
+            await this._processRedirectResultOnce()
+
+            state.authSub = auth.onAuthStateChanged(async user => {
+                await this._handleAuthState(user)
+            }, err => {
+                this.handleAuthError(err)
             })
         }
     }
+
+    return manager
 }

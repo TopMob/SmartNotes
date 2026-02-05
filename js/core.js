@@ -5,13 +5,18 @@ import { initFirebase } from "./core/firebase.js"
 import { createAuthManager } from "./core/auth.js"
 import { bootstrapCore } from "./core/bootstrap.js"
 
-const { auth, db } = initFirebase()
-const Auth = createAuthManager({ auth })
+const core = window.__smartnotesCore || (() => {
+    const { auth, db } = initFirebase()
+    const Auth = createAuthManager({ auth })
+    const ctx = { auth, db, Auth }
+    window.__smartnotesCore = ctx
+    return ctx
+})()
 
 window.Utils = Utils
-window.auth = auth
-window.db = db
-window.Auth = Auth
+window.auth = core.auth
+window.db = core.db
+window.Auth = core.Auth
 window.LANG = LANG
 
-bootstrapCore({ ThemeManager, Auth })
+bootstrapCore({ ThemeManager, Auth: core.Auth })
