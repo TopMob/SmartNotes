@@ -1,0 +1,85 @@
+@media (max-width: 768px) {
+    .top-bar {
+        padding: 0 15px;
+        height: 60px;
+    }
+
+    .search-container {
+        position: absolute;
+        top: 65px;
+        left: 15px;
+        right: 15px;
+        max-width: none;
+        z-index: 90;
+        box-shadow: var(--shadow-lg);
+        margin: 0;
+    }
+
+    .content-scrollable {
+        padding-top: 60px;
+    }
+
+    #note-title {
+        font-size: 1.5rem;
+    }
+
+    .mobile-only-title {
+        display: none;
+    }
+
+    .modal-card {
+        width: 100%;
+        margin: 0;
+        max-height: 85vh;
+        border-radius: 24px 24px 0 0;
+        border-bottom: none;
+    }
+
+    .modal-overlay {
+        align-items: flex-end;
+    }
+
+    .btn-fab {
+        bottom: calc(20px + var(--safe-bottom));
+        right: 20px;
+    }
+
+    .sidebar-glass {
+        width: 85%;
+        max-width: 320px;
+    }
+
+    .editor-container {
+        border: none;
+    }
+}
+
+@media (min-width: 1024px) {
+    .sidebar-glass {
+        transform: translateX(0);
+        position: relative;
+        height: 100%;
+        box-shadow: none;
+        z-index: 1;
+    }
+}
+
+@media (prefers-contrast: more) {
+    .note-card,
+    .folder-card,
+    .modal-card {
+        border-color: rgba(255,255,255,0.4);
+    }
+}
+
+@media (hover: none) {
+    .note-card:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .card-actions {
+        opacity: 1;
+        transform: none;
+    }
+}
