@@ -419,6 +419,9 @@ async function initApp() {
 }
 
 window.initApp = initApp
+if (window.Auth && typeof window.Auth.onInitAppAvailable === "function") {
+    window.Auth.onInitAppAvailable().catch(() => null)
+}
 window.switchView = switchView
 window.filterAndRender = filterAndRender
 window.deleteFolder = deleteFolder

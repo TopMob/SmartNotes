@@ -168,23 +168,18 @@ export function createAuthManager({ auth }) {
         },
         async _bootApp(user) {
             if (!user || this._appUserId === user.uid) return
-            if (typeof window.initApp === "function") {
-                this._appUserId = user.uid
-                await window.initApp()
+            if (typeof window.initApp !== "function") {
+                window.__smartnotesPendingBootUserId = user.uid
                 return
             }
-            const maxWaitMs = 3000
-            const stepMs = 100
-            let waited = 0
-            while (waited < maxWaitMs) {
-                await new Promise(resolve => setTimeout(resolve, stepMs))
-                waited += stepMs
-                if (typeof window.initApp === "function") {
-                    this._appUserId = user.uid
-                    await window.initApp()
-                    return
-                }
-            }
+            this._appUserId = user.uid
+            await window.initApp()
+            if (window.__smartnotesPendingBootUserId === user.uid) delete window.__smartnotesPendingBootUserId
+        },
+        async onInitAppAvailable() {
+            const user = auth && auth.currentUser ? auth.currentUser : (typeof StateStore !== "undefined" ? StateStore.read().user : null)
+            if (!user) return
+            await this._bootApp(user)
         },
         async _handleAuthState(user) {
             if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
@@ -201,11 +196,8 @@ export function createAuthManager({ auth }) {
             auth.onAuthStateChanged((user) => {
                 this._handleAuthState(user).catch((e) => this.handleAuthError(e))
             })
-            if (this._isRedirectInProgress()) {
-                await this._handleRedirectResult()
-                return
-            }
-            this._setRedirectInProgress(false)
+            await this._handleRedirectResult()
+            if (!this._isRedirectInProgress()) this._setRedirectInProgress(false)
         }
     }
 }
