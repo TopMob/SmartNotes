@@ -10,6 +10,23 @@ export const firebaseConfig = {
 
 let firebaseSingleton = null
 
+async function setupAuthPersistence(auth) {
+    if (!auth || typeof firebase === "undefined") return
+
+    try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        return
+    } catch {
+        // Safari and private browsing can reject LOCAL persistence.
+    }
+
+    try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+    } catch {
+        // Keep Firebase default persistence when browser storage is fully blocked.
+    }
+}
+
 export function initFirebase() {
     if (firebaseSingleton) return firebaseSingleton
 
@@ -21,7 +38,7 @@ export function initFirebase() {
     const auth = firebase.auth(app)
     const db = firebase.firestore(app)
 
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => null)
+    setupAuthPersistence(auth)
     db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 
     firebaseSingleton = { app, auth, db }
