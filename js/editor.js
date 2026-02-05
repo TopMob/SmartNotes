@@ -101,7 +101,6 @@ const Editor = (() => {
 
         const lockApply = document.getElementById("lock-apply")
         if (lockApply) {
-            // Remove old listener if exists (simple way without abortController for external element)
             const newBtn = lockApply.cloneNode(true)
             lockApply.parentNode.replaceChild(newBtn, lockApply)
             newBtn.addEventListener("click", handleLockApply)
@@ -115,13 +114,12 @@ const Editor = (() => {
         
         let safeContent = text
         if (html) {
-            // Basic sanitization for paste: strip styles, keeping structure
             const div = document.createElement("div")
             div.innerHTML = html
             div.querySelectorAll("*").forEach(el => {
                 el.removeAttribute("style")
                 el.removeAttribute("class")
-                if (el.tagName === "IMG") el.remove() // Prevent external images
+                if (el.tagName === "IMG") el.remove()
             })
             safeContent = div.innerHTML
         }
@@ -306,7 +304,7 @@ const Editor = (() => {
 
     const handleResizeMove = (e) => {
         if (!resizeState) return
-        e.preventDefault() // Prevent scroll on touch
+        e.preventDefault()
         
         const clientX = e.clientX || e.touches?.[0].clientX
         const dx = clientX - resizeState.startX
@@ -325,14 +323,13 @@ const Editor = (() => {
         resizeState = null
         document.removeEventListener("touchmove", handleResizeMove)
         document.removeEventListener("pointermove", handleResizeMove)
-        queueSnapshot() // Force snapshot after resize
+        queueSnapshot()
     }
 
     const open = (note = null) => {
         const current = StateStore.read()
         const folderId = current.view === "folder" ? current.activeFolderId : null
         
-        // Generate new note logic
         const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
             id: Utils.generateId(),
             folderId,
@@ -342,12 +339,10 @@ const Editor = (() => {
 
         StateStore.update("currentNote", JSON.parse(JSON.stringify(n)))
         
-        // Reset State
         history = []
         future = []
         renderState()
         
-        // Initial Snapshot
         history.push(captureSnapshot())
         
         els.wrapper.classList.add("active")
@@ -375,7 +370,6 @@ const Editor = (() => {
         StateStore.update("currentNote", null)
         deselectMedia()
         stopRecording()
-        // Stop observing when closed
         if (observer) observer.disconnect()
     }
 
@@ -434,7 +428,6 @@ const Editor = (() => {
             </span>
         `).join("")
 
-        // Suggestions
         const sugs = SmartSearch.suggestTags(n.title, n.content)
             .filter(x => !tags.some(t => t.toLowerCase() === x.toLowerCase()))
             .slice(0, 5)
@@ -476,7 +469,6 @@ const Editor = (() => {
         if (history.length > CONFIG.MAX_HISTORY) history.shift()
         future = []
         
-        // Update store live
         const n = StateStore.read().currentNote
         if (n) {
             StateStore.update("currentNote", { 
@@ -512,8 +504,7 @@ const Editor = (() => {
             content: snap.content, 
             tags: snap.tags 
         })
-        renderState() // This recreates DOM, losing cursor
-        // Cursor logic omitted for simplicity in non-VDOM editor
+        renderState()
     }
 
     const insertMedia = (src, type) => {
@@ -604,9 +595,10 @@ const Editor = (() => {
     const handleTagLineEnter = (e) => {
         if (e.key !== "Enter") return
         const block = getActiveBlock()
-        if (!block || block.parentElement !== els.content) return
+        if (!block || !els.content.contains(block)) return
         const text = block.textContent.trim()
-        if (/^#[^\s#]+$/.test(text)) {
+        if (/^#\S+$/.test(text)) {
+            e.preventDefault()
             block.classList.add("tag-line")
         } else {
             block.classList.remove("tag-line")
@@ -627,14 +619,12 @@ const Editor = (() => {
         const n = StateStore.read().currentNote
         if (!n) return
 
-        // Auto-tagging
         const autoTags = SmartSearch.suggestTags(n.title, n.content)
         const currentTags = new Set(n.tags.map(t => t.toLowerCase()))
         autoTags.forEach(t => {
             if (!currentTags.has(t.toLowerCase())) n.tags.push(t)
         })
 
-        // Folder logic
         if (!n.folderId) {
             const suggested = SmartSearch.suggestFolderId(n, StateStore.read().folders)
             if (suggested) n.folderId = suggested
