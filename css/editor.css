@@ -77,7 +77,15 @@
     letter-spacing: var(--editor-letter-spacing);
     color: var(--text);
     outline: none;
+    width: 100%;
+    max-width: 100%;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    box-sizing: border-box;
 }
+
 
 .note-content:focus {
     border-color: rgba(var(--primary-rgb), 0.28);
@@ -240,21 +248,24 @@
 
 .media-wrapper {
     position: relative;
-    margin: 14px 0;
-    max-width: 100%;
+    margin: 14px auto;
+    max-width: 100% !important;
     margin-left: auto;
     margin-right: auto;
     text-align: center;
+    display: block;
 }
 
 .media-wrapper img,
 .media-wrapper video,
 .media-wrapper audio {
-    max-width: 100%;
+    max-width: 100% !important;
     border-radius: var(--radius-md);
     display: block;
     margin-left: auto;
     margin-right: auto;
+    height: auto !important;
+    border-radius: var(--radius-md);
 }
 
 .media-resize-handle {
