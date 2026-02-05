@@ -352,8 +352,14 @@ Object.assign(UI, {
         tools.forEach(tool => {
             const row = document.createElement("div")
             row.className = "settings-toggle-item"
+            
             const label = document.createElement("span")
             label.textContent = this.getText(tool.label, tool.label)
+            
+            // Создаем структуру переключателя (Toggle Switch)
+            const labelSwitch = document.createElement("label")
+            labelSwitch.className = "switch"
+            
             const input = document.createElement("input")
             input.type = "checkbox"
             input.checked = enabled[tool.id] !== false
@@ -361,7 +367,12 @@ Object.assign(UI, {
             input.addEventListener("change", () => {
                 Editor.setToolEnabled(tool.id, input.checked)
             })
-            row.append(label, input)
+            
+            const slider = document.createElement("span")
+            slider.className = "slider"
+            
+            labelSwitch.append(input, slider)
+            row.append(label, labelSwitch)
             root.appendChild(row)
         })
     }
