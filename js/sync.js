@@ -2,54 +2,67 @@ const SYNC_CONFIG = {
   ENDPOINT: "https://script.google.com/macros/s/AKfycbxJbz08kyiltSfyQSfmeONr32dG7RgiZQAQAlETG_0vSkA7SoSbS4ZYQwp0nEBA2Dn1/exec",
   DEBOUNCE_MS: 3000,
   BATCH_LIMIT: 50000
-};
+}
 
 const SyncService = {
   queue: new Map(),
+  unsubscribe: null,
+  activeUid: null,
 
-  init() {
-    if (!auth || !db) return;
-    auth.onAuthStateChanged(user => {
-      if (user) this.listen(user);
-    });
+  start(user) {
+    if (!auth || !db || !user) return
+    if (this.activeUid === user.uid) return
+    this.stop()
+    this.activeUid = user.uid
+    this.unsubscribe = this.listen(user)
+  },
+
+  stop() {
+    if (typeof this.unsubscribe === "function") {
+      this.unsubscribe()
+    }
+    this.unsubscribe = null
+    this.activeUid = null
+    this.queue.forEach(timer => clearTimeout(timer))
+    this.queue.clear()
   },
 
   listen(user) {
-    db.collection("users")
+    return db.collection("users")
       .doc(user.uid)
       .collection("notes")
       .onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
-          const id = change.doc.id;
-          const data = change.doc.data();
+          const id = change.doc.id
+          const data = change.doc.data()
 
           if (change.type === "removed") {
-            this.schedule(id, this.buildPayload(id, data, user, true));
-            return;
+            this.schedule(id, this.buildPayload(id, data, user, true))
+            return
           }
 
-          if (!data || data._isAiUpdating) return;
-          if (!data.title && !data.content) return;
+          if (!data || data._isAiUpdating) return
+          if (!data.title && !data.content) return
 
-          this.schedule(id, this.buildPayload(id, data, user, false));
-        });
+          this.schedule(id, this.buildPayload(id, data, user, false))
+        })
       }, err => {
-        if (typeof UI !== "undefined" && UI.showToast) UI.showToast(UI.getText("sync_error", "Sync error"));
-        console.error("Sync listener error", err);
-      });
+        if (typeof UI !== "undefined" && UI.showToast) UI.showToast(UI.getText("sync_error", "Sync error"))
+        console.error("Sync listener error", err)
+      })
   },
 
   schedule(id, payload) {
     if (this.queue.has(id)) {
-      clearTimeout(this.queue.get(id));
+      clearTimeout(this.queue.get(id))
     }
 
     const timer = setTimeout(() => {
-      this.send(payload);
-      this.queue.delete(id);
-    }, SYNC_CONFIG.DEBOUNCE_MS);
+      this.send(payload)
+      this.queue.delete(id)
+    }, SYNC_CONFIG.DEBOUNCE_MS)
 
-    this.queue.set(id, timer);
+    this.queue.set(id, timer)
   },
 
   async send(payload) {
@@ -59,17 +72,17 @@ const SyncService = {
         mode: "no-cors",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(payload)
-      });
-    } catch (e) {}
+      })
+    } catch {}
   },
 
   buildPayload(id, data, user, isDeleted) {
     const folderName =
       StateStore.read()?.folders?.find(f => f.id === data?.folderId)?.name ||
-      "Общее";
+      "Общее"
 
-    const cleanText = this.toPlainText(data?.content || "");
-    const attachments = this.countAttachments(data?.content || "");
+    const cleanText = this.toPlainText(data?.content || "")
+    const attachments = this.countAttachments(data?.content || "")
 
     return {
       noteId: id,
@@ -83,28 +96,28 @@ const SyncService = {
       isArchived: data?.isArchived ? "Да" : "Нет",
       isTrash: isDeleted ? "Да" : "Нет",
       attachments
-    };
+    }
   },
 
   toPlainText(html) {
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    return (div.textContent || "").trim();
+    const div = document.createElement("div")
+    div.innerHTML = html
+    return (div.textContent || "").trim()
   },
 
   countAttachments(html) {
-    const div = document.createElement("div");
-    div.innerHTML = html;
+    const div = document.createElement("div")
+    div.innerHTML = html
 
-    const imgs = div.querySelectorAll("img").length;
-    const audio = div.querySelectorAll("audio").length;
+    const imgs = div.querySelectorAll("img").length
+    const audio = div.querySelectorAll("audio").length
 
-    const list = [];
-    if (imgs) list.push(imgs + " фото");
-    if (audio) list.push(audio + " аудио");
+    const list = []
+    if (imgs) list.push(imgs + " фото")
+    if (audio) list.push(audio + " аудио")
 
-    return list.length ? list.join(", ") : "Нет";
+    return list.length ? list.join(", ") : "Нет"
   }
-};
+}
 
-SyncService.init();
+window.SyncService = SyncService

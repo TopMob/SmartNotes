@@ -369,18 +369,44 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
     })
 }
 
-async function initApp() {
-    try {
+const AppLifecycle = {
+    initialized: false,
+    activeUid: null,
+    unsubscribers: [],
+
+    async initializeOnce() {
+        if (this.initialized) return
+        this.initialized = true
         await DriveService.init()
         ReminderService.init()
         if (typeof Editor !== "undefined") Editor.init()
         UI.init()
         UI.setLang(localStorage.getItem("app-lang") || "ru")
+    },
 
-        const user = StateStore.read().user
+    clearSubscriptions() {
+        this.unsubscribers.forEach(unsub => {
+            if (typeof unsub === "function") unsub()
+        })
+        this.unsubscribers = []
+    },
+
+    stopUserSession() {
+        this.activeUid = null
+        this.clearSubscriptions()
+        if (typeof SyncService !== "undefined" && SyncService.stop) SyncService.stop()
+    },
+
+    async startUserSession(user) {
         if (!db || !user) return
 
-        db.collection("users").doc(user.uid).collection("folders")
+        await this.initializeOnce()
+
+        if (this.activeUid === user.uid) return
+        this.stopUserSession()
+        this.activeUid = user.uid
+
+        const folderUnsub = db.collection("users").doc(user.uid).collection("folders")
             .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
                 const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -390,11 +416,11 @@ async function initApp() {
                     filterAndRender(document.getElementById("search-input")?.value || "")
                 }
             }, err => {
-                if (typeof UI !== "undefined") UI.showToast(UI.getText("sync_error", "Sync error"))
+                UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Folders sync error", err)
             })
 
-        db.collection("users").doc(user.uid).collection("notes")
+        const notesUnsub = db.collection("users").doc(user.uid).collection("notes")
             .orderBy("order", "asc")
             .onSnapshot(snap => {
                 const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -402,9 +428,15 @@ async function initApp() {
                 filterAndRender(document.getElementById("search-input")?.value || "")
                 if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
             }, err => {
-                if (typeof UI !== "undefined") UI.showToast(UI.getText("sync_error", "Sync error"))
+                UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Notes sync error", err)
             })
+
+        this.unsubscribers = [folderUnsub, notesUnsub]
+
+        if (typeof SyncService !== "undefined" && SyncService.start) {
+            SyncService.start(user)
+        }
 
         const loader = document.getElementById("app-loader")
         if (loader) loader.classList.add("hidden")
@@ -413,12 +445,18 @@ async function initApp() {
         if (search) search.value = ""
 
         switchView("notes")
-    } catch (e) {
-        console.error("Init Error", e)
     }
 }
 
+async function initApp() {
+    const user = StateStore.read().user
+    if (!user) return
+    await AppLifecycle.startUserSession(user)
+}
+
 window.initApp = initApp
+window.startUserSession = (user) => AppLifecycle.startUserSession(user)
+window.stopUserSession = () => AppLifecycle.stopUserSession()
 window.switchView = switchView
 window.filterAndRender = filterAndRender
 window.deleteFolder = deleteFolder

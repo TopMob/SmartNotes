@@ -8,16 +8,22 @@ export const firebaseConfig = {
     clientId: "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com"
 }
 
-export function initFirebase() {
-    let auth = null
-    let db = null
+let firebaseSingleton = null
 
-    if (typeof firebase !== "undefined") {
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig)
-        auth = firebase.auth()
-        db = firebase.firestore()
-        db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
+export function initFirebase() {
+    if (firebaseSingleton) return firebaseSingleton
+
+    if (typeof firebase === "undefined") {
+        return { app: null, auth: null, db: null }
     }
 
-    return { auth, db }
+    const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig)
+    const auth = firebase.auth(app)
+    const db = firebase.firestore(app)
+
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => null)
+    db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
+
+    firebaseSingleton = { app, auth, db }
+    return firebaseSingleton
 }
