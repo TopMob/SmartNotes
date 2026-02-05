@@ -14,8 +14,7 @@ export function initFirebase() {
     if (firebaseSingleton) return firebaseSingleton
 
     if (typeof firebase === "undefined") {
-        firebaseSingleton = { app: null, auth: null, db: null }
-        return firebaseSingleton
+        return { app: null, auth: null, db: null }
     }
 
     const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig)

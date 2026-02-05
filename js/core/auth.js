@@ -78,6 +78,7 @@ export function createAuthManager({ auth }) {
         },
         async login() {
             if (!auth || typeof firebase === "undefined") {
+                console.error("[Auth] Firebase auth is unavailable: SDK not initialized")
                 this._toast(this._t("auth_unavailable", "Authentication unavailable"))
                 return
             }

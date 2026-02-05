@@ -8,6 +8,14 @@ export function bootstrapCore({ ThemeManager, Auth }) {
             UI.captureShareFromHash()
         }
 
+        const loginButton = document.querySelector("[data-action='login']")
+        if (loginButton && !loginButton.dataset.authBound) {
+            loginButton.dataset.authBound = "1"
+            loginButton.addEventListener("click", () => {
+                Auth.login()
+            })
+        }
+
         Auth.init().catch(() => null)
 
         document.addEventListener("dblclick", (event) => {
