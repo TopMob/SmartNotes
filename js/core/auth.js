@@ -1,4 +1,6 @@
 const AUTH_REDIRECT_PENDING_KEY = "smartnotes.auth.redirect.pending"
+const AUTH_REDIRECT_TS_KEY = "smartnotes.auth.redirect.pending.ts"
+const AUTH_REDIRECT_TTL_MS = 60 * 1000
 
 export function createAuthManager({ auth }) {
     const state = {
@@ -26,15 +28,26 @@ export function createAuthManager({ auth }) {
         },
         _setRedirectPending(flag) {
             try {
-                if (flag) sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, "1")
-                else sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY)
+                if (flag) {
+                    sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, "1")
+                    sessionStorage.setItem(AUTH_REDIRECT_TS_KEY, String(Date.now()))
+                } else {
+                    sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY)
+                    sessionStorage.removeItem(AUTH_REDIRECT_TS_KEY)
+                }
             } catch {
                 return
             }
         },
         _getRedirectPending() {
             try {
-                return sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === "1"
+                if (sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) !== "1") return false
+                const startedAt = Number(sessionStorage.getItem(AUTH_REDIRECT_TS_KEY) || 0)
+                if (!startedAt || (Date.now() - startedAt) > AUTH_REDIRECT_TTL_MS) {
+                    this._setRedirectPending(false)
+                    return false
+                }
+                return true
             } catch {
                 return false
             }
@@ -151,8 +164,6 @@ export function createAuthManager({ auth }) {
         async _processRedirectResultOnce() {
             if (!auth || state.redirectHandled) return
             state.redirectHandled = true
-            const pendingRedirect = this._getRedirectPending()
-            if (pendingRedirect) this._setLoginBusy(true)
 
             try {
                 await auth.getRedirectResult()
@@ -160,7 +171,6 @@ export function createAuthManager({ auth }) {
                 this.handleAuthError(err)
             } finally {
                 this._setRedirectPending(false)
-                this._setLoginBusy(false)
             }
         },
         async _handleAuthState(user) {
@@ -186,12 +196,18 @@ export function createAuthManager({ auth }) {
         async init() {
             if (!auth || state.initialized) return
             state.initialized = true
+            this._setLoginBusy(false)
+            if (!this._getRedirectPending()) {
+                this._setRedirectPending(false)
+            }
 
             await this._processRedirectResultOnce()
 
             state.authSub = auth.onAuthStateChanged(async user => {
+                this._setLoginBusy(false)
                 await this._handleAuthState(user)
             }, err => {
+                this._setLoginBusy(false)
                 this.handleAuthError(err)
             })
         }
