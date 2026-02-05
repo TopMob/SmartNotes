@@ -122,13 +122,13 @@
 }
 
 .media-wrapper.align-left {
-    float: left;
-    margin: 6px 14px 6px 0;
+    margin-left: 0;
+    margin-right: auto;
 }
 
 .media-wrapper.align-right {
-    float: right;
-    margin: 6px 0 6px 14px;
+    margin-left: auto;
+    margin-right: 0;
 }
 
 .note-content img {

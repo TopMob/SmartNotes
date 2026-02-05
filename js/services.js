@@ -253,3 +253,132 @@ const ReminderService = {
         if (el) el.classList.remove("active")
     }
 }
+
+
+const PhotoEditor = {
+    canvas: null,
+    ctx: null,
+    baseImage: null,
+    targetImage: null,
+    targetWrapper: null,
+    drawing: false,
+    strokes: [],
+    currentStroke: null,
+
+    init() {
+        if (this.canvas) return
+        this.canvas = document.getElementById("photo-editor-canvas")
+        if (!this.canvas) return
+        this.ctx = this.canvas.getContext("2d")
+        this.bind()
+    },
+
+    bind() {
+        if (!this.canvas) return
+        const start = (e) => {
+            e.preventDefault()
+            const p = this.point(e)
+            this.drawing = true
+            this.currentStroke = {
+                color: document.getElementById("photo-color-picker")?.value || "#00f2ff",
+                width: Number(document.getElementById("photo-width-picker")?.value || 3),
+                points: [p]
+            }
+        }
+        const move = (e) => {
+            if (!this.drawing || !this.currentStroke) return
+            e.preventDefault()
+            this.currentStroke.points.push(this.point(e))
+            this.redraw()
+        }
+        const end = () => {
+            if (!this.drawing || !this.currentStroke) return
+            this.drawing = false
+            this.strokes.push(this.currentStroke)
+            this.currentStroke = null
+            this.redraw()
+        }
+
+        this.canvas.addEventListener("pointerdown", start)
+        this.canvas.addEventListener("pointermove", move)
+        this.canvas.addEventListener("pointerup", end)
+        this.canvas.addEventListener("pointerleave", end)
+    },
+
+    point(e) {
+        const rect = this.canvas.getBoundingClientRect()
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    },
+
+    openForImage(img, wrapper) {
+        this.init()
+        if (!this.canvas || !this.ctx || !img) return
+        this.targetImage = img
+        this.targetWrapper = wrapper || null
+
+        this.baseImage = new Image()
+        this.baseImage.onload = () => {
+            const maxWidth = Math.min(window.innerWidth - 64, 1100)
+            const w = Math.min(this.baseImage.naturalWidth || img.clientWidth || 600, maxWidth)
+            const ratio = (this.baseImage.naturalHeight || img.clientHeight || 400) / Math.max(1, this.baseImage.naturalWidth || w)
+            const h = Math.max(260, Math.round(w * ratio))
+            this.canvas.width = w
+            this.canvas.height = h
+            this.strokes = []
+            this.currentStroke = null
+            this.redraw()
+            if (typeof UI !== "undefined" && UI.openModal) UI.openModal("photo-editor-modal")
+        }
+        this.baseImage.src = img.src
+    },
+
+    redraw() {
+        if (!this.ctx || !this.canvas || !this.baseImage) return
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+        this.ctx.drawImage(this.baseImage, 0, 0, this.canvas.width, this.canvas.height)
+
+        const drawStroke = (stroke) => {
+            if (!stroke || !stroke.points?.length) return
+            this.ctx.strokeStyle = stroke.color
+            this.ctx.lineWidth = stroke.width
+            this.ctx.lineJoin = "round"
+            this.ctx.lineCap = "round"
+            this.ctx.beginPath()
+            this.ctx.moveTo(stroke.points[0].x, stroke.points[0].y)
+            for (let i = 1; i < stroke.points.length; i++) {
+                this.ctx.lineTo(stroke.points[i].x, stroke.points[i].y)
+            }
+            this.ctx.stroke()
+        }
+
+        this.strokes.forEach(drawStroke)
+        if (this.currentStroke) drawStroke(this.currentStroke)
+    },
+
+    undo() {
+        this.strokes.pop()
+        this.redraw()
+    },
+
+    clear() {
+        this.strokes = []
+        this.currentStroke = null
+        this.redraw()
+    },
+
+    save() {
+        if (!this.canvas || !this.targetImage) return
+        const dataUrl = this.canvas.toDataURL("image/png", 0.95)
+        this.targetImage.src = dataUrl
+        if (this.targetWrapper) {
+            this.targetWrapper.dataset.width = String(this.canvas.width)
+            this.targetWrapper.dataset.height = String(this.canvas.height)
+        }
+        if (typeof UI !== "undefined" && UI.closeModal) UI.closeModal("photo-editor-modal")
+        if (typeof Editor !== "undefined" && Editor && typeof Editor.save === "function") {
+            Editor.save({ silent: true })
+        }
+    }
+}
+
+window.PhotoEditor = PhotoEditor

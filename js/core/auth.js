@@ -124,17 +124,13 @@ export function createAuthManager({ auth }) {
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
             if (loginScreen) {
                 loginScreen.style.opacity = "0"
-                setTimeout(() => {
-                    loginScreen.style.display = "none"
-                    loginScreen.classList.remove("active")
-                }, 320)
+                loginScreen.style.display = "none"
+                loginScreen.classList.remove("active")
             }
             if (appScreen) {
                 appScreen.style.display = "flex"
-                setTimeout(() => {
-                    appScreen.style.opacity = "1"
-                    appScreen.classList.add("active")
-                }, 30)
+                appScreen.style.opacity = "1"
+                appScreen.classList.add("active")
             }
         },
         applySignedOutUI() {
@@ -142,17 +138,13 @@ export function createAuthManager({ auth }) {
             const appScreen = document.getElementById("app")
             if (appScreen) {
                 appScreen.style.opacity = "0"
-                setTimeout(() => {
-                    appScreen.style.display = "none"
-                    appScreen.classList.remove("active")
-                }, 220)
+                appScreen.style.display = "none"
+                appScreen.classList.remove("active")
             }
             if (loginScreen) {
                 loginScreen.style.display = "flex"
-                setTimeout(() => {
-                    loginScreen.classList.add("active")
-                    loginScreen.style.opacity = "1"
-                }, 30)
+                loginScreen.classList.add("active")
+                loginScreen.style.opacity = "1"
             }
         },
         resetSession() {
@@ -161,17 +153,11 @@ export function createAuthManager({ auth }) {
         },
         async init() {
             if (!auth) return
-            const redirectPromise = auth.getRedirectResult().catch(e => {
+            auth.getRedirectResult().catch(e => {
                 this.handleAuthError(e)
                 return null
             })
-            let initialCheck = true
             auth.onAuthStateChanged(async user => {
-                if (initialCheck) {
-                    await redirectPromise
-                    user = auth.currentUser
-                    initialCheck = false
-                }
                 if (typeof StateStore !== "undefined" && StateStore.update) StateStore.update("user", user || null)
                 if (user) {
                     this.applySignedInUI(user)

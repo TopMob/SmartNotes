@@ -7,12 +7,15 @@ const Editor = (() => {
     let observer = null
     let abortController = null
     let recordingStream = null
+    let autoSaveTimer = null
+
 
     const CONFIG = {
         MAX_HISTORY: 100,
         SNAPSHOT_DELAY: 300,
         MIN_IMG_WIDTH: 100,
-        MAX_IMG_WIDTH: 860
+        MAX_IMG_WIDTH: 860,
+        AUTOSAVE_DELAY: 1200
     }
 
     const init = () => {
@@ -366,6 +369,10 @@ const Editor = (() => {
     }
 
     const close = () => {
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer)
+            autoSaveTimer = null
+        }
         els.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
         deselectMedia()
@@ -477,8 +484,31 @@ const Editor = (() => {
                 content: current.content,
                 updatedAt: Utils.serverTimestamp()
             })
+            scheduleAutoSave()
         }
     }, CONFIG.SNAPSHOT_DELAY)
+
+    const scheduleAutoSave = () => {
+        const user = StateStore.read().user
+        const note = StateStore.read().currentNote
+        if (!user || !note || !db) return
+
+        if (autoSaveTimer) clearTimeout(autoSaveTimer)
+        autoSaveTimer = setTimeout(() => {
+            persistCurrentNote().catch(() => null)
+        }, CONFIG.AUTOSAVE_DELAY)
+    }
+
+    const persistCurrentNote = async () => {
+        const user = StateStore.read().user
+        const n = StateStore.read().currentNote
+        if (!db || !user || !n) return
+
+        const payload = NoteIO.normalizeNote(n)
+        const ref = db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
+        await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+        StateStore.update("editorDirty", false)
+    }
 
     const undo = () => {
         if (history.length <= 1) return
@@ -612,6 +642,23 @@ const Editor = (() => {
 
     const toggleToolbar = () => els.toolbar?.classList.toggle("is-hidden")
 
+    const drawOnSelectedMedia = () => {
+        if (!selectedMedia) {
+            UI.showToast(UI.getText("draw_photo_hint", "Open the photo editor"))
+            return
+        }
+        const img = selectedMedia.querySelector("img")
+        if (!img) {
+            UI.showToast(UI.getText("draw_photo_hint", "Open the photo editor"))
+            return
+        }
+        if (typeof PhotoEditor !== "undefined" && PhotoEditor && typeof PhotoEditor.openForImage === "function") {
+            PhotoEditor.openForImage(img, selectedMedia)
+            return
+        }
+        UI.showToast(UI.getText("draw_photo_hint", "Open the photo editor"))
+    }
+
     const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
@@ -630,14 +677,16 @@ const Editor = (() => {
             if (suggested) n.folderId = suggested
         }
 
-        const payload = NoteIO.normalizeNote(n)
-        const ref = db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
-        
         try {
-            await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-            StateStore.update("editorDirty", false)
-            if (!options.silent) UI.showToast(UI.getText("saved", "Saved"))
-            close()
+            if (autoSaveTimer) {
+                clearTimeout(autoSaveTimer)
+                autoSaveTimer = null
+            }
+            await persistCurrentNote()
+            if (!options.silent) {
+                UI.showToast(UI.getText("saved", "Saved"))
+                close()
+            }
         } catch (e) {
             UI.showToast("Save failed")
         }
@@ -670,7 +719,7 @@ const Editor = (() => {
         resetMediaTransform,
         alignMediaOrText,
         deleteSelectedMedia,
-        drawOnSelectedMedia: () => UI.showToast(UI.getText("draw_photo_hint", "Use photo editor")),
+        drawOnSelectedMedia,
         toggleRecording
     }
 })()

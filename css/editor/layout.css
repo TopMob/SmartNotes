@@ -74,7 +74,7 @@
 }
 
 .note-content {
-    min-height: 46vh;
+    min-height: 40vh;
     height: auto;
     padding: 14px 12px;
     border-radius: var(--radius-lg);
@@ -92,7 +92,23 @@
     word-break: break-word;
     box-sizing: border-box;
     display: flow-root;
+    max-height: 62vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    resize: vertical;
 }
+
+.note-content > * {
+    max-width: 100%;
+}
+
+.note-content p,
+.note-content div,
+.note-content li,
+.note-content span {
+    overflow-wrap: anywhere;
+}
+
 
 
 .note-content:focus {
