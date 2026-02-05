@@ -194,7 +194,10 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
 
             try {
-                await auth.getRedirectResult()
+                const res = await auth.getRedirectResult()
+                if (res && res.user) {
+                    await this._handleAuthState(res.user)
+                }
             } catch (err) {
                 this.handleAuthError(err)
             } finally {

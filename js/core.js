@@ -1,7 +1,7 @@
 import { ThemeManager } from "./theme.js"
 import { LANG } from "./lang.js"
 import { Utils } from "./core/utils.js"
-import { initFirebase } from "./core/firebase.js"
+import { initFirebase, setupAuthPersistence } from "./core/firebase.js"
 import { createAuthManager } from "./core/auth.js"
 import { bootstrapCore } from "./core/bootstrap.js"
 
@@ -19,5 +19,9 @@ window.db = core.db
 window.Auth = core.Auth
 window.LANG = LANG
 
-core.Auth.init().catch(() => null)
+;(async () => {
+    await setupAuthPersistence(core.auth)
+    await core.Auth.init().catch(() => null)
+})()
+
 bootstrapCore({ ThemeManager, Auth: core.Auth })
