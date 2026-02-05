@@ -1,19 +1,5 @@
 export function createAuthManager({ auth }) {
     return {
-        _mobileEnv() {
-            const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches
-            const ua = (navigator.userAgent || "").toLowerCase()
-            const mobileUa = /android|iphone|ipad|ipod|iemobile|opera mini|mobile/.test(ua)
-            const touchDevice = typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1
-            const uaMobile = navigator.userAgentData && navigator.userAgentData.mobile
-            return !!(coarse || mobileUa || touchDevice || uaMobile)
-        },
-        _redirectPreferredBrowser() {
-            const ua = (navigator.userAgent || "").toLowerCase()
-            const isSafari = /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg\//.test(ua)
-            const isBrave = !!(navigator.brave && typeof navigator.brave.isBrave === "function")
-            return isSafari || isBrave
-        },
         _t(key, fallback) {
             return (typeof UI !== "undefined" && UI.getText) ? UI.getText(key, fallback) : (fallback || key)
         },
@@ -30,9 +16,7 @@ export function createAuthManager({ auth }) {
             const code = e && e.code ? e.code : "auth/unknown"
             const message = e && e.message ? String(e.message) : ""
             const map = {
-                "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
-                "auth/cancelled-popup-request": this._t("auth_cancelled", "Request canceled"),
                 "-40": this._t("auth_network_failed", "No internet connection")
             }
             const serviceUnavailable = message.includes("503") || message.toLowerCase().includes("unavailable")
@@ -45,36 +29,9 @@ export function createAuthManager({ auth }) {
                 return
             }
             const provider = this._provider()
-            const redirect = async () => {
-                await auth.signInWithRedirect(provider)
-            }
             try {
-                if (this._mobileEnv() || this._redirectPreferredBrowser()) {
-                    await redirect()
-                    return
-                }
-                await auth.signInWithPopup(provider)
+                await auth.signInWithRedirect(provider)
             } catch (e) {
-                const code = e && e.code ? e.code : ""
-                const redirectCodes = new Set([
-                    "auth/popup-blocked",
-                    "auth/operation-not-supported-in-this-environment",
-                    "auth/cancelled-popup-request",
-                    "auth/popup-closed-by-user",
-                    "auth/web-storage-unsupported",
-                    "auth/unauthorized-domain",
-                    "auth/internal-error"
-                ])
-                const shouldRedirect = this._mobileEnv() || this._redirectPreferredBrowser() || redirectCodes.has(code)
-                if (shouldRedirect) {
-                    try {
-                        await redirect()
-                        return
-                    } catch (err) {
-                        this.handleAuthError(err)
-                        return
-                    }
-                }
                 this.handleAuthError(e)
             }
         },
