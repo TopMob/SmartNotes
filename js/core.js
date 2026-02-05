@@ -19,4 +19,5 @@ window.db = core.db
 window.Auth = core.Auth
 window.LANG = LANG
 
+core.Auth.init().catch(() => null)
 bootstrapCore({ ThemeManager, Auth: core.Auth })

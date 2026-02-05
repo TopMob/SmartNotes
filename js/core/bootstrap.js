@@ -16,7 +16,6 @@ export function bootstrapCore({ ThemeManager, Auth }) {
             })
         }
 
-        Auth.init().catch(() => null)
 
         document.addEventListener("dblclick", (event) => {
             event.preventDefault()

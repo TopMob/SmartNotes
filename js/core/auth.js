@@ -1,15 +1,9 @@
-const AUTH_REDIRECT_PENDING_KEY = "smartnotes.auth.redirect.pending"
-const AUTH_REDIRECT_TS_KEY = "smartnotes.auth.redirect.pending.ts"
-const AUTH_REDIRECT_TTL_MS = 60 * 1000
-
 export function createAuthManager({ auth }) {
     const state = {
         initialized: false,
-        isRedirecting: false,
-        redirectHandled: false,
+        loginInFlight: false,
         authReady: false,
         currentUser: null,
-        authSub: null,
         loginButton: null
     }
 
@@ -26,34 +20,16 @@ export function createAuthManager({ auth }) {
             provider.setCustomParameters({ prompt: "select_account" })
             return provider
         },
-        _setRedirectPending(flag) {
-            try {
-                if (flag) {
-                    sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, "1")
-                    sessionStorage.setItem(AUTH_REDIRECT_TS_KEY, String(Date.now()))
-                } else {
-                    sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY)
-                    sessionStorage.removeItem(AUTH_REDIRECT_TS_KEY)
-                }
-            } catch {
-                return
-            }
+        _isIOS() {
+            const ua = (navigator.userAgent || "").toLowerCase()
+            return /iphone|ipad|ipod/.test(ua)
         },
-        _getRedirectPending() {
-            try {
-                if (sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) !== "1") return false
-                const startedAt = Number(sessionStorage.getItem(AUTH_REDIRECT_TS_KEY) || 0)
-                if (!startedAt || (Date.now() - startedAt) > AUTH_REDIRECT_TTL_MS) {
-                    this._setRedirectPending(false)
-                    return false
-                }
-                return true
-            } catch {
-                return false
-            }
+        _isSafari() {
+            const ua = (navigator.userAgent || "").toLowerCase()
+            return /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg\//.test(ua)
         },
         _setLoginBusy(flag) {
-            state.isRedirecting = !!flag
+            state.loginInFlight = !!flag
             if (!state.loginButton) {
                 state.loginButton = document.querySelector("[data-action='login']")
             }
@@ -66,6 +42,8 @@ export function createAuthManager({ auth }) {
             const code = err && err.code ? err.code : "auth/unknown"
             const message = err && err.message ? String(err.message).toLowerCase() : ""
             const map = {
+                "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
+                "auth/popup-blocked": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
                 "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
                 "auth/web-storage-unsupported": this._t("auth_storage_failed", "Storage is blocked in this browser"),
                 "auth/operation-not-supported-in-this-environment": this._t("auth_env_failed", "Authentication is blocked in this browser")
@@ -75,6 +53,10 @@ export function createAuthManager({ auth }) {
                 ? this._t("auth_service_unavailable", "Service temporarily unavailable")
                 : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
             this._toast(text)
+            console.error("[Auth] login error", code, err)
+        },
+        async _signInWithRedirect() {
+            await auth.signInWithRedirect(this._provider())
         },
         async login() {
             if (!auth || typeof firebase === "undefined") {
@@ -82,22 +64,45 @@ export function createAuthManager({ auth }) {
                 this._toast(this._t("auth_unavailable", "Authentication unavailable"))
                 return
             }
-            if (state.isRedirecting) return
+            if (state.loginInFlight) return
+
+            this._setLoginBusy(true)
 
             try {
-                this._setLoginBusy(true)
-                this._setRedirectPending(true)
-                await auth.signInWithRedirect(this._provider())
+                if (this._isIOS() || this._isSafari()) {
+                    await this._signInWithRedirect()
+                    return
+                }
+
+                await auth.signInWithPopup(this._provider())
             } catch (err) {
+                const popupFallbackCodes = new Set([
+                    "auth/popup-blocked",
+                    "auth/popup-closed-by-user",
+                    "auth/cancelled-popup-request",
+                    "auth/operation-not-supported-in-this-environment",
+                    "auth/web-storage-unsupported"
+                ])
+                if (popupFallbackCodes.has(err?.code)) {
+                    try {
+                        await this._signInWithRedirect()
+                        return
+                    } catch (redirectErr) {
+                        this._setLoginBusy(false)
+                        this.handleAuthError(redirectErr)
+                        return
+                    }
+                }
                 this._setLoginBusy(false)
-                this._setRedirectPending(false)
                 this.handleAuthError(err)
+                return
             }
+
+            this._setLoginBusy(false)
         },
         async logout() {
             if (!auth) return
             this._setLoginBusy(false)
-            this._setRedirectPending(false)
             try {
                 await auth.signOut()
             } catch {
@@ -162,18 +167,6 @@ export function createAuthManager({ auth }) {
                 loginScreen.style.opacity = "1"
             }
         },
-        async _processRedirectResultOnce() {
-            if (!auth || state.redirectHandled) return
-            state.redirectHandled = true
-
-            try {
-                await auth.getRedirectResult()
-            } catch (err) {
-                this.handleAuthError(err)
-            } finally {
-                this._setRedirectPending(false)
-            }
-        },
         async _handleAuthState(user) {
             const normalizedUser = user || auth.currentUser || null
             state.currentUser = normalizedUser
@@ -197,14 +190,18 @@ export function createAuthManager({ auth }) {
         async init() {
             if (!auth || state.initialized) return
             state.initialized = true
+
             this._setLoginBusy(false)
-            if (!this._getRedirectPending()) {
-                this._setRedirectPending(false)
+
+            try {
+                await auth.getRedirectResult()
+            } catch (err) {
+                this.handleAuthError(err)
+            } finally {
+                this._setLoginBusy(false)
             }
 
-            await this._processRedirectResultOnce()
-
-            state.authSub = auth.onAuthStateChanged(async user => {
+            auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
                 await this._handleAuthState(user)
             }, err => {
