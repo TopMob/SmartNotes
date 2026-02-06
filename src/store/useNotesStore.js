@@ -19,8 +19,15 @@ const seedNotes = [
   },
 ];
 
+const createNoteId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `note-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
 const createNote = (title) => ({
-  id: crypto.randomUUID(),
+  id: createNoteId(),
   title,
   content: "<p></p>",
   createdAt: Date.now(),
