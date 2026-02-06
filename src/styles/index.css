@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.tiptap {
+  min-height: 220px;
+  outline: none;
+}
+
+.tiptap > * + * {
+  margin-top: 0.75rem;
+}
+
+.tiptap h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.tiptap h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5rem;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid rgb(71 85 105);
+  padding-left: 1rem;
+  color: rgb(148 163 184);
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: rgb(100 116 139);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
