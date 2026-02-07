@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import { useTranslation } from 'react-i18next'
 
 const toolbarButtons = [
   { label: 'B', action: 'toggleBold' },
@@ -16,12 +17,13 @@ const toolbarButtons = [
 
 export default function Editor({ note, onSave, onClose }) {
   const [title, setTitle] = useState(note?.title || '')
+  const { t } = useTranslation()
 
   const editor = useEditor({
     extensions: [
       StarterKit,
       Placeholder.configure({
-        placeholder: 'Start writing your note'
+        placeholder: t('editor.contentPlaceholder')
       })
     ],
     content: note?.content || ''
@@ -54,7 +56,7 @@ export default function Editor({ note, onSave, onClose }) {
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Note title"
+            placeholder={t('editor.titlePlaceholder')}
             className="w-full flex-1 bg-transparent text-2xl font-semibold text-white outline-none"
           />
           <div className="flex items-center gap-2">
@@ -63,14 +65,14 @@ export default function Editor({ note, onSave, onClose }) {
               onClick={onClose}
               className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500"
             >
-              Close
+              {t('editor.close')}
             </button>
             <button
               type="button"
               onClick={handleSave}
               className="rounded-full bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
             >
-              Save
+              {t('editor.save')}
             </button>
           </div>
         </div>

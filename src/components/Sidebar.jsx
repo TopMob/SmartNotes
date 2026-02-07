@@ -1,19 +1,22 @@
+import { useTranslation } from 'react-i18next'
 import useAppStore from '../store/useAppStore'
-
-const filters = [
-  { id: 'all', label: 'All notes' },
-  { id: 'recent', label: 'Recently updated' },
-  { id: 'favorites', label: 'Favorites' }
-]
 
 export default function Sidebar() {
   const activeFilter = useAppStore((state) => state.activeFilter)
   const setActiveFilter = useAppStore((state) => state.setActiveFilter)
+  const { t } = useTranslation()
+
+  const filters = [
+    { id: 'all', label: t('sidebar.allNotes') },
+    { id: 'favorites', label: t('sidebar.favorites') }
+  ]
 
   return (
     <aside className="flex h-full flex-col gap-6 border-r border-slate-800 bg-slate-950 px-4 py-6">
       <div>
-        <p className="text-xs uppercase tracking-widest text-slate-500">Filters</p>
+        <p className="text-xs uppercase tracking-widest text-slate-500">
+          {t('sidebar.filters')}
+        </p>
         <div className="mt-4 flex flex-col gap-2">
           {filters.map((filter) => (
             <button
@@ -31,11 +34,30 @@ export default function Sidebar() {
           ))}
         </div>
       </div>
-      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-300">
-        <p className="font-semibold text-white">Tips</p>
-        <p className="mt-2 text-xs leading-relaxed text-slate-400">
-          Use the editor to capture thoughts, then organize them with search and filters.
+      <div>
+        <p className="text-xs uppercase tracking-widest text-slate-500">
+          {t('sidebar.quickLinks')}
         </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-300 transition hover:bg-slate-900"
+          >
+            {t('sidebar.settings')}
+          </button>
+          <button
+            type="button"
+            className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-300 transition hover:bg-slate-900"
+          >
+            {t('sidebar.about')}
+          </button>
+          <button
+            type="button"
+            className="rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-300 transition hover:bg-slate-900"
+          >
+            {t('sidebar.rate')}
+          </button>
+        </div>
       </div>
     </aside>
   )
