@@ -358,9 +358,7 @@ Object.assign(UI, {
         if (!note || !root) return
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
         const folders = StateStore.read().folders
-        const isPinned = !!note.isPinned
         const isArchived = !!note.isArchived
-        const pinLabel = isPinned ? (dict.unpin_note || "Unpin") : (dict.pin_note || "Pin")
         const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
         const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
         folders.forEach(f => {
@@ -369,9 +367,6 @@ Object.assign(UI, {
         })
         root.innerHTML = `
             <div class="modal-actions-grid">
-                <button type="button" class="btn-secondary" data-action="note-pin-toggle" data-note-id="${encodeURIComponent(note.id)}">
-                    ${pinLabel}
-                </button>
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
                     ${archiveLabel}
                 </button>
