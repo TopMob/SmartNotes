@@ -8,6 +8,8 @@ const Editor = (() => {
     let observer = null
     let abortController = null
     let recordingStream = null
+    let savedRange = null
+    let alignMenuTarget = null
 
     const CONFIG = {
         MAX_HISTORY: 100,
@@ -25,6 +27,7 @@ const Editor = (() => {
             tagsInput: document.getElementById("note-tags-input"),
             tagsContainer: document.getElementById("note-tags-container"),
             ctxMenu: document.getElementById("media-context-menu"),
+            alignMenu: document.getElementById("editor-align-menu"),
             scrollArea: document.querySelector(".editor-scroll-area")
         }
         loadToolSettings()
@@ -47,6 +50,9 @@ const Editor = (() => {
 
             els.content.addEventListener("paste", handlePaste, { signal })
             els.content.addEventListener("keydown", handleTagLineEnter, { signal })
+            els.content.addEventListener("keyup", storeSelection, { signal })
+            els.content.addEventListener("mouseup", storeSelection, { signal })
+            els.content.addEventListener("touchend", storeSelection, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const audioPlayer = e.target.closest(".audio-player")
@@ -71,6 +77,14 @@ const Editor = (() => {
             els.content.addEventListener("pointerdown", handleResizeStart, { signal })
             els.content.addEventListener("pointerdown", handleMediaDragStart, { signal })
         }
+
+        document.addEventListener("selectionchange", storeSelection, { signal })
+        document.addEventListener("click", (e) => {
+            if (!els.alignMenu || !els.alignMenu.classList.contains("active")) return
+            if (e.target.closest("#editor-align-menu")) return
+            if (alignMenuTarget && e.target.closest(".tool-btn") === alignMenuTarget) return
+            closeAlignMenu()
+        }, { signal })
 
         if (els.scrollArea) {
             els.scrollArea.addEventListener("scroll", deselectMedia, { signal, passive: true })
@@ -178,7 +192,7 @@ const Editor = (() => {
                 const idx = parseInt(btn.dataset.toolIdx, 10)
                 const t = tools[idx]
                 if (t) {
-                    t.cmd()
+                    t.cmd(btn)
                     els.content?.focus()
                 }
             })
@@ -192,7 +206,16 @@ const Editor = (() => {
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => document.execCommand("insertUnorderedList") },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => document.execCommand("insertOrderedList") },
         { id: "task", i: "checklist", label: "tool_task", cmd: () => insertChecklistLine() },
-        { id: "image", i: "image", label: "tool_image", cmd: () => document.getElementById("img-upload")?.click() },
+        { id: "image", i: "image", label: "tool_image", cmd: () => {
+            storeSelection()
+            document.getElementById("img-upload")?.click()
+        }},
+        { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
+            storeSelection()
+            UI.openModal("sketch-modal")
+            SketchService.prepare()
+        }},
+        { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => toggleAlignMenu(btn) },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
     ]
 
@@ -246,6 +269,7 @@ const Editor = (() => {
             UI.showToast(UI.getText("mic_unsupported", "Microphone not supported"))
             return
         }
+        storeSelection()
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
             recordingStream = stream
@@ -279,6 +303,8 @@ const Editor = (() => {
     const toggleTask = (el) => {
         const item = el.closest(".task-item")
         if (item) item.classList.toggle("completed", !!el.checked)
+        if (el.checked) el.setAttribute("checked", "")
+        else el.removeAttribute("checked")
     }
 
     const fileToDataUrl = (file) => new Promise((resolve, reject) => {
@@ -448,6 +474,7 @@ const Editor = (() => {
         els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
         renderTags()
         makeMediaDraggable()
+        syncMediaSizes()
         syncAudioPlayers()
         syncTaskStates()
         syncLockButton(n)
@@ -473,6 +500,56 @@ const Editor = (() => {
         sel.removeAllRanges()
         sel.addRange(range)
         els.content?.focus()
+    }
+
+    const storeSelection = () => {
+        const sel = window.getSelection()
+        if (!sel || sel.rangeCount === 0) return
+        const range = sel.getRangeAt(0)
+        if (!els.content || !els.content.contains(range.commonAncestorContainer)) return
+        savedRange = range.cloneRange()
+    }
+
+    const restoreSelection = () => {
+        if (!els.content) return null
+        const sel = window.getSelection()
+        let range = null
+        if (savedRange && els.content.contains(savedRange.commonAncestorContainer)) {
+            range = savedRange
+        } else if (sel && sel.rangeCount && els.content.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+            range = sel.getRangeAt(0)
+        } else {
+            range = document.createRange()
+            range.selectNodeContents(els.content)
+            range.collapse(false)
+        }
+        if (sel) {
+            sel.removeAllRanges()
+            sel.addRange(range)
+        }
+        return range
+    }
+
+    const insertHtmlAtSelection = (html) => {
+        if (!els.content) return
+        const range = restoreSelection()
+        const container = document.createElement("div")
+        container.innerHTML = html
+        const fragment = document.createDocumentFragment()
+        while (container.firstChild) fragment.appendChild(container.firstChild)
+        if (range) {
+            range.deleteContents()
+            range.insertNode(fragment)
+            range.collapse(false)
+            const sel = window.getSelection()
+            if (sel) {
+                sel.removeAllRanges()
+                sel.addRange(range)
+            }
+        } else {
+            els.content.appendChild(fragment)
+        }
+        storeSelection()
     }
 
     const getDropRange = (x, y) => {
@@ -643,8 +720,14 @@ const Editor = (() => {
                 <span class="media-resize-handle" aria-hidden="true"></span>
             </div><br>
         `
-        document.execCommand("insertHTML", false, html)
+        insertHtmlAtSelection(html)
         makeMediaDraggable()
+        syncMediaSizes()
+    }
+
+    const insertSketchImage = (src) => {
+        if (!src) return
+        insertMedia(src, "image")
     }
 
     const insertAudio = (src) => {
@@ -659,9 +742,10 @@ const Editor = (() => {
                 <audio src="${Utils.escapeHtml(src)}"></audio>
             </div><br>
         `
-        document.execCommand("insertHTML", false, html)
+        insertHtmlAtSelection(html)
         makeMediaDraggable()
         syncAudioPlayers()
+        syncMediaSizes()
     }
 
     const toggleAudioPlayer = (player) => {
@@ -713,6 +797,37 @@ const Editor = (() => {
         })
     }
 
+    const syncMediaSizes = () => {
+        if (!els.content) return
+        const parentWidth = els.content.getBoundingClientRect().width - 40
+        const maxWidth = Math.min(CONFIG.MAX_IMG_WIDTH, parentWidth)
+        els.content.querySelectorAll(".media-wrapper").forEach(wrapper => {
+            const img = wrapper.querySelector("img")
+            if (!img) return
+            const apply = () => {
+                const width = parseFloat(wrapper.dataset.width || "")
+                const height = parseFloat(wrapper.dataset.height || "")
+                if (width && height) {
+                    img.style.width = `${width}px`
+                    img.style.height = `${height}px`
+                    return
+                }
+                const naturalWidth = img.naturalWidth || img.width
+                const naturalHeight = img.naturalHeight || img.height
+                if (!naturalWidth || !naturalHeight) return
+                const ratio = naturalWidth / Math.max(1, naturalHeight)
+                const targetWidth = Utils.clamp(naturalWidth, CONFIG.MIN_IMG_WIDTH, maxWidth)
+                const targetHeight = targetWidth / ratio
+                img.style.width = `${targetWidth}px`
+                img.style.height = `${targetHeight}px`
+                wrapper.dataset.width = targetWidth
+                wrapper.dataset.height = targetHeight
+            }
+            if (img.complete) apply()
+            else img.addEventListener("load", apply, { once: true })
+        })
+    }
+
     const selectMedia = (el) => {
         deselectMedia()
         selectedMedia = el
@@ -755,6 +870,31 @@ const Editor = (() => {
             const cmd = side === "center" ? "justifyCenter" : (side === "right" ? "justifyRight" : "justifyLeft")
             document.execCommand(cmd)
         }
+        closeAlignMenu()
+    }
+
+    const toggleAlignMenu = (btn) => {
+        const menu = els.alignMenu
+        if (!menu || !btn) return
+        if (menu.classList.contains("active") && alignMenuTarget === btn) {
+            closeAlignMenu()
+            return
+        }
+        alignMenuTarget = btn
+        const rect = btn.getBoundingClientRect()
+        menu.classList.remove("hidden")
+        menu.classList.add("active")
+        const left = Math.min(window.innerWidth - menu.offsetWidth - 10, rect.left)
+        menu.style.left = `${Math.max(10, left)}px`
+        menu.style.top = `${rect.bottom + 8}px`
+    }
+
+    const closeAlignMenu = () => {
+        const menu = els.alignMenu
+        if (!menu) return
+        menu.classList.remove("active")
+        menu.classList.add("hidden")
+        alignMenuTarget = null
     }
 
     const getActiveBlock = () => {
@@ -846,7 +986,7 @@ const Editor = (() => {
         resetMediaTransform,
         alignMediaOrText,
         deleteSelectedMedia,
-        drawOnSelectedMedia: () => UI.showToast(UI.getText("draw_photo_hint", "Use photo editor")),
+        insertSketchImage,
         toggleRecording
     }
 })()

@@ -19,6 +19,7 @@
     margin-right: auto;
     text-align: center;
     display: block;
+    width: fit-content;
 }
 
 .media-wrapper img,

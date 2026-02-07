@@ -8,7 +8,7 @@ const StateStore = (() => {
         searchQuery: "",
         currentNote: null,
         tempRating: 0,
-        config: { lang: "ru", folderViewMode: "compact", reduceMotion: false, editorTools: {} },
+        config: { lang: "ru", folderViewMode: "compact", reduceMotion: false, editorTools: {}, notesFilter: { sort: "manual", folders: [] } },
         recording: false,
         mediaRecorder: null,
         editorDirty: false,
@@ -46,7 +46,8 @@ const StateStore = (() => {
         editorDirty: false,
         orderHistory: [],
         pendingShare: null,
-        appearanceDraft: null
+        appearanceDraft: null,
+        config: { ...initialState.config }
     }))
 
     return {
