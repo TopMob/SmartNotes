@@ -208,6 +208,9 @@ const UI = {
             case "primary-action":
                 this.primaryAction()
                 break
+            case "create-folder":
+                this.createFolder()
+                break
             case "open-modal":
                 this.openModal(el.dataset.modal)
                 break
@@ -291,6 +294,9 @@ const UI = {
                 break
             case "lock-archive":
                 this.toggleLockArchive(el.dataset.noteId || "")
+                break
+            case "lock-unhide":
+                this.unlockLockedNote(el.dataset.noteId || "")
                 break
             case "lock-move-folder":
                 this.moveLockNoteToFolder(el.dataset.noteId || "")
@@ -414,22 +420,26 @@ const UI = {
 
     primaryAction() {
         if (StateStore.read().view === "folders") {
-            if (StateStore.read().folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
-            this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
-                const trimmed = String(name || "").trim()
-                if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
-                if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
-                    return this.showToast(this.getText("folder_exists", "Folder already exists"))
-                }
-                if (!db || !StateStore.read().user) return
-                await db.collection("users").doc(StateStore.read().user.uid).collection("folders").add({
-                    name: trimmed,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                })
-            })
+            this.createFolder()
             return
         }
         Editor.open()
+    },
+
+    createFolder() {
+        if (StateStore.read().folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
+        this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+            const trimmed = String(name || "").trim()
+            if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+                return this.showToast(this.getText("folder_exists", "Folder already exists"))
+            }
+            if (!db || !StateStore.read().user) return
+            await db.collection("users").doc(StateStore.read().user.uid).collection("folders").add({
+                name: trimmed,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            })
+        })
     },
 
     applyAppearanceSettings() {

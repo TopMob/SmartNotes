@@ -41,12 +41,13 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "input"])
-        const allowedClasses = new Set(["task-item", "task-checkbox", "task-text", "completed", "media-wrapper", "media-resize-handle", "align-left", "align-right"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "input", "audio"])
+        const allowedClasses = new Set(["task-item", "task-checkbox", "task-text", "completed", "media-wrapper", "media-resize-handle", "align-left", "align-right", "audio-wrapper"])
         const allowAttrs = {
             a: new Set(["href"]),
             img: new Set(["src", "alt"]),
-            input: new Set(["type", "checked"])
+            input: new Set(["type", "checked"]),
+            audio: new Set(["src", "controls"])
         }
         const wrapper = document.createElement("div")
         wrapper.innerHTML = String(html || "")
@@ -54,6 +55,7 @@ export const Utils = {
             const v = String(value || "").trim()
             if (!v) return false
             if (v.startsWith("data:image")) return true
+            if (v.startsWith("data:audio")) return true
             if (v.startsWith("https://")) return true
             if (v.startsWith("http://")) return true
             if (v.startsWith("mailto:")) return true
@@ -99,6 +101,13 @@ export const Utils = {
                     const src = child.getAttribute("src")
                     const s = String(src || "")
                     if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:image")) || s.startsWith("http:")) {
+                        child.removeAttribute("src")
+                    }
+                }
+                if (tag === "audio") {
+                    const src = child.getAttribute("src")
+                    const s = String(src || "")
+                    if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:audio")) || s.startsWith("http:")) {
                         child.removeAttribute("src")
                     }
                 }

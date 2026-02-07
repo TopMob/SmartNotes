@@ -213,6 +213,10 @@ const Editor = (() => {
         StateStore.update("recording", !!active)
         const indicator = document.getElementById("voice-indicator")
         if (indicator) indicator.classList.toggle("active", !!active)
+        const voiceBtn = document.querySelector('[data-action="editor-voice"]')
+        const icon = voiceBtn?.querySelector("i")
+        if (icon) icon.textContent = active ? "stop" : "mic"
+        voiceBtn?.classList.toggle("is-recording", !!active)
     }
 
     const stopRecording = () => {

@@ -205,6 +205,7 @@ export const LANG = {
         share_note: "Поделиться заметкой",
         collab_note: "Совместное редактирование",
         lock_note: "Заблокировать заметку",
+        unlock_note: "Открыть",
         nav_aria: "Навигация",
         sections_aria: "Разделы",
         notes_list_aria: "Список заметок",
@@ -229,6 +230,7 @@ export const LANG = {
         logout_failed: "Ошибка при выходе",
         login_failed: "Ошибка входа",
         favorite_failed: "Не удалось обновить избранное",
+        unlock_failed: "Не удалось открыть заметку",
         draw_photo_hint: "Откройте редактор фото",
         password_title: "Пароль",
         password_prompt: "Введите пароль"
@@ -439,6 +441,7 @@ export const LANG = {
         share_note: "Share note",
         collab_note: "Collaborate",
         lock_note: "Lock note",
+        unlock_note: "Unlock",
         nav_aria: "Navigation",
         sections_aria: "Sections",
         notes_list_aria: "Notes list",
@@ -463,6 +466,7 @@ export const LANG = {
         logout_failed: "Sign out failed",
         login_failed: "Sign-in failed",
         favorite_failed: "Unable to update favorite",
+        unlock_failed: "Unable to unlock note",
         draw_photo_hint: "Open the photo editor",
         password_title: "Password",
         password_prompt: "Enter password"

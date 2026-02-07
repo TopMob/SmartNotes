@@ -71,6 +71,7 @@
     font-weight: 800;
     letter-spacing: -0.02em;
     margin-bottom: 14px;
+    width: 100%;
 }
 
 .note-content {
@@ -87,11 +88,18 @@
     width: 100%;
     max-width: 100%;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
     box-sizing: border-box;
     display: flow-root;
+}
+
+.note-content * {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 
@@ -243,4 +251,3 @@
     clear: both;
     flex-wrap: wrap;
 }
-
