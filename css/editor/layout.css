@@ -87,13 +87,16 @@
     outline: none;
     width: 100%;
     max-width: 100%;
+    max-height: 55vh;
+    overflow-y: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
     box-sizing: border-box;
-    display: flow-root;
+    display: block;
+    flex: 1 1 auto;
 }
 
 .note-content * {
