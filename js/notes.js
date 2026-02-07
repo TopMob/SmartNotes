@@ -289,6 +289,10 @@ function normalizeVisibleNotes(list, orderKey = "order") {
 function getTimestampValue(value) {
     if (!value) return 0
     if (typeof value === "number") return value
+    if (typeof value === "string") {
+        const parsed = Date.parse(value)
+        return Number.isNaN(parsed) ? 0 : parsed
+    }
     if (value.seconds) return value.seconds * 1000
     if (value.toDate) return value.toDate().getTime()
     return 0
@@ -328,6 +332,15 @@ function isHiddenLocked(note) {
     return !!(note && note.lock && note.lock.hidden)
 }
 
+function isHiddenNote(note) {
+    return !!note?.isHidden
+}
+
+function isFutureNote(note) {
+    const ts = getTimestampValue(note?.futureAt)
+    return ts > Date.now()
+}
+
 function getLockedNotes() {
     const current = StateStore.read()
     return (current.notes || []).filter(n => isHiddenLocked(n))
@@ -361,10 +374,22 @@ function filterAndRender(query) {
         list = list.filter(n => !isHiddenLocked(n))
     }
 
+    if (view === "hidden") {
+        list = list.filter(n => isHiddenNote(n))
+    } else {
+        list = list.filter(n => !isHiddenNote(n))
+    }
+
+    if (view === "future") {
+        list = list.filter(n => isFutureNote(n) && !n.isArchived)
+    } else {
+        list = list.filter(n => !isFutureNote(n))
+    }
+
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
-    else if (view !== "locked") list = list.filter(n => !n.isArchived)
+    else if (view !== "locked" && view !== "hidden" && view !== "future") list = list.filter(n => !n.isArchived)
 
     if (view !== "folder" && view !== "folders" && selectedFolders.length) {
         list = list.filter(note => {
@@ -401,6 +426,10 @@ function filterAndRender(query) {
     } else {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))
+        } else if (view === "hidden") {
+            UI.updateEmptyState("visibility_off", UI.getText("hidden_empty", "No hidden notes"))
+        } else if (view === "future") {
+            UI.updateEmptyState("schedule", UI.getText("future_empty", "No future notes"))
         } else {
             UI.updateEmptyState("note_add", UI.getText("empty", "Nothing here yet"))
         }
@@ -461,6 +490,96 @@ function openNoteActions(noteId) {
     UI.currentNoteActionId = noteId
     UI.renderNoteActions(noteId)
     UI.openModal("note-actions-modal")
+}
+
+async function deleteNoteById(noteId) {
+    const note = StateStore.read().notes.find(n => n.id === noteId)
+    if (!note) return
+    UI.confirm("delete", async () => {
+        if (!db || !StateStore.read().user) return
+        await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(noteId).delete()
+        UI.showToast(UI.getText("note_deleted", "Deleted"))
+        UI.closeModal("note-actions-modal")
+    })
+}
+
+async function toggleHiddenNote(noteId) {
+    const user = StateStore.read().user
+    if (!db || !user) return
+    const note = StateStore.read().notes.find(n => n.id === noteId)
+    if (!note) return
+    const nextValue = !note.isHidden
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({
+        isHidden: nextValue,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    })
+    UI.showToast(nextValue ? UI.getText("note_hidden", "Note hidden") : UI.getText("note_unhidden", "Note unhidden"))
+    UI.closeModal("note-actions-modal")
+}
+
+async function scheduleFutureNote(noteId) {
+    const user = StateStore.read().user
+    if (!db || !user) return
+    const input = document.querySelector(`.note-future-input[data-note-id="${encodeURIComponent(noteId)}"]`)
+    const value = input ? input.value : ""
+    if (!value) {
+        UI.showToast(UI.getText("future_required", "Pick a date"))
+        return
+    }
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+        UI.showToast(UI.getText("future_required", "Pick a date"))
+        return
+    }
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({
+        futureAt: date.toISOString(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    })
+    UI.showToast(UI.getText("future_saved", "Scheduled"))
+    UI.closeModal("note-actions-modal")
+}
+
+async function clearFutureNote(noteId) {
+    const user = StateStore.read().user
+    if (!db || !user) return
+    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
+    await ref.update({
+        futureAt: null,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    })
+    UI.showToast(UI.getText("future_cleared", "Schedule cleared"))
+    UI.closeModal("note-actions-modal")
+}
+
+async function copyNoteTextById(noteId) {
+    const note = StateStore.read().notes.find(n => n.id === noteId)
+    if (!note) return
+    if (note.lock?.hash) {
+        UI.showToast(UI.getText("lock_download_blocked", "Note is locked"))
+        return
+    }
+    const text = Utils.stripHtml(note.content || "")
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text)
+        } else {
+            const textarea = document.createElement("textarea")
+            textarea.value = text
+            textarea.setAttribute("readonly", "true")
+            textarea.style.position = "fixed"
+            textarea.style.opacity = "0"
+            document.body.appendChild(textarea)
+            textarea.select()
+            document.execCommand("copy")
+            document.body.removeChild(textarea)
+        }
+        UI.showToast(UI.getText("copy_success", "Copied"))
+        UI.closeModal("note-actions-modal")
+    } catch {
+        UI.showToast(UI.getText("copy_failed", "Copy failed"))
+    }
 }
 
 async function toggleFavorite(noteId) {
@@ -631,6 +750,11 @@ window.switchView = switchView
 window.filterAndRender = filterAndRender
 window.deleteFolder = deleteFolder
 window.openNoteActions = openNoteActions
+window.deleteNoteById = deleteNoteById
+window.toggleHiddenNote = toggleHiddenNote
+window.scheduleFutureNote = scheduleFutureNote
+window.clearFutureNote = clearFutureNote
+window.copyNoteTextById = copyNoteTextById
 window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive

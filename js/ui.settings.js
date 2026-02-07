@@ -6,13 +6,31 @@ Object.assign(UI, {
         this.toggleSidebar(false)
         if (id === "share-modal") {
             const link = document.getElementById("share-link")
-            const n = StateStore.read().currentNote
-            if (link && n) link.value = ShareService.makeShareLink(n.id)
+            const current = StateStore.read().currentNote
+            const fallback = StateStore.read().notes.find(n => n.id === UI.currentNoteActionId)
+            const n = current || fallback
+            if (link) {
+                link.value = ""
+                if (n) {
+                    ShareService.createLink(n, "share").then(url => {
+                        link.value = url || ""
+                    })
+                }
+            }
         }
         if (id === "collab-modal") {
             const link = document.getElementById("collab-link")
-            const n = StateStore.read().currentNote
-            if (link && n) link.value = ShareService.makeCollabLink(n.id)
+            const current = StateStore.read().currentNote
+            const fallback = StateStore.read().notes.find(n => n.id === UI.currentNoteActionId)
+            const n = current || fallback
+            if (link) {
+                link.value = ""
+                if (n) {
+                    ShareService.createLink(n, "collab").then(url => {
+                        link.value = url || ""
+                    })
+                }
+            }
         }
         if (id === "lock-center-modal") {
             this.renderLockCenter()
@@ -369,7 +387,6 @@ Object.assign(UI, {
             const label = document.createElement("span")
             label.textContent = this.getText(tool.label, tool.label)
             
-            // Создаем структуру переключателя (Toggle Switch)
             const labelSwitch = document.createElement("label")
             labelSwitch.className = "switch"
             

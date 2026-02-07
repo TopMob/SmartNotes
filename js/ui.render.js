@@ -175,6 +175,7 @@ Object.assign(UI, {
 
     getReorderScope() {
         const { notes, view, activeFolderId } = StateStore.read()
+        if (view === "locked" || view === "hidden" || view === "future") return []
         let list = notes.slice()
         if (view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
         if (view === "archive") list = list.filter(n => !!n.isArchived)
@@ -319,16 +320,37 @@ Object.assign(UI, {
     handlePendingShare() {
         const { pendingShare, user, notes } = StateStore.read()
         if (!pendingShare || !user) return
-        if (!notes.length) return
         const payload = pendingShare
         StateActions.clearPendingShare()
         if (payload.error) {
             return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
         }
-        const note = notes.find(n => n.id === payload.noteId)
-        if (!note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
-        if (payload.mode === "collab") this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
-        Editor.openFromList(note)
+        if (!payload.shareId) return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
+        ShareService.fetchSharedNote(payload.shareId).then(async (shared) => {
+            if (!shared || !shared.note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
+            if (payload.mode === "collab") {
+                const existing = notes.find(n => n.collabId === payload.shareId)
+                if (existing) {
+                    this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
+                    Editor.openFromList(existing)
+                    return
+                }
+                const base = NoteIO.normalizeNote(shared.note)
+                const id = notes.some(n => n.id === payload.shareId) ? Utils.generateId() : payload.shareId
+                const collabNote = { ...base, id, collabId: payload.shareId, shareId: null }
+                await db.collection("users").doc(user.uid).collection("notes").doc(id).set(collabNote, { merge: true })
+                this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
+                Editor.openFromList(collabNote)
+                return
+            }
+            const base = NoteIO.normalizeNote(shared.note)
+            const sharedNote = { ...base, id: Utils.generateId(), shareId: null, collabId: null }
+            await db.collection("users").doc(user.uid).collection("notes").doc(sharedNote.id).set(sharedNote, { merge: true })
+            this.showToast(this.getText("share_imported", "Note added to your list"))
+            Editor.openFromList(sharedNote)
+        }).catch(() => {
+            this.showShareFallback(this.getText("share_missing", "Note not found"))
+        })
     },
 
     captureShareFromHash() {
@@ -392,6 +414,42 @@ Object.assign(UI, {
         }
     },
 
+    async submitPoll() {
+        if (!db || !StateStore.read().user) {
+            this.showToast(this.getText("poll_failed", "Unable to send poll"))
+            return
+        }
+        const topic = String(document.getElementById("poll-topic")?.value || "").trim()
+        const answer = String(document.getElementById("poll-answer")?.value || "").trim()
+        if (!topic || !answer) {
+            this.showToast(this.getText("poll_required", "Fill in the poll"))
+            return
+        }
+        const { user, config } = StateStore.read()
+        const payload = {
+            uid: user.uid,
+            email: user.email || "",
+            displayName: user.displayName || "",
+            topic,
+            answer,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            userAgent: navigator.userAgent || "",
+            appVersion: "web",
+            language: config.lang
+        }
+        try {
+            await db.collection("polls").add(payload)
+            const topicInput = document.getElementById("poll-topic")
+            const answerInput = document.getElementById("poll-answer")
+            if (topicInput) topicInput.value = ""
+            if (answerInput) answerInput.value = ""
+            this.showToast(this.getText("poll_thanks", "Thanks!"))
+            this.closeModal("poll-modal")
+        } catch {
+            this.showToast(this.getText("poll_failed", "Unable to send poll"))
+        }
+    },
+
     renderNoteActions(noteId) {
         const note = StateStore.read().notes.find(n => n.id === noteId)
         const root = document.getElementById("note-actions-content")
@@ -399,16 +457,35 @@ Object.assign(UI, {
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
         const folders = StateStore.read().folders
         const isArchived = !!note.isArchived
+        const isHidden = !!note.isHidden
         const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
+        const hiddenLabel = isHidden ? (dict.unhide_note || "Unhide") : (dict.hide_note || "Hide")
         const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
         folders.forEach(f => {
             const selected = note.folderId === f.id ? "selected" : ""
             folderOptions.push(`<option value="${f.id}" ${selected}>${Utils.escapeHtml(f.name)}</option>`)
         })
+        const futureStamp = note.futureAt?.toDate ? note.futureAt.toDate() : (note.futureAt ? new Date(note.futureAt) : null)
+        const futureValue = futureStamp ? new Date(futureStamp.getTime() - futureStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
                     ${archiveLabel}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-hide-toggle" data-note-id="${encodeURIComponent(note.id)}">
+                    ${hiddenLabel}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.copy_text || "Copy text"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-share" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.share_note || "Share"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-collab" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.collab_note || "Collaborate"}
+                </button>
+                <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.delete_note || "Delete"}
                 </button>
             </div>
             <div class="lock-center-folder" style="margin-top:12px;">
@@ -417,6 +494,15 @@ Object.assign(UI, {
                 </select>
                 <button type="button" class="btn-primary" data-action="note-move-folder" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.move_to_folder || "Move"}
+                </button>
+            </div>
+            <div class="lock-center-folder" style="margin-top:12px;">
+                <input type="datetime-local" class="input-area note-future-input" data-note-id="${encodeURIComponent(note.id)}" value="${futureValue}" aria-label="${dict.future_note || "Future note"}">
+                <button type="button" class="btn-primary" data-action="note-future-set" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.future_note || "Future note"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-future-clear" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.future_clear || "Clear"}
                 </button>
             </div>
             <div class="modal-actions-grid" style="margin-top:12px;">

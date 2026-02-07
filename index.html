@@ -88,6 +88,16 @@
                         <span data-lang="archive">Архив</span>
                     </button>
 
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="hidden">
+                        <i class="material-icons-round" aria-hidden="true">visibility_off</i>
+                        <span data-lang="hidden_notes">Спрятанное</span>
+                    </button>
+
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="future">
+                        <i class="material-icons-round" aria-hidden="true">schedule</i>
+                        <span data-lang="future_notes">На будущее</span>
+                    </button>
+
                     <button type="button" class="nav-item" data-action="switch-view" data-view="folders">
                         <i class="material-icons-round" aria-hidden="true">folder</i>
                         <span data-lang="folders_overview">Папки</span>
@@ -122,6 +132,11 @@
                 <button type="button" class="footer-link" data-action="open-modal" data-modal="rate-modal">
                     <i class="material-icons-round" aria-hidden="true">thumb_up</i>
                     <span data-lang="rate">Оценить</span>
+                </button>
+
+                <button type="button" class="footer-link" data-action="open-modal" data-modal="poll-modal">
+                    <i class="material-icons-round" aria-hidden="true">poll</i>
+                    <span data-lang="polls">Опросы</span>
                 </button>
 
                 <button type="button" class="footer-link" data-action="open-settings">
@@ -238,7 +253,14 @@
                     </button>
 
                     <button type="button" class="btn-icon" data-action="editor-voice" aria-label="Голосовая запись">
-                        <i class="material-icons-round" aria-hidden="true">mic</i>
+                        <span class="custom-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" data-state="idle" aria-hidden="true">
+                                <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-6 8h2v3h-2z"/>
+                            </svg>
+                            <svg viewBox="0 0 24 24" data-state="active" aria-hidden="true">
+                                <rect x="7" y="7" width="10" height="10" rx="2"></rect>
+                            </svg>
+                        </span>
                     </button>
 
                     <button type="button" class="btn-icon" id="editor-lock-toggle" data-action="editor-lock" aria-label="Заблокировать заметку" data-lang-aria="lock_note">
@@ -255,6 +277,19 @@
                 <input id="note-title" type="text" placeholder="Заголовок" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
+
+                <div id="inline-sketch-panel" class="inline-sketch-panel" aria-label="Рисование" data-lang-aria="sketch_inline_aria">
+                    <div class="inline-sketch-toolbar">
+                        <span data-lang="sketch_inline_title">Рисование</span>
+                        <div class="inline-sketch-actions">
+                            <button type="button" class="btn-secondary" data-action="inline-sketch-undo" data-lang="undo">Отменить</button>
+                            <button type="button" class="btn-secondary" data-action="inline-sketch-clear" data-lang="clear">Очистить</button>
+                            <button type="button" class="btn-secondary" data-action="inline-sketch-cancel" data-lang="cancel">Отмена</button>
+                            <button type="button" class="btn-primary" data-action="inline-sketch-apply" data-lang="insert">Вставить</button>
+                        </div>
+                    </div>
+                    <canvas id="inline-sketch-canvas" class="inline-sketch-canvas"></canvas>
+                </div>
 
                 <div class="editor-page-controls" aria-label="Страницы" data-lang-aria="editor_pages">
                     <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
@@ -422,31 +457,6 @@
         </div>
     </div>
 
-    <div id="sketch-modal" class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card full-screen-modal">
-            <header class="modal-header modal-header-tight">
-                <div class="row-left">
-                    <h2 class="modal-title" data-lang="sketch_title">Холст</h2>
-                    <input type="color" id="sketch-color-picker" value="#00f2ff" class="input-color-custom input-color-round" aria-label="Цвет кисти" data-lang-aria="sketch_color">
-                    <input type="range" id="sketch-width-picker" min="1" max="20" value="3" class="range-compact" aria-label="Толщина кисти" data-lang-aria="sketch_width">
-                    <input type="range" id="sketch-zoom-picker" min="1" max="3" value="1" step="0.1" class="range-compact" aria-label="Масштаб" data-lang-aria="sketch_zoom">
-                </div>
-                <div class="row-right">
-                    <button type="button" class="btn-icon" data-action="sketch-undo" aria-label="Отменить штрих" data-lang-aria="sketch_undo"><i class="material-icons-round" aria-hidden="true">undo</i></button>
-                    <button type="button" class="btn-icon" data-action="sketch-eraser" aria-label="Ластик" data-lang-aria="sketch_eraser"><i class="material-icons-round" aria-hidden="true">cleaning_services</i></button>
-                    <button type="button" class="btn-icon" data-action="sketch-clear" aria-label="Очистить" data-lang-aria="sketch_clear"><i class="material-icons-round" aria-hidden="true">delete</i></button>
-                    <button type="button" class="btn-icon" data-action="close-modal" data-modal="sketch-modal" aria-label="Закрыть" data-lang-aria="close"><i class="material-icons-round" aria-hidden="true">close</i></button>
-                </div>
-            </header>
-            <div class="modal-body no-padding modal-canvas-body">
-                <canvas id="sketch-canvas" class="canvas-full" style="touch-action:none;"></canvas>
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-primary" data-action="sketch-save" data-lang="insert">Вставить</button>
-            </footer>
-        </div>
-    </div>
-
     <div id="photo-editor-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card full-screen-modal">
             <header class="modal-header modal-header-tight">
@@ -552,9 +562,37 @@
         </div>
     </div>
 
+    <div id="poll-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Опрос" data-lang-aria="poll_title">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="polls">Опросы</h2>
+                <button type="button" class="btn-icon" data-action="close-modal" data-modal="poll-modal" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <div class="field">
+                    <span class="field-label" data-lang="poll_topic_label">Тема опроса</span>
+                    <input id="poll-topic" type="text" class="input-area" autocomplete="off" aria-label="Тема опроса" data-lang-aria="poll_topic_label">
+                </div>
+                <div class="field">
+                    <span class="field-label" data-lang="poll_answer_label">Ответ</span>
+                    <textarea id="poll-answer" rows="4" class="input-area" aria-label="Ответ" data-lang-aria="poll_answer_label"></textarea>
+                </div>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-primary" data-action="submit-poll" data-lang="send">Отправить</button>
+            </footer>
+        </div>
+    </div>
+
     <div id="voice-indicator" class="voice-indicator" aria-hidden="true">
         <div class="pulse-ring" aria-hidden="true"></div>
-        <i class="material-icons-round" aria-hidden="true">mic</i>
+        <span class="custom-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-6 8h2v3h-2z"/>
+            </svg>
+        </span>
         <span data-lang="recording">Запись...</span>
     </div>
 

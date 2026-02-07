@@ -41,12 +41,11 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "input", "audio"])
-        const allowedClasses = new Set(["task-item", "task-checkbox", "task-text", "completed", "media-wrapper", "media-resize-handle", "align-left", "align-right", "audio-wrapper", "audio-player", "audio-icon", "audio-label", "note-page"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio"])
+        const allowedClasses = new Set(["media-wrapper", "media-resize-handle", "align-left", "align-right", "audio-wrapper", "audio-player", "audio-icon", "audio-label", "note-page"])
         const allowAttrs = {
             a: new Set(["href"]),
             img: new Set(["src", "alt"]),
-            input: new Set(["type", "checked"]),
             audio: new Set(["src", "controls", "preload"])
         }
         const wrapper = document.createElement("div")
@@ -110,11 +109,6 @@ export const Utils = {
                     if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:audio")) || s.startsWith("http:")) {
                         child.removeAttribute("src")
                     }
-                }
-                if (tag === "input") {
-                    const type = String(child.getAttribute("type") || "").toLowerCase()
-                    if (type !== "checkbox") child.removeAttribute("type")
-                    if (child.hasAttribute("checked")) child.setAttribute("checked", "")
                 }
                 walk(child)
             })
