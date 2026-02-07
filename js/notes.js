@@ -1,4 +1,5 @@
 const FAVORITES_STORAGE_KEY = "favorite-notes"
+const NOTES_FILTER_KEY = "notes-filter"
 
 const readFavoriteIds = () => {
     try {
@@ -30,6 +31,18 @@ const applyStoredFavorites = (notes) => {
         return note
     })
 }
+
+const loadNotesFilter = () => {
+    try {
+        const stored = JSON.parse(localStorage.getItem(NOTES_FILTER_KEY))
+        if (stored && typeof stored === "object") {
+            const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
+            StateActions.updateConfig({ notesFilter: { ...current, ...stored } })
+        }
+    } catch {}
+}
+
+loadNotesFilter()
 
 const NotesRenderer = (() => {
     const cardCache = new Map()
@@ -226,6 +239,44 @@ function normalizeVisibleNotes(list, orderKey = "order") {
     return arr
 }
 
+function getTimestampValue(value) {
+    if (!value) return 0
+    if (typeof value === "number") return value
+    if (value.seconds) return value.seconds * 1000
+    if (value.toDate) return value.toDate().getTime()
+    return 0
+}
+
+function getTextLength(note) {
+    const text = `${note.title || ""} ${Utils.stripHtml(note.content || "")}`.trim()
+    return text.length
+}
+
+function sortVisibleNotes(list, sortMode, scores) {
+    const pinned = list.filter(n => !!n.isPinned)
+    const unpinned = list.filter(n => !n.isPinned)
+    const locale = StateStore.read().config.lang || "ru"
+    const compare = (a, b) => {
+        if (sortMode === "title") {
+            return String(a.title || "").localeCompare(String(b.title || ""), locale, { sensitivity: "base" })
+        }
+        if (sortMode === "length") {
+            return getTextLength(b) - getTextLength(a)
+        }
+        if (sortMode === "importance") {
+            if (!!b.isFavorite !== !!a.isFavorite) return a.isFavorite ? -1 : 1
+            return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
+        }
+        if (sortMode === "relevance" && scores) {
+            return (scores.get(b.id) || 0) - (scores.get(a.id) || 0)
+        }
+        return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
+    }
+    pinned.sort(compare)
+    unpinned.sort(compare)
+    return [...pinned, ...unpinned]
+}
+
 function isHiddenLocked(note) {
     return !!(note && note.lock && note.lock.hidden)
 }
@@ -254,6 +305,8 @@ function filterAndRender(query) {
     }
 
     let list = current.notes.slice()
+    const notesFilter = current.config.notesFilter || { sort: "manual", folders: [] }
+    const selectedFolders = Array.isArray(notesFilter.folders) ? notesFilter.folders : []
 
     if (view === "locked") {
         list = list.filter(n => isHiddenLocked(n))
@@ -266,23 +319,35 @@ function filterAndRender(query) {
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
     else if (view !== "locked") list = list.filter(n => !n.isArchived)
 
+    if (view !== "folder" && view !== "folders" && selectedFolders.length) {
+        list = list.filter(note => {
+            if (!note.folderId) return selectedFolders.includes("none")
+            return selectedFolders.includes(note.folderId)
+        })
+    }
+
+    let scores = null
     if (q) {
         try {
             const scored = list.map(n => ({
                 n,
                 score: SmartSearch.score(q, n.title, n.content, n.tags)
-            }))
-                .filter(item => item.score >= 0.35)
-                .sort((a, b) => b.score - a.score)
-
+            })).filter(item => item.score >= 0.35)
+            scores = new Map(scored.map(item => [item.n.id, item.score]))
             list = scored.map(item => item.n)
         } catch (e) {
             console.error("Search failed", e)
         }
     }
 
-    const orderKey = view === "folder" ? "folderOrder" : "order"
-    list = normalizeVisibleNotes(list, orderKey)
+    const sortMode = notesFilter.sort || "updated"
+    if (sortMode === "manual") {
+        const orderKey = view === "folder" ? "folderOrder" : "order"
+        list = normalizeVisibleNotes(list, orderKey)
+    } else {
+        const mode = sortMode === "relevance" && !scores ? "updated" : sortMode
+        list = sortVisibleNotes(list, mode, scores)
+    }
 
     if (view === "folders") {
         UI.renderFolderGrid()

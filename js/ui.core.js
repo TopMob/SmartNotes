@@ -17,7 +17,11 @@ const UI = {
             promptModal: document.getElementById("prompt-modal"),
             fab: document.querySelector(".btn-fab"),
             folderList: document.getElementById("folder-list-root"),
-            sidebarOverlay: document.getElementById("sidebar-overlay")
+            sidebarOverlay: document.getElementById("sidebar-overlay"),
+            filterMenu: document.getElementById("notes-filter-menu"),
+            filterButton: document.getElementById("notes-filter-toggle"),
+            filterFolders: document.getElementById("notes-folder-filters"),
+            filterSort: document.getElementById("notes-sort-select")
         }
         this.bindEvents()
         if (window.matchMedia("(min-width: 1024px)").matches) {
@@ -26,6 +30,7 @@ const UI = {
         this.updateSidebarLayout()
         window.addEventListener("resize", () => this.updateSidebarLayout())
         this.applyAppearanceSettings()
+        this.renderFilterMenu()
         this.updatePrimaryActionLabel()
         this.routeShare()
         window.addEventListener("hashchange", () => this.routeShare())
@@ -45,6 +50,7 @@ const UI = {
         ThemeManager.renderPicker()
         this.syncSettingsUI()
         this.renderEditorSettings()
+        this.renderFilterMenu()
         this.renderSettingsPage()
     },
 
@@ -77,6 +83,9 @@ const UI = {
             }
             if (this.els.userMenu?.classList.contains("active") && !e.target.closest(".user-avatar-wrapper")) {
                 this.toggleUserMenu(false)
+            }
+            if (this.els.filterMenu?.classList.contains("active") && !e.target.closest("#notes-filter-menu") && !e.target.closest("#notes-filter-toggle")) {
+                this.toggleFilterMenu(false)
             }
 
             const overlay = e.target.closest(".modal-overlay")
@@ -118,6 +127,21 @@ const UI = {
         if (search) {
             search.addEventListener("input", (e) => {
                 filterAndRender(e.target.value)
+            })
+        }
+
+        if (this.els.filterSort) {
+            this.els.filterSort.addEventListener("change", (e) => {
+                this.updateFilterConfig({ sort: e.target.value })
+            })
+        }
+
+        if (this.els.filterFolders) {
+            this.els.filterFolders.addEventListener("change", (e) => {
+                const input = e.target.closest("input[type='checkbox']")
+                if (!input) return
+                const selected = this.readFolderFilterSelection()
+                this.updateFilterConfig({ folders: selected })
             })
         }
 
@@ -177,6 +201,54 @@ const UI = {
 
         const noteImport = document.getElementById("note-import")
         if (noteImport) noteImport.addEventListener("change", (e) => this.handleNoteImport(e))
+    },
+
+    readFolderFilterSelection() {
+        const selected = []
+        this.els.filterFolders?.querySelectorAll("input[type='checkbox']").forEach(input => {
+            if (input.checked) selected.push(input.value)
+        })
+        return selected
+    },
+
+    updateFilterConfig(next) {
+        const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
+        const updated = { ...current, ...next }
+        StateActions.updateConfig({ notesFilter: updated })
+        localStorage.setItem("notes-filter", JSON.stringify(updated))
+        filterAndRender(document.getElementById("search-input")?.value || "")
+        this.renderFilterMenu()
+    },
+
+    renderFilterMenu() {
+        if (!this.els.filterFolders || !this.els.filterSort) return
+        const { folders, config } = StateStore.read()
+        const current = config.notesFilter || { sort: "manual", folders: [] }
+        this.els.filterSort.value = current.sort || "updated"
+        const items = []
+        items.push({ id: "none", name: this.getText("folder_none", "No folder") })
+        folders.forEach(folder => items.push({ id: folder.id, name: folder.name }))
+        this.els.filterFolders.innerHTML = items.map(item => {
+            const checked = current.folders?.includes(item.id) ? "checked" : ""
+            return `
+                <label class="filter-option">
+                    <input type="checkbox" value="${item.id}" ${checked}>
+                    <span>${Utils.escapeHtml(item.name || "")}</span>
+                </label>
+            `
+        }).join("")
+    },
+
+    toggleFilterMenu(force) {
+        const menu = this.els.filterMenu
+        if (!menu) return
+        const next = typeof force === "boolean" ? force : !menu.classList.contains("active")
+        menu.classList.toggle("active", next)
+        if (next && this.els.filterButton) {
+            const rect = this.els.filterButton.getBoundingClientRect()
+            menu.style.top = `${rect.bottom + 10}px`
+            menu.style.left = `${Math.max(10, Math.min(window.innerWidth - menu.offsetWidth - 10, rect.right - menu.offsetWidth))}px`
+        }
     },
 
     handleAction(el, e) {
@@ -313,6 +385,9 @@ const UI = {
             case "appearance-save":
                 this.saveAppearanceDraft()
                 break
+            case "toggle-filter-menu":
+                this.toggleFilterMenu()
+                break
             case "submit-feedback":
                 this.submitFeedback()
                 break
@@ -322,17 +397,20 @@ const UI = {
             case "media-align":
                 Editor.alignMediaOrText(el.dataset.align)
                 break
-            case "media-draw":
-                Editor.drawOnSelectedMedia()
-                break
             case "media-delete":
                 Editor.deleteSelectedMedia()
+                break
+            case "editor-align":
+                Editor.alignMediaOrText(el.dataset.align)
                 break
             case "sketch-undo":
                 SketchService.undo()
                 break
             case "sketch-clear":
                 SketchService.clear()
+                break
+            case "sketch-eraser":
+                SketchService.toggleEraser()
                 break
             case "sketch-save":
                 SketchService.save()

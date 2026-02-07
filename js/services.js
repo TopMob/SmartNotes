@@ -200,6 +200,147 @@ const LockService = {
     }
 }
 
+const SketchService = {
+    canvas: null,
+    ctx: null,
+    colorPicker: null,
+    widthPicker: null,
+    zoomPicker: null,
+    history: [],
+    isDrawing: false,
+    isEraser: false,
+    scale: 1,
+    lastPoint: null,
+
+    prepare() {
+        if (!this.canvas) this.init()
+        this.resizeCanvas(false)
+        this.isEraser = false
+        this.setScale(parseFloat(this.zoomPicker?.value || "1"))
+        this.updateCursor()
+    },
+
+    init() {
+        this.canvas = document.getElementById("sketch-canvas")
+        if (!this.canvas) return
+        this.ctx = this.canvas.getContext("2d")
+        this.colorPicker = document.getElementById("sketch-color-picker")
+        this.widthPicker = document.getElementById("sketch-width-picker")
+        this.zoomPicker = document.getElementById("sketch-zoom-picker")
+        this.canvas.addEventListener("pointerdown", (e) => this.startDraw(e))
+        this.canvas.addEventListener("pointermove", (e) => this.draw(e))
+        this.canvas.addEventListener("pointerup", () => this.endDraw())
+        this.canvas.addEventListener("pointercancel", () => this.endDraw())
+        this.canvas.addEventListener("pointerleave", () => this.endDraw())
+        this.zoomPicker?.addEventListener("input", () => this.setScale(parseFloat(this.zoomPicker.value || "1")))
+        window.addEventListener("resize", () => this.resizeCanvas(true))
+        this.updateCursor()
+    },
+
+    resizeCanvas(preserve) {
+        if (!this.canvas || !this.ctx) return
+        const parent = this.canvas.parentElement
+        if (!parent) return
+        const rect = parent.getBoundingClientRect()
+        if (!rect.width || !rect.height) return
+        let snapshot = null
+        if (preserve) snapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height)
+        this.canvas.width = Math.floor(rect.width)
+        this.canvas.height = Math.floor(rect.height)
+        if (snapshot) this.ctx.putImageData(snapshot, 0, 0)
+    },
+
+    setScale(value) {
+        const nextScale = Utils.clamp(value || 1, 1, 3)
+        this.scale = nextScale
+        if (this.canvas) {
+            this.canvas.style.transform = `scale(${nextScale})`
+            this.canvas.style.transformOrigin = "top left"
+        }
+    },
+
+    getPoint(e) {
+        const rect = this.canvas.getBoundingClientRect()
+        const x = (e.clientX - rect.left) / this.scale
+        const y = (e.clientY - rect.top) / this.scale
+        return { x, y }
+    },
+
+    applyStrokeStyle() {
+        if (!this.ctx) return
+        const size = parseFloat(this.widthPicker?.value || "3")
+        this.ctx.lineWidth = size
+        this.ctx.lineCap = "round"
+        this.ctx.lineJoin = "round"
+        if (this.isEraser) {
+            this.ctx.globalCompositeOperation = "destination-out"
+            this.ctx.strokeStyle = "rgba(0,0,0,1)"
+        } else {
+            this.ctx.globalCompositeOperation = "source-over"
+            this.ctx.strokeStyle = this.colorPicker?.value || "#00f2ff"
+        }
+    },
+
+    startDraw(e) {
+        if (!this.canvas || !this.ctx) return
+        this.canvas.setPointerCapture?.(e.pointerId)
+        this.isDrawing = true
+        this.applyStrokeStyle()
+        this.history.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height))
+        this.lastPoint = this.getPoint(e)
+    },
+
+    draw(e) {
+        if (!this.isDrawing || !this.ctx) return
+        const point = this.getPoint(e)
+        if (!this.lastPoint) {
+            this.lastPoint = point
+            return
+        }
+        this.ctx.beginPath()
+        this.ctx.moveTo(this.lastPoint.x, this.lastPoint.y)
+        this.ctx.lineTo(point.x, point.y)
+        this.ctx.stroke()
+        this.lastPoint = point
+    },
+
+    endDraw() {
+        this.isDrawing = false
+        this.lastPoint = null
+    },
+
+    toggleEraser() {
+        this.isEraser = !this.isEraser
+        this.updateCursor()
+    },
+
+    updateCursor() {
+        if (!this.canvas) return
+        this.canvas.style.cursor = this.isEraser ? "cell" : "crosshair"
+    },
+
+    undo() {
+        if (!this.ctx || !this.history.length) return
+        const last = this.history.pop()
+        if (last) this.ctx.putImageData(last, 0, 0)
+    },
+
+    clear() {
+        if (!this.ctx || !this.canvas) return
+        this.history.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height))
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+    },
+
+    save() {
+        if (!this.canvas) return
+        const dataUrl = this.canvas.toDataURL("image/png")
+        Editor.insertSketchImage(dataUrl)
+        UI.closeModal("sketch-modal")
+    }
+}
+
+window.SketchService = SketchService
+
 const ShareService = {
     getBaseUrl() {
         const u = new URL(window.location.href)

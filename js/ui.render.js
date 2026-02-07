@@ -190,15 +190,16 @@ Object.assign(UI, {
             this.showToast(this.getText("reorder_search_disabled", "Reordering is disabled while searching"))
             return
         }
+        const notesFilter = StateStore.read().config.notesFilter || { sort: "updated" }
+        if (notesFilter.sort && notesFilter.sort !== "manual") {
+            this.showToast(this.getText("reorder_sort_disabled", "Switch to manual sorting to reorder"))
+            return
+        }
         const draggedNote = StateStore.read().notes.find(n => n.id === draggedId)
         const targetNote = StateStore.read().notes.find(n => n.id === targetId)
         if (!draggedNote || !targetNote) return
         const { view, activeFolderId } = StateStore.read()
         const isFolderView = view === "folder" && !!activeFolderId
-        if (!isFolderView && (draggedNote.folderId || targetNote.folderId)) {
-            this.showToast(this.getText("reorder_folder_disabled", "Reordering is available only inside folders or for notes without folders"))
-            return
-        }
         if (!!draggedNote.isPinned !== !!targetNote.isPinned) {
             this.showToast(this.getText("reorder_pinned_blocked", "Pinned notes reorder separately"))
             return
@@ -287,6 +288,7 @@ Object.assign(UI, {
                 <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" data-action="delete-folder" data-folder-id="${f.id}" aria-hidden="true">close</i>
             </button>
         `).join("")
+        this.renderFilterMenu()
     },
 
     renderFolderGrid() {

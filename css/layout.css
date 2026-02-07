@@ -231,6 +231,65 @@
     display: block;
 }
 
+.filter-menu {
+    position: fixed;
+    right: 20px;
+    top: 70px;
+    width: 280px;
+    max-width: calc(100vw - 40px);
+    display: block;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.filter-menu.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.filter-section {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.filter-section + .filter-section {
+    margin-top: 10px;
+}
+
+.filter-title {
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.filter-select {
+    width: 100%;
+}
+
+.filter-options {
+    display: grid;
+    gap: 6px;
+    max-height: 220px;
+    overflow: auto;
+}
+
+.filter-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.filter-option input {
+    accent-color: var(--primary);
+}
+
 .dropdown-header {
     padding: 10px;
     opacity: 0.9;

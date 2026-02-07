@@ -152,6 +152,9 @@
                     <button type="button" class="btn-icon" data-action="trigger-import" aria-label="Импортировать файл" data-lang-aria="import_file">
                         <i class="material-icons-round" aria-hidden="true">upload_file</i>
                     </button>
+                    <button type="button" id="notes-filter-toggle" class="btn-icon" data-action="toggle-filter-menu" aria-label="Фильтры" data-lang-aria="filters">
+                        <i class="material-icons-round" aria-hidden="true">filter_alt</i>
+                    </button>
 
                     <div class="user-avatar-wrapper">
                         <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" class="header-avatar" data-action="toggle-user-menu">
@@ -171,6 +174,24 @@
                     </div>
                 </div>
             </header>
+
+            <div id="notes-filter-menu" class="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
+                <div class="filter-section">
+                    <label for="notes-sort-select" data-lang="sort_by">Сортировка</label>
+                    <select id="notes-sort-select" class="input-area filter-select" aria-label="Сортировка" data-lang-aria="sort_by">
+                        <option value="updated" data-lang="sort_updated">По времени изменения</option>
+                        <option value="relevance" data-lang="sort_relevance">По релевантности</option>
+                        <option value="importance" data-lang="sort_importance">По важности</option>
+                        <option value="title" data-lang="sort_title">По алфавиту</option>
+                        <option value="length" data-lang="sort_length">По количеству символов</option>
+                        <option value="manual" data-lang="sort_manual">Вручную</option>
+                    </select>
+                </div>
+                <div class="filter-section">
+                    <div class="filter-title" data-lang="filter_folders">Папки</div>
+                    <div id="notes-folder-filters" class="filter-options"></div>
+                </div>
+            </div>
 
             <section id="notes-content-area" class="content-scrollable scrollable" aria-label="Список заметок" data-lang-aria="notes_list_aria">
                 <div id="app-loader" class="loader-container hidden" aria-hidden="true">
@@ -258,11 +279,20 @@
         <button type="button" class="btn-icon" data-action="media-align" data-align="right" aria-label="По правому краю" data-lang-aria="align_right">
             <i class="material-icons-round" aria-hidden="true">format_align_right</i>
         </button>
-        <button type="button" class="btn-icon" data-action="media-draw" aria-label="Рисовать на фото" data-lang-aria="draw_photo">
-            <i class="material-icons-round" aria-hidden="true">brush</i>
-        </button>
         <button type="button" class="btn-icon" data-action="media-delete" style="color:var(--danger)" aria-label="Удалить" data-lang-aria="delete">
             <i class="material-icons-round" aria-hidden="true">delete</i>
+        </button>
+    </div>
+
+    <div id="editor-align-menu" class="context-menu hidden" role="menu" aria-label="Выравнивание" data-lang-aria="align_menu">
+        <button type="button" data-action="editor-align" data-align="left" aria-label="По левому краю" data-lang-aria="align_left">
+            <i class="material-icons-round" aria-hidden="true">format_align_left</i>
+        </button>
+        <button type="button" data-action="editor-align" data-align="center" aria-label="По центру" data-lang-aria="align_center">
+            <i class="material-icons-round" aria-hidden="true">format_align_center</i>
+        </button>
+        <button type="button" data-action="editor-align" data-align="right" aria-label="По правому краю" data-lang-aria="align_right">
+            <i class="material-icons-round" aria-hidden="true">format_align_right</i>
         </button>
     </div>
 
@@ -382,9 +412,11 @@
                     <h2 class="modal-title" data-lang="sketch_title">Холст</h2>
                     <input type="color" id="sketch-color-picker" value="#00f2ff" class="input-color-custom input-color-round" aria-label="Цвет кисти" data-lang-aria="sketch_color">
                     <input type="range" id="sketch-width-picker" min="1" max="20" value="3" class="range-compact" aria-label="Толщина кисти" data-lang-aria="sketch_width">
+                    <input type="range" id="sketch-zoom-picker" min="1" max="3" value="1" step="0.1" class="range-compact" aria-label="Масштаб" data-lang-aria="sketch_zoom">
                 </div>
                 <div class="row-right">
                     <button type="button" class="btn-icon" data-action="sketch-undo" aria-label="Отменить штрих" data-lang-aria="sketch_undo"><i class="material-icons-round" aria-hidden="true">undo</i></button>
+                    <button type="button" class="btn-icon" data-action="sketch-eraser" aria-label="Ластик" data-lang-aria="sketch_eraser"><i class="material-icons-round" aria-hidden="true">cleaning_services</i></button>
                     <button type="button" class="btn-icon" data-action="sketch-clear" aria-label="Очистить" data-lang-aria="sketch_clear"><i class="material-icons-round" aria-hidden="true">delete</i></button>
                     <button type="button" class="btn-icon" data-action="close-modal" data-modal="sketch-modal" aria-label="Закрыть" data-lang-aria="close"><i class="material-icons-round" aria-hidden="true">close</i></button>
                 </div>
