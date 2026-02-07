@@ -520,7 +520,6 @@ const AppLifecycle = {
     stopUserSession() {
         this.activeUid = null
         this.clearSubscriptions()
-        if (typeof SyncService !== "undefined" && SyncService.stop) SyncService.stop()
     },
 
     async startUserSession(user) {
@@ -561,10 +560,6 @@ const AppLifecycle = {
             })
 
         this.unsubscribers = [folderUnsub, notesUnsub]
-
-        if (typeof SyncService !== "undefined" && SyncService.start) {
-            SyncService.start(user)
-        }
 
         const loader = document.getElementById("app-loader")
         if (loader) loader.classList.add("hidden")
