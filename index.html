@@ -54,7 +54,7 @@
 
     <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
         <div class="login-box">
-            <h1 class="brand-text-fixed">SmartNotes</h1>
+            <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
             <p class="subtext" data-lang="login">Вход в систему</p>
             <div class="auth-buttons-group">
                 <button type="button" class="btn-auth google" data-action="login">
@@ -68,7 +68,7 @@
     <div id="app" class="app-layout" aria-hidden="false">
         <aside id="sidebar" class="sidebar-glass" aria-label="Навигация" data-lang-aria="nav_aria">
             <header class="sidebar-header">
-                <span class="brand-text-fixed">SmartNotes</span>
+                <span class="brand-text-fixed" data-brand-text>SmartNotes</span>
                 <button type="button" class="btn-icon mobile-only" data-action="toggle-sidebar" data-force="false" aria-label="Закрыть меню" data-lang-aria="close_menu">
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
@@ -276,19 +276,6 @@
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
 
-                <div id="inline-sketch-panel" class="inline-sketch-panel" aria-label="Рисование" data-lang-aria="sketch_inline_aria">
-                    <div class="inline-sketch-toolbar">
-                        <span data-lang="sketch_inline_title">Рисование</span>
-                        <div class="inline-sketch-actions">
-                            <button type="button" class="btn-secondary" data-action="inline-sketch-undo" data-lang="undo">Отменить</button>
-                            <button type="button" class="btn-secondary" data-action="inline-sketch-clear" data-lang="clear">Очистить</button>
-                            <button type="button" class="btn-secondary" data-action="inline-sketch-cancel" data-lang="cancel">Отмена</button>
-                            <button type="button" class="btn-primary" data-action="inline-sketch-apply" data-lang="insert">Вставить</button>
-                        </div>
-                    </div>
-                    <canvas id="inline-sketch-canvas" class="inline-sketch-canvas"></canvas>
-                </div>
-
                 <div class="editor-page-controls" aria-label="Страницы" data-lang-aria="editor_pages">
                     <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
                         <i class="material-icons-round" aria-hidden="true">chevron_left</i>
@@ -302,7 +289,21 @@
                     </button>
                 </div>
 
-                <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+                <div class="note-content-wrapper">
+                    <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+                    <div id="inline-sketch-overlay" class="inline-sketch-overlay" aria-label="Рисование" data-lang-aria="sketch_inline_aria">
+                        <div class="inline-sketch-toolbar">
+                            <span data-lang="sketch_inline_title">Рисование</span>
+                            <div class="inline-sketch-actions">
+                                <button type="button" class="btn-secondary" data-action="inline-sketch-undo" data-lang="undo">Отменить</button>
+                                <button type="button" class="btn-secondary" data-action="inline-sketch-clear" data-lang="clear">Очистить</button>
+                                <button type="button" class="btn-secondary" data-action="inline-sketch-cancel" data-lang="cancel">Отмена</button>
+                                <button type="button" class="btn-primary" data-action="inline-sketch-apply" data-lang="insert">Вставить</button>
+                            </div>
+                        </div>
+                        <canvas id="inline-sketch-canvas" class="inline-sketch-canvas"></canvas>
+                    </div>
+                </div>
 
                 <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
                     <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">

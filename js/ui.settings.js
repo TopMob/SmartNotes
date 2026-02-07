@@ -111,12 +111,19 @@ Object.assign(UI, {
 
         if (page === "appearance") {
             title.textContent = dict.settings_appearance || dict.appearance || "Appearance"
+            const hasSecretPresets = this.hasSecretPresetAccess()
             root.innerHTML = `
                 <div class="settings-group">
                     <div class="field">
                         <span class="field-label">${dict.presets || "Presets"}</span>
                         <div id="theme-picker-root" class="settings-theme-grid"></div>
                     </div>
+                    ${hasSecretPresets ? `
+                    <div class="field">
+                        <span class="field-label">${dict.hidden_presets || "Hidden presets"}</span>
+                        <div id="hidden-presets-root" class="hidden-presets-root"></div>
+                    </div>
+                    ` : ""}
                     <div class="field">
                         <span class="field-label">${dict.manual || "Manual"}</span>
                         <div class="settings-color-grid">
@@ -142,6 +149,7 @@ Object.assign(UI, {
             `
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
+            if (hasSecretPresets) this.renderHiddenPresets()
             return
         }
 
@@ -156,14 +164,23 @@ Object.assign(UI, {
         const saved = ThemeManager.getSavedSettings()
         if (saved.preset && saved.preset !== "manual") {
             const preset = ThemeManager.resolvePreset(saved.preset)
-            StateStore.update("appearanceDraft", { preset: saved.preset, p: preset.p, bg: preset.bg, t: preset.t })
+            StateStore.update("appearanceDraft", {
+                preset: saved.preset,
+                p: saved.p || preset.p,
+                bg: saved.bg || preset.bg,
+                t: saved.t || preset.t,
+                brandName: saved.brandName || "SmartNotes",
+                basePreset: saved.basePreset || "dark"
+            })
             return
         }
         StateStore.update("appearanceDraft", {
             preset: "manual",
             p: saved.p || ThemeManager.themes.dark.p,
             bg: saved.bg || ThemeManager.themes.dark.bg,
-            t: saved.t || ThemeManager.themes.dark.t
+            t: saved.t || ThemeManager.themes.dark.t,
+            brandName: saved.brandName || "SmartNotes",
+            basePreset: saved.basePreset || "dark"
         })
     },
 
@@ -179,14 +196,24 @@ Object.assign(UI, {
         const onSelect = (key) => {
             let nextDraft = null
             if (key === "manual") {
-                nextDraft = { ...draft, preset: "manual" }
+                nextDraft = {
+                    ...draft,
+                    preset: "manual",
+                    brandName: "SmartNotes",
+                    basePreset: "dark"
+                }
             } else {
                 const preset = ThemeManager.resolvePreset(key)
-                nextDraft = { preset: key, p: preset.p, bg: preset.bg, t: preset.t }
+                nextDraft = {
+                    preset: key,
+                    p: preset.p,
+                    bg: preset.bg,
+                    t: preset.t,
+                    brandName: "SmartNotes",
+                    basePreset: key
+                }
             }
-            StateStore.update("appearanceDraft", nextDraft)
-            ThemeManager.applySettings(nextDraft, false)
-            this.renderAppearanceDraft()
+            this.applyAppearanceDraft(nextDraft)
         }
         ThemeManager.renderPicker({ onSelect, activeKey, manualColor: draft.p })
         ThemeManager.setupColorInputs((type, val) => {
@@ -195,7 +222,152 @@ Object.assign(UI, {
             StateStore.update("appearanceDraft", next)
             ThemeManager.applySettings(next, false)
             ThemeManager.renderPicker({ onSelect, activeKey: "manual", manualColor: next.p })
+            if (this.hasSecretPresetAccess()) this.renderHiddenPresets()
         })
+    },
+
+    hasSecretPresetAccess() {
+        const folders = StateStore.read().folders || []
+        return folders.some(folder => String(folder.name || "").trim() === "67")
+    },
+
+    getHiddenPresetGroups() {
+        const lang = StateStore.read().config.lang || "ru"
+        const pick = (label) => label[lang] || label.ru || label.en || ""
+        return [
+            {
+                id: "hidden-anime",
+                title: pick({ ru: "Аниме", en: "Anime" }),
+                items: [
+                    { key: "anime_taiga", label: pick({ ru: "Тайга", en: "Taiga" }) },
+                    { key: "anime_asuka", label: pick({ ru: "Аска", en: "Asuka" }) },
+                    { key: "anime_asuna", label: pick({ ru: "Асуна", en: "Asuna" }) },
+                    { key: "anime_rei", label: pick({ ru: "Аянами рей", en: "Ayanami Rei" }) },
+                    { key: "anime_oshi_no_ko", label: pick({ ru: "звёздное дитя", en: "Oshi no Ko" }) },
+                    { key: "anime_healer_mage", label: pick({ ru: "маг целитель", en: "Healer Mage" }) },
+                    { key: "anime_rem", label: pick({ ru: "Рем", en: "Rem" }) },
+                    { key: "anime_zero", label: pick({ ru: "Zero", en: "Zero" }) },
+                    { key: "anime_emilia", label: pick({ ru: "Эмилия", en: "Emilia" }) },
+                    { key: "anime_nezuko", label: pick({ ru: "Нэдзуко", en: "Nezuko" }) },
+                    { key: "anime_mai", label: pick({ ru: "Май Сакурадзима", en: "Mai Sakurajima" }) },
+                    { key: "anime_hinata", label: pick({ ru: "Хината Хьюга", en: "Hinata Hyuga" }) },
+                    { key: "anime_monika", label: pick({ ru: "моника", en: "Monika" }) },
+                    { key: "anime_helltaker", label: pick({ ru: "хелтейкер", en: "Helltaker" }) },
+                    { key: "anime_yor", label: pick({ ru: "Йор", en: "Yor" }) },
+                    { key: "anime_power", label: pick({ ru: "пауер", en: "Power" }) },
+                    { key: "anime_megumin", label: pick({ ru: "Мегумин", en: "Megumin" }) },
+                    { key: "anime_toru", label: pick({ ru: "Тору", en: "Tohru" }) },
+                    { key: "anime_nobara", label: pick({ ru: "Нобара Кугисаки", en: "Nobara Kugisaki" }) },
+                    { key: "anime_casca", label: pick({ ru: "Каска(берсерк)", en: "Casca" }) },
+                    { key: "anime_misa", label: pick({ ru: "Миса Аманэ", en: "Misa Amane" }) }
+                ]
+            },
+            {
+                id: "hidden-games",
+                title: pick({ ru: "Игры", en: "Games" }),
+                items: [
+                    { key: "game_zzz", label: pick({ ru: "ZZZ", en: "ZZZ" }) },
+                    { key: "game_dark_souls", label: pick({ ru: "блексоулс", en: "Dark Souls" }) },
+                    { key: "game_minecraft", label: pick({ ru: "minecraft", en: "Minecraft" }) },
+                    { key: "game_dota", label: pick({ ru: "dota", en: "Dota" }) },
+                    { key: "game_cs", label: pick({ ru: "cs", en: "CS" }) },
+                    { key: "game_fortnite", label: pick({ ru: "fortnite", en: "Fortnite" }) }
+                ]
+            },
+            {
+                id: "hidden-apps",
+                title: pick({ ru: "Приложения", en: "Apps" }),
+                items: [
+                    { key: "app_smartlib", label: pick({ ru: "SmartLib", en: "SmartLib" }) }
+                ]
+            },
+            {
+                id: "hidden-windows",
+                title: pick({ ru: "Винда", en: "Windows" }),
+                items: [
+                    { key: "windows_classic", label: pick({ ru: "SmartWin", en: "SmartWin" }) }
+                ]
+            },
+            {
+                id: "hidden-sites",
+                title: pick({ ru: "Сайты", en: "Sites" }),
+                items: [
+                    { key: "site_smarthub", label: pick({ ru: "SmartHub", en: "SmartHub" }) }
+                ]
+            },
+            {
+                id: "hidden-classic",
+                title: pick({ ru: "Обычные", en: "Classic" }),
+                items: [
+                    { key: "cyber_edge", label: pick({ ru: "КИБЕРПАНК БЕГУЩИЕ ПО КРАЮ", en: "Cyberpunk Edge Runners" }) },
+                    { key: "lego_world", label: pick({ ru: "Лего", en: "Lego" }) }
+                ]
+            }
+        ]
+    },
+
+    applyAppearanceDraft(nextDraft) {
+        StateStore.update("appearanceDraft", nextDraft)
+        ThemeManager.applySettings(nextDraft, false)
+        this.renderAppearanceDraft()
+        if (this.hasSecretPresetAccess()) this.renderHiddenPresets()
+    },
+
+    buildHiddenPresetDraft(preset, presetKey) {
+        return {
+            preset: presetKey,
+            p: preset.p,
+            bg: preset.bg,
+            t: preset.t,
+            brandName: preset.brandName || "SmartNotes",
+            basePreset: preset.basePreset || "dark"
+        }
+    },
+
+    renderHiddenPresets() {
+        const root = document.getElementById("hidden-presets-root")
+        if (!root) return
+        const groups = this.getHiddenPresetGroups()
+        if (!groups.length) return
+        const draft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        const activeTab = this.hiddenPresetTab && groups.some(group => group.id === this.hiddenPresetTab)
+            ? this.hiddenPresetTab
+            : groups[0].id
+        this.hiddenPresetTab = activeTab
+        root.innerHTML = ""
+        const tabs = document.createElement("div")
+        tabs.className = "hidden-presets-tabs"
+        groups.forEach(group => {
+            const button = document.createElement("button")
+            button.type = "button"
+            button.className = "hidden-presets-tab"
+            if (group.id === activeTab) button.classList.add("active")
+            button.textContent = group.title
+            button.addEventListener("click", () => {
+                this.hiddenPresetTab = group.id
+                this.renderHiddenPresets()
+            })
+            tabs.appendChild(button)
+        })
+        root.appendChild(tabs)
+        const activeGroup = groups.find(group => group.id === activeTab)
+        if (!activeGroup) return
+        const grid = document.createElement("div")
+        grid.className = "hidden-presets-grid"
+        activeGroup.items.forEach(item => {
+            const preset = HiddenPresets[item.key]
+            if (!preset) return
+            const button = document.createElement("button")
+            button.type = "button"
+            button.className = "hidden-preset-item"
+            if (draft?.preset === item.key) button.classList.add("active")
+            button.textContent = item.label
+            button.addEventListener("click", () => {
+                this.applyAppearanceDraft(this.buildHiddenPresetDraft(preset, item.key))
+            })
+            grid.appendChild(button)
+        })
+        root.appendChild(grid)
     },
 
     resetAppearanceDraft() {

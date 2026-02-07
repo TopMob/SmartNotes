@@ -673,6 +673,11 @@ Object.assign(UI, {
         })
         const futureStamp = note.futureAt?.toDate ? note.futureAt.toDate() : (note.futureAt ? new Date(note.futureAt) : null)
         const futureValue = futureStamp ? new Date(futureStamp.getTime() - futureStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
+        const futureClearButton = futureValue
+            ? `<button type="button" class="btn-secondary" data-action="note-future-clear" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.future_clear || "Clear"}
+                </button>`
+            : ""
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
@@ -704,9 +709,7 @@ Object.assign(UI, {
                 <button type="button" class="btn-primary" data-action="note-future-set" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.future_note || "Future note"}
                 </button>
-                <button type="button" class="btn-secondary" data-action="note-future-clear" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.future_clear || "Clear"}
-                </button>
+                ${futureClearButton}
             </div>
             <div class="modal-actions-grid" style="margin-top:12px;">
                 <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">

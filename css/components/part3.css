@@ -303,3 +303,52 @@ select.input-area:focus {
 .collab-link-block {
     margin-bottom: 12px;
 }
+
+.hidden-presets-root {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.hidden-presets-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.hidden-presets-tab {
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hidden-presets-tab.active {
+    border-color: rgba(var(--primary-rgb), 0.6);
+    background: rgba(var(--primary-rgb), 0.18);
+}
+
+.hidden-presets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.hidden-preset-item {
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hidden-preset-item.active {
+    border-color: rgba(var(--primary-rgb), 0.7);
+    background: rgba(var(--primary-rgb), 0.2);
+}
