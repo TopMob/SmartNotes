@@ -17,7 +17,11 @@ const NoteIO = {
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
             isPinned: !!safe.isPinned,
+            isHidden: !!safe.isHidden,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
+            futureAt: safe.futureAt || null,
+            shareId: safe.shareId ? String(safe.shareId) : null,
+            collabId: safe.collabId ? String(safe.collabId) : null,
             order: typeof safe.order === "number" ? safe.order : Date.now(),
             createdAt: safe.createdAt || now,
             updatedAt: safe.updatedAt || now
@@ -118,7 +122,6 @@ const SmartSearch = {
         for (const qw of qTokens) {
             let maxWordScore = 0
             
-            // Expand synonyms
             const variants = [qw]
             for (const [key, list] of this.synonyms) {
                 if (qw === key || list.includes(qw)) {
@@ -200,147 +203,6 @@ const LockService = {
     }
 }
 
-const SketchService = {
-    canvas: null,
-    ctx: null,
-    colorPicker: null,
-    widthPicker: null,
-    zoomPicker: null,
-    history: [],
-    isDrawing: false,
-    isEraser: false,
-    scale: 1,
-    lastPoint: null,
-
-    prepare() {
-        if (!this.canvas) this.init()
-        this.resizeCanvas(false)
-        this.isEraser = false
-        this.setScale(parseFloat(this.zoomPicker?.value || "1"))
-        this.updateCursor()
-    },
-
-    init() {
-        this.canvas = document.getElementById("sketch-canvas")
-        if (!this.canvas) return
-        this.ctx = this.canvas.getContext("2d")
-        this.colorPicker = document.getElementById("sketch-color-picker")
-        this.widthPicker = document.getElementById("sketch-width-picker")
-        this.zoomPicker = document.getElementById("sketch-zoom-picker")
-        this.canvas.addEventListener("pointerdown", (e) => this.startDraw(e))
-        this.canvas.addEventListener("pointermove", (e) => this.draw(e))
-        this.canvas.addEventListener("pointerup", () => this.endDraw())
-        this.canvas.addEventListener("pointercancel", () => this.endDraw())
-        this.canvas.addEventListener("pointerleave", () => this.endDraw())
-        this.zoomPicker?.addEventListener("input", () => this.setScale(parseFloat(this.zoomPicker.value || "1")))
-        window.addEventListener("resize", () => this.resizeCanvas(true))
-        this.updateCursor()
-    },
-
-    resizeCanvas(preserve) {
-        if (!this.canvas || !this.ctx) return
-        const parent = this.canvas.parentElement
-        if (!parent) return
-        const rect = parent.getBoundingClientRect()
-        if (!rect.width || !rect.height) return
-        let snapshot = null
-        if (preserve) snapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height)
-        this.canvas.width = Math.floor(rect.width)
-        this.canvas.height = Math.floor(rect.height)
-        if (snapshot) this.ctx.putImageData(snapshot, 0, 0)
-    },
-
-    setScale(value) {
-        const nextScale = Utils.clamp(value || 1, 1, 3)
-        this.scale = nextScale
-        if (this.canvas) {
-            this.canvas.style.transform = `scale(${nextScale})`
-            this.canvas.style.transformOrigin = "top left"
-        }
-    },
-
-    getPoint(e) {
-        const rect = this.canvas.getBoundingClientRect()
-        const x = (e.clientX - rect.left) / this.scale
-        const y = (e.clientY - rect.top) / this.scale
-        return { x, y }
-    },
-
-    applyStrokeStyle() {
-        if (!this.ctx) return
-        const size = parseFloat(this.widthPicker?.value || "3")
-        this.ctx.lineWidth = size
-        this.ctx.lineCap = "round"
-        this.ctx.lineJoin = "round"
-        if (this.isEraser) {
-            this.ctx.globalCompositeOperation = "destination-out"
-            this.ctx.strokeStyle = "rgba(0,0,0,1)"
-        } else {
-            this.ctx.globalCompositeOperation = "source-over"
-            this.ctx.strokeStyle = this.colorPicker?.value || "#00f2ff"
-        }
-    },
-
-    startDraw(e) {
-        if (!this.canvas || !this.ctx) return
-        this.canvas.setPointerCapture?.(e.pointerId)
-        this.isDrawing = true
-        this.applyStrokeStyle()
-        this.history.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height))
-        this.lastPoint = this.getPoint(e)
-    },
-
-    draw(e) {
-        if (!this.isDrawing || !this.ctx) return
-        const point = this.getPoint(e)
-        if (!this.lastPoint) {
-            this.lastPoint = point
-            return
-        }
-        this.ctx.beginPath()
-        this.ctx.moveTo(this.lastPoint.x, this.lastPoint.y)
-        this.ctx.lineTo(point.x, point.y)
-        this.ctx.stroke()
-        this.lastPoint = point
-    },
-
-    endDraw() {
-        this.isDrawing = false
-        this.lastPoint = null
-    },
-
-    toggleEraser() {
-        this.isEraser = !this.isEraser
-        this.updateCursor()
-    },
-
-    updateCursor() {
-        if (!this.canvas) return
-        this.canvas.style.cursor = this.isEraser ? "cell" : "crosshair"
-    },
-
-    undo() {
-        if (!this.ctx || !this.history.length) return
-        const last = this.history.pop()
-        if (last) this.ctx.putImageData(last, 0, 0)
-    },
-
-    clear() {
-        if (!this.ctx || !this.canvas) return
-        this.history.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height))
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
-    },
-
-    save() {
-        if (!this.canvas) return
-        const dataUrl = this.canvas.toDataURL("image/png")
-        Editor.insertSketchImage(dataUrl)
-        UI.closeModal("sketch-modal")
-    }
-}
-
-window.SketchService = SketchService
-
 const ShareService = {
     getBaseUrl() {
         const u = new URL(window.location.href)
@@ -352,12 +214,8 @@ const ShareService = {
         return this.getBaseUrl()
     },
 
-    makeShareLink(noteId) {
-        return `${this.getBaseUrl()}#share/${encodeURIComponent(noteId)}`
-    },
-
-    makeCollabLink(noteId) {
-        return `${this.getBaseUrl()}#collab/${encodeURIComponent(noteId)}`
+    buildLink(mode, token) {
+        return `${this.getBaseUrl()}#${mode}/${encodeURIComponent(token)}`
     },
 
     parseHash(hash) {
@@ -365,12 +223,59 @@ const ShareService = {
         const [mode, id] = h.split("/")
         if ((mode === "share" || mode === "collab") && id) {
             try {
-                return { mode, noteId: decodeURIComponent(id) }
+                return { mode, shareId: decodeURIComponent(id) }
             } catch {
                 return null
             }
         }
         return null
+    },
+
+    async createLink(note, mode) {
+        if (!db || !note || !StateStore.read().user) return ""
+        const token = await this.ensureShareToken(note, mode)
+        if (!token) return ""
+        return this.buildLink(mode, token)
+    },
+
+    async ensureShareToken(note, mode) {
+        if (!db || !note || !StateStore.read().user) return null
+        const isCollab = mode === "collab"
+        const existing = isCollab ? note.collabId : note.shareId
+        if (existing) return existing
+        const ref = db.collection("sharedNotes").doc()
+        const owner = StateStore.read().user
+        const payload = {
+            note: NoteIO.normalizeNote(note),
+            mode,
+            ownerId: owner.uid,
+            ownerEmail: owner.email || "",
+            ownerName: owner.displayName || "",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }
+        await ref.set(payload)
+        const patch = isCollab ? { collabId: ref.id } : { shareId: ref.id }
+        const noteRef = db.collection("users").doc(owner.uid).collection("notes").doc(note.id)
+        await noteRef.set(patch, { merge: true })
+        return ref.id
+    },
+
+    async fetchSharedNote(shareId) {
+        if (!db || !shareId) return null
+        const ref = db.collection("sharedNotes").doc(shareId)
+        const snap = await ref.get()
+        if (!snap.exists) return null
+        return { id: snap.id, ...snap.data() }
+    },
+
+    async updateSharedNote(collabId, note) {
+        if (!db || !collabId || !note) return
+        const ref = db.collection("sharedNotes").doc(collabId)
+        await ref.set({
+            note: NoteIO.normalizeNote(note),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
     }
 }
 
@@ -383,7 +288,6 @@ const DriveService = {
     },
     async uploadNote(note) {
         if (!this.ready) return UI.showToast(UI.getText("drive_unavailable", "Drive unavailable"))
-        // Placeholder for actual Drive API implementation
         return UI.showToast(UI.getText("drive_saved", "Uploaded"))
     }
 }

@@ -38,6 +38,28 @@
     display: inline-flex;
 }
 
+.custom-icon {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.custom-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.btn-icon.is-recording .custom-icon svg[data-state="idle"] {
+    display: none;
+}
+
+.btn-icon:not(.is-recording) .custom-icon svg[data-state="active"] {
+    display: none;
+}
+
 .pulse-ring {
     width: 10px;
     height: 10px;

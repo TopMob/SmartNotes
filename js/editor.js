@@ -12,6 +12,14 @@ const Editor = (() => {
     let alignMenuTarget = null
     let pageIndex = 0
     let titleTouched = false
+    let autoSaveSnapshot = null
+    let collabUnsub = null
+    let sketchState = {
+        ctx: null,
+        isDrawing: false,
+        history: [],
+        lastPoint: null
+    }
 
     const CONFIG = {
         MAX_HISTORY: 100,
@@ -34,10 +42,13 @@ const Editor = (() => {
             tagsContainer: document.getElementById("note-tags-container"),
             ctxMenu: document.getElementById("media-context-menu"),
             alignMenu: document.getElementById("editor-align-menu"),
-            scrollArea: document.querySelector(".editor-scroll-area")
+            scrollArea: document.querySelector(".editor-scroll-area"),
+            sketchPanel: document.getElementById("inline-sketch-panel"),
+            sketchCanvas: document.getElementById("inline-sketch-canvas")
         }
         loadToolSettings()
         buildToolbar()
+        setupInlineSketch()
         bind()
     }
 
@@ -59,6 +70,8 @@ const Editor = (() => {
 
             els.content.addEventListener("paste", handlePaste, { signal })
             els.content.addEventListener("keydown", handleTagLineEnter, { signal })
+            els.content.addEventListener("keydown", handleEditorKeyDown, { signal })
+            els.content.addEventListener("keyup", handleEquationKeyUp, { signal })
             els.content.addEventListener("keyup", storeSelection, { signal })
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
@@ -77,10 +90,6 @@ const Editor = (() => {
                     return
                 }
                 deselectMedia()
-            }, { signal })
-
-            els.content.addEventListener("change", (e) => {
-                if (e.target.matches(".task-checkbox")) toggleTask(e.target)
             }, { signal })
 
             els.content.addEventListener("pointerdown", handleResizeStart, { signal })
@@ -167,6 +176,111 @@ const Editor = (() => {
         }
         
         document.execCommand("insertHTML", false, safeContent || text)
+    }
+
+    const setupInlineSketch = () => {
+        if (!els.sketchCanvas) return
+        sketchState.ctx = els.sketchCanvas.getContext("2d")
+        els.sketchCanvas.addEventListener("pointerdown", startSketchDraw)
+        els.sketchCanvas.addEventListener("pointermove", drawSketch)
+        els.sketchCanvas.addEventListener("pointerup", endSketchDraw)
+        els.sketchCanvas.addEventListener("pointerleave", endSketchDraw)
+        els.sketchCanvas.addEventListener("pointercancel", endSketchDraw)
+        window.addEventListener("resize", () => {
+            if (els.sketchPanel?.classList.contains("active")) resizeSketchCanvas()
+        })
+    }
+
+    const resizeSketchCanvas = () => {
+        if (!els.sketchCanvas || !sketchState.ctx) return
+        const rect = els.sketchCanvas.getBoundingClientRect()
+        if (!rect.width || !rect.height) return
+        const snapshot = sketchState.ctx.getImageData(0, 0, els.sketchCanvas.width, els.sketchCanvas.height)
+        els.sketchCanvas.width = Math.floor(rect.width)
+        els.sketchCanvas.height = Math.floor(rect.height)
+        if (snapshot) sketchState.ctx.putImageData(snapshot, 0, 0)
+    }
+
+    const openInlineSketch = () => {
+        if (!els.sketchPanel || !els.sketchCanvas) return
+        els.sketchPanel.classList.add("active")
+        setTimeout(() => resizeSketchCanvas(), 0)
+    }
+
+    const closeInlineSketch = () => {
+        if (!els.sketchPanel) return
+        els.sketchPanel.classList.remove("active")
+        sketchState.history = []
+        sketchState.lastPoint = null
+        sketchState.isDrawing = false
+    }
+
+    const clearInlineSketch = () => {
+        if (!els.sketchCanvas || !sketchState.ctx) return
+        sketchState.history.push(sketchState.ctx.getImageData(0, 0, els.sketchCanvas.width, els.sketchCanvas.height))
+        sketchState.ctx.clearRect(0, 0, els.sketchCanvas.width, els.sketchCanvas.height)
+    }
+
+    const undoInlineSketch = () => {
+        if (!els.sketchCanvas || !sketchState.ctx || !sketchState.history.length) return
+        const last = sketchState.history.pop()
+        if (last) sketchState.ctx.putImageData(last, 0, 0)
+    }
+
+    const applyInlineSketch = () => {
+        if (!els.sketchCanvas) return
+        const dataUrl = els.sketchCanvas.toDataURL("image/png")
+        if (dataUrl) insertMedia(dataUrl, "image")
+        clearInlineSketch()
+        closeInlineSketch()
+    }
+
+    const cancelInlineSketch = () => {
+        clearInlineSketch()
+        closeInlineSketch()
+    }
+
+    const startSketchDraw = (e) => {
+        if (!els.sketchCanvas || !sketchState.ctx) return
+        sketchState.isDrawing = true
+        sketchState.history.push(sketchState.ctx.getImageData(0, 0, els.sketchCanvas.width, els.sketchCanvas.height))
+        const rect = els.sketchCanvas.getBoundingClientRect()
+        sketchState.lastPoint = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        }
+        sketchState.ctx.strokeStyle = "#000"
+        sketchState.ctx.lineWidth = 3
+        sketchState.ctx.lineCap = "round"
+        sketchState.ctx.lineJoin = "round"
+    }
+
+    const drawSketch = (e) => {
+        if (!sketchState.isDrawing || !sketchState.ctx || !sketchState.lastPoint || !els.sketchCanvas) return
+        const rect = els.sketchCanvas.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+        sketchState.ctx.beginPath()
+        sketchState.ctx.moveTo(sketchState.lastPoint.x, sketchState.lastPoint.y)
+        sketchState.ctx.lineTo(x, y)
+        sketchState.ctx.stroke()
+        sketchState.lastPoint = { x, y }
+    }
+
+    const endSketchDraw = () => {
+        sketchState.isDrawing = false
+        sketchState.lastPoint = null
+    }
+
+    const handleEditorKeyDown = (e) => {
+        const isCut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x"
+        if (!isCut) return
+        if (cutCurrentLine()) e.preventDefault()
+    }
+
+    const handleEquationKeyUp = (e) => {
+        if (e.key !== "=") return
+        replaceEquationAtCaret()
     }
 
     const handleLockApply = async () => {
@@ -306,15 +420,13 @@ const Editor = (() => {
         { id: "underline", i: "format_underlined", label: "tool_underline", cmd: () => document.execCommand("underline") },
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => document.execCommand("insertUnorderedList") },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => document.execCommand("insertOrderedList") },
-        { id: "task", i: "checklist", label: "tool_task", cmd: () => insertChecklistLine() },
         { id: "image", i: "image", label: "tool_image", cmd: () => {
             storeSelection()
             document.getElementById("img-upload")?.click()
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             storeSelection()
-            UI.openModal("sketch-modal")
-            SketchService.prepare()
+            openInlineSketch()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => toggleAlignMenu(btn) },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
@@ -330,13 +442,6 @@ const Editor = (() => {
         buildToolbar()
     }
 
-    const insertChecklistLine = () => {
-        const id = Utils.generateId()
-        const html = `<div class="task-item" data-task-id="${id}"><input class="task-checkbox" type="checkbox"><span class="task-text" contenteditable="true"></span></div><br>`
-        document.execCommand("insertHTML", false, html)
-        const textEl = els.content?.querySelector(`.task-item[data-task-id="${id}"] .task-text`)
-        if (textEl) focusEditable(textEl)
-    }
 
     const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
         const r = new FileReader()
@@ -350,8 +455,6 @@ const Editor = (() => {
         const indicator = document.getElementById("voice-indicator")
         if (indicator) indicator.classList.toggle("active", !!active)
         const voiceBtn = document.querySelector('[data-action="editor-voice"]')
-        const icon = voiceBtn?.querySelector("i")
-        if (icon) icon.textContent = active ? "stop" : "mic"
         voiceBtn?.classList.toggle("is-recording", !!active)
     }
 
@@ -401,12 +504,6 @@ const Editor = (() => {
         else startRecording()
     }
 
-    const toggleTask = (el) => {
-        const item = el.closest(".task-item")
-        if (item) item.classList.toggle("completed", !!el.checked)
-        if (el.checked) el.setAttribute("checked", "")
-        else el.removeAttribute("checked")
-    }
 
     const fileToDataUrl = (file) => new Promise((resolve, reject) => {
         const r = new FileReader()
@@ -541,11 +638,40 @@ const Editor = (() => {
         renderState()
         
         history.push(captureSnapshot())
+        autoSaveSnapshot = captureSnapshot()
         
         els.wrapper.classList.add("active")
         setTimeout(() => focusActivePage(), 50)
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
+        setupCollabSync(n)
+    }
+
+    const setupCollabSync = (note) => {
+        if (collabUnsub) {
+            collabUnsub()
+            collabUnsub = null
+        }
+        if (!db || !note?.collabId) return
+        const ref = db.collection("sharedNotes").doc(note.collabId)
+        collabUnsub = ref.onSnapshot(snap => {
+            if (!snap.exists) return
+            const shared = snap.data()
+            if (!shared?.note) return
+            if (StateStore.read().editorDirty) return
+            const incoming = NoteIO.normalizeNote({ ...shared.note, id: note.id, collabId: note.collabId, shareId: null })
+            const current = StateStore.read().currentNote
+            if (!current) return
+            if (incoming.title === current.title && incoming.content === current.content && JSON.stringify(incoming.tags) === JSON.stringify(current.tags)) return
+            StateStore.update("currentNote", { ...current, ...incoming })
+            const updatedNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, ...incoming } : n)
+            StateActions.setNotes(updatedNotes)
+            const user = StateStore.read().user
+            if (user) {
+                db.collection("users").doc(user.uid).collection("notes").doc(note.id).set(incoming, { merge: true })
+            }
+            renderState()
+        })
     }
 
     const openFromList = async (note) => {
@@ -568,8 +694,14 @@ const Editor = (() => {
         StateStore.update("currentNote", null)
         deselectMedia()
         stopRecording()
+        closeInlineSketch()
         pageIndex = 0
         titleTouched = false
+        autoSaveSnapshot = null
+        if (collabUnsub) {
+            collabUnsub()
+            collabUnsub = null
+        }
         if (observer) observer.disconnect()
     }
 
@@ -584,19 +716,11 @@ const Editor = (() => {
         makeMediaDraggable()
         syncMediaSizes()
         syncAudioPlayers()
-        syncTaskStates()
         syncLockButton(n)
         if (observer && els.content) {
             observer.disconnect()
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
         }
-    }
-
-    const syncTaskStates = () => {
-        els.content.querySelectorAll(".task-checkbox").forEach(cb => {
-            const item = cb.closest(".task-item")
-            if (item) item.classList.toggle("completed", !!cb.checked)
-        })
     }
 
     const focusEditable = (el) => {
@@ -616,6 +740,144 @@ const Editor = (() => {
         const range = sel.getRangeAt(0)
         if (!els.content || !els.content.contains(range.commonAncestorContainer)) return
         savedRange = range.cloneRange()
+    }
+
+    const copyTextToClipboard = async (text) => {
+        const value = String(text || "")
+        if (!value) return false
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(value)
+                return true
+            } catch {
+                return false
+            }
+        }
+        const textarea = document.createElement("textarea")
+        textarea.value = value
+        textarea.setAttribute("readonly", "true")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        document.body.appendChild(textarea)
+        textarea.select()
+        const ok = document.execCommand("copy")
+        document.body.removeChild(textarea)
+        return ok
+    }
+
+    const cutCurrentLine = () => {
+        const sel = window.getSelection()
+        if (!sel || sel.rangeCount === 0) return false
+        const range = sel.getRangeAt(0)
+        if (!els.content || !els.content.contains(range.commonAncestorContainer)) return false
+        let block = getActiveBlock()
+        if (!block) {
+            const node = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement
+            block = node?.closest("div, p, li") || node
+        }
+        if (!block || block === els.content) return false
+        const text = block.textContent || ""
+        copyTextToClipboard(text)
+        block.remove()
+        queueSnapshot()
+        return true
+    }
+
+    const getTextNodes = (root) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
+        const nodes = []
+        let current = walker.nextNode()
+        while (current) {
+            nodes.push(current)
+            current = walker.nextNode()
+        }
+        return nodes
+    }
+
+    const getCaretOffsetInBlock = (block) => {
+        const sel = window.getSelection()
+        if (!sel || sel.rangeCount === 0) return null
+        const range = sel.getRangeAt(0)
+        const nodes = getTextNodes(block)
+        let offset = 0
+        for (const node of nodes) {
+            if (node === range.startContainer) {
+                return offset + range.startOffset
+            }
+            offset += node.textContent?.length || 0
+        }
+        return null
+    }
+
+    const createRangeFromOffsets = (root, start, end) => {
+        const range = document.createRange()
+        const nodes = getTextNodes(root)
+        let offset = 0
+        let startNode = null
+        let startOffset = 0
+        let endNode = null
+        let endOffset = 0
+        for (const node of nodes) {
+            const len = node.textContent?.length || 0
+            if (!startNode && start <= offset + len) {
+                startNode = node
+                startOffset = Math.max(0, start - offset)
+            }
+            if (!endNode && end <= offset + len) {
+                endNode = node
+                endOffset = Math.max(0, end - offset)
+            }
+            offset += len
+        }
+        if (!startNode || !endNode) return null
+        range.setStart(startNode, startOffset)
+        range.setEnd(endNode, endOffset)
+        return range
+    }
+
+    const replaceEquationAtCaret = () => {
+        const target = getActiveBlock() || getPages()[pageIndex] || els.content
+        if (!target) return
+        const caretOffset = getCaretOffsetInBlock(target)
+        if (caretOffset === null) return
+        const fullText = target.textContent || ""
+        const textBefore = fullText.slice(0, caretOffset)
+        const match = textBefore.match(/(-?\d+(?:[.,]\d+)?)\s*([+\-*/])\s*(-?\d+(?:[.,]\d+)?)\s*=$/)
+        if (!match) return
+        const startIndex = textBefore.length - match[0].length
+        const endIndex = textBefore.length
+        const left = parseFloat(match[1].replace(",", "."))
+        const right = parseFloat(match[3].replace(",", "."))
+        if (!Number.isFinite(left) || !Number.isFinite(right)) return
+        let result = null
+        switch (match[2]) {
+            case "+":
+                result = left + right
+                break
+            case "-":
+                result = left - right
+                break
+            case "*":
+                result = left * right
+                break
+            case "/":
+                result = right === 0 ? null : left / right
+                break
+            default:
+                break
+        }
+        if (result === null) return
+        const range = createRangeFromOffsets(target, startIndex, endIndex)
+        if (!range) return
+        range.deleteContents()
+        range.insertNode(document.createTextNode(String(result)))
+        range.collapse(false)
+        const sel = window.getSelection()
+        if (sel) {
+            sel.removeAllRanges()
+            sel.addRange(range)
+        }
+        queueSnapshot()
     }
 
     const restoreSelection = () => {
@@ -856,7 +1118,17 @@ const Editor = (() => {
                 updatedAt: Utils.serverTimestamp()
             })
         }
+        scheduleAutoSave()
     }, CONFIG.SNAPSHOT_DELAY)
+
+    const scheduleAutoSave = Utils.debounce(async () => {
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote || !StateStore.read().editorDirty) return
+        const snap = captureSnapshot()
+        if (autoSaveSnapshot && snapshotsEqual(autoSaveSnapshot, snap)) return
+        await save({ silent: true })
+        autoSaveSnapshot = captureSnapshot()
+    }, 1200)
 
     const undo = () => {
         if (history.length <= 1) return
@@ -897,11 +1169,6 @@ const Editor = (() => {
         insertHtmlAtSelection(html)
         makeMediaDraggable()
         syncMediaSizes()
-    }
-
-    const insertSketchImage = (src) => {
-        if (!src) return
-        insertMedia(src, "image")
     }
 
     const insertAudio = (src) => {
@@ -1141,7 +1408,11 @@ const Editor = (() => {
         
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            if (n.collabId) {
+                await ShareService.updateSharedNote(n.collabId, n)
+            }
             StateStore.update("editorDirty", false)
+            autoSaveSnapshot = captureSnapshot()
             if (!options.silent) {
                 UI.showToast(UI.getText("saved", "Saved"))
                 close()
@@ -1179,7 +1450,10 @@ const Editor = (() => {
         resetMediaTransform,
         alignMediaOrText,
         deleteSelectedMedia,
-        insertSketchImage,
+        undoInlineSketch,
+        clearInlineSketch,
+        cancelInlineSketch,
+        applyInlineSketch,
         toggleRecording,
         addPage,
         nextPage,

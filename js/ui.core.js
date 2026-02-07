@@ -367,6 +367,29 @@ const UI = {
             case "note-archive":
                 this.toggleSelectedArchive(decodeURIComponent(el.dataset.noteId || ""))
                 break
+            case "note-delete":
+                deleteNoteById(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-share":
+                this.openModal("share-modal")
+                this.closeModal("note-actions-modal")
+                break
+            case "note-collab":
+                this.openModal("collab-modal")
+                this.closeModal("note-actions-modal")
+                break
+            case "note-hide-toggle":
+                toggleHiddenNote(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-copy-text":
+                copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-future-set":
+                scheduleFutureNote(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-future-clear":
+                clearFutureNote(decodeURIComponent(el.dataset.noteId || ""))
+                break
             case "note-move-folder":
                 this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
                 break
@@ -403,6 +426,9 @@ const UI = {
             case "submit-feedback":
                 this.submitFeedback()
                 break
+            case "submit-poll":
+                this.submitPoll()
+                break
             case "media-reset":
                 Editor.resetMediaTransform()
                 break
@@ -415,17 +441,17 @@ const UI = {
             case "editor-align":
                 Editor.alignMediaOrText(el.dataset.align)
                 break
-            case "sketch-undo":
-                SketchService.undo()
+            case "inline-sketch-undo":
+                Editor.undoInlineSketch()
                 break
-            case "sketch-clear":
-                SketchService.clear()
+            case "inline-sketch-clear":
+                Editor.clearInlineSketch()
                 break
-            case "sketch-eraser":
-                SketchService.toggleEraser()
+            case "inline-sketch-cancel":
+                Editor.cancelInlineSketch()
                 break
-            case "sketch-save":
-                SketchService.save()
+            case "inline-sketch-apply":
+                Editor.applyInlineSketch()
                 break
             case "photo-undo":
                 PhotoEditor.undo()
@@ -574,6 +600,8 @@ const UI = {
             notes: dict.view_notes || "Notes",
             favorites: dict.view_favorites || "Favorites",
             archive: dict.view_archive || "Archive",
+            hidden: dict.view_hidden || "Hidden",
+            future: dict.view_future || "Future",
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection"
