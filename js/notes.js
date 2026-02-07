@@ -32,6 +32,55 @@ const applyStoredFavorites = (notes) => {
     })
 }
 
+const getCleanText = (html) => {
+    const text = Utils.stripHtml(html || "")
+    return text.replace(/\s+/g, " ").trim()
+}
+
+const getMediaCounts = (html) => {
+    if (!html) return { images: 0, audio: 0 }
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    return {
+        images: wrapper.querySelectorAll("img").length,
+        audio: wrapper.querySelectorAll("audio").length
+    }
+}
+
+const getCountLabel = (count, singleKey, pluralKey) => {
+    if (count === 1) return UI.getText(singleKey, singleKey)
+    return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
+}
+
+const formatMediaSummary = (counts) => {
+    const parts = []
+    if (counts.images) {
+        parts.push(`${counts.images} ${getCountLabel(counts.images, "media_photo", "media_photos")}`)
+    }
+    if (counts.audio) {
+        parts.push(`${counts.audio} ${getCountLabel(counts.audio, "media_audio", "media_audios")}`)
+    }
+    return parts.join(" · ")
+}
+
+const buildAutoTitle = (note) => {
+    const text = getCleanText(note.content || "")
+    if (text) {
+        const firstLine = text.split(/\r?\n/).find(line => line.trim()) || text
+        const normalized = firstLine.trim()
+        return normalized.length > 60 ? `${normalized.slice(0, 57)}…` : normalized
+    }
+    const mediaSummary = formatMediaSummary(getMediaCounts(note.content || ""))
+    return mediaSummary || UI.getText("untitled_note", "Untitled")
+}
+
+const buildPreviewText = (note) => {
+    const text = getCleanText(note.content || "")
+    if (text) return text
+    const mediaSummary = formatMediaSummary(getMediaCounts(note.content || ""))
+    return mediaSummary || UI.getText("empty_note", "No content")
+}
+
 const loadNotesFilter = () => {
     try {
         const stored = JSON.parse(localStorage.getItem(NOTES_FILTER_KEY))
@@ -87,11 +136,10 @@ const NotesRenderer = (() => {
             actions.appendChild(createBtn("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
         }
 
-        const titleText = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || UI.getText("untitled_note", "Untitled"))
+        const titleText = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || buildAutoTitle(note))
         const h3 = el("h3", [], titleText)
 
-        const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-        const contentText = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : (rawText || UI.getText("empty_note", "No content"))
+        const contentText = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : buildPreviewText(note)
         const p = el("p", [], contentText)
 
         const meta = el("div", ["note-meta"])
@@ -141,13 +189,12 @@ const NotesRenderer = (() => {
         const isLockedView = StateStore.read().view === "locked"
         const isLockedNote = isHiddenLocked(note)
 
-        if (note.title !== data.title || isLockedView) {
-            refs.h3.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || UI.getText("untitled_note", "Untitled"))
+        if (note.title !== data.title || note.content !== data.content || isLockedView) {
+            refs.h3.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || buildAutoTitle(note))
         }
 
         if (note.content !== data.content || isLockedView) {
-            const rawText = (note.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-            refs.p.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : (rawText || UI.getText("empty_note", "No content"))
+            refs.p.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : buildPreviewText(note)
         }
 
         const t1 = note.updatedAt?.seconds || 0

@@ -230,6 +230,7 @@ Object.assign(UI, {
         ThemeManager.applySettings(draft, true)
         this.initAppearanceDraft()
         this.renderAppearanceDraft()
+        this.closeModal("settings-modal")
     },
 
     bindSettingsControls() {
@@ -316,7 +317,7 @@ Object.assign(UI, {
         }
     },
 
-    showPrompt(title, placeholder, cb) {
+    showPrompt(title, placeholder, cb, value = "") {
         const modal = this.els.promptModal
         const input = document.getElementById("prompt-input")
         const ok = document.getElementById("prompt-ok")
@@ -324,7 +325,7 @@ Object.assign(UI, {
         const titleEl = document.getElementById("prompt-title")
 
         if (titleEl) titleEl.textContent = title
-        input.value = ""
+        input.value = value
         input.placeholder = placeholder
 
         const finish = (val) => {

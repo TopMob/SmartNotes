@@ -255,7 +255,7 @@ const UI = {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder", "rename-active-folder"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -282,6 +282,9 @@ const UI = {
                 break
             case "create-folder":
                 this.createFolder()
+                break
+            case "rename-active-folder":
+                this.renameFolder(StateStore.read().activeFolderId)
                 break
             case "open-modal":
                 this.openModal(el.dataset.modal)
@@ -330,6 +333,15 @@ const UI = {
                 break
             case "editor-save":
                 Editor.save()
+                break
+            case "editor-prev-page":
+                Editor.prevPage()
+                break
+            case "editor-next-page":
+                Editor.nextPage()
+                break
+            case "editor-add-page":
+                Editor.addPage()
                 break
             case "editor-voice":
                 Editor.toggleRecording()
@@ -526,6 +538,25 @@ const UI = {
         })
     },
 
+    renameFolder(folderId) {
+        const id = String(folderId || "")
+        if (!id) return
+        const folder = StateStore.read().folders.find(f => f.id === id)
+        if (!folder) return
+        this.showPrompt(this.getText("rename_folder", "Rename folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+            const trimmed = String(name || "").trim()
+            if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (trimmed.toLowerCase() === String(folder.name || "").toLowerCase()) return
+            if (StateStore.read().folders.some(f => f.id !== id && f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+                return this.showToast(this.getText("folder_exists", "Folder already exists"))
+            }
+            if (!db || !StateStore.read().user) return
+            await db.collection("users").doc(StateStore.read().user.uid).collection("folders").doc(id).update({
+                name: trimmed
+            })
+        }, String(folder.name || ""))
+    },
+
     applyAppearanceSettings() {
         const saved = JSON.parse(localStorage.getItem("app-preferences")) || {}
         StateActions.updateConfig({
@@ -555,11 +586,21 @@ const UI = {
         }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
+        this.updateFolderRenameButton()
     },
 
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
         const label = StateStore.read().view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
+        this.updateFolderRenameButton()
+    },
+
+    updateFolderRenameButton() {
+        const button = document.getElementById("rename-folder-button")
+        if (!button) return
+        const { view, activeFolderId } = StateStore.read()
+        const isVisible = view === "folder" && !!activeFolderId
+        button.classList.toggle("hidden", !isVisible)
     }
 }

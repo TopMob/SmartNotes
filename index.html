@@ -139,7 +139,12 @@
                     <button type="button" id="menu-toggle" class="btn-icon" data-action="toggle-sidebar" aria-label="Открыть меню" data-lang-aria="open_menu">
                         <i class="material-icons-round" aria-hidden="true">menu</i>
                     </button>
-                    <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
+                    <div class="view-title-group">
+                        <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
+                        <button type="button" id="rename-folder-button" class="btn-icon hidden" data-action="rename-active-folder" aria-label="Переименовать папку" data-lang-aria="rename_folder">
+                            <i class="material-icons-round" aria-hidden="true">edit</i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="search-container" role="search">
@@ -251,7 +256,20 @@
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
 
-                <div id="note-content-editable" class="note-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+                <div class="editor-page-controls" aria-label="Страницы" data-lang-aria="editor_pages">
+                    <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
+                        <i class="material-icons-round" aria-hidden="true">chevron_left</i>
+                    </button>
+                    <span id="editor-page-indicator" class="page-indicator" aria-live="polite">1/1</span>
+                    <button type="button" class="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
+                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                    </button>
+                    <button type="button" class="btn-icon" id="editor-page-add" data-action="editor-add-page" aria-label="Добавить страницу" data-lang-aria="page_add">
+                        <i class="material-icons-round" aria-hidden="true">note_add</i>
+                    </button>
+                </div>
+
+                <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
 
                 <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
                     <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">

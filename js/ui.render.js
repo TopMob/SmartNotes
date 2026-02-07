@@ -285,7 +285,9 @@ Object.assign(UI, {
             <button type="button" class="nav-item ${activeFolderId === f.id ? "active" : ""}" data-action="open-folder" data-folder-id="${f.id}">
                 <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
-                <i class="material-icons-round" style="margin-left:auto; opacity:0.5; font-size:16px" data-action="delete-folder" data-folder-id="${f.id}" aria-hidden="true">close</i>
+                <span class="folder-action-group">
+                    <i class="material-icons-round folder-action" data-action="delete-folder" data-folder-id="${f.id}" aria-hidden="true">close</i>
+                </span>
             </button>
         `).join("")
         this.renderFilterMenu()

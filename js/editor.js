@@ -10,6 +10,8 @@ const Editor = (() => {
     let recordingStream = null
     let savedRange = null
     let alignMenuTarget = null
+    let pageIndex = 0
+    let titleTouched = false
 
     const CONFIG = {
         MAX_HISTORY: 100,
@@ -24,6 +26,10 @@ const Editor = (() => {
             title: document.getElementById("note-title"),
             content: document.getElementById("note-content-editable"),
             toolbar: document.getElementById("editor-toolbar"),
+            pageIndicator: document.getElementById("editor-page-indicator"),
+            pagePrev: document.querySelector('[data-action="editor-prev-page"]'),
+            pageNext: document.querySelector('[data-action="editor-next-page"]'),
+            pageAdd: document.querySelector('[data-action="editor-add-page"]'),
             tagsInput: document.getElementById("note-tags-input"),
             tagsContainer: document.getElementById("note-tags-container"),
             ctxMenu: document.getElementById("media-context-menu"),
@@ -41,7 +47,10 @@ const Editor = (() => {
         const { signal } = abortController
 
         if (els.title) {
-            els.title.addEventListener("input", queueSnapshot, { signal })
+            els.title.addEventListener("input", () => {
+                titleTouched = true
+                queueSnapshot()
+            }, { signal })
         }
 
         if (els.content) {
@@ -129,7 +138,18 @@ const Editor = (() => {
         }
     }
 
-    const handlePaste = (e) => {
+    const handlePaste = async (e) => {
+        const items = Array.from(e.clipboardData?.items || [])
+        const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
+        if (imageItem) {
+            e.preventDefault()
+            const file = imageItem.getAsFile()
+            if (!file) return
+            const url = await fileToDataUrl(file)
+            insertMedia(url, "image")
+            return
+        }
+
         e.preventDefault()
         const text = e.clipboardData.getData("text/plain")
         const html = e.clipboardData.getData("text/html")
@@ -197,6 +217,87 @@ const Editor = (() => {
                 }
             })
         })
+    }
+
+    const getPages = () => els.content ? Array.from(els.content.querySelectorAll(".note-page")) : []
+
+    const createPageElement = (html = "") => {
+        const page = document.createElement("div")
+        page.className = "note-page"
+        page.contentEditable = "true"
+        page.setAttribute("role", "textbox")
+        page.setAttribute("aria-multiline", "true")
+        const label = els.content?.getAttribute("aria-label")
+        if (label) page.setAttribute("aria-label", label)
+        page.innerHTML = html
+        return page
+    }
+
+    const updatePageIndicator = () => {
+        if (!els.pageIndicator) return
+        const pages = getPages()
+        const total = pages.length || 1
+        els.pageIndicator.textContent = `${pageIndex + 1}/${total}`
+    }
+
+    const setActivePage = (index) => {
+        const pages = getPages()
+        if (!pages.length) return
+        pageIndex = Utils.clamp(index, 0, pages.length - 1)
+        pages.forEach((page, idx) => {
+            page.classList.toggle("is-active", idx === pageIndex)
+            page.setAttribute("aria-hidden", idx === pageIndex ? "false" : "true")
+        })
+        updatePageIndicator()
+        focusActivePage()
+    }
+
+    const ensurePages = () => {
+        if (!els.content) return
+        const pages = getPages()
+        if (!pages.length) {
+            const html = els.content.innerHTML
+            els.content.innerHTML = ""
+            els.content.appendChild(createPageElement(html))
+        } else {
+            pages.forEach(page => {
+                page.contentEditable = "true"
+                page.setAttribute("role", "textbox")
+                page.setAttribute("aria-multiline", "true")
+            })
+        }
+        const updatedPages = getPages()
+        if (!updatedPages.length) return
+        if (pageIndex >= updatedPages.length) pageIndex = updatedPages.length - 1
+        if (pageIndex < 0) pageIndex = 0
+        setActivePage(pageIndex)
+    }
+
+    const focusActivePage = () => {
+        const page = getPages()[pageIndex]
+        if (!page) return
+        page.focus()
+    }
+
+    const addPage = () => {
+        if (!els.content) return
+        const pages = getPages()
+        const page = createPageElement("")
+        const current = pages[pageIndex]
+        if (current) current.after(page)
+        else els.content.appendChild(page)
+        ensurePages()
+        setActivePage(pageIndex + 1)
+        queueSnapshot()
+    }
+
+    const nextPage = () => {
+        const pages = getPages()
+        if (pageIndex < pages.length - 1) setActivePage(pageIndex + 1)
+    }
+
+    const prevPage = () => {
+        if (pageIndex > 0) setActivePage(pageIndex - 1)
     }
 
     const getToolList = () => [
@@ -326,7 +427,8 @@ const Editor = (() => {
         e.stopPropagation()
 
         const rect = img.getBoundingClientRect()
-        const parentWidth = els.content.getBoundingClientRect().width - 40
+        const page = getPages()[pageIndex] || els.content
+        const parentWidth = page.getBoundingClientRect().width - 40
         
         resizeState = {
             startX: e.clientX || e.touches?.[0].clientX,
@@ -431,6 +533,8 @@ const Editor = (() => {
         })
 
         StateStore.update("currentNote", JSON.parse(JSON.stringify(n)))
+        pageIndex = 0
+        titleTouched = !!n.title
         
         history = []
         future = []
@@ -439,7 +543,7 @@ const Editor = (() => {
         history.push(captureSnapshot())
         
         els.wrapper.classList.add("active")
-        setTimeout(() => els.content?.focus(), 50)
+        setTimeout(() => focusActivePage(), 50)
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
     }
@@ -464,6 +568,8 @@ const Editor = (() => {
         StateStore.update("currentNote", null)
         deselectMedia()
         stopRecording()
+        pageIndex = 0
+        titleTouched = false
         if (observer) observer.disconnect()
     }
 
@@ -472,6 +578,8 @@ const Editor = (() => {
         if (!n) return
         els.title.value = n.title || ""
         els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
+        ensurePages()
+        syncAutoTitle()
         renderTags()
         makeMediaDraggable()
         syncMediaSizes()
@@ -598,6 +706,71 @@ const Editor = (() => {
         UI.openModal("lock-modal")
     }
 
+    const getTextFromHtml = (html) => {
+        const text = Utils.stripHtml(html || "")
+        return text.replace(/\s+/g, " ").trim()
+    }
+
+    const getMediaCountsFromHtml = (html) => {
+        const wrapper = document.createElement("div")
+        wrapper.innerHTML = html || ""
+        return {
+            images: wrapper.querySelectorAll("img").length,
+            audio: wrapper.querySelectorAll("audio").length
+        }
+    }
+
+    const getCountLabel = (count, singleKey, pluralKey) => {
+        if (count === 1) return UI.getText(singleKey, singleKey)
+        return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
+    }
+
+    const formatMediaSummary = (counts) => {
+        const parts = []
+        if (counts.images) {
+            parts.push(`${counts.images} ${getCountLabel(counts.images, "media_photo", "media_photos")}`)
+        }
+        if (counts.audio) {
+            parts.push(`${counts.audio} ${getCountLabel(counts.audio, "media_audio", "media_audios")}`)
+        }
+        return parts.join(" · ")
+    }
+
+    const buildAutoTitle = (html) => {
+        const text = getTextFromHtml(html)
+        if (text) {
+            const line = text.split(/\r?\n/).find(l => l.trim()) || text
+            const normalized = line.trim()
+            return normalized.length > 60 ? `${normalized.slice(0, 57)}…` : normalized
+        }
+        return formatMediaSummary(getMediaCountsFromHtml(html)) || UI.getText("untitled_note", "Untitled")
+    }
+
+    const extractHashtags = (value) => {
+        const res = new Set()
+        const text = String(value || "")
+        for (const match of text.matchAll(/#([\p{L}\p{N}_-]{2,})/gu)) {
+            const tag = match[1]?.trim()
+            if (tag) res.add(tag)
+        }
+        return [...res]
+    }
+
+    const collectSuggestedTags = (title, content) => {
+        const text = `${title || ""} ${Utils.stripHtml(content || "")}`
+        const fromSmart = SmartSearch.suggestTags(title || "", content || "")
+        const fromHash = extractHashtags(text)
+        return [...new Set([...fromSmart, ...fromHash])]
+    }
+
+    const syncAutoTitle = () => {
+        if (!els.title || titleTouched) return
+        const html = els.content?.innerHTML || ""
+        const next = buildAutoTitle(html)
+        if (!next) return
+        if (els.title.value !== next) els.title.value = next
+    }
+
     const addTag = (tag) => {
         const t = String(tag || "").trim().replace(/^#+/, "")
         if (!t) return
@@ -632,7 +805,7 @@ const Editor = (() => {
             </span>
         `).join("")
 
-        const sugs = SmartSearch.suggestTags(n.title, n.content)
+        const sugs = collectSuggestedTags(n.title, n.content)
             .filter(x => !tags.some(t => t.toLowerCase() === x.toLowerCase()))
             .slice(0, 5)
 
@@ -663,6 +836,7 @@ const Editor = (() => {
         JSON.stringify(a.tags) === JSON.stringify(b.tags)
 
     const queueSnapshot = Utils.debounce(() => {
+        syncAutoTitle()
         StateStore.update("editorDirty", true)
         const prev = history[history.length - 1]
         const current = captureSnapshot()
@@ -799,7 +973,8 @@ const Editor = (() => {
 
     const syncMediaSizes = () => {
         if (!els.content) return
-        const parentWidth = els.content.getBoundingClientRect().width - 40
+        const page = getPages()[pageIndex] || els.content
+        const parentWidth = page.getBoundingClientRect().width - 40
         const maxWidth = Math.min(CONFIG.MAX_IMG_WIDTH, parentWidth)
         els.content.querySelectorAll(".media-wrapper").forEach(wrapper => {
             const img = wrapper.querySelector("img")
@@ -904,7 +1079,10 @@ const Editor = (() => {
         if (!node) return null
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (!node || node === els.content) return null
-        return node.closest("div, p")
+        if (node.classList?.contains("note-page")) return null
+        const block = node.closest("div, p")
+        if (block?.classList?.contains("note-page")) return null
+        return block
     }
 
     const handleTagLineEnter = (e) => {
@@ -931,10 +1109,22 @@ const Editor = (() => {
         const user = StateStore.read().user
         if (!db || !user) return
 
-        const n = StateStore.read().currentNote
-        if (!n) return
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const snapshot = captureSnapshot()
+        const n = {
+            ...currentNote,
+            title: snapshot.title,
+            content: snapshot.content,
+            tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : []
+        }
 
-        const autoTags = SmartSearch.suggestTags(n.title, n.content)
+        if (!titleTouched && !String(n.title || "").trim()) {
+            n.title = buildAutoTitle(n.content || "")
+            if (els.title) els.title.value = n.title
+        }
+
+        const autoTags = collectSuggestedTags(n.title, n.content)
         const currentTags = new Set(n.tags.map(t => t.toLowerCase()))
         autoTags.forEach(t => {
             if (!currentTags.has(t.toLowerCase())) n.tags.push(t)
@@ -945,14 +1135,17 @@ const Editor = (() => {
             if (suggested) n.folderId = suggested
         }
 
+        StateStore.update("currentNote", n)
         const payload = NoteIO.normalizeNote(n)
         const ref = db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
         
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             StateStore.update("editorDirty", false)
-            if (!options.silent) UI.showToast(UI.getText("saved", "Saved"))
-            close()
+            if (!options.silent) {
+                UI.showToast(UI.getText("saved", "Saved"))
+                close()
+            }
         } catch (e) {
             UI.showToast("Save failed")
         }
@@ -987,6 +1180,9 @@ const Editor = (() => {
         alignMediaOrText,
         deleteSelectedMedia,
         insertSketchImage,
-        toggleRecording
+        toggleRecording,
+        addPage,
+        nextPage,
+        prevPage
     }
 })()
