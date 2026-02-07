@@ -4,33 +4,8 @@ Object.assign(UI, {
         if (!el) return
         el.classList.add("active")
         this.toggleSidebar(false)
-        if (id === "share-modal") {
-            const link = document.getElementById("share-link")
-            const current = StateStore.read().currentNote
-            const fallback = StateStore.read().notes.find(n => n.id === UI.currentNoteActionId)
-            const n = current || fallback
-            if (link) {
-                link.value = ""
-                if (n) {
-                    ShareService.createLink(n, "share").then(url => {
-                        link.value = url || ""
-                    })
-                }
-            }
-        }
-        if (id === "collab-modal") {
-            const link = document.getElementById("collab-link")
-            const current = StateStore.read().currentNote
-            const fallback = StateStore.read().notes.find(n => n.id === UI.currentNoteActionId)
-            const n = current || fallback
-            if (link) {
-                link.value = ""
-                if (n) {
-                    ShareService.createLink(n, "collab").then(url => {
-                        link.value = url || ""
-                    })
-                }
-            }
+        if (id === "poll-modal") {
+            this.startSurvey()
         }
         if (id === "lock-center-modal") {
             this.renderLockCenter()

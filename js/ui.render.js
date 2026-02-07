@@ -175,7 +175,7 @@ Object.assign(UI, {
 
     getReorderScope() {
         const { notes, view, activeFolderId } = StateStore.read()
-        if (view === "locked" || view === "hidden" || view === "future") return []
+        if (view === "locked" || view === "future") return []
         let list = notes.slice()
         if (view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
         if (view === "archive") list = list.filter(n => !!n.isArchived)
@@ -414,39 +414,247 @@ Object.assign(UI, {
         }
     },
 
-    async submitPoll() {
+    getSurveyQuestions() {
+        return [
+            { id: 1, text: this.getText("survey_q1", "What would you like to add") },
+            { id: 2, text: this.getText("survey_q2", "What themes and colors do you like") },
+            { id: 3, text: this.getText("survey_q3", "Dark or light theme") },
+            { id: 4, text: this.getText("survey_q4", "What functionality is missing") },
+            { id: 5, text: this.getText("survey_q5", "What would you change in the app") },
+            { id: 6, text: this.getText("survey_q6", "How convenient is the interface") },
+            { id: 7, text: this.getText("survey_q7", "Do you need easter eggs and memes") },
+            { id: 8, text: this.getText("survey_q8", "Is it convenient to write and edit notes") },
+            { id: 9, text: this.getText("survey_q9", "Is export and saving important") },
+            { id: 10, text: this.getText("survey_q10", "What topics would you add visual presets for") }
+        ]
+    },
+
+    startSurvey() {
+        this.surveyState = {
+            index: 0,
+            mode: "question",
+            answers: {}
+        }
+        this.renderSurveyStep()
+    },
+
+    renderSurveyStep() {
+        const stepEl = document.getElementById("survey-step")
+        const questionEl = document.getElementById("survey-question")
+        const answerEl = document.getElementById("survey-answer")
+        const decisionEl = document.getElementById("survey-decision")
+        const nextButton = document.querySelector('[data-action="survey-next"]')
+        const prevButton = document.querySelector('[data-action="survey-prev"]')
+        const progressEl = document.getElementById("survey-progress")
+        if (!stepEl || !questionEl || !answerEl || !decisionEl || !nextButton || !prevButton || !progressEl) return
+
+        const questions = this.getSurveyQuestions()
+        const total = questions.length
+        const { index, mode, answers } = this.surveyState || { index: 0, mode: "question", answers: {} }
+        const currentQuestion = questions[index]
+
+        stepEl.textContent = `${index + 1}/${total}`
+        progressEl.textContent = this.getText("survey_progress", "Survey")
+        questionEl.textContent = currentQuestion ? currentQuestion.text : ""
+        answerEl.value = answers[currentQuestion?.id] || ""
+        answerEl.classList.toggle("hidden", mode === "decision")
+        nextButton.classList.toggle("hidden", mode === "decision")
+        decisionEl.classList.toggle("hidden", mode !== "decision")
+        prevButton.classList.toggle("hidden", index === 0 && mode === "question")
+    },
+
+    storeSurveyAnswer() {
+        const answerEl = document.getElementById("survey-answer")
+        if (!answerEl) return false
+        const value = String(answerEl.value || "").trim()
+        if (!value) {
+            this.showToast(this.getText("survey_required", "Please answer the question"))
+            return false
+        }
+        const questions = this.getSurveyQuestions()
+        const currentQuestion = questions[this.surveyState.index]
+        this.surveyState.answers[currentQuestion.id] = value
+        return true
+    },
+
+    advanceSurvey() {
+        if (!this.surveyState || this.surveyState.mode !== "question") return
+        const questions = this.getSurveyQuestions()
+        const currentIndex = this.surveyState.index
+        if (!this.storeSurveyAnswer()) return
+        if (currentIndex === 4) {
+            this.surveyState.mode = "decision"
+            this.renderSurveyStep()
+            return
+        }
+        if (currentIndex < questions.length - 1) {
+            this.surveyState.index = currentIndex + 1
+            this.renderSurveyStep()
+        } else {
+            this.finishSurvey()
+        }
+    },
+
+    goBackSurvey() {
+        if (!this.surveyState) return
+        if (this.surveyState.mode === "decision") {
+            this.surveyState.mode = "question"
+            this.renderSurveyStep()
+            return
+        }
+        if (this.surveyState.index > 0) {
+            this.surveyState.index -= 1
+            this.renderSurveyStep()
+        }
+    },
+
+    continueSurvey() {
+        if (!this.surveyState) return
+        this.surveyState.mode = "question"
+        this.surveyState.index = 5
+        this.renderSurveyStep()
+    },
+
+    finishSurvey() {
+        this.submitSurvey()
+    },
+
+    async submitSurvey() {
         if (!db || !StateStore.read().user) {
             this.showToast(this.getText("poll_failed", "Unable to send poll"))
             return
         }
-        const topic = String(document.getElementById("poll-topic")?.value || "").trim()
-        const answer = String(document.getElementById("poll-answer")?.value || "").trim()
-        if (!topic || !answer) {
-            this.showToast(this.getText("poll_required", "Fill in the poll"))
-            return
+        if (this.surveyState?.mode === "question") {
+            if (!this.storeSurveyAnswer()) return
         }
         const { user, config } = StateStore.read()
-        const payload = {
-            uid: user.uid,
-            email: user.email || "",
-            displayName: user.displayName || "",
-            topic,
-            answer,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            userAgent: navigator.userAgent || "",
-            appVersion: "web",
-            language: config.lang
-        }
+        const answers = this.surveyState?.answers || {}
+        const questions = this.getSurveyQuestions()
+        const baseRef = db.collection("feedback").doc("user").collection("survey")
         try {
-            await db.collection("polls").add(payload)
-            const topicInput = document.getElementById("poll-topic")
-            const answerInput = document.getElementById("poll-answer")
-            if (topicInput) topicInput.value = ""
-            if (answerInput) answerInput.value = ""
+            for (const question of questions) {
+                const response = answers[question.id]
+                if (!response) continue
+                await baseRef.doc(`${question.id} Question`).collection("answers").add({
+                    uid: user.uid,
+                    email: user.email || "",
+                    displayName: user.displayName || "",
+                    question: question.text,
+                    answer: response,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    userAgent: navigator.userAgent || "",
+                    appVersion: "web",
+                    language: config.lang
+                })
+            }
             this.showToast(this.getText("poll_thanks", "Thanks!"))
             this.closeModal("poll-modal")
         } catch {
             this.showToast(this.getText("poll_failed", "Unable to send poll"))
+        }
+    },
+
+    resolveNoteById(noteId) {
+        const current = StateStore.read().currentNote
+        if (current && (!noteId || current.id === noteId)) return current
+        if (noteId) return StateStore.read().notes.find(n => n.id === noteId)
+        return StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
+    },
+
+    buildShareText(note) {
+        const title = note.title?.trim() || this.getText("untitled_note", "Untitled")
+        const content = Utils.stripHtml(note.content || "").trim()
+        return content ? `${title}\n\n${content}` : title
+    },
+
+    openShareModal(noteId) {
+        const note = this.resolveNoteById(noteId)
+        if (!note) return
+        this.currentShareNoteId = note.id
+        const summary = document.getElementById("share-note-summary")
+        const content = document.getElementById("share-content")
+        if (summary) summary.textContent = note.title?.trim() || this.getText("untitled_note", "Untitled")
+        if (content) content.value = this.buildShareText(note)
+        const shareButton = document.querySelector('[data-action="share-note-native"]')
+        if (shareButton) shareButton.classList.toggle("hidden", !navigator.share)
+        this.openModal("share-modal")
+    },
+
+    async shareCurrentNoteNative() {
+        const note = this.resolveNoteById(this.currentShareNoteId)
+        if (!note) return
+        if (!navigator.share) {
+            this.showToast(this.getText("share_unavailable", "Sharing is not supported"))
+            return
+        }
+        try {
+            await navigator.share({
+                title: note.title?.trim() || this.getText("untitled_note", "Untitled"),
+                text: this.buildShareText(note)
+            })
+        } catch {
+            this.showToast(this.getText("share_failed", "Unable to share"))
+        }
+    },
+
+    async copyShareText() {
+        const content = document.getElementById("share-content")
+        if (!content || !navigator.clipboard) {
+            this.showToast(this.getText("copy_failed", "Unable to copy"))
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(content.value || "")
+            this.showToast(this.getText("copy_success", "Copied"))
+        } catch {
+            this.showToast(this.getText("copy_failed", "Unable to copy"))
+        }
+    },
+
+    openCollabModal(noteId) {
+        const note = this.resolveNoteById(noteId)
+        if (!note) return
+        this.currentCollabNoteId = note.id
+        const status = document.getElementById("collab-status")
+        const linkInput = document.getElementById("collab-link")
+        const linkBlock = document.getElementById("collab-link-block")
+        const copyButton = document.querySelector('[data-action="copy-collab-link"]')
+        if (note.collabId) {
+            if (status) status.textContent = this.getText("collab_enabled", "Collaboration enabled")
+            if (linkInput) linkInput.value = ShareService.buildLink("collab", note.collabId)
+            if (linkBlock) linkBlock.classList.remove("hidden")
+            if (copyButton) copyButton.classList.remove("hidden")
+        } else {
+            if (status) status.textContent = this.getText("collab_desc", "Enable collaboration to start")
+            if (linkInput) linkInput.value = ""
+            if (linkBlock) linkBlock.classList.add("hidden")
+            if (copyButton) copyButton.classList.add("hidden")
+        }
+        this.openModal("collab-modal")
+    },
+
+    async enableCollaboration() {
+        const note = this.resolveNoteById(this.currentCollabNoteId)
+        if (!note) return
+        if (!db || !StateStore.read().user) {
+            this.showToast(this.getText("collab_failed", "Unable to enable collaboration"))
+            return
+        }
+        try {
+            const token = await ShareService.ensureShareToken(note, "collab")
+            if (!token) {
+                this.showToast(this.getText("collab_failed", "Unable to enable collaboration"))
+                return
+            }
+            const nextNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, collabId: token } : n)
+            StateActions.setNotes(nextNotes)
+            if (StateStore.read().currentNote?.id === note.id) {
+                StateActions.setCurrentNote({ ...note, collabId: token })
+            }
+            this.openCollabModal(note.id)
+            this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
+        } catch {
+            this.showToast(this.getText("collab_failed", "Unable to enable collaboration"))
         }
     },
 
@@ -457,9 +665,7 @@ Object.assign(UI, {
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
         const folders = StateStore.read().folders
         const isArchived = !!note.isArchived
-        const isHidden = !!note.isHidden
         const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
-        const hiddenLabel = isHidden ? (dict.unhide_note || "Unhide") : (dict.hide_note || "Hide")
         const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
         folders.forEach(f => {
             const selected = note.folderId === f.id ? "selected" : ""
@@ -471,9 +677,6 @@ Object.assign(UI, {
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
                     ${archiveLabel}
-                </button>
-                <button type="button" class="btn-secondary" data-action="note-hide-toggle" data-note-id="${encodeURIComponent(note.id)}">
-                    ${hiddenLabel}
                 </button>
                 <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.copy_text || "Copy text"}
