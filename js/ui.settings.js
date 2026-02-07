@@ -115,17 +115,6 @@ Object.assign(UI, {
         if (page === "appearance") {
             title.textContent = dict.settings_appearance || dict.appearance || "Appearance"
             root.innerHTML = `
-                <div class="settings-group settings-appearance-language">
-                    <div class="settings-grid">
-                        <div class="field">
-                            <span class="field-label">${dict.language || "Language"}</span>
-                            <select id="settings-appearance-language" class="input-area" aria-label="${dict.language || "Language"}">
-                                <option value="ru">Русский</option>
-                                <option value="en">English</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
                 <div class="settings-group">
                     <div class="field">
                         <span class="field-label">${dict.presets || "Presets"}</span>
@@ -156,7 +145,6 @@ Object.assign(UI, {
             `
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
-            this.bindAppearanceControls()
             return
         }
 
@@ -164,17 +152,6 @@ Object.assign(UI, {
             title.textContent = dict.settings_editor_tools || dict.editor_settings || "Editor tools"
             root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
             this.renderEditorSettings()
-        }
-    },
-
-    bindAppearanceControls() {
-        const langSelect = document.getElementById("settings-appearance-language")
-        if (langSelect) {
-            langSelect.value = StateStore.read().config.lang === "en" ? "en" : "ru"
-            langSelect.addEventListener("change", (e) => {
-                this.setLang(e.target.value)
-                this.renderSettingsPage()
-            })
         }
     },
 
@@ -226,17 +203,20 @@ Object.assign(UI, {
 
     resetAppearanceDraft() {
         const defaults = ThemeManager.getDefaultSettings()
+        let draft = null
         if (defaults.preset && defaults.preset !== "manual") {
             const preset = ThemeManager.resolvePreset(defaults.preset)
-            StateStore.update("appearanceDraft", { preset: defaults.preset, p: preset.p, bg: preset.bg, t: preset.t })
+            draft = { preset: defaults.preset, p: preset.p, bg: preset.bg, t: preset.t }
         } else {
-            StateStore.update("appearanceDraft", {
+            draft = {
                 preset: "manual",
                 p: ThemeManager.themes.dark.p,
                 bg: ThemeManager.themes.dark.bg,
                 t: ThemeManager.themes.dark.t
-            })
+            }
         }
+        StateStore.update("appearanceDraft", draft)
+        ThemeManager.applySettings(draft, false)
         this.renderAppearanceDraft()
     },
 

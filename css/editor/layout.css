@@ -105,6 +105,12 @@
     word-break: break-word;
 }
 
+.note-content ul,
+.note-content ol {
+    padding-left: 1.2rem;
+    margin: 0 0 0.8rem;
+}
+
 
 .note-content:focus {
     border-color: rgba(var(--primary-rgb), 0.28);
@@ -249,7 +255,7 @@
     margin-top: 14px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 10px;
     clear: both;
     flex-wrap: wrap;

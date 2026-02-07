@@ -300,16 +300,16 @@ export const ThemeManager = {
             wrapper.type = "button"
             wrapper.className = "theme-item-wrapper"
             wrapper.dataset.themeKey = item.key
+            if (activeKey === item.key) wrapper.classList.add("active")
             const dot = document.createElement("span")
             dot.className = "theme-dot"
             const color = item.key === "manual" ? (manualColor || this.themes.dark.p) : this.resolvePreset(item.key).p
             dot.style.background = color
             if (activeKey === item.key) dot.classList.add("active")
-            const label = document.createElement("span")
-            label.className = "theme-label"
-            label.textContent = window.UI && UI.getText ? UI.getText(item.labelKey, item.key) : item.key
+            const labelText = window.UI && UI.getText ? UI.getText(item.labelKey, item.key) : item.key
+            wrapper.setAttribute("aria-label", labelText)
+            wrapper.title = labelText
             wrapper.appendChild(dot)
-            wrapper.appendChild(label)
             wrapper.addEventListener("click", () => {
                 if (typeof onSelect === "function") onSelect(item.key)
             })

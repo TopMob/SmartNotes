@@ -4,6 +4,7 @@ const Editor = (() => {
     let future = []
     let selectedMedia = null
     let resizeState = null
+    let dragState = null
     let observer = null
     let abortController = null
     let recordingStream = null
@@ -68,6 +69,7 @@ const Editor = (() => {
             }, { signal })
 
             els.content.addEventListener("pointerdown", handleResizeStart, { signal })
+            els.content.addEventListener("pointerdown", handleMediaDragStart, { signal })
         }
 
         if (els.scrollArea) {
@@ -142,6 +144,7 @@ const Editor = (() => {
         const nextNote = { ...currentNote }
         await LockService.setLock(nextNote, pass.trim())
         StateStore.update("currentNote", nextNote)
+        syncLockButton(nextNote)
         UI.closeModal("lock-modal")
         await save({ silent: true })
         UI.showToast(UI.getText("lock_hidden", "Note hidden"))
@@ -204,8 +207,11 @@ const Editor = (() => {
     }
 
     const insertChecklistLine = () => {
-        const html = '<div class="task-item"><input class="task-checkbox" type="checkbox"><span class="task-text"></span></div>'
+        const id = Utils.generateId()
+        const html = `<div class="task-item" data-task-id="${id}"><input class="task-checkbox" type="checkbox"><span class="task-text" contenteditable="true"></span></div><br>`
         document.execCommand("insertHTML", false, html)
+        const textEl = els.content?.querySelector(`.task-item[data-task-id="${id}"] .task-text`)
+        if (textEl) focusEditable(textEl)
     }
 
     const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
@@ -305,18 +311,17 @@ const Editor = (() => {
             img
         }
 
-        const moveEvent = e.type === "touchstart" ? "touchmove" : "pointermove"
-        const upEvent = e.type === "touchstart" ? "touchend" : "pointerup"
-
-        document.addEventListener(moveEvent, handleResizeMove, { passive: false })
-        document.addEventListener(upEvent, handleResizeEnd, { once: true })
+        handle.setPointerCapture?.(e.pointerId)
+        document.addEventListener("pointermove", handleResizeMove, { passive: false })
+        document.addEventListener("pointerup", handleResizeEnd, { once: true })
+        document.addEventListener("pointercancel", handleResizeEnd, { once: true })
     }
 
     const handleResizeMove = (e) => {
         if (!resizeState) return
         e.preventDefault()
         
-        const clientX = e.clientX || e.touches?.[0].clientX
+        const clientX = e.clientX
         const dx = clientX - resizeState.startX
         let w = resizeState.startWidth + dx
         
@@ -331,9 +336,61 @@ const Editor = (() => {
 
     const handleResizeEnd = () => {
         resizeState = null
-        document.removeEventListener("touchmove", handleResizeMove)
         document.removeEventListener("pointermove", handleResizeMove)
         queueSnapshot()
+    }
+
+    const handleMediaDragStart = (e) => {
+        if (e.button && e.button !== 0) return
+        if (e.target.closest(".media-resize-handle")) return
+        const wrapper = e.target.closest(".media-wrapper")
+        if (!wrapper || !els.content.contains(wrapper)) return
+        dragState = {
+            wrapper,
+            trailingBreak: wrapper.nextSibling && wrapper.nextSibling.nodeName === "BR" ? wrapper.nextSibling : null,
+            startX: e.clientX,
+            startY: e.clientY,
+            moved: false
+        }
+        wrapper.setPointerCapture?.(e.pointerId)
+        document.addEventListener("pointermove", handleMediaDragMove, { passive: false })
+        document.addEventListener("pointerup", handleMediaDragEnd, { once: true })
+        document.addEventListener("pointercancel", handleMediaDragEnd, { once: true })
+    }
+
+    const handleMediaDragMove = (e) => {
+        if (!dragState) return
+        const dx = e.clientX - dragState.startX
+        const dy = e.clientY - dragState.startY
+        if (!dragState.moved && Math.hypot(dx, dy) < 6) return
+        dragState.moved = true
+        dragState.wrapper.classList.add("dragging")
+        dragState.wrapper.style.transform = `translate(${dx}px, ${dy}px)`
+        dragState.wrapper.style.pointerEvents = "none"
+        e.preventDefault()
+    }
+
+    const handleMediaDragEnd = (e) => {
+        if (!dragState) return
+        const { wrapper, trailingBreak, moved } = dragState
+        wrapper.classList.remove("dragging")
+        wrapper.style.transform = ""
+        wrapper.style.pointerEvents = ""
+        if (moved) {
+            const range = getDropRange(e.clientX, e.clientY)
+            if (range && els.content.contains(range.commonAncestorContainer)) {
+                const fragment = document.createDocumentFragment()
+                fragment.appendChild(wrapper)
+                if (trailingBreak) fragment.appendChild(trailingBreak)
+                range.insertNode(fragment)
+            } else {
+                els.content.appendChild(wrapper)
+                if (trailingBreak) els.content.appendChild(trailingBreak)
+            }
+            queueSnapshot()
+        }
+        dragState = null
+        document.removeEventListener("pointermove", handleMediaDragMove)
     }
 
     const open = (note = null) => {
@@ -393,6 +450,7 @@ const Editor = (() => {
         makeMediaDraggable()
         syncAudioPlayers()
         syncTaskStates()
+        syncLockButton(n)
         if (observer && els.content) {
             observer.disconnect()
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
@@ -404,6 +462,63 @@ const Editor = (() => {
             const item = cb.closest(".task-item")
             if (item) item.classList.toggle("completed", !!cb.checked)
         })
+    }
+
+    const focusEditable = (el) => {
+        const sel = window.getSelection()
+        if (!sel) return
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(range)
+        els.content?.focus()
+    }
+
+    const getDropRange = (x, y) => {
+        if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y)
+        if (document.caretPositionFromPoint) {
+            const pos = document.caretPositionFromPoint(x, y)
+            if (!pos) return null
+            const range = document.createRange()
+            range.setStart(pos.offsetNode, pos.offset)
+            range.collapse(true)
+            return range
+        }
+        return null
+    }
+
+    const syncLockButton = (note) => {
+        const btn = document.getElementById("editor-lock-toggle")
+        if (!btn || !note) return
+        const isLocked = !!note.lock?.hash
+        const label = isLocked ? UI.getText("unlock_note", "Unlock") : UI.getText("lock_note", "Lock")
+        const icon = btn.querySelector("i")
+        btn.setAttribute("aria-label", label)
+        if (icon) icon.textContent = isLocked ? "lock_open" : "lock"
+    }
+
+    const toggleLock = async () => {
+        const note = StateStore.read().currentNote
+        if (!note) return
+        if (note.lock?.hash) {
+            const verified = await new Promise(resolve => {
+                UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
+                    resolve(await LockService.verify(note, val))
+                })
+            })
+            if (!verified) {
+                UI.showToast(UI.getText("lock_invalid_password", "Invalid password"))
+                return
+            }
+            const nextNote = { ...note, lock: null }
+            StateStore.update("currentNote", nextNote)
+            syncLockButton(nextNote)
+            await save({ silent: true })
+            UI.showToast(UI.getText("unlock_success", "Note unlocked"))
+            return
+        }
+        UI.openModal("lock-modal")
     }
 
     const addTag = (tag) => {
@@ -724,6 +839,7 @@ const Editor = (() => {
         redo,
         deleteCurrent,
         toggleToolbar,
+        toggleLock,
         getToolList,
         getEnabledTools,
         setToolEnabled,
