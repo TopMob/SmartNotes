@@ -298,6 +298,9 @@ const UI = {
             case "lock-unhide":
                 this.unlockLockedNote(el.dataset.noteId || "")
                 break
+            case "lock-remove":
+                this.removeLockPermanently(el.dataset.noteId || "")
+                break
             case "lock-move-folder":
                 this.moveLockNoteToFolder(el.dataset.noteId || "")
                 break

@@ -47,7 +47,7 @@ export const Utils = {
             a: new Set(["href"]),
             img: new Set(["src", "alt"]),
             input: new Set(["type", "checked"]),
-            audio: new Set(["src", "controls"])
+            audio: new Set(["src", "controls", "preload"])
         }
         const wrapper = document.createElement("div")
         wrapper.innerHTML = String(html || "")

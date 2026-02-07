@@ -218,7 +218,7 @@ function normalizeVisibleNotes(list, orderKey = "order") {
     if (!Array.isArray(list)) return []
     const arr = list.map(n => NoteIO.normalizeNote(n))
     arr.sort((a, b) => {
-        if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? -1 : 1
+        if (!!b.isPinned !== !!a.isPinned) return a.isPinned ? -1 : 1
         const vA = typeof a[orderKey] === "number" ? a[orderKey] : 0
         const vB = typeof b[orderKey] === "number" ? b[orderKey] : 0
         return vA - vB
