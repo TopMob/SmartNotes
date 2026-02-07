@@ -10,12 +10,6 @@ export const firebaseConfig = {
 
 let firebaseSingleton = null
 
-function isSafari() {
-    if (typeof navigator === "undefined") return false
-    const ua = (navigator.userAgent || "").toLowerCase()
-    return /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg\//.test(ua)
-}
-
 export function initFirebase() {
     if (firebaseSingleton) return firebaseSingleton
 
@@ -27,10 +21,6 @@ export function initFirebase() {
     const auth = firebase.auth(app)
     const db = firebase.firestore(app)
 
-    const persistence = isSafari()
-        ? firebase.auth.Auth.Persistence.SESSION
-        : firebase.auth.Auth.Persistence.LOCAL
-    auth.setPersistence(persistence).catch(() => null)
     db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 
     firebaseSingleton = { app, auth, db }
