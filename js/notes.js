@@ -1,3 +1,36 @@
+const FAVORITES_STORAGE_KEY = "favorite-notes"
+
+const readFavoriteIds = () => {
+    try {
+        const stored = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY))
+        if (Array.isArray(stored)) return new Set(stored)
+    } catch {}
+    return new Set()
+}
+
+const writeFavoriteIds = (ids) => {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...ids]))
+}
+
+const syncFavoritesStorage = (notes) => {
+    const ids = new Set()
+    notes.forEach(note => {
+        if (note.isFavorite) ids.add(note.id)
+    })
+    writeFavoriteIds(ids)
+}
+
+const applyStoredFavorites = (notes) => {
+    const stored = readFavoriteIds()
+    if (!stored.size) return notes
+    return notes.map(note => {
+        if (typeof note.isFavorite !== "boolean" && stored.has(note.id)) {
+            return { ...note, isFavorite: true }
+        }
+        return note
+    })
+}
+
 const NotesRenderer = (() => {
     const cardCache = new Map()
 
@@ -35,7 +68,9 @@ const NotesRenderer = (() => {
         if (!(isLockedView && isLockedNote)) {
             actions = el("div", ["card-actions"])
             actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
-            actions.appendChild(createBtn("note-favorite", "star", UI.getText("favorite_note", "Favorite"), note.id))
+            const favBtn = createBtn("note-favorite", note.isFavorite ? "star" : "star_border", UI.getText("favorite_note", "Favorite"), note.id)
+            favBtn.classList.toggle("favorite-active", !!note.isFavorite)
+            actions.appendChild(favBtn)
             actions.appendChild(createBtn("note-menu", "more_horiz", UI.getText("note_actions", "Actions"), note.id))
         }
 
@@ -70,9 +105,14 @@ const NotesRenderer = (() => {
         if (actions) card.append(actions)
         card.append(h3, p, meta, lockContainer)
 
+        card.classList.toggle("favorite", !!note.isFavorite)
+
+        const favBtn = actions ? actions.children[1] : null
+        const favIcon = favBtn ? favBtn.firstChild : null
+
         cardCache.set(note.id, {
             el: card,
-            refs: { h3, p, dateSpan, tagsSpan, lockContainer, favIcon: actions ? actions.children[1].firstChild : null },
+            refs: { h3, p, dateSpan, tagsSpan, lockContainer, favBtn, favIcon },
             data: { ...note }
         })
 
@@ -112,6 +152,12 @@ const NotesRenderer = (() => {
 
         if (note.isPinned !== data.isPinned) {
             card.classList.toggle("pinned", !!note.isPinned)
+        }
+
+        if (note.isFavorite !== data.isFavorite) {
+            card.classList.toggle("favorite", !!note.isFavorite)
+            if (refs.favBtn) refs.favBtn.classList.toggle("favorite-active", !!note.isFavorite)
+            if (refs.favIcon) refs.favIcon.textContent = note.isFavorite ? "star" : "star_border"
         }
 
         const lockHash = note.lock?.hash || ""
@@ -306,17 +352,32 @@ function openNoteActions(noteId) {
 }
 
 async function toggleFavorite(noteId) {
-    const user = StateStore.read().user
-    if (!db || !user) return
-
     const note = StateStore.read().notes.find(n => n.id === noteId)
     if (!note) return
     if (isHiddenLocked(note)) return
 
+    const nextValue = !note.isFavorite
+    const nextNotes = StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: nextValue } : n)
+    StateActions.setNotes(nextNotes)
+    syncFavoritesStorage(nextNotes)
+    filterAndRender(document.getElementById("search-input")?.value || "")
+
+    const user = StateStore.read().user
+    if (!db || !user) return
+
     const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
-    await ref.update({
-        isFavorite: !note.isFavorite
-    })
+    try {
+        await ref.update({
+            isFavorite: nextValue
+        })
+    } catch (e) {
+        const revertedNotes = StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: note.isFavorite } : n)
+        StateActions.setNotes(revertedNotes)
+        syncFavoritesStorage(revertedNotes)
+        filterAndRender(document.getElementById("search-input")?.value || "")
+        UI.showToast(UI.getText("favorite_failed", "Unable to update favorite"))
+        console.error("Favorite update failed", e)
+    }
 }
 
 async function togglePin(noteId, options = {}) {
@@ -423,8 +484,10 @@ const AppLifecycle = {
         const notesUnsub = db.collection("users").doc(user.uid).collection("notes")
             .orderBy("order", "asc")
             .onSnapshot(snap => {
-                const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                let notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                notes = applyStoredFavorites(notes)
                 StateStore.update("notes", notes)
+                syncFavoritesStorage(notes)
                 filterAndRender(document.getElementById("search-input")?.value || "")
                 if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
             }, err => {

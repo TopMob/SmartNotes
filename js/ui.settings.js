@@ -48,6 +48,7 @@ Object.assign(UI, {
         if (!root || !title || !backBtn) return
         const page = this.settingsPage
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        root.classList.toggle("settings-appearance-page", page === "appearance")
         if (!page) {
             title.textContent = dict.settings_menu_title || dict.settings || "Settings"
             backBtn.classList.add("is-hidden")
@@ -114,6 +115,17 @@ Object.assign(UI, {
         if (page === "appearance") {
             title.textContent = dict.settings_appearance || dict.appearance || "Appearance"
             root.innerHTML = `
+                <div class="settings-group settings-appearance-language">
+                    <div class="settings-grid">
+                        <div class="field">
+                            <span class="field-label">${dict.language || "Language"}</span>
+                            <select id="settings-appearance-language" class="input-area" aria-label="${dict.language || "Language"}">
+                                <option value="ru">Русский</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
                 <div class="settings-group">
                     <div class="field">
                         <span class="field-label">${dict.presets || "Presets"}</span>
@@ -144,6 +156,7 @@ Object.assign(UI, {
             `
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
+            this.bindAppearanceControls()
             return
         }
 
@@ -151,6 +164,17 @@ Object.assign(UI, {
             title.textContent = dict.settings_editor_tools || dict.editor_settings || "Editor tools"
             root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
             this.renderEditorSettings()
+        }
+    },
+
+    bindAppearanceControls() {
+        const langSelect = document.getElementById("settings-appearance-language")
+        if (langSelect) {
+            langSelect.value = StateStore.read().config.lang === "en" ? "en" : "ru"
+            langSelect.addEventListener("change", (e) => {
+                this.setLang(e.target.value)
+                this.renderSettingsPage()
+            })
         }
     },
 

@@ -48,6 +48,12 @@ const Editor = (() => {
             els.content.addEventListener("keydown", handleTagLineEnter, { signal })
             
             els.content.addEventListener("click", (e) => {
+                const audioPlayer = e.target.closest(".audio-player")
+                if (audioPlayer) {
+                    toggleAudioPlayer(audioPlayer)
+                    e.stopPropagation()
+                    return
+                }
                 const wrapper = e.target.closest(".media-wrapper")
                 if (wrapper) {
                     selectMedia(wrapper)
@@ -213,6 +219,10 @@ const Editor = (() => {
         StateStore.update("recording", !!active)
         const indicator = document.getElementById("voice-indicator")
         if (indicator) indicator.classList.toggle("active", !!active)
+        const voiceBtn = document.querySelector('[data-action="editor-voice"]')
+        const icon = voiceBtn?.querySelector("i")
+        if (icon) icon.textContent = active ? "stop" : "mic"
+        voiceBtn?.classList.toggle("is-recording", !!active)
     }
 
     const stopRecording = () => {
@@ -522,13 +532,44 @@ const Editor = (() => {
 
     const insertAudio = (src) => {
         const id = Utils.generateId()
+        const label = UI.getText("audio_note", "Audio")
         const html = `
             <div class="media-wrapper audio-wrapper" id="${id}" contenteditable="false" draggable="true">
-                <audio controls src="${Utils.escapeHtml(src)}"></audio>
+                <div class="audio-player" data-audio-id="${id}">
+                    <i class="material-icons-round audio-icon" aria-hidden="true">play_arrow</i>
+                    <span class="audio-label">${Utils.escapeHtml(label)}</span>
+                </div>
+                <audio src="${Utils.escapeHtml(src)}"></audio>
             </div><br>
         `
         document.execCommand("insertHTML", false, html)
         makeMediaDraggable()
+    }
+
+    const toggleAudioPlayer = (player) => {
+        const wrapper = player.closest(".audio-wrapper")
+        const audio = wrapper?.querySelector("audio")
+        if (!audio) return
+        const isPlaying = !audio.paused && !audio.ended
+        if (isPlaying) {
+            audio.pause()
+        } else {
+            document.querySelectorAll(".audio-wrapper audio").forEach(a => {
+                if (a !== audio) a.pause()
+            })
+            audio.play().catch(() => null)
+        }
+        updateAudioUI(player, audio)
+        audio.onended = () => updateAudioUI(player, audio)
+        audio.onpause = () => updateAudioUI(player, audio)
+        audio.onplay = () => updateAudioUI(player, audio)
+    }
+
+    const updateAudioUI = (player, audio) => {
+        const icon = player.querySelector(".audio-icon")
+        const playing = audio && !audio.paused && !audio.ended
+        if (icon) icon.textContent = playing ? "pause" : "play_arrow"
+        player.classList.toggle("playing", playing)
     }
 
     const makeMediaDraggable = () => {

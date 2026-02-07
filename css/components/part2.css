@@ -266,6 +266,12 @@
     background: rgba(255, 255, 255, 0.08);
 }
 
+.action-btn.favorite-active {
+    background: rgba(255, 214, 0, 0.22);
+    border-color: rgba(255, 214, 0, 0.5);
+    color: #ffe082;
+}
+
 .theme-item-wrapper {
     display: flex;
     align-items: center;

@@ -34,6 +34,9 @@ Object.assign(UI, {
                         <button type="button" class="btn-secondary" data-action="lock-archive" data-note-id="${id}">
                             ${isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")}
                         </button>
+                        <button type="button" class="btn-secondary" data-action="lock-unhide" data-note-id="${id}">
+                            ${dict.unlock_note || "Unlock"}
+                        </button>
                         <div class="lock-center-folder">
                             <select class="input-area lock-center-select" data-note-id="${id}" aria-label="${dict.folder_view_aria || "Folder"}">
                                 ${folderOptions.join("")}
@@ -72,6 +75,35 @@ Object.assign(UI, {
         const folderId = select.value || null
         await moveNoteToFolder(id, folderId, { allowLocked: true })
         this.renderLockCenter()
+    },
+
+    async unlockLockedNote(noteId) {
+        const id = decodeURIComponent(noteId || "")
+        if (!id) return
+        const note = StateStore.read().notes.find(n => n.id === id)
+        if (!note || !note.lock?.hash) return
+        const verified = await new Promise(resolve => {
+            this.showPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"), async (val) => {
+                resolve(await LockService.verify(note, val))
+            })
+        })
+        if (!verified) {
+            this.showToast(this.getText("lock_invalid_password", "Invalid password"))
+            return
+        }
+        const nextNotes = StateStore.read().notes.map(n => n.id === id ? { ...n, lock: { ...n.lock, hidden: false } } : n)
+        StateActions.setNotes(nextNotes)
+        filterAndRender(document.getElementById("search-input")?.value || "")
+        this.renderLockCenter()
+        if (!db || !StateStore.read().user) return
+        try {
+            await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(id).update({
+                "lock.hidden": false
+            })
+        } catch (e) {
+            this.showToast(this.getText("unlock_failed", "Unable to unlock"))
+            console.error("Unlock failed", e)
+        }
     },
 
     savePreferences() {
@@ -326,9 +358,7 @@ Object.assign(UI, {
         if (!note || !root) return
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
         const folders = StateStore.read().folders
-        const isPinned = !!note.isPinned
         const isArchived = !!note.isArchived
-        const pinLabel = isPinned ? (dict.unpin_note || "Unpin") : (dict.pin_note || "Pin")
         const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
         const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
         folders.forEach(f => {
@@ -337,9 +367,6 @@ Object.assign(UI, {
         })
         root.innerHTML = `
             <div class="modal-actions-grid">
-                <button type="button" class="btn-secondary" data-action="note-pin-toggle" data-note-id="${encodeURIComponent(note.id)}">
-                    ${pinLabel}
-                </button>
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
                     ${archiveLabel}
                 </button>
