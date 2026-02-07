@@ -17,7 +17,6 @@ const NoteIO = {
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
             isPinned: !!safe.isPinned,
-            isHidden: !!safe.isHidden,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
             futureAt: safe.futureAt || null,
             shareId: safe.shareId ? String(safe.shareId) : null,

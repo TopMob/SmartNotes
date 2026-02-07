@@ -43,7 +43,7 @@ const Editor = (() => {
             ctxMenu: document.getElementById("media-context-menu"),
             alignMenu: document.getElementById("editor-align-menu"),
             scrollArea: document.querySelector(".editor-scroll-area"),
-            sketchPanel: document.getElementById("inline-sketch-panel"),
+            sketchPanel: document.getElementById("inline-sketch-overlay"),
             sketchCanvas: document.getElementById("inline-sketch-canvas")
         }
         loadToolSettings()

@@ -241,7 +241,6 @@ input:checked + .slider:before {
     background-color: #fff;
 }
 
-/* --- Обновленный стиль Select (для настроек языка и вида) --- */
 select.input-area {
     appearance: none;
     -webkit-appearance: none;
@@ -250,7 +249,6 @@ select.input-area {
     border: 1px solid rgba(255, 255, 255, 0.1);
     cursor: pointer;
     transition: all 0.2s ease;
-    /* Кастомная стрелочка */
     background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%),
                       linear-gradient(135deg, var(--text) 50%, transparent 50%);
     background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%;
@@ -268,4 +266,89 @@ select.input-area:focus {
     border-color: var(--primary);
     background-color: rgba(15, 15, 17, 0.95);
     box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.15);
+}
+
+.survey-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+}
+
+.survey-step {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.survey-question {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.survey-decision {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+#share-content {
+    min-height: 150px;
+    resize: vertical;
+}
+
+.collab-link-block {
+    margin-bottom: 12px;
+}
+
+.hidden-presets-root {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.hidden-presets-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.hidden-presets-tab {
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hidden-presets-tab.active {
+    border-color: rgba(var(--primary-rgb), 0.6);
+    background: rgba(var(--primary-rgb), 0.18);
+}
+
+.hidden-presets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.hidden-preset-item {
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hidden-preset-item.active {
+    border-color: rgba(var(--primary-rgb), 0.7);
+    background: rgba(var(--primary-rgb), 0.2);
 }

@@ -1,0 +1,93 @@
+:root {
+    --primary: #00f2ff;
+    --primary-rgb: 0, 242, 255;
+    --bg: #050505;
+    --surface: #0f0f11;
+    --surface-light: #18181b;
+    --surface-transparent: rgba(15, 15, 17, 0.65);
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.72);
+    --border: rgba(255, 255, 255, 0.08);
+    --danger: #ff3b30;
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 18px;
+    --radius-xl: 24px;
+    --font-base: 16px;
+    --type-scale: 1;
+    --hit-size: 44px;
+    --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    --density: 1;
+    --blur-strength: 18px;
+    --motion-enabled: 1;
+    --animation-duration: 0.3s;
+    --editor-padding: 30px;
+    --editor-line-height: 1.7;
+    --editor-letter-spacing: 0px;
+    --editor-toolbar-bg: rgba(255, 255, 255, 0.03);
+    --editor-toolbar-border: var(--border);
+    --editor-toolbar-shadow: none;
+}
+
+[data-theme-preset="site_smarthub"] {
+    --bg: #0b0b0b;
+    --surface: #141414;
+    --surface-light: #1b1b1b;
+    --surface-transparent: rgba(20, 20, 20, 0.8);
+    --primary: #ff8a00;
+    --primary-rgb: 255, 138, 0;
+}
+
+[data-theme-preset="site_smarthub"] .note-page {
+    background: #111111;
+    border: 1px solid rgba(255, 138, 0, 0.35);
+}
+
+[data-theme-preset="app_smartlib"] {
+    --bg: #120614;
+    --surface: #1c0a21;
+    --surface-light: #2a0f33;
+    --surface-transparent: rgba(28, 10, 33, 0.78);
+    --primary: #ff7ad9;
+    --primary-rgb: 255, 122, 217;
+}
+
+[data-theme-preset="cyber_edge"] {
+    --bg: #060012;
+    --surface: #11001f;
+    --surface-light: #1a0030;
+    --surface-transparent: rgba(17, 0, 31, 0.78);
+    --primary: #ff2a6d;
+    --primary-rgb: 255, 42, 109;
+}
+
+[data-theme-preset="lego_world"] {
+    --bg: #ffef7a;
+    --surface: #fff3a6;
+    --surface-light: #fffae0;
+    --surface-transparent: rgba(255, 243, 166, 0.88);
+    --primary: #e11d48;
+    --primary-rgb: 225, 29, 72;
+    --text: #1f2937;
+    --text-dim: rgba(31, 41, 55, 0.72);
+    --border: rgba(31, 41, 55, 0.18);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+}
+
+[data-theme-preset="windows_classic"] {
+    --bg: #e5f2ff;
+    --surface: #f6fbff;
+    --surface-light: #ffffff;
+    --surface-transparent: rgba(246, 251, 255, 0.9);
+    --primary: #2563eb;
+    --primary-rgb: 37, 99, 235;
+    --text: #0b1220;
+    --text-dim: rgba(11, 18, 32, 0.7);
+    --border: rgba(2, 6, 23, 0.12);
+}

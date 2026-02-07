@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="css/editor.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/presets/active.css">
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js" defer></script>
@@ -38,6 +39,8 @@
     <script src="js/lang.js" type="module"></script>
     <script src="js/theme.js" type="module"></script>
     <script src="js/core.js" type="module"></script>
+    <script src="js/presets/runtime.js" defer></script>
+    <script src="js/presets/active.js" defer></script>
     <script src="js/services.js" defer></script>
     <script src="js/ui.core.js" defer></script>
     <script src="js/ui.settings.js" defer></script>
@@ -51,7 +54,7 @@
 
     <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
         <div class="login-box">
-            <h1 class="brand-text-fixed">SmartNotes</h1>
+            <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
             <p class="subtext" data-lang="login">Вход в систему</p>
             <div class="auth-buttons-group">
                 <button type="button" class="btn-auth google" data-action="login">
@@ -65,7 +68,7 @@
     <div id="app" class="app-layout" aria-hidden="false">
         <aside id="sidebar" class="sidebar-glass" aria-label="Навигация" data-lang-aria="nav_aria">
             <header class="sidebar-header">
-                <span class="brand-text-fixed">SmartNotes</span>
+                <span class="brand-text-fixed" data-brand-text>SmartNotes</span>
                 <button type="button" class="btn-icon mobile-only" data-action="toggle-sidebar" data-force="false" aria-label="Закрыть меню" data-lang-aria="close_menu">
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
@@ -86,11 +89,6 @@
                     <button type="button" class="nav-item" data-action="switch-view" data-view="archive">
                         <i class="material-icons-round" aria-hidden="true">archive</i>
                         <span data-lang="archive">Архив</span>
-                    </button>
-
-                    <button type="button" class="nav-item" data-action="switch-view" data-view="hidden">
-                        <i class="material-icons-round" aria-hidden="true">visibility_off</i>
-                        <span data-lang="hidden_notes">Спрятанное</span>
                     </button>
 
                     <button type="button" class="nav-item" data-action="switch-view" data-view="future">
@@ -278,19 +276,6 @@
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
 
-                <div id="inline-sketch-panel" class="inline-sketch-panel" aria-label="Рисование" data-lang-aria="sketch_inline_aria">
-                    <div class="inline-sketch-toolbar">
-                        <span data-lang="sketch_inline_title">Рисование</span>
-                        <div class="inline-sketch-actions">
-                            <button type="button" class="btn-secondary" data-action="inline-sketch-undo" data-lang="undo">Отменить</button>
-                            <button type="button" class="btn-secondary" data-action="inline-sketch-clear" data-lang="clear">Очистить</button>
-                            <button type="button" class="btn-secondary" data-action="inline-sketch-cancel" data-lang="cancel">Отмена</button>
-                            <button type="button" class="btn-primary" data-action="inline-sketch-apply" data-lang="insert">Вставить</button>
-                        </div>
-                    </div>
-                    <canvas id="inline-sketch-canvas" class="inline-sketch-canvas"></canvas>
-                </div>
-
                 <div class="editor-page-controls" aria-label="Страницы" data-lang-aria="editor_pages">
                     <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
                         <i class="material-icons-round" aria-hidden="true">chevron_left</i>
@@ -304,7 +289,21 @@
                     </button>
                 </div>
 
-                <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+                <div class="note-content-wrapper">
+                    <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+                    <div id="inline-sketch-overlay" class="inline-sketch-overlay" aria-label="Рисование" data-lang-aria="sketch_inline_aria">
+                        <div class="inline-sketch-toolbar">
+                            <span data-lang="sketch_inline_title">Рисование</span>
+                            <div class="inline-sketch-actions">
+                                <button type="button" class="btn-secondary" data-action="inline-sketch-undo" data-lang="undo">Отменить</button>
+                                <button type="button" class="btn-secondary" data-action="inline-sketch-clear" data-lang="clear">Очистить</button>
+                                <button type="button" class="btn-secondary" data-action="inline-sketch-cancel" data-lang="cancel">Отмена</button>
+                                <button type="button" class="btn-primary" data-action="inline-sketch-apply" data-lang="insert">Вставить</button>
+                            </div>
+                        </div>
+                        <canvas id="inline-sketch-canvas" class="inline-sketch-canvas"></canvas>
+                    </div>
+                </div>
 
                 <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
                     <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
@@ -390,10 +389,11 @@
                 </button>
             </header>
             <div class="modal-body">
-                <p class="muted" data-lang="share_desc">Ссылка будет сгенерирована в JS и появится здесь</p>
-                <input id="share-link" type="text" class="input-area" readonly value="">
+                <p class="muted" id="share-note-summary" data-lang="share_desc">Готовый текст заметки для отправки</p>
+                <textarea id="share-content" rows="6" class="input-area" readonly></textarea>
                 <div class="row-right">
-                    <button type="button" class="btn-secondary" data-action="copy-share-link" data-lang="copy">Копировать</button>
+                    <button type="button" class="btn-secondary" data-action="copy-share-text" data-lang="copy">Копировать</button>
+                    <button type="button" class="btn-primary" data-action="share-note-native" data-lang="share_native">Поделиться</button>
                 </div>
             </div>
         </div>
@@ -408,9 +408,12 @@
                 </button>
             </header>
             <div class="modal-body">
-                <p class="muted" data-lang="collab_desc">Одноразовая ссылка будет сгенерирована в JS и появится здесь</p>
-                <input id="collab-link" type="text" class="input-area" readonly value="">
+                <p class="muted" id="collab-status" data-lang="collab_desc">Включите режим совместного редактирования</p>
+                <div id="collab-link-block" class="collab-link-block hidden">
+                    <input id="collab-link" type="text" class="input-area" readonly value="">
+                </div>
                 <div class="row-right">
+                    <button type="button" class="btn-secondary" data-action="collab-enable" data-lang="collab_enable">Включить</button>
                     <button type="button" class="btn-secondary" data-action="copy-collab-link" data-lang="copy">Копировать</button>
                 </div>
             </div>
@@ -571,17 +574,20 @@
                 </button>
             </header>
             <div class="modal-body">
-                <div class="field">
-                    <span class="field-label" data-lang="poll_topic_label">Тема опроса</span>
-                    <input id="poll-topic" type="text" class="input-area" autocomplete="off" aria-label="Тема опроса" data-lang-aria="poll_topic_label">
+                <div class="survey-header">
+                    <span id="survey-step" class="survey-step">1/10</span>
+                    <span id="survey-progress" class="survey-progress" data-lang="survey_progress">Опрос</span>
                 </div>
-                <div class="field">
-                    <span class="field-label" data-lang="poll_answer_label">Ответ</span>
-                    <textarea id="poll-answer" rows="4" class="input-area" aria-label="Ответ" data-lang-aria="poll_answer_label"></textarea>
+                <div id="survey-question" class="survey-question" data-lang="survey_question">Вопрос</div>
+                <textarea id="survey-answer" rows="4" class="input-area" aria-label="Ответ" data-lang-aria="poll_answer_label"></textarea>
+                <div id="survey-decision" class="survey-decision hidden">
+                    <button type="button" class="btn-secondary" data-action="survey-finish" data-lang="survey_finish">Завершить</button>
+                    <button type="button" class="btn-primary" data-action="survey-continue" data-lang="survey_continue">Продолжить</button>
                 </div>
             </div>
             <footer class="modal-footer">
-                <button type="button" class="btn-primary" data-action="submit-poll" data-lang="send">Отправить</button>
+                <button type="button" class="btn-secondary" data-action="survey-prev" data-lang="back">Назад</button>
+                <button type="button" class="btn-primary" data-action="survey-next" data-lang="survey_next">Далее</button>
             </footer>
         </div>
     </div>

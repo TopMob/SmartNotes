@@ -332,10 +332,6 @@ function isHiddenLocked(note) {
     return !!(note && note.lock && note.lock.hidden)
 }
 
-function isHiddenNote(note) {
-    return !!note?.isHidden
-}
-
 function isFutureNote(note) {
     const ts = getTimestampValue(note?.futureAt)
     return ts > Date.now()
@@ -363,6 +359,11 @@ function filterAndRender(query) {
         view = "notes"
         activeFolderId = null
     }
+    if (view === "hidden") {
+        StateStore.update("view", "notes")
+        view = "notes"
+        activeFolderId = null
+    }
 
     let list = current.notes.slice()
     const notesFilter = current.config.notesFilter || { sort: "manual", folders: [] }
@@ -374,12 +375,6 @@ function filterAndRender(query) {
         list = list.filter(n => !isHiddenLocked(n))
     }
 
-    if (view === "hidden") {
-        list = list.filter(n => isHiddenNote(n))
-    } else {
-        list = list.filter(n => !isHiddenNote(n))
-    }
-
     if (view === "future") {
         list = list.filter(n => isFutureNote(n) && !n.isArchived)
     } else {
@@ -389,7 +384,7 @@ function filterAndRender(query) {
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
-    else if (view !== "locked" && view !== "hidden" && view !== "future") list = list.filter(n => !n.isArchived)
+    else if (view !== "locked" && view !== "future") list = list.filter(n => !n.isArchived)
 
     if (view !== "folder" && view !== "folders" && selectedFolders.length) {
         list = list.filter(note => {
@@ -426,8 +421,6 @@ function filterAndRender(query) {
     } else {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))
-        } else if (view === "hidden") {
-            UI.updateEmptyState("visibility_off", UI.getText("hidden_empty", "No hidden notes"))
         } else if (view === "future") {
             UI.updateEmptyState("schedule", UI.getText("future_empty", "No future notes"))
         } else {
@@ -501,21 +494,6 @@ async function deleteNoteById(noteId) {
         UI.showToast(UI.getText("note_deleted", "Deleted"))
         UI.closeModal("note-actions-modal")
     })
-}
-
-async function toggleHiddenNote(noteId) {
-    const user = StateStore.read().user
-    if (!db || !user) return
-    const note = StateStore.read().notes.find(n => n.id === noteId)
-    if (!note) return
-    const nextValue = !note.isHidden
-    const ref = db.collection("users").doc(user.uid).collection("notes").doc(noteId)
-    await ref.update({
-        isHidden: nextValue,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-    UI.showToast(nextValue ? UI.getText("note_hidden", "Note hidden") : UI.getText("note_unhidden", "Note unhidden"))
-    UI.closeModal("note-actions-modal")
 }
 
 async function scheduleFutureNote(noteId) {

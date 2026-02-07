@@ -30,6 +30,7 @@ const UI = {
         this.updateSidebarLayout()
         window.addEventListener("resize", () => this.updateSidebarLayout())
         this.applyAppearanceSettings()
+        this.attachSecretAudio()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
         this.routeShare()
@@ -68,6 +69,23 @@ const UI = {
             const k = el.getAttribute("data-lang-aria")
             if (k && dict[k]) el.setAttribute("aria-label", dict[k])
         })
+    },
+
+    async attachSecretAudio() {
+        try {
+            const response = await fetch("audio/danil-kolbasenko.mp3", { method: "HEAD" })
+            if (!response.ok) return
+            if (document.getElementById("secret-audio")) return
+            const audio = document.createElement("audio")
+            audio.id = "secret-audio"
+            audio.src = "audio/danil-kolbasenko.mp3"
+            audio.preload = "none"
+            audio.setAttribute("aria-hidden", "true")
+            audio.style.display = "none"
+            document.body.appendChild(audio)
+        } catch {
+            return
+        }
     },
 
     bindEvents() {
@@ -313,9 +331,6 @@ const UI = {
             case "trigger-import":
                 this.triggerImport()
                 break
-            case "copy-share-link":
-                this.copyToClipboard("share-link")
-                break
             case "copy-collab-link":
                 this.copyToClipboard("collab-link")
                 break
@@ -371,15 +386,12 @@ const UI = {
                 deleteNoteById(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-share":
-                this.openModal("share-modal")
+                this.openShareModal(decodeURIComponent(el.dataset.noteId || ""))
                 this.closeModal("note-actions-modal")
                 break
             case "note-collab":
-                this.openModal("collab-modal")
+                this.openCollabModal(decodeURIComponent(el.dataset.noteId || ""))
                 this.closeModal("note-actions-modal")
-                break
-            case "note-hide-toggle":
-                toggleHiddenNote(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-copy-text":
                 copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
@@ -426,9 +438,6 @@ const UI = {
             case "submit-feedback":
                 this.submitFeedback()
                 break
-            case "submit-poll":
-                this.submitPoll()
-                break
             case "media-reset":
                 Editor.resetMediaTransform()
                 break
@@ -452,6 +461,27 @@ const UI = {
                 break
             case "inline-sketch-apply":
                 Editor.applyInlineSketch()
+                break
+            case "share-note-native":
+                this.shareCurrentNoteNative()
+                break
+            case "copy-share-text":
+                this.copyShareText()
+                break
+            case "collab-enable":
+                this.enableCollaboration()
+                break
+            case "survey-next":
+                this.advanceSurvey()
+                break
+            case "survey-prev":
+                this.goBackSurvey()
+                break
+            case "survey-continue":
+                this.continueSurvey()
+                break
+            case "survey-finish":
+                this.finishSurvey()
                 break
             case "photo-undo":
                 PhotoEditor.undo()
@@ -600,7 +630,6 @@ const UI = {
             notes: dict.view_notes || "Notes",
             favorites: dict.view_favorites || "Favorites",
             archive: dict.view_archive || "Archive",
-            hidden: dict.view_hidden || "Hidden",
             future: dict.view_future || "Future",
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
