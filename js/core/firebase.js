@@ -21,7 +21,6 @@ export function initFirebase() {
     const auth = firebase.auth(app)
     const db = firebase.firestore(app)
 
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => null)
     db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 
     firebaseSingleton = { app, auth, db }

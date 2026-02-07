@@ -1,5 +1,5 @@
 export function bootstrapCore({ ThemeManager, Auth }) {
-    document.addEventListener("DOMContentLoaded", () => {
+    const boot = () => {
         if (ThemeManager && typeof ThemeManager.init === "function") {
             ThemeManager.init()
         }
@@ -20,5 +20,11 @@ export function bootstrapCore({ ThemeManager, Auth }) {
         document.addEventListener("dblclick", (event) => {
             event.preventDefault()
         }, { passive: false })
-    }, { once: true })
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", boot, { once: true })
+        return
+    }
+    boot()
 }

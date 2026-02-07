@@ -1,3 +1,5 @@
+import { isSafari } from "./authSafariFix.js"
+
 export function createAuthManager({ auth }) {
     const state = {
         initialized: false,
@@ -23,10 +25,6 @@ export function createAuthManager({ auth }) {
         _isIOS() {
             const ua = (navigator.userAgent || "").toLowerCase()
             return /iphone|ipad|ipod/.test(ua)
-        },
-        _isSafari() {
-            const ua = (navigator.userAgent || "").toLowerCase()
-            return /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg\//.test(ua)
         },
         _setLoginBusy(flag) {
             state.loginInFlight = !!flag
@@ -69,7 +67,12 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(true)
 
             try {
-                if (this._isIOS() || this._isSafari()) {
+                if (isSafari()) {
+                    await auth.signInWithPopup(this._provider())
+                    return
+                }
+
+                if (this._isIOS()) {
                     await this._signInWithRedirect()
                     return
                 }
