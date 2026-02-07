@@ -357,7 +357,8 @@ const Editor = (() => {
         
         els.wrapper.classList.add("active")
         setTimeout(() => els.content?.focus(), 50)
-        UI.toggleSidebar(false)
+        const isDesktop = window.matchMedia("(min-width: 1024px)").matches
+        if (!isDesktop) UI.toggleSidebar(false)
     }
 
     const openFromList = async (note) => {
@@ -390,6 +391,7 @@ const Editor = (() => {
         els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
         renderTags()
         makeMediaDraggable()
+        syncAudioPlayers()
         syncTaskStates()
         if (observer && els.content) {
             observer.disconnect()
@@ -544,6 +546,7 @@ const Editor = (() => {
         `
         document.execCommand("insertHTML", false, html)
         makeMediaDraggable()
+        syncAudioPlayers()
     }
 
     const toggleAudioPlayer = (player) => {
@@ -570,6 +573,22 @@ const Editor = (() => {
         const playing = audio && !audio.paused && !audio.ended
         if (icon) icon.textContent = playing ? "pause" : "play_arrow"
         player.classList.toggle("playing", playing)
+    }
+
+    const syncAudioPlayers = () => {
+        if (!els.content) return
+        els.content.querySelectorAll(".audio-player").forEach(player => {
+            const wrapper = player.closest(".audio-wrapper")
+            const audio = wrapper?.querySelector("audio")
+            if (!audio) return
+            if (!audio.hasAttribute("controls")) audio.setAttribute("controls", "")
+            audio.preload = "metadata"
+            if (audio.src) audio.load()
+            audio.onended = () => updateAudioUI(player, audio)
+            audio.onpause = () => updateAudioUI(player, audio)
+            audio.onplay = () => updateAudioUI(player, audio)
+            updateAudioUI(player, audio)
+        })
     }
 
     const makeMediaDraggable = () => {

@@ -37,6 +37,9 @@ Object.assign(UI, {
                         <button type="button" class="btn-secondary" data-action="lock-unhide" data-note-id="${id}">
                             ${dict.unlock_note || "Unlock"}
                         </button>
+                        <button type="button" class="btn-secondary" data-action="lock-remove" data-note-id="${id}">
+                            ${dict.unlock_forever || "Remove lock"}
+                        </button>
                         <div class="lock-center-folder">
                             <select class="input-area lock-center-select" data-note-id="${id}" aria-label="${dict.folder_view_aria || "Folder"}">
                                 ${folderOptions.join("")}
@@ -102,6 +105,37 @@ Object.assign(UI, {
             })
         } catch (e) {
             this.showToast(this.getText("unlock_failed", "Unable to unlock"))
+            console.error("Unlock failed", e)
+        }
+    },
+
+    async removeLockPermanently(noteId) {
+        const id = decodeURIComponent(noteId || "")
+        if (!id) return
+        const note = StateStore.read().notes.find(n => n.id === id)
+        if (!note || !note.lock?.hash) return
+        const verified = await new Promise(resolve => {
+            this.showPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"), async (val) => {
+                resolve(await LockService.verify(note, val))
+            })
+        })
+        if (!verified) {
+            this.showToast(this.getText("lock_invalid_password", "Invalid password"))
+            return
+        }
+        const nextNotes = StateStore.read().notes.map(n => n.id === id ? { ...n, lock: null } : n)
+        StateActions.setNotes(nextNotes)
+        filterAndRender(document.getElementById("search-input")?.value || "")
+        this.renderLockCenter()
+        if (!db || !StateStore.read().user) return
+        try {
+            const payload = { lock: null }
+            if (firebase?.firestore?.FieldValue?.delete) {
+                payload.lock = firebase.firestore.FieldValue.delete()
+            }
+            await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(id).update(payload)
+        } catch (e) {
+            this.showToast(this.getText("unlock_failed", "Unable to unlock note"))
             console.error("Unlock failed", e)
         }
     },
