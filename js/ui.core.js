@@ -253,6 +253,9 @@ const UI = {
             case "editor-delete":
                 Editor.deleteCurrent()
                 break
+            case "editor-lock":
+                Editor.toggleLock()
+                break
             case "editor-save":
                 Editor.save()
                 break

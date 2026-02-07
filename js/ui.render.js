@@ -272,6 +272,8 @@ Object.assign(UI, {
         const root = this.els.folderList
         if (!root) return
         const hideList = StateStore.read().config.folderViewMode === "full"
+        const title = document.querySelector('.nav-title[data-lang="folders"]')
+        if (title) title.classList.toggle("hidden", hideList)
         root.classList.toggle("hidden", hideList)
         if (hideList) {
             root.innerHTML = ""

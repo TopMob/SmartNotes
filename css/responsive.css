@@ -51,6 +51,34 @@
 
     .editor-container {
         border: none;
+        --hit-size: 38px;
+    }
+
+    .editor-header-bar {
+        height: 54px;
+        padding: 0 12px;
+    }
+
+    .editor-tools {
+        gap: 6px;
+    }
+
+    .editor-scroll-area {
+        padding: 16px;
+        padding-bottom: calc(var(--editor-padding) * 2);
+    }
+
+    .editor-toolbar {
+        gap: 6px;
+        padding: 6px;
+        margin-bottom: 12px;
+        position: static;
+    }
+
+    .note-content {
+        padding: 10px;
+        max-height: none;
+        min-height: 38vh;
     }
 }
 

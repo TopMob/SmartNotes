@@ -273,14 +273,15 @@
 }
 
 .theme-item-wrapper {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 10px;
-    border-radius: var(--radius-lg);
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    border-radius: 50%;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    width: 100%;
     min-width: 0;
-    text-align: left;
+    text-align: center;
 }
