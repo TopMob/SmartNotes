@@ -12,11 +12,13 @@ import {
   query,
   serverTimestamp
 } from 'firebase/firestore'
+import { useTranslation } from 'react-i18next'
 import { auth, db } from './utils/firebase'
 import useAppStore from './store/useAppStore'
 import Layout from './components/Layout'
 import AuthPage from './pages/AuthPage'
 import HomePage from './pages/HomePage'
+import i18n from './i18n'
 
 export default function App() {
   const user = useAppStore((state) => state.user)
@@ -24,6 +26,8 @@ export default function App() {
   const setUser = useAppStore((state) => state.setUser)
   const setAuthLoading = useAppStore((state) => state.setAuthLoading)
   const setNotes = useAppStore((state) => state.setNotes)
+  const settings = useAppStore((state) => state.settings)
+  const { t } = useTranslation()
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -32,6 +36,12 @@ export default function App() {
     })
     return () => unsubscribe()
   }, [setUser, setAuthLoading])
+
+  useEffect(() => {
+    if (settings?.language && i18n.language !== settings.language) {
+      i18n.changeLanguage(settings.language)
+    }
+  }, [settings])
 
   useEffect(() => {
     if (!user) {
@@ -55,7 +65,7 @@ export default function App() {
       return
     }
     const payload = {
-      title: note.title || 'Untitled note',
+      title: note.title || t('defaults.untitledNote'),
       content: note.content || '',
       favorite: note.favorite || false,
       updatedAt: serverTimestamp()
@@ -91,7 +101,7 @@ export default function App() {
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-200">
-        Loading...
+        {t('loading')}
       </div>
     )
   }

@@ -1,11 +1,13 @@
 import Fuse from 'fuse.js'
 import dayjs from 'dayjs'
+import { useTranslation } from 'react-i18next'
 import useAppStore from '../store/useAppStore'
 import NoteCard from './NoteCard'
 
 export default function NotesList({ notes, onSelect, onDelete, onToggleFavorite }) {
   const searchQuery = useAppStore((state) => state.searchQuery)
   const activeFilter = useAppStore((state) => state.activeFilter)
+  const { t } = useTranslation()
 
   const sortedNotes = [...notes].sort((a, b) => {
     const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : new Date(a.updatedAt).getTime()
@@ -40,8 +42,8 @@ export default function NotesList({ notes, onSelect, onDelete, onToggleFavorite 
   if (!results.length) {
     return (
       <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400">
-        <h3 className="text-lg font-semibold text-white">No notes yet</h3>
-        <p className="mt-2 text-sm">Create a new note or adjust your search to see results.</p>
+        <h3 className="text-lg font-semibold text-white">{t('notes.emptyTitle')}</h3>
+        <p className="mt-2 text-sm">{t('notes.emptyBody')}</p>
       </div>
     )
   }
