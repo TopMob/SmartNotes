@@ -286,7 +286,6 @@ Object.assign(UI, {
                 <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(f.name)}</span>
                 <span class="folder-action-group">
-                    <i class="material-icons-round folder-action" data-action="rename-folder" data-folder-id="${f.id}" aria-hidden="true">edit</i>
                     <i class="material-icons-round folder-action" data-action="delete-folder" data-folder-id="${f.id}" aria-hidden="true">close</i>
                 </span>
             </button>
@@ -304,9 +303,6 @@ Object.assign(UI, {
             const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
             return `
                 <div class="folder-card" data-action="open-folder" data-folder-id="${folder.id}">
-                    <button type="button" class="folder-card-action" data-action="rename-folder" data-folder-id="${folder.id}" aria-label="${this.getText("rename_folder", "Rename folder")}">
-                        <i class="material-icons-round" aria-hidden="true">edit</i>
-                    </button>
                     <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
                     <div class="folder-meta">${count} ${label}</div>
                 </div>

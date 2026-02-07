@@ -230,6 +230,7 @@ Object.assign(UI, {
         ThemeManager.applySettings(draft, true)
         this.initAppearanceDraft()
         this.renderAppearanceDraft()
+        this.closeModal("settings-modal")
     },
 
     bindSettingsControls() {

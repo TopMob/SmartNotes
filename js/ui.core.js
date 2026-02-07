@@ -255,7 +255,7 @@ const UI = {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder", "rename-folder"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder", "rename-active-folder"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -283,8 +283,8 @@ const UI = {
             case "create-folder":
                 this.createFolder()
                 break
-            case "rename-folder":
-                this.renameFolder(el.dataset.folderId)
+            case "rename-active-folder":
+                this.renameFolder(StateStore.read().activeFolderId)
                 break
             case "open-modal":
                 this.openModal(el.dataset.modal)
@@ -586,11 +586,21 @@ const UI = {
         }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
+        this.updateFolderRenameButton()
     },
 
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
         const label = StateStore.read().view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
+        this.updateFolderRenameButton()
+    },
+
+    updateFolderRenameButton() {
+        const button = document.getElementById("rename-folder-button")
+        if (!button) return
+        const { view, activeFolderId } = StateStore.read()
+        const isVisible = view === "folder" && !!activeFolderId
+        button.classList.toggle("hidden", !isVisible)
     }
 }
