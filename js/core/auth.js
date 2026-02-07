@@ -56,6 +56,13 @@ export function createAuthManager({ auth }) {
             console.error("[Auth] login error", code, err)
         },
         async _signInWithRedirect() {
+            if (this._isSafari()) {
+                try {
+                    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+                } catch (err) {
+                    console.warn("[Auth] Safari persistence fallback failed", err)
+                }
+            }
             await auth.signInWithRedirect(this._provider())
         },
         async login() {
