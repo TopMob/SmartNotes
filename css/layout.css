@@ -100,6 +100,24 @@
     opacity: 0.9;
 }
 
+.folder-action-group {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.folder-action {
+    font-size: 18px;
+    opacity: 0.55;
+    transition: opacity var(--animation-duration) var(--ease-out), color var(--animation-duration) var(--ease-out);
+}
+
+.folder-action:hover {
+    opacity: 0.95;
+    color: var(--text);
+}
+
 .nav-item:hover {
     background: rgba(255, 255, 255, 0.06);
 }
@@ -448,6 +466,7 @@
 }
 
 .folder-card {
+    position: relative;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-lg);
@@ -471,6 +490,28 @@
 .folder-meta {
     font-size: 13px;
     opacity: 0.75;
+}
+
+.folder-card-action {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity var(--animation-duration) var(--ease-out), transform var(--animation-duration) var(--ease-out);
+}
+
+.folder-card:hover .folder-card-action {
+    opacity: 1;
+    transform: translateY(-2px);
 }
 
 .note-card.dragging {

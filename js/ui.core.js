@@ -255,7 +255,7 @@ const UI = {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder", "rename-folder"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -282,6 +282,9 @@ const UI = {
                 break
             case "create-folder":
                 this.createFolder()
+                break
+            case "rename-folder":
+                this.renameFolder(el.dataset.folderId)
                 break
             case "open-modal":
                 this.openModal(el.dataset.modal)
@@ -330,6 +333,15 @@ const UI = {
                 break
             case "editor-save":
                 Editor.save()
+                break
+            case "editor-prev-page":
+                Editor.prevPage()
+                break
+            case "editor-next-page":
+                Editor.nextPage()
+                break
+            case "editor-add-page":
+                Editor.addPage()
                 break
             case "editor-voice":
                 Editor.toggleRecording()
@@ -524,6 +536,25 @@ const UI = {
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             })
         })
+    },
+
+    renameFolder(folderId) {
+        const id = String(folderId || "")
+        if (!id) return
+        const folder = StateStore.read().folders.find(f => f.id === id)
+        if (!folder) return
+        this.showPrompt(this.getText("rename_folder", "Rename folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+            const trimmed = String(name || "").trim()
+            if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (trimmed.toLowerCase() === String(folder.name || "").toLowerCase()) return
+            if (StateStore.read().folders.some(f => f.id !== id && f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+                return this.showToast(this.getText("folder_exists", "Folder already exists"))
+            }
+            if (!db || !StateStore.read().user) return
+            await db.collection("users").doc(StateStore.read().user.uid).collection("folders").doc(id).update({
+                name: trimmed
+            })
+        }, String(folder.name || ""))
     },
 
     applyAppearanceSettings() {

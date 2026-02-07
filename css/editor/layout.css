@@ -77,7 +77,7 @@
 .note-content {
     min-height: 46vh;
     height: auto;
-    padding: 14px 12px;
+    padding: 10px;
     border-radius: var(--radius-lg);
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
@@ -89,14 +89,28 @@
     max-width: 100%;
     max-height: 55vh;
     overflow-y: auto;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1 1 auto;
+}
+
+.note-page {
+    min-height: 42vh;
+    padding: 14px 12px;
+    border-radius: var(--radius-md);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
-    box-sizing: border-box;
+    outline: none;
+    display: none;
+}
+
+.note-page.is-active {
     display: block;
-    flex: 1 1 auto;
 }
 
 .note-content * {
@@ -112,9 +126,23 @@
 }
 
 
-.note-content:focus {
+.note-content:focus-within {
     border-color: rgba(var(--primary-rgb), 0.28);
     box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.10);
+}
+
+.editor-page-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.page-indicator {
+    font-size: 0.9rem;
+    opacity: 0.75;
+    min-width: 54px;
+    text-align: center;
 }
 
 .editor-toolbar {
