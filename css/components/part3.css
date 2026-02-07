@@ -4,6 +4,17 @@
     background: rgba(var(--primary-rgb), 0.08);
 }
 
+.settings-appearance-page {
+    color: var(--text);
+}
+
+.settings-appearance-page .field-label,
+.settings-appearance-page .settings-group-title,
+.settings-appearance-page .settings-section-title,
+.settings-appearance-page .settings-menu-desc {
+    color: var(--text);
+}
+
 .theme-dot {
     width: 18px;
     height: 18px;

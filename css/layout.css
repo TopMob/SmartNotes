@@ -31,6 +31,27 @@
     transform: translateX(0);
 }
 
+.sidebar-glass.collapsed {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+    transform: translateX(-100%);
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1900;
+    display: none;
+}
+
+.sidebar-overlay.active {
+    display: block;
+}
+
 .sidebar-header {
     height: 64px;
     display: flex;
@@ -297,6 +318,11 @@
 .note-card.pinned {
     border-color: rgba(var(--primary-rgb), 0.4);
     background: linear-gradient(160deg, rgba(var(--primary-rgb), 0.15), rgba(255,255,255,0.04));
+}
+
+.note-card.favorite {
+    border-color: rgba(255, 214, 0, 0.35);
+    background: linear-gradient(160deg, rgba(255, 214, 0, 0.12), rgba(255,255,255,0.04));
 }
 
 .note-card.pinning {

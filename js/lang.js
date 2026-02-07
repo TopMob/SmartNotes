@@ -228,6 +228,7 @@ export const LANG = {
         auth_cancelled: "Запрос отменен",
         logout_failed: "Ошибка при выходе",
         login_failed: "Ошибка входа",
+        favorite_failed: "Не удалось обновить избранное",
         draw_photo_hint: "Откройте редактор фото",
         password_title: "Пароль",
         password_prompt: "Введите пароль"
@@ -461,6 +462,7 @@ export const LANG = {
         auth_cancelled: "Request canceled",
         logout_failed: "Sign out failed",
         login_failed: "Sign-in failed",
+        favorite_failed: "Unable to update favorite",
         draw_photo_hint: "Open the photo editor",
         password_title: "Password",
         password_prompt: "Enter password"

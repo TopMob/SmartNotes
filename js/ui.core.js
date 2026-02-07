@@ -16,9 +16,15 @@ const UI = {
             confirmModal: document.getElementById("confirm-modal"),
             promptModal: document.getElementById("prompt-modal"),
             fab: document.querySelector(".btn-fab"),
-            folderList: document.getElementById("folder-list-root")
+            folderList: document.getElementById("folder-list-root"),
+            sidebarOverlay: document.getElementById("sidebar-overlay")
         }
         this.bindEvents()
+        if (window.matchMedia("(min-width: 1024px)").matches) {
+            this.els.sidebar?.classList.add("active")
+        }
+        this.updateSidebarLayout()
+        window.addEventListener("resize", () => this.updateSidebarLayout())
         this.applyAppearanceSettings()
         this.updatePrimaryActionLabel()
         this.routeShare()
@@ -65,7 +71,8 @@ const UI = {
                 this.handleAction(actionEl, e)
             }
 
-            if (this.els.sidebar?.classList.contains("active") && !this.els.sidebar.contains(e.target) && !e.target.closest("#menu-toggle")) {
+            const isDesktop = window.matchMedia("(min-width: 1024px)").matches
+            if (!isDesktop && this.els.sidebar?.classList.contains("active") && !this.els.sidebar.contains(e.target) && !e.target.closest("#menu-toggle")) {
                 this.toggleSidebar(false)
             }
             if (this.els.userMenu?.classList.contains("active") && !e.target.closest(".user-avatar-wrapper")) {
@@ -75,6 +82,16 @@ const UI = {
             const overlay = e.target.closest(".modal-overlay")
             if (overlay && e.target === overlay && !overlay.dataset.modalStatic) {
                 this.closeModal(overlay.id)
+            }
+        })
+
+        if (this.els.sidebarOverlay) {
+            this.els.sidebarOverlay.addEventListener("click", () => this.toggleSidebar(false))
+        }
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && this.els.sidebar?.classList.contains("active")) {
+                this.toggleSidebar(false)
             }
         })
 
@@ -322,9 +339,22 @@ const UI = {
         }
     },
 
+    updateSidebarLayout() {
+        const isDesktop = window.matchMedia("(min-width: 1024px)").matches
+        const isActive = this.els.sidebar?.classList.contains("active")
+        if (this.els.sidebar) {
+            this.els.sidebar.classList.toggle("collapsed", isDesktop && !isActive)
+        }
+        if (this.els.sidebarOverlay) {
+            this.els.sidebarOverlay.classList.toggle("active", !!isActive && !isDesktop)
+        }
+    },
+
     toggleSidebar(force) {
         if (!this.els.sidebar) return
-        this.els.sidebar.classList.toggle("active", typeof force === "boolean" ? force : !this.els.sidebar.classList.contains("active"))
+        const next = typeof force === "boolean" ? force : !this.els.sidebar.classList.contains("active")
+        this.els.sidebar.classList.toggle("active", next)
+        this.updateSidebarLayout()
     },
 
     toggleUserMenu(force) {
