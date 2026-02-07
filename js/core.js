@@ -12,6 +12,18 @@ const core = window.__smartnotesCore || (() => {
     return ctx
 })()
 
+let resolveAuthReady = null
+const authReady = new Promise(resolve => {
+    resolveAuthReady = resolve
+})
+
+const AuthProxy = {
+    login: () => authReady.then(auth => auth.login()),
+    logout: () => authReady.then(auth => auth.logout()),
+    switchAccount: () => authReady.then(auth => auth.switchAccount())
+}
+core.Auth = core.Auth || AuthProxy
+
 window.Utils = Utils
 window.auth = core.auth
 window.db = core.db
@@ -21,11 +33,9 @@ window.LANG = LANG
 async function startCore() {
     await new Promise(resolve => {
         if (typeof firebase !== "undefined") return resolve()
-        let tries = 0
         const tick = () => {
-            if (typeof firebase !== "undefined" || tries > 120) return resolve()
-            tries += 1
-            requestAnimationFrame(tick)
+            if (typeof firebase !== "undefined") return resolve()
+            setTimeout(tick, 50)
         }
         tick()
     })
@@ -37,12 +47,12 @@ async function startCore() {
         window.db = core.db
     }
     await setupAuthPersistence(core.auth)
-    if (!core.Auth) {
-        core.Auth = createAuthManager({ auth: core.auth })
-        window.Auth = core.Auth
-    }
-    core.Auth.init().catch(() => null)
-    bootstrapCore({ ThemeManager, Auth: core.Auth })
+    const authManager = createAuthManager({ auth: core.auth })
+    core.Auth = authManager
+    window.Auth = core.Auth
+    resolveAuthReady(authManager)
+    authManager.init().catch(() => null)
 }
 
+bootstrapCore({ ThemeManager, Auth: core.Auth })
 startCore().catch(() => null)
