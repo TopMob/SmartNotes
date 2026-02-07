@@ -23,6 +23,10 @@ Object.assign(UI, {
         const el = document.getElementById(id)
         if (!el) return
         el.classList.remove("active")
+        if (id === "settings-modal") {
+            ThemeManager.revertToLastSaved()
+            StateStore.update("appearanceDraft", null)
+        }
     },
 
     openSettings() {
