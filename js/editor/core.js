@@ -657,7 +657,6 @@ const Editor = (() => {
         StateStore.update("currentNote", null)
         deselectMedia()
         stopRecording()
-        closeInlineSketch()
         pageIndex = 0
         titleTouched = false
         autoSaveSnapshot = null

@@ -130,6 +130,7 @@ const ColorPalette = (() => {
         const onMove = (event) => {
             if (event.pointerId !== pointerId) return
             if (event.buttons === 0 && event.pointerType === "mouse") return
+            event.preventDefault()
             moveHandler(event)
         }
         const onUp = (event) => {
@@ -187,6 +188,7 @@ const ColorPalette = (() => {
         if (sv) {
             sv.addEventListener("pointerdown", (event) => {
                 event.preventDefault()
+                event.stopPropagation()
                 sv.setPointerCapture?.(event.pointerId)
                 handleSvPointer(state, event)
                 trackPointer(event.pointerId, (moveEvent) => handleSvPointer(state, moveEvent))
@@ -196,6 +198,7 @@ const ColorPalette = (() => {
         if (hue) {
             hue.addEventListener("pointerdown", (event) => {
                 event.preventDefault()
+                event.stopPropagation()
                 hue.setPointerCapture?.(event.pointerId)
                 handleHuePointer(state, event)
                 trackPointer(event.pointerId, (moveEvent) => handleHuePointer(state, moveEvent))

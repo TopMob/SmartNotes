@@ -83,6 +83,7 @@ const EditorDrawing = (() => {
     const setDrawingTool = (tool) => {
         if (!isSupportedTool(tool)) return
         drawingState.tool = tool
+        applyToolStyle()
         updateDrawingToolButtons()
     }
 
@@ -110,6 +111,7 @@ const EditorDrawing = (() => {
         drawingState.canvas = canvas
         drawingState.ctx = canvas.getContext("2d")
         attachObservers()
+        bindControlsPointerGuard()
         scheduleLayoutSync()
         return canvas
     }
@@ -135,6 +137,26 @@ const EditorDrawing = (() => {
         if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
         drawingState.mutationObserver = null
         drawingState.content?.removeEventListener("scroll", scheduleScrollSync)
+    }
+
+    const bindControlsPointerGuard = () => {
+        if (!elements.drawingControls || elements.drawingControls.dataset.pointerGuard === "true") return
+        elements.drawingControls.dataset.pointerGuard = "true"
+        elements.drawingControls.addEventListener("pointerdown", () => disableCanvasPointerEventsUntilRelease())
+    }
+
+    const disableCanvasPointerEventsUntilRelease = () => {
+        if (!drawingState.canvas || !drawingState.active) return
+        drawingState.canvas.style.pointerEvents = "none"
+        const restorePointerEvents = () => {
+            window.removeEventListener("pointerup", restorePointerEvents)
+            window.removeEventListener("pointercancel", restorePointerEvents)
+            if (drawingState.canvas && drawingState.active) {
+                drawingState.canvas.style.pointerEvents = "auto"
+            }
+        }
+        window.addEventListener("pointerup", restorePointerEvents)
+        window.addEventListener("pointercancel", restorePointerEvents)
     }
 
     const scheduleScrollSync = () => {
