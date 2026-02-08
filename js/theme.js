@@ -291,7 +291,11 @@ export const ThemeManager = {
         this.applySettings(saved, false)
     },
     getDefaultSettings() {
-        return { preset: "dark" }
+        return {
+            preset: "dark",
+            mainBackgroundImage: "",
+            sidebarBackgroundImage: ""
+        }
     },
     getSavedSettings() {
         const raw = localStorage.getItem(this.storageKey)
@@ -326,7 +330,13 @@ export const ThemeManager = {
             bg: settings?.bg || base.bg,
             t: settings?.t || base.t
         }
-        this.applyToRoot(applied)
+        const mainBackgroundImage = this.prepareBackgroundImage(settings?.mainBackgroundImage)
+        const sidebarBackgroundImage = this.prepareBackgroundImage(settings?.sidebarBackgroundImage)
+        this.applyToRoot({
+            ...applied,
+            mainBackgroundImage,
+            sidebarBackgroundImage
+        })
         const brandName = settings?.brandName || base.brandName || "SmartNotes"
         this.applyBrandName(brandName)
         document.documentElement.dataset.themePreset = presetKey
@@ -337,7 +347,9 @@ export const ThemeManager = {
                 bg: applied.bg,
                 t: applied.t,
                 brandName,
-                basePreset: settings?.basePreset || "dark"
+                basePreset: settings?.basePreset || "dark",
+                mainBackgroundImage: settings?.mainBackgroundImage || "",
+                sidebarBackgroundImage: settings?.sidebarBackgroundImage || ""
             })
         }
     },
@@ -374,6 +386,8 @@ export const ThemeManager = {
         root.style.setProperty("--editor-toolbar-bg", theme.toolbarBg)
         root.style.setProperty("--editor-toolbar-border", theme.toolbarBorder)
         root.style.setProperty("--editor-toolbar-shadow", theme.toolbarShadow)
+        root.style.setProperty("--main-bg-image", theme.mainBackgroundImage || "none")
+        root.style.setProperty("--sidebar-bg-image", theme.sidebarBackgroundImage || "none")
     },
     applyBrandName(name) {
         const text = String(name || "SmartNotes")
@@ -452,6 +466,13 @@ export const ThemeManager = {
     revertToLastSaved() {
         const saved = this.getSavedSettings()
         this.applySettings(saved, false)
+    },
+    prepareBackgroundImage(value) {
+        const trimmed = String(value || "").trim()
+        if (!trimmed) return "none"
+        if (/^url\(/i.test(trimmed)) return trimmed
+        const safeValue = trimmed.replace(/"/g, '\\"')
+        return `url("${safeValue}")`
     },
     normalizeHex(value) {
         const v = String(value || "").trim()

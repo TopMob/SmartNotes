@@ -210,6 +210,27 @@ Object.assign(UI, {
                             </label>
                         </div>
                     </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.settings_backgrounds || "Backgrounds"}</div>
+                        <div class="settings-background-grid">
+                            <div class="field">
+                                <span class="field-label">${dict.settings_main_background || "Main screen background"}</span>
+                                <input type="text" class="input-area" data-appearance-bg-input="main" placeholder="${dict.settings_background_placeholder || "Image URL or data"}" aria-label="${dict.settings_main_background || "Main screen background"}" autocomplete="off">
+                                <div class="settings-background-actions">
+                                    <input type="file" class="input-area" data-appearance-bg-file="main" accept="image/*" aria-label="${dict.settings_background_upload || "Upload background image"}">
+                                    <button type="button" class="btn-secondary" data-appearance-bg-clear="main">${dict.clear || "Clear"}</button>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">${dict.settings_sidebar_background || "Sidebar background"}</span>
+                                <input type="text" class="input-area" data-appearance-bg-input="sidebar" placeholder="${dict.settings_background_placeholder || "Image URL or data"}" aria-label="${dict.settings_sidebar_background || "Sidebar background"}" autocomplete="off">
+                                <div class="settings-background-actions">
+                                    <input type="file" class="input-area" data-appearance-bg-file="sidebar" accept="image/*" aria-label="${dict.settings_background_upload || "Upload background image"}">
+                                    <button type="button" class="btn-secondary" data-appearance-bg-clear="sidebar">${dict.clear || "Clear"}</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="settings-actions row-between">
                     <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
@@ -218,6 +239,7 @@ Object.assign(UI, {
             `
             if (window.ColorPalette) window.ColorPalette.init(root)
             this.initAppearanceDraft()
+            this.bindAppearanceBackgroundControls(root)
             this.renderAppearanceDraft()
             if (hasSecretPresets) this.renderHiddenPresets()
             return
@@ -240,7 +262,9 @@ Object.assign(UI, {
                 bg: saved.bg || preset.bg,
                 t: saved.t || preset.t,
                 brandName: saved.brandName || "SmartNotes",
-                basePreset: saved.basePreset || "dark"
+                basePreset: saved.basePreset || "dark",
+                mainBackgroundImage: saved.mainBackgroundImage || "",
+                sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
             })
             return
         }
@@ -250,7 +274,9 @@ Object.assign(UI, {
             bg: saved.bg || ThemeManager.themes.dark.bg,
             t: saved.t || ThemeManager.themes.dark.t,
             brandName: saved.brandName || "SmartNotes",
-            basePreset: saved.basePreset || "dark"
+            basePreset: saved.basePreset || "dark",
+            mainBackgroundImage: saved.mainBackgroundImage || "",
+            sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
         })
     },
 
@@ -261,8 +287,18 @@ Object.assign(UI, {
             draft = { ...draft, p: preset.p, bg: preset.bg, t: preset.t }
             StateStore.update("appearanceDraft", draft)
         }
+        const normalizedDraft = {
+            ...draft,
+            mainBackgroundImage: typeof draft.mainBackgroundImage === "string" ? draft.mainBackgroundImage : "",
+            sidebarBackgroundImage: typeof draft.sidebarBackgroundImage === "string" ? draft.sidebarBackgroundImage : ""
+        }
+        if (normalizedDraft.mainBackgroundImage !== draft.mainBackgroundImage || normalizedDraft.sidebarBackgroundImage !== draft.sidebarBackgroundImage) {
+            draft = normalizedDraft
+            StateStore.update("appearanceDraft", draft)
+        }
         const activeKey = draft.preset && draft.preset !== "manual" ? draft.preset : "manual"
         ThemeManager.syncInputs(draft.p, draft.bg, draft.t)
+        this.syncAppearanceBackgroundInputs(draft)
         const onSelect = (key) => {
             let nextDraft = null
             if (key === "manual") {
@@ -280,7 +316,9 @@ Object.assign(UI, {
                     bg: preset.bg,
                     t: preset.t,
                     brandName: "SmartNotes",
-                    basePreset: key
+                    basePreset: key,
+                    mainBackgroundImage: draft.mainBackgroundImage || "",
+                    sidebarBackgroundImage: draft.sidebarBackgroundImage || ""
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -383,14 +421,16 @@ Object.assign(UI, {
         if (this.hasSecretPresetAccess()) this.renderHiddenPresets()
     },
 
-    buildHiddenPresetDraft(preset, presetKey) {
+    buildHiddenPresetDraft(preset, presetKey, currentDraft) {
         return {
             preset: presetKey,
             p: preset.p,
             bg: preset.bg,
             t: preset.t,
             brandName: preset.brandName || "SmartNotes",
-            basePreset: preset.basePreset || "dark"
+            basePreset: preset.basePreset || "dark",
+            mainBackgroundImage: currentDraft?.mainBackgroundImage || "",
+            sidebarBackgroundImage: currentDraft?.sidebarBackgroundImage || ""
         }
     },
 
@@ -433,7 +473,7 @@ Object.assign(UI, {
             if (draft?.preset === item.key) button.classList.add("active")
             button.textContent = item.label
             button.addEventListener("click", () => {
-                this.applyAppearanceDraft(this.buildHiddenPresetDraft(preset, item.key))
+                this.applyAppearanceDraft(this.buildHiddenPresetDraft(preset, item.key, draft))
             })
             grid.appendChild(button)
         })
@@ -445,13 +485,22 @@ Object.assign(UI, {
         let draft = null
         if (defaults.preset && defaults.preset !== "manual") {
             const preset = ThemeManager.resolvePreset(defaults.preset)
-            draft = { preset: defaults.preset, p: preset.p, bg: preset.bg, t: preset.t }
+            draft = {
+                preset: defaults.preset,
+                p: preset.p,
+                bg: preset.bg,
+                t: preset.t,
+                mainBackgroundImage: defaults.mainBackgroundImage || "",
+                sidebarBackgroundImage: defaults.sidebarBackgroundImage || ""
+            }
         } else {
             draft = {
                 preset: "manual",
                 p: ThemeManager.themes.dark.p,
                 bg: ThemeManager.themes.dark.bg,
-                t: ThemeManager.themes.dark.t
+                t: ThemeManager.themes.dark.t,
+                mainBackgroundImage: "",
+                sidebarBackgroundImage: ""
             }
         }
         StateStore.update("appearanceDraft", draft)
@@ -495,6 +544,58 @@ Object.assign(UI, {
                 ThemeManager.revertToLastSaved()
             })
         }
+    },
+    bindAppearanceBackgroundControls(root) {
+        if (!root) return
+        const bindTextInput = (input, key) => {
+            if (!input) return
+            input.addEventListener("change", (event) => {
+                const nextValue = String(event.target.value || "").trim()
+                this.updateAppearanceBackground(key, nextValue)
+            })
+        }
+        const bindFileInput = (input, key) => {
+            if (!input) return
+            input.addEventListener("change", (event) => {
+                const file = event.target.files && event.target.files[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = () => {
+                    const result = typeof reader.result === "string" ? reader.result : ""
+                    this.updateAppearanceBackground(key, result)
+                    event.target.value = ""
+                }
+                reader.readAsDataURL(file)
+            })
+        }
+        const bindClearButton = (button, key) => {
+            if (!button) return
+            button.addEventListener("click", () => {
+                this.updateAppearanceBackground(key, "")
+            })
+        }
+        bindTextInput(root.querySelector('[data-appearance-bg-input="main"]'), "mainBackgroundImage")
+        bindTextInput(root.querySelector('[data-appearance-bg-input="sidebar"]'), "sidebarBackgroundImage")
+        bindFileInput(root.querySelector('[data-appearance-bg-file="main"]'), "mainBackgroundImage")
+        bindFileInput(root.querySelector('[data-appearance-bg-file="sidebar"]'), "sidebarBackgroundImage")
+        bindClearButton(root.querySelector('[data-appearance-bg-clear="main"]'), "mainBackgroundImage")
+        bindClearButton(root.querySelector('[data-appearance-bg-clear="sidebar"]'), "sidebarBackgroundImage")
+    },
+    syncAppearanceBackgroundInputs(draft) {
+        const mainInput = document.querySelector('[data-appearance-bg-input="main"]')
+        const sidebarInput = document.querySelector('[data-appearance-bg-input="sidebar"]')
+        if (mainInput) mainInput.value = draft.mainBackgroundImage || ""
+        if (sidebarInput) sidebarInput.value = draft.sidebarBackgroundImage || ""
+    },
+    updateAppearanceBackground(key, value) {
+        const current = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        const next = {
+            ...current,
+            [key]: value
+        }
+        StateStore.update("appearanceDraft", next)
+        ThemeManager.applySettings(next, false)
+        this.renderAppearanceDraft()
     },
 
     showToast(msg, options = {}) {
