@@ -648,7 +648,7 @@ const Editor = (() => {
             els.drawingControls.classList.add("hidden")
         }
         if (window.EditorDrawing) {
-            EditorDrawing.setDrawingData("")
+            EditorDrawing.setDrawingData("", { recordHistory: true, replaceHistory: true })
             EditorDrawing.cleanup()
         }
         if (observer) observer.disconnect()
@@ -666,7 +666,7 @@ const Editor = (() => {
         syncMediaSizes()
         syncAudioPlayers()
         syncLockButton(n)
-        if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "")
+        if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "", { recordHistory: true, replaceHistory: true })
         if (observer && els.content) {
             observer.disconnect()
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
@@ -1289,7 +1289,8 @@ const Editor = (() => {
     const captureSnapshot = () => ({
         title: els.title.value || "",
         content: els.content.innerHTML || "",
-        tags: [...(StateStore.read().currentNote?.tags || [])]
+        tags: [...(StateStore.read().currentNote?.tags || [])],
+        drawing: window.EditorDrawing?.getDrawingSnapshot?.() ?? (StateStore.read().currentNote?.drawing || "")
     })
 
     const persistDrawing = (drawingData) => {
@@ -1303,13 +1304,14 @@ const Editor = (() => {
             updatedAt: Utils.serverTimestamp()
         })
         StateStore.update("editorDirty", true)
-        scheduleAutoSave()
+        queueSnapshot()
     }
 
-    const snapshotsEqual = (a, b) => 
-        a.title === b.title && 
-        a.content === b.content && 
-        JSON.stringify(a.tags) === JSON.stringify(b.tags)
+    const snapshotsEqual = (a, b) =>
+        a.title === b.title &&
+        a.content === b.content &&
+        JSON.stringify(a.tags) === JSON.stringify(b.tags) &&
+        a.drawing === b.drawing
 
     const queueSnapshot = Utils.debounce(() => {
         syncAutoTitle()
@@ -1329,6 +1331,7 @@ const Editor = (() => {
                 ...n, 
                 title: current.title, 
                 content: current.content,
+                drawing: current.drawing,
                 updatedAt: Utils.serverTimestamp()
             })
         }
@@ -1366,7 +1369,8 @@ const Editor = (() => {
             ...n, 
             title: snap.title, 
             content: snap.content, 
-            tags: snap.tags 
+            tags: snap.tags,
+            drawing: snap.drawing
         })
         renderState()
     }
