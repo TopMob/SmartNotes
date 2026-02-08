@@ -663,21 +663,10 @@ const Editor = (() => {
         autoSaveSnapshot = null
         drawingState.active = false
         drawingState.isDrawing = false
-        drawingState.lastPoint = null
-        if (window.EditorDrawing) EditorDrawing.updateImageFromCanvas()
         if (els.drawingControls) {
             els.drawingControls.classList.add("hidden")
         }
-        if (drawingState.canvas?.parentElement) {
-            drawingState.canvas.parentElement.removeChild(drawingState.canvas)
-        }
-        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
-        drawingState.resizeObserver = null
-        if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
-        drawingState.mutationObserver = null
-        if (drawingState.refreshFrame) cancelAnimationFrame(drawingState.refreshFrame)
-        drawingState.refreshFrame = null
-        if (window.EditorDrawing) EditorDrawing.removeDrawingLayerIfEmpty()
+        if (window.EditorDrawing) EditorDrawing.cleanup()
         if (observer) observer.disconnect()
     }
 

@@ -237,25 +237,10 @@
     width: 140px;
 }
 
-.note-drawing-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 2;
-}
-
-.note-drawing-image {
-    width: 100%;
-    height: 100%;
-    object-fit: fill;
-    display: block;
-}
-
 .note-drawing-canvas {
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
+    top: 0;
+    left: 0;
     z-index: 3;
     touch-action: none;
 }
