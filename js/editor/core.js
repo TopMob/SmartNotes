@@ -78,7 +78,7 @@ const Editor = (() => {
             els.content.addEventListener("paste", handlePaste, { signal })
             els.content.addEventListener("keydown", handleTagLineEnter, { signal })
             els.content.addEventListener("keydown", handleEditorKeyDown, { signal })
-            els.content.addEventListener("keyup", handleEquationKeyUp, { signal })
+            els.content.addEventListener("keydown", handleEquationConfirmKeyDown, { signal })
             els.content.addEventListener("keyup", storeSelection, { signal })
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
@@ -247,9 +247,10 @@ const Editor = (() => {
         if (cutCurrentLine()) e.preventDefault()
     }
 
-    const handleEquationKeyUp = (e) => {
-        if (e.key !== "=") return
-        replaceEquationAtCaret()
+    const handleEquationConfirmKeyDown = (e) => {
+        if (e.key !== "Enter") return
+        if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
+        if (confirmEquationAtCaret()) e.preventDefault()
     }
 
     const handleLockApply = async () => {
@@ -739,15 +740,24 @@ const Editor = (() => {
         return nodes
     }
 
-    const getCaretOffsetInBlock = (block) => {
+    const getActiveRangeInContent = () => {
         const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return null
-        const range = sel.getRangeAt(0)
+        if (sel && sel.rangeCount) {
+            const range = sel.getRangeAt(0)
+            if (els.content && els.content.contains(range.commonAncestorContainer)) return range
+        }
+        if (savedRange && els.content && els.content.contains(savedRange.commonAncestorContainer)) return savedRange
+        return null
+    }
+
+    const getCaretOffsetInBlock = (block, range) => {
+        const targetRange = range || getActiveRangeInContent()
+        if (!targetRange || !targetRange.collapsed) return null
         const nodes = getTextNodes(block)
         let offset = 0
         for (const node of nodes) {
-            if (node === range.startContainer) {
-                return offset + range.startOffset
+            if (node === targetRange.startContainer) {
+                return offset + targetRange.startOffset
             }
             offset += node.textContent?.length || 0
         }
@@ -780,49 +790,289 @@ const Editor = (() => {
         return range
     }
 
-    const replaceEquationAtCaret = () => {
-        const target = getActiveBlock() || getPages()[pageIndex] || els.content
-        if (!target) return
-        const caretOffset = getCaretOffsetInBlock(target)
-        if (caretOffset === null) return
-        const fullText = target.textContent || ""
-        const textBefore = fullText.slice(0, caretOffset)
-        const match = textBefore.match(/(-?\d+(?:[.,]\d+)?)\s*([+\-*/])\s*(-?\d+(?:[.,]\d+)?)\s*=$/)
-        if (!match) return
-        const startIndex = textBefore.length - match[0].length
-        const endIndex = textBefore.length
-        const left = parseFloat(match[1].replace(",", "."))
-        const right = parseFloat(match[3].replace(",", "."))
-        if (!Number.isFinite(left) || !Number.isFinite(right)) return
-        let result = null
-        switch (match[2]) {
-            case "+":
-                result = left + right
-                break
-            case "-":
-                result = left - right
-                break
-            case "*":
-                result = left * right
-                break
-            case "/":
-                result = right === 0 ? null : left / right
-                break
-            default:
-                break
+    const getBlockFromRange = (range) => {
+        let node = range.startContainer
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+        if (!node || node === els.content) return null
+        if (node.classList?.contains("note-page")) return null
+        const block = node.closest("div, p")
+        if (block?.classList?.contains("note-page")) return null
+        return block
+    }
+
+    const findExpressionAroundCaret = (text, caretOffset) => {
+        const allowed = /[0-9+\-*/().,%\s]/
+        let start = caretOffset
+        let end = caretOffset
+        while (start > 0 && allowed.test(text[start - 1])) start -= 1
+        while (end < text.length && allowed.test(text[end])) end += 1
+        const slice = text.slice(start, end)
+        const trimmed = slice.trim()
+        if (!trimmed) return null
+        if (!/[+\-*/%()]/.test(trimmed)) return null
+        const leadingSpace = slice.indexOf(trimmed)
+        const expressionStart = start + leadingSpace
+        const expressionEnd = expressionStart + trimmed.length
+        return { expression: trimmed, start: expressionStart, end: expressionEnd }
+    }
+
+    const tokenizeExpression = (expression) => {
+        const tokens = []
+        let index = 0
+        let lastType = "start"
+        const isNumberPart = (char) => /[0-9.,]/.test(char)
+        while (index < expression.length) {
+            const char = expression[index]
+            if (/\s/.test(char)) {
+                index += 1
+                continue
+            }
+            if (isNumberPart(char)) {
+                let numberText = ""
+                let separatorCount = 0
+                while (index < expression.length && isNumberPart(expression[index])) {
+                    const current = expression[index]
+                    if (current === "." || current === ",") {
+                        separatorCount += 1
+                        if (separatorCount > 1) return null
+                        numberText += "."
+                    } else {
+                        numberText += current
+                    }
+                    index += 1
+                }
+                if (!numberText || numberText === ".") return null
+                const value = Number(numberText)
+                if (!Number.isFinite(value)) return null
+                tokens.push({ type: "number", value })
+                lastType = "number"
+                continue
+            }
+            if (char === "(") {
+                tokens.push({ type: "leftParen" })
+                index += 1
+                lastType = "leftParen"
+                continue
+            }
+            if (char === ")") {
+                if (lastType === "operator" || lastType === "leftParen" || lastType === "start") return null
+                tokens.push({ type: "rightParen" })
+                index += 1
+                lastType = "rightParen"
+                continue
+            }
+            if (char === "%") {
+                if (!["number", "rightParen", "percent"].includes(lastType)) return null
+                tokens.push({ type: "percent" })
+                index += 1
+                lastType = "percent"
+                continue
+            }
+            if ("+-*/".includes(char)) {
+                const isUnary = lastType === "start" || lastType === "operator" || lastType === "leftParen"
+                if (isUnary) {
+                    if (char === "+") {
+                        index += 1
+                        continue
+                    }
+                    tokens.push({ type: "operator", value: "neg" })
+                    index += 1
+                    lastType = "operator"
+                    continue
+                }
+                tokens.push({ type: "operator", value: char })
+                index += 1
+                lastType = "operator"
+                continue
+            }
+            return null
         }
-        if (result === null) return
-        const range = createRangeFromOffsets(target, startIndex, endIndex)
-        if (!range) return
-        range.deleteContents()
-        range.insertNode(document.createTextNode(String(result)))
-        range.collapse(false)
+        if (lastType === "operator" || lastType === "leftParen") return null
+        return tokens
+    }
+
+    const toRpn = (tokens) => {
+        const output = []
+        const stack = []
+        const operatorInfo = {
+            "+": { precedence: 1, assoc: "left" },
+            "-": { precedence: 1, assoc: "left" },
+            "*": { precedence: 2, assoc: "left" },
+            "/": { precedence: 2, assoc: "left" },
+            "neg": { precedence: 3, assoc: "right" }
+        }
+        for (const token of tokens) {
+            if (token.type === "number") {
+                output.push(token)
+                continue
+            }
+            if (token.type === "percent") {
+                output.push(token)
+                continue
+            }
+            if (token.type === "operator") {
+                const currentInfo = operatorInfo[token.value]
+                while (stack.length) {
+                    const top = stack[stack.length - 1]
+                    if (top.type !== "operator") break
+                    const topInfo = operatorInfo[top.value]
+                    const shouldPop = topInfo.precedence > currentInfo.precedence
+                        || (topInfo.precedence === currentInfo.precedence && currentInfo.assoc === "left")
+                    if (!shouldPop) break
+                    output.push(stack.pop())
+                }
+                stack.push(token)
+                continue
+            }
+            if (token.type === "leftParen") {
+                stack.push(token)
+                continue
+            }
+            if (token.type === "rightParen") {
+                let found = false
+                while (stack.length) {
+                    const top = stack.pop()
+                    if (top.type === "leftParen") {
+                        found = true
+                        break
+                    }
+                    output.push(top)
+                }
+                if (!found) return null
+                continue
+            }
+            return null
+        }
+        while (stack.length) {
+            const top = stack.pop()
+            if (top.type === "leftParen" || top.type === "rightParen") return null
+            output.push(top)
+        }
+        return output
+    }
+
+    const evaluateRpn = (tokens) => {
+        const stack = []
+        for (const token of tokens) {
+            if (token.type === "number") {
+                stack.push(token.value)
+                continue
+            }
+            if (token.type === "percent") {
+                if (!stack.length) return null
+                const value = stack.pop()
+                if (typeof value !== "number") return null
+                stack.push({ type: "percent", value })
+                continue
+            }
+            if (token.type === "operator") {
+                if (token.value === "neg") {
+                    if (!stack.length) return null
+                    const value = stack.pop()
+                    if (typeof value === "number") {
+                        stack.push(-value)
+                    } else if (value?.type === "percent") {
+                        stack.push({ type: "percent", value: -value.value })
+                    } else {
+                        return null
+                    }
+                    continue
+                }
+                if (stack.length < 2) return null
+                const right = stack.pop()
+                const left = stack.pop()
+                if (typeof left !== "number") return null
+                let result = null
+                if (typeof right === "number") {
+                    switch (token.value) {
+                        case "+":
+                            result = left + right
+                            break
+                        case "-":
+                            result = left - right
+                            break
+                        case "*":
+                            result = left * right
+                            break
+                        case "/":
+                            result = right === 0 ? null : left / right
+                            break
+                        default:
+                            result = null
+                            break
+                    }
+                } else if (right?.type === "percent") {
+                    const ratio = right.value / 100
+                    switch (token.value) {
+                        case "+":
+                            result = left + left * ratio
+                            break
+                        case "-":
+                            result = left - left * ratio
+                            break
+                        case "*":
+                            result = left * ratio
+                            break
+                        case "/":
+                            result = ratio === 0 ? null : left / ratio
+                            break
+                        default:
+                            result = null
+                            break
+                    }
+                } else {
+                    result = null
+                }
+                if (!Number.isFinite(result)) return null
+                stack.push(result)
+                continue
+            }
+            return null
+        }
+        if (stack.length !== 1) return null
+        const finalValue = stack[0]
+        if (typeof finalValue === "number") return finalValue
+        if (finalValue?.type === "percent") return finalValue.value / 100
+        return null
+    }
+
+    const evaluateExpression = (expression) => {
+        const tokens = tokenizeExpression(expression)
+        if (!tokens) return null
+        const rpn = toRpn(tokens)
+        if (!rpn) return null
+        return evaluateRpn(rpn)
+    }
+
+    const formatEquationResult = (value) => {
+        const rounded = Math.round(value * 1000000000) / 1000000000
+        return String(rounded)
+    }
+
+    const confirmEquationAtCaret = () => {
+        const range = getActiveRangeInContent()
+        if (!range || !range.collapsed) return false
+        const target = getBlockFromRange(range) || getPages()[pageIndex] || els.content
+        if (!target) return false
+        const caretOffset = getCaretOffsetInBlock(target, range)
+        if (caretOffset === null) return false
+        const fullText = target.textContent || ""
+        const expressionData = findExpressionAroundCaret(fullText, caretOffset)
+        if (!expressionData) return false
+        const result = evaluateExpression(expressionData.expression)
+        if (!Number.isFinite(result)) return false
+        const replaceRange = createRangeFromOffsets(target, expressionData.start, expressionData.end)
+        if (!replaceRange) return false
+        replaceRange.deleteContents()
+        replaceRange.insertNode(document.createTextNode(formatEquationResult(result)))
+        replaceRange.collapse(false)
         const sel = window.getSelection()
         if (sel) {
             sel.removeAllRanges()
-            sel.addRange(range)
+            sel.addRange(replaceRange)
         }
         queueSnapshot()
+        return true
     }
 
     const restoreSelection = () => {
@@ -1315,6 +1565,10 @@ const Editor = (() => {
         deselectMedia()
     }
 
+    const confirmEquation = () => {
+        confirmEquationAtCaret()
+    }
+
     const toggleToolbar = () => els.toolbar?.classList.toggle("is-hidden")
 
     const save = async (options = {}) => {
@@ -1392,6 +1646,7 @@ const Editor = (() => {
         resetMediaTransform,
         alignMediaOrText,
         deleteSelectedMedia,
+        confirmEquation,
         toggleRecording,
         addPage,
         nextPage,
