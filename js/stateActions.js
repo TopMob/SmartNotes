@@ -25,12 +25,6 @@ const StateActions = {
     setEditorDirty(flag) {
         StateStore.update("editorDirty", !!flag)
     },
-    setPendingShare(payload) {
-        StateStore.update("pendingShare", payload)
-    },
-    clearPendingShare() {
-        StateStore.update("pendingShare", null)
-    },
     updateConfig(values) {
         StateStore.updateConfig(values)
     },

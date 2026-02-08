@@ -184,6 +184,28 @@
     gap: 8px;
 }
 
+.drawing-tool-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.drawing-tool-btn {
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    transition: background var(--animation-duration) var(--ease-out), border-color var(--animation-duration) var(--ease-out), color var(--animation-duration) var(--ease-out);
+}
+
+.drawing-tool-btn.is-active {
+    border-color: rgba(var(--primary-rgb), 0.6);
+    background: rgba(var(--primary-rgb), 0.18);
+    color: var(--text);
+}
+
 .drawing-control-label {
     font-size: 0.85rem;
     opacity: 0.8;
@@ -193,6 +215,27 @@
     width: 44px;
     height: 32px;
     padding: 0;
+}
+
+.drawing-color-presets {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.drawing-color-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: var(--swatch-color);
+    cursor: pointer;
+    padding: 0;
+}
+
+.drawing-color-swatch.is-active {
+    border-color: rgba(var(--primary-rgb), 0.8);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
 }
 
 .drawing-range {

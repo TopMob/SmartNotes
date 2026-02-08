@@ -693,12 +693,10 @@ const AppLifecycle = {
             .orderBy("order", "asc")
             .onSnapshot(snap => {
                 let notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-                notes = notes.map(note => note.ownerUid ? note : { ...note, ownerUid: user.uid })
                 notes = applyStoredFavorites(notes)
                 StateStore.update("notes", notes)
                 syncFavoritesStorage(notes)
                 filterAndRender(document.getElementById("search-input")?.value || "")
-                if (typeof UI.handlePendingShare === "function") UI.handlePendingShare()
             }, err => {
                 UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Notes sync error", err)

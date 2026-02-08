@@ -33,8 +33,6 @@ const UI = {
         this.attachSecretAudio()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
-        this.routeShare()
-        window.addEventListener("hashchange", () => this.routeShare())
     },
 
     getText(key, fallback = "") {
@@ -331,9 +329,6 @@ const UI = {
             case "trigger-import":
                 this.triggerImport()
                 break
-            case "copy-collab-link":
-                this.copyToClipboard("collab-link")
-                break
             case "editor-undo":
                 Editor.undo()
                 break
@@ -384,14 +379,6 @@ const UI = {
                 break
             case "note-delete":
                 deleteNoteById(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-share":
-                this.openShareModal(decodeURIComponent(el.dataset.noteId || ""))
-                this.closeModal("note-actions-modal")
-                break
-            case "note-collab":
-                this.openCollabModal(decodeURIComponent(el.dataset.noteId || ""))
-                this.closeModal("note-actions-modal")
                 break
             case "note-copy-text":
                 copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
@@ -450,18 +437,6 @@ const UI = {
             case "editor-align":
                 Editor.alignMediaOrText(el.dataset.align)
                 break
-            case "share-note-native":
-                this.shareCurrentNoteNative()
-                break
-            case "share-enable":
-                this.enableShareLink()
-                break
-            case "copy-share-link":
-                this.copyShareLink()
-                break
-            case "collab-enable":
-                this.enableCollaboration()
-                break
             case "survey-next":
                 this.advanceSurvey()
                 break
@@ -516,12 +491,6 @@ const UI = {
         if (!input) return
         input.value = ""
         input.click()
-    },
-
-    copyToClipboard(id) {
-        const input = document.getElementById(id)
-        if (!input || !navigator.clipboard) return
-        navigator.clipboard.writeText(input.value || "").catch(() => null)
     },
 
     async handleNoteImport(e) {
