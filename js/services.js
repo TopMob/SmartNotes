@@ -4,6 +4,7 @@ const NoteIO = {
         const tags = Array.isArray(safe.tags) 
             ? [...new Set(safe.tags.filter(x => x && typeof x === "string").map(x => x.trim()))] 
             : []
+        const drawing = typeof safe.drawing === "string" ? safe.drawing : ""
         
         const now = Utils.serverTimestamp()
         
@@ -11,6 +12,7 @@ const NoteIO = {
             id: safe.id ? String(safe.id) : Utils.generateId(),
             title: safe.title ? String(safe.title).trim() : "",
             content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
+            drawing,
             tags,
             folderId: safe.folderId ? String(safe.folderId) : null,
             folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
