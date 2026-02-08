@@ -5,6 +5,7 @@ const NoteIO = {
             ? [...new Set(safe.tags.filter(x => x && typeof x === "string").map(x => x.trim()))] 
             : []
         const drawing = typeof safe.drawing === "string" ? safe.drawing : ""
+        const access = safe.access && typeof safe.access === "object" ? safe.access : null
         
         const now = Utils.serverTimestamp()
         
@@ -19,6 +20,7 @@ const NoteIO = {
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
             isPinned: !!safe.isPinned,
+            access,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
             futureAt: safe.futureAt || null,
             order: typeof safe.order === "number" ? safe.order : Date.now(),
@@ -29,6 +31,7 @@ const NoteIO = {
 
     exportNote(note) {
         const safe = this.normalizeNote(note)
+        if (safe.access) delete safe.access
         return JSON.stringify({ version: 2, note: safe }, null, 2)
     },
 
@@ -221,3 +224,137 @@ const ReminderService = {
         if (el) el.classList.remove("active")
     }
 }
+
+const CollaborationService = {
+    shareCollection: "noteShares",
+    sharedNotesCollection: "sharedNotes",
+    pendingTokenKey: "pending-share-token",
+    getAccess(note) {
+        const access = note && typeof note === "object" ? note.access : null
+        return access && typeof access === "object" ? access : null
+    },
+    getRole(note) {
+        const access = this.getAccess(note)
+        return access?.role === "edit" || access?.role === "view" ? access.role : "owner"
+    },
+    canEdit(note) {
+        const role = this.getRole(note)
+        return role === "owner" || role === "edit"
+    },
+    canManage(note) {
+        return this.getRole(note) === "owner"
+    },
+    isSharedNote(note) {
+        const access = this.getAccess(note)
+        const userUid = StateStore.read().user?.uid
+        return !!(access && access.ownerUid && access.ownerUid !== userUid)
+    },
+    sharedNoteId(ownerUid, noteId) {
+        return `shared_${ownerUid}_${noteId}`
+    },
+    normalizePermission(value) {
+        return value === "edit" ? "edit" : "view"
+    },
+    async generateToken() {
+        if (window.crypto?.getRandomValues) {
+            const bytes = new Uint8Array(16)
+            window.crypto.getRandomValues(bytes)
+            const raw = String.fromCharCode(...bytes)
+            return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
+        }
+        return `${Utils.generateId()}${Date.now().toString(36)}`
+    },
+    buildShareUrl(token) {
+        const url = new URL(window.location.href)
+        url.searchParams.set("share", token)
+        return url.toString()
+    },
+    getShareTokenFromUrl() {
+        const url = new URL(window.location.href)
+        const token = url.searchParams.get("share")
+        return token ? token.trim() : ""
+    },
+    captureShareToken() {
+        const token = this.getShareTokenFromUrl()
+        if (!token) return ""
+        sessionStorage.setItem(this.pendingTokenKey, token)
+        const url = new URL(window.location.href)
+        url.searchParams.delete("share")
+        window.history.replaceState({}, document.title, url.toString())
+        return token
+    },
+    async acceptPendingShare(user) {
+        const token = sessionStorage.getItem(this.pendingTokenKey)
+        if (!token) return null
+        sessionStorage.removeItem(this.pendingTokenKey)
+        return this.acceptShareToken(token, user)
+    },
+    async createShareLink(note, permission) {
+        const user = StateStore.read().user
+        if (!db || !user || !note) return ""
+        const access = this.getAccess(note)
+        const ownerUid = access?.ownerUid || user.uid
+        if (ownerUid !== user.uid) return ""
+        const noteId = access?.noteId || note.id
+        const token = await this.generateToken()
+        const payload = {
+            ownerUid,
+            noteId,
+            permission: this.normalizePermission(permission),
+            createdAt: Utils.serverTimestamp()
+        }
+        await db.collection(this.shareCollection).doc(token).set(payload)
+        return this.buildShareUrl(token)
+    },
+    async acceptShareToken(token, user) {
+        if (!db || !user) return null
+        const trimmed = String(token || "").trim()
+        if (!trimmed) return null
+        const doc = await db.collection(this.shareCollection).doc(trimmed).get()
+        if (!doc.exists) return null
+        const data = doc.data() || {}
+        if (!data.ownerUid || !data.noteId) return null
+        const permission = this.normalizePermission(data.permission)
+        const entryId = `${data.ownerUid}_${data.noteId}`
+        const entry = {
+            ownerUid: data.ownerUid,
+            noteId: data.noteId,
+            permission,
+            shareToken: trimmed,
+            updatedAt: Utils.serverTimestamp()
+        }
+        await db.collection("users").doc(user.uid).collection(this.sharedNotesCollection).doc(entryId).set(entry, { merge: true })
+        return { id: entryId, ...entry }
+    },
+    getNoteReference(note, user) {
+        if (!db || !user || !note) return null
+        const access = this.getAccess(note)
+        const ownerUid = access?.ownerUid || user.uid
+        const noteId = access?.noteId || note.id
+        return db.collection("users").doc(ownerUid).collection("notes").doc(noteId)
+    },
+    async copyToClipboard(text) {
+        const value = String(text || "")
+        if (!value) return false
+        if (navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(value)
+                return true
+            } catch {
+                return false
+            }
+        }
+        const textarea = document.createElement("textarea")
+        textarea.value = value
+        textarea.setAttribute("readonly", "true")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        document.body.appendChild(textarea)
+        textarea.select()
+        const ok = document.execCommand("copy")
+        document.body.removeChild(textarea)
+        return ok
+    }
+}
+
+window.CollaborationService = CollaborationService

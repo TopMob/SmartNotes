@@ -308,6 +308,12 @@ Object.assign(UI, {
             case "note-move-folder":
                 this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
                 break
+            case "note-share-view":
+                shareNoteView(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-share-edit":
+                shareNoteEdit(decodeURIComponent(el.dataset.noteId || ""))
+                break
             case "download-note":
                 this.downloadSelectedNote()
                 break

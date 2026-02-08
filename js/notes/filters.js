@@ -1,6 +1,10 @@
 function normalizeVisibleNotes(list, orderKey = "order") {
     if (!Array.isArray(list)) return []
-    const arr = list.map(n => NoteIO.normalizeNote(n))
+    const arr = list.map(n => {
+        const normalized = NoteIO.normalizeNote(n)
+        if (n && n.access) normalized.access = n.access
+        return normalized
+    })
     arr.sort((a, b) => {
         if (!!b.isPinned !== !!a.isPinned) return a.isPinned ? -1 : 1
         const valueA = typeof a[orderKey] === "number" ? a[orderKey] : 0
