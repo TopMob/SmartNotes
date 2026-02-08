@@ -269,6 +269,9 @@ Object.assign(UI, {
             case "editor-voice":
                 Editor.toggleRecording()
                 break
+            case "editor-calc":
+                Editor.confirmEquation()
+                break
             case "close-editor":
                 Editor.close()
                 break
