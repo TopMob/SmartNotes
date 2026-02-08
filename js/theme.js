@@ -449,7 +449,6 @@ export const ThemeManager = {
             if (text) window.ColorPalette.syncInput(text)
         }
     },
-    },
     revertToLastSaved() {
         const saved = this.getSavedSettings()
         this.applySettings(saved, false)

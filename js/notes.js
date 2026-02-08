@@ -728,7 +728,6 @@ window.filterAndRender = filterAndRender
 window.deleteFolder = deleteFolder
 window.openNoteActions = openNoteActions
 window.deleteNoteById = deleteNoteById
-window.toggleHiddenNote = toggleHiddenNote
 window.scheduleFutureNote = scheduleFutureNote
 window.clearFutureNote = clearFutureNote
 window.copyNoteTextById = copyNoteTextById
