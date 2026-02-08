@@ -673,8 +673,10 @@ const Editor = (() => {
         }
         if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
         drawingState.resizeObserver = null
-        if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
-        drawingState.resizeFrame = null
+        if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
+        drawingState.mutationObserver = null
+        if (drawingState.refreshFrame) cancelAnimationFrame(drawingState.refreshFrame)
+        drawingState.refreshFrame = null
         if (window.EditorDrawing) EditorDrawing.removeDrawingLayerIfEmpty()
         if (observer) observer.disconnect()
     }

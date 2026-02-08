@@ -90,6 +90,7 @@
     max-height: 55vh;
     overflow-y: auto;
     box-sizing: border-box;
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 16px;

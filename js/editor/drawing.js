@@ -5,16 +5,15 @@ const EditorDrawing = (() => {
         size: 3,
         tool: "pen",
         isDrawing: false,
-        lastPoint: null,
         pointerId: null,
-        pendingPoints: [],
-        drawFrame: null,
+        lastPoint: null,
         canvas: null,
         ctx: null,
         image: null,
         scale: 1,
         resizeObserver: null,
-        resizeFrame: null
+        mutationObserver: null,
+        refreshFrame: null
     }
     let elements = {}
     let buildToolbar = () => {}
@@ -25,7 +24,7 @@ const EditorDrawing = (() => {
         elements = nextElements || {}
         if (typeof nextBuildToolbar === "function") buildToolbar = nextBuildToolbar
         if (typeof nextUpdateEditableState === "function") updateEditableState = nextUpdateEditableState
-        getDrawingContainer = () => elements.contentWrapper || null
+        getDrawingContainer = () => elements.content || null
     }
 
     const setupControls = () => {
@@ -62,10 +61,6 @@ const EditorDrawing = (() => {
         window.addEventListener("resize", () => {
             if (drawingState.active) refreshDrawingSurface()
         })
-    }
-
-    const getDrawingToolSettings = () => {
-        return { composite: "source-over", opacity: 1, color: drawingState.color }
     }
 
     const updateDrawingToolButtons = () => {
@@ -110,64 +105,30 @@ const EditorDrawing = (() => {
     const getCanvasPoint = (event) => {
         if (!drawingState.canvas) return null
         const rect = drawingState.canvas.getBoundingClientRect()
-        return {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top
-        }
+        const maxX = drawingState.canvas.width / drawingState.scale
+        const maxY = drawingState.canvas.height / drawingState.scale
+        const x = Utils.clamp(event.clientX - rect.left, 0, maxX)
+        const y = Utils.clamp(event.clientY - rect.top, 0, maxY)
+        return { x, y }
     }
 
-    const applyDrawingToolToContext = () => {
+    const applyPenStyle = () => {
         if (!drawingState.ctx) return
-        const tool = getDrawingToolSettings()
-        drawingState.ctx.globalCompositeOperation = tool.composite
-        drawingState.ctx.globalAlpha = tool.opacity
-        drawingState.ctx.strokeStyle = tool.color
+        drawingState.ctx.globalCompositeOperation = "source-over"
+        drawingState.ctx.globalAlpha = 1
+        drawingState.ctx.strokeStyle = drawingState.color
         drawingState.ctx.lineWidth = drawingState.size
         drawingState.ctx.lineCap = "round"
         drawingState.ctx.lineJoin = "round"
     }
 
-    const drawPendingPoints = () => {
-        if (!drawingState.ctx || !drawingState.isDrawing || !drawingState.lastPoint) return
-        if (!drawingState.pendingPoints.length) return
+    const drawSegment = (point) => {
+        if (!drawingState.ctx || !drawingState.lastPoint) return
         drawingState.ctx.beginPath()
         drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
-        drawingState.pendingPoints.forEach(point => {
-            const samePoint = point.x === drawingState.lastPoint.x && point.y === drawingState.lastPoint.y
-            const targetX = samePoint ? point.x + 0.01 : point.x
-            const targetY = samePoint ? point.y + 0.01 : point.y
-            drawingState.ctx.lineTo(targetX, targetY)
-            drawingState.lastPoint = point
-        })
-        drawingState.pendingPoints = []
+        drawingState.ctx.lineTo(point.x, point.y)
         drawingState.ctx.stroke()
-    }
-
-    const scheduleDraw = () => {
-        if (!drawingState.active) return
-        if (drawingState.drawFrame) return
-        drawingState.drawFrame = requestAnimationFrame(() => {
-            drawingState.drawFrame = null
-            drawPendingPoints()
-        })
-    }
-
-    const scheduleDrawingRefresh = () => {
-        if (!drawingState.active) return
-        if (drawingState.resizeFrame) return
-        drawingState.resizeFrame = requestAnimationFrame(() => {
-            drawingState.resizeFrame = null
-            refreshDrawingSurface()
-        })
-    }
-
-    const observeDrawingContainer = (container) => {
-        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
-        drawingState.resizeObserver = null
-        if (!container || typeof ResizeObserver === "undefined") return
-        drawingState.resizeObserver = new ResizeObserver(() => scheduleDrawingRefresh())
-        drawingState.resizeObserver.observe(container)
-        if (elements.content) drawingState.resizeObserver.observe(elements.content)
+        drawingState.lastPoint = point
     }
 
     const ensureDrawingLayer = () => {
@@ -179,12 +140,14 @@ const EditorDrawing = (() => {
             layer = document.createElement("div")
             layer.className = "note-drawing-layer"
             layer.setAttribute("contenteditable", "false")
+            container.appendChild(layer)
+        }
+        if (!image) {
             image = document.createElement("img")
             image.className = "note-drawing-image"
             image.alt = ""
             image.draggable = false
             layer.appendChild(image)
-            container.prepend(layer)
         }
         drawingState.image = image
         return { container, layer, image }
@@ -211,7 +174,7 @@ const EditorDrawing = (() => {
         if (!drawingState.canvas || !drawingState.ctx || !container) return
         const rect = container.getBoundingClientRect()
         const cssWidth = Math.max(1, Math.floor(rect.width))
-        const cssHeight = Math.max(1, Math.floor(Math.max(rect.height, container.scrollHeight)))
+        const cssHeight = Math.max(1, Math.floor(container.scrollHeight))
         const scale = window.devicePixelRatio || 1
         const width = Math.max(1, Math.floor(cssWidth * scale))
         const height = Math.max(1, Math.floor(cssHeight * scale))
@@ -231,6 +194,7 @@ const EditorDrawing = (() => {
             }
             image.src = snapshot
         } else {
+            drawingState.ctx.clearRect(0, 0, width, height)
             applyCanvasScale(scale)
         }
     }
@@ -285,6 +249,29 @@ const EditorDrawing = (() => {
         drawingState.image.src = drawingState.canvas.toDataURL("image/png")
     }
 
+    const scheduleRefresh = () => {
+        if (!drawingState.active) return
+        if (drawingState.refreshFrame) return
+        drawingState.refreshFrame = requestAnimationFrame(() => {
+            drawingState.refreshFrame = null
+            refreshDrawingSurface()
+        })
+    }
+
+    const observeDrawingContainer = (container) => {
+        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
+        drawingState.resizeObserver = null
+        if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
+        drawingState.mutationObserver = null
+        if (!container) return
+        if (typeof ResizeObserver !== "undefined") {
+            drawingState.resizeObserver = new ResizeObserver(() => scheduleRefresh())
+            drawingState.resizeObserver.observe(container)
+        }
+        drawingState.mutationObserver = new MutationObserver(() => scheduleRefresh())
+        drawingState.mutationObserver.observe(container, { childList: true, subtree: true, characterData: true })
+    }
+
     const refreshDrawingSurface = () => {
         const data = ensureDrawingLayer()
         if (!data) return
@@ -310,13 +297,12 @@ const EditorDrawing = (() => {
             drawingState.isDrawing = false
             drawingState.lastPoint = null
             drawingState.pointerId = null
-            drawingState.pendingPoints = []
-            if (drawingState.drawFrame) cancelAnimationFrame(drawingState.drawFrame)
-            drawingState.drawFrame = null
             if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
             drawingState.resizeObserver = null
-            if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
-            drawingState.resizeFrame = null
+            if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
+            drawingState.mutationObserver = null
+            if (drawingState.refreshFrame) cancelAnimationFrame(drawingState.refreshFrame)
+            drawingState.refreshFrame = null
             removeDrawingLayerIfEmpty()
         }
         updateEditableState()
@@ -333,9 +319,11 @@ const EditorDrawing = (() => {
         drawingState.isDrawing = true
         drawingState.pointerId = event.pointerId
         drawingState.lastPoint = point
-        drawingState.pendingPoints = [point]
-        applyDrawingToolToContext()
-        scheduleDraw()
+        applyPenStyle()
+        drawingState.ctx.beginPath()
+        drawingState.ctx.moveTo(point.x, point.y)
+        drawingState.ctx.lineTo(point.x + 0.01, point.y + 0.01)
+        drawingState.ctx.stroke()
     }
 
     const drawLine = (event) => {
@@ -346,20 +334,17 @@ const EditorDrawing = (() => {
         events.forEach(pointerEvent => {
             const point = getCanvasPoint(pointerEvent)
             if (!point) return
-            drawingState.pendingPoints.push(point)
+            drawSegment(point)
         })
-        scheduleDraw()
     }
 
     const endDrawing = (event) => {
         if (event) event.preventDefault()
         if (!drawingState.isDrawing) return
         if (event && drawingState.pointerId !== event.pointerId) return
-        drawPendingPoints()
         drawingState.isDrawing = false
         drawingState.lastPoint = null
         drawingState.pointerId = null
-        drawingState.pendingPoints = []
         updateImageFromCanvas()
     }
 
