@@ -45,10 +45,9 @@ Object.assign(UI, {
             { id: 4, text: this.getText("survey_q4", "What functionality is missing") },
             { id: 5, text: this.getText("survey_q5", "What would you change in the app") },
             { id: 6, text: this.getText("survey_q6", "How convenient is the interface") },
-            { id: 7, text: this.getText("survey_q7", "Do you need easter eggs and memes") },
-            { id: 8, text: this.getText("survey_q8", "Is it convenient to write and edit notes") },
-            { id: 9, text: this.getText("survey_q9", "Is export and saving important") },
-            { id: 10, text: this.getText("survey_q10", "What topics would you add visual presets for") }
+            { id: 7, text: this.getText("survey_q8", "Is it convenient to write and edit notes") },
+            { id: 8, text: this.getText("survey_q9", "Is export and saving important") },
+            { id: 9, text: this.getText("survey_q10", "What topics would you add visual presets for") }
         ]
     },
 

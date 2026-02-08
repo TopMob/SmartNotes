@@ -46,8 +46,6 @@ const buildPrintableNoteHtml = (note, dict) => {
         .note-content img { max-width: 100%; height: auto; }
         .note-content ul, .note-content ol { padding-left: 22px; }
         .note-content p { margin: 0 0 10px; }
-        .todo-item { display: flex; align-items: flex-start; gap: 8px; }
-        .todo-item input:checked + .todo-label { text-decoration: line-through; opacity: 0.7; }
         @media print {
             body { margin: 20mm; }
             .note-page { break-inside: avoid; }
