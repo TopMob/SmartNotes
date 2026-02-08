@@ -311,6 +311,12 @@ Object.assign(UI, {
             case "download-note":
                 this.downloadSelectedNote()
                 break
+            case "export-note-txt":
+                this.exportSelectedNoteAsText()
+                break
+            case "export-note-pdf":
+                this.exportSelectedNoteAsPdf()
+                break
             case "upload-note":
                 this.uploadSelectedNote()
                 break
