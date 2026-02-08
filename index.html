@@ -389,19 +389,15 @@
                 </button>
             </header>
             <div class="modal-body">
-                <p class="muted" id="share-note-summary" data-lang="share_desc">Готовый текст заметки для отправки</p>
-                <textarea id="share-content" rows="6" class="input-area" readonly></textarea>
-                <div class="row-right">
-                    <button type="button" class="btn-secondary" data-action="copy-share-text" data-lang="copy">Копировать</button>
-                    <button type="button" class="btn-primary" data-action="share-note-native" data-lang="share_native">Поделиться</button>
-                </div>
-                <p class="muted" id="share-link-status" data-lang="share_link_desc">Ссылка для просмотра</p>
+                <p class="muted" id="share-note-summary" data-lang="share_link_desc">Ссылка для просмотра</p>
+                <p class="muted" id="share-link-status" data-lang="share_link_status">Ссылка не создана</p>
                 <div id="share-link-block" class="collab-link-block hidden">
                     <input id="share-link" type="text" class="input-area" readonly value="">
                 </div>
                 <div class="row-right">
                     <button type="button" class="btn-secondary" data-action="share-enable" data-lang="share_link_enable">Создать ссылку</button>
                     <button type="button" class="btn-secondary" data-action="copy-share-link" data-lang="copy">Копировать</button>
+                    <button type="button" class="btn-primary" data-action="share-note-native" data-lang="share_native">Поделиться</button>
                 </div>
             </div>
         </div>
@@ -589,6 +585,7 @@
                 <div id="survey-question" class="survey-question" data-lang="survey_question">Вопрос</div>
                 <textarea id="survey-answer" rows="4" class="input-area" aria-label="Ответ" data-lang-aria="poll_answer_label"></textarea>
                 <div id="survey-decision" class="survey-decision hidden">
+                    <p id="survey-decision-title" data-lang="survey_continue_prompt">Хотите продолжить опрос?</p>
                     <button type="button" class="btn-secondary" data-action="survey-finish" data-lang="survey_finish">Завершить</button>
                     <button type="button" class="btn-primary" data-action="survey-continue" data-lang="survey_continue">Продолжить</button>
                 </div>

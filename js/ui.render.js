@@ -550,23 +550,25 @@ Object.assign(UI, {
         const { user, config } = StateStore.read()
         const answers = this.surveyState?.answers || {}
         const questions = this.getSurveyQuestions()
-        const baseRef = db.collection("feedback").doc("user").collection("survey")
+        const payloadAnswers = questions
+            .map(question => ({
+                id: question.id,
+                question: question.text,
+                answer: answers[question.id] || ""
+            }))
+            .filter(item => item.answer)
         try {
-            for (const question of questions) {
-                const response = answers[question.id]
-                if (!response) continue
-                await baseRef.doc(`${question.id} Question`).collection("answers").add({
-                    uid: user.uid,
-                    email: user.email || "",
-                    displayName: user.displayName || "",
-                    question: question.text,
-                    answer: response,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    userAgent: navigator.userAgent || "",
-                    appVersion: "web",
-                    language: config.lang
-                })
-            }
+            await db.collection("feedback").add({
+                uid: user.uid,
+                email: user.email || "",
+                displayName: user.displayName || "",
+                answers: payloadAnswers,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                userAgent: navigator.userAgent || "",
+                appVersion: "web",
+                language: config.lang,
+                type: "survey"
+            })
             this.showToast(this.getText("poll_thanks", "Thanks!"))
             this.closeModal("poll-modal")
         } catch {
@@ -588,12 +590,6 @@ Object.assign(UI, {
         return note.accessLevel === "edit"
     },
 
-    buildShareText(note) {
-        const title = note.title?.trim() || this.getText("untitled_note", "Untitled")
-        const content = Utils.stripHtml(note.content || "").trim()
-        return content ? `${title}\n\n${content}` : title
-    },
-
     openShareModal(noteId) {
         const note = this.resolveNoteById(noteId)
         if (!note) return
@@ -603,20 +599,18 @@ Object.assign(UI, {
         }
         this.currentShareNoteId = note.id
         const summary = document.getElementById("share-note-summary")
-        const content = document.getElementById("share-content")
         const linkStatus = document.getElementById("share-link-status")
         const linkInput = document.getElementById("share-link")
         const linkBlock = document.getElementById("share-link-block")
         const copyButton = document.querySelector('[data-action="copy-share-link"]')
         if (summary) summary.textContent = note.title?.trim() || this.getText("untitled_note", "Untitled")
-        if (content) content.value = this.buildShareText(note)
         if (note.shareId) {
             if (linkStatus) linkStatus.textContent = this.getText("share_link_ready", "Link ready")
             if (linkInput) linkInput.value = ShareService.buildLink("share", note.shareId)
             if (linkBlock) linkBlock.classList.remove("hidden")
             if (copyButton) copyButton.classList.remove("hidden")
         } else {
-            if (linkStatus) linkStatus.textContent = this.getText("share_link_desc", "Create a view link")
+            if (linkStatus) linkStatus.textContent = this.getText("share_link_status", "Link not created")
             if (linkInput) linkInput.value = ""
             if (linkBlock) linkBlock.classList.add("hidden")
             if (copyButton) copyButton.classList.add("hidden")
@@ -634,26 +628,29 @@ Object.assign(UI, {
             return
         }
         try {
+            let shareId = note.shareId
+            if (!shareId) {
+                shareId = await ShareService.ensureShareToken(note, "share")
+                if (!shareId) {
+                    this.showToast(this.getText("share_failed", "Unable to share"))
+                    return
+                }
+                const ownerUid = StateStore.read().user.uid
+                const nextNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, shareId, ownerUid: n.ownerUid || ownerUid, accessLevel: "edit" } : n)
+                StateActions.setNotes(nextNotes)
+                if (StateStore.read().currentNote?.id === note.id) {
+                    StateActions.setCurrentNote({ ...note, shareId, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
+                }
+                this.openShareModal(note.id)
+            }
+            const link = ShareService.buildLink("share", shareId)
             await navigator.share({
                 title: note.title?.trim() || this.getText("untitled_note", "Untitled"),
-                text: this.buildShareText(note)
+                text: link,
+                url: link
             })
         } catch {
             this.showToast(this.getText("share_failed", "Unable to share"))
-        }
-    },
-
-    async copyShareText() {
-        const content = document.getElementById("share-content")
-        if (!content || !navigator.clipboard) {
-            this.showToast(this.getText("copy_failed", "Unable to copy"))
-            return
-        }
-        try {
-            await navigator.clipboard.writeText(content.value || "")
-            this.showToast(this.getText("copy_success", "Copied"))
-        } catch {
-            this.showToast(this.getText("copy_failed", "Unable to copy"))
         }
     },
 

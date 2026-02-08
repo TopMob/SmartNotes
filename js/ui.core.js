@@ -465,9 +465,6 @@ const UI = {
             case "share-note-native":
                 this.shareCurrentNoteNative()
                 break
-            case "copy-share-text":
-                this.copyShareText()
-                break
             case "share-enable":
                 this.enableShareLink()
                 break
