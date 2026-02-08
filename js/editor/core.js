@@ -657,25 +657,15 @@ const Editor = (() => {
         StateStore.update("currentNote", null)
         deselectMedia()
         stopRecording()
-        closeInlineSketch()
         pageIndex = 0
         titleTouched = false
         autoSaveSnapshot = null
         drawingState.active = false
         drawingState.isDrawing = false
-        drawingState.lastPoint = null
-        if (window.EditorDrawing) EditorDrawing.updateImageFromCanvas()
         if (els.drawingControls) {
             els.drawingControls.classList.add("hidden")
         }
-        if (drawingState.canvas?.parentElement) {
-            drawingState.canvas.parentElement.removeChild(drawingState.canvas)
-        }
-        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
-        drawingState.resizeObserver = null
-        if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
-        drawingState.resizeFrame = null
-        if (window.EditorDrawing) EditorDrawing.removeDrawingLayerIfEmpty()
+        if (window.EditorDrawing) EditorDrawing.cleanup()
         if (observer) observer.disconnect()
     }
 
