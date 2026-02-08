@@ -86,12 +86,6 @@ const Editor = (() => {
             els.content.addEventListener("input", scheduleEasterEggCheck, { signal })
             
             els.content.addEventListener("click", (e) => {
-                const audioPlayer = e.target.closest(".audio-player")
-                if (audioPlayer) {
-                    toggleAudioPlayer(audioPlayer)
-                    e.stopPropagation()
-                    return
-                }
                 const wrapper = e.target.closest(".media-wrapper")
                 if (wrapper) {
                     selectMedia(wrapper)
@@ -134,6 +128,10 @@ const Editor = (() => {
                 const add = e.target.closest("[data-action='add-tag']")
                 if (add) addTag(decodeURIComponent(add.dataset.tag || ""))
             }, { signal })
+        }
+
+        if (window.EditorAudio) {
+            EditorAudio.bind({ container: els.content, signal })
         }
 
         const imgUpload = document.getElementById("img-upload")
@@ -664,7 +662,7 @@ const Editor = (() => {
         renderTags()
         makeMediaDraggable()
         syncMediaSizes()
-        syncAudioPlayers()
+        if (window.EditorAudio) EditorAudio.sync(els.content)
         syncLockButton(n)
         if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "", { recordHistory: true, replaceHistory: true })
         if (observer && els.content) {
@@ -1390,63 +1388,10 @@ const Editor = (() => {
     }
 
     const insertAudio = (src) => {
-        const id = Utils.generateId()
-        const label = UI.getText("audio_note", "Audio")
-        const html = `
-            <div class="media-wrapper audio-wrapper" id="${id}" contenteditable="false" draggable="true">
-                <div class="audio-player" data-audio-id="${id}">
-                    <i class="material-icons-round audio-icon" aria-hidden="true">play_arrow</i>
-                    <span class="audio-label">${Utils.escapeHtml(label)}</span>
-                </div>
-                <audio src="${Utils.escapeHtml(src)}"></audio>
-            </div><br>
-        `
+        if (!window.EditorAudio) return
+        const html = EditorAudio.createAudioBlockHtml(src)
         insertHtmlAtSelection(html)
-        makeMediaDraggable()
-        syncAudioPlayers()
-        syncMediaSizes()
-    }
-
-    const toggleAudioPlayer = (player) => {
-        const wrapper = player.closest(".audio-wrapper")
-        const audio = wrapper?.querySelector("audio")
-        if (!audio) return
-        const isPlaying = !audio.paused && !audio.ended
-        if (isPlaying) {
-            audio.pause()
-        } else {
-            document.querySelectorAll(".audio-wrapper audio").forEach(a => {
-                if (a !== audio) a.pause()
-            })
-            audio.play().catch(() => null)
-        }
-        updateAudioUI(player, audio)
-        audio.onended = () => updateAudioUI(player, audio)
-        audio.onpause = () => updateAudioUI(player, audio)
-        audio.onplay = () => updateAudioUI(player, audio)
-    }
-
-    const updateAudioUI = (player, audio) => {
-        const icon = player.querySelector(".audio-icon")
-        const playing = audio && !audio.paused && !audio.ended
-        if (icon) icon.textContent = playing ? "pause" : "play_arrow"
-        player.classList.toggle("playing", playing)
-    }
-
-    const syncAudioPlayers = () => {
-        if (!els.content) return
-        els.content.querySelectorAll(".audio-player").forEach(player => {
-            const wrapper = player.closest(".audio-wrapper")
-            const audio = wrapper?.querySelector("audio")
-            if (!audio) return
-            if (!audio.hasAttribute("controls")) audio.setAttribute("controls", "")
-            audio.preload = "metadata"
-            if (audio.src) audio.load()
-            audio.onended = () => updateAudioUI(player, audio)
-            audio.onpause = () => updateAudioUI(player, audio)
-            audio.onplay = () => updateAudioUI(player, audio)
-            updateAudioUI(player, audio)
-        })
+        EditorAudio.sync(els.content)
     }
 
     const makeMediaDraggable = () => {
