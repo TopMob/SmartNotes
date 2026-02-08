@@ -1504,6 +1504,9 @@ const Editor = (() => {
             if (n.collabId && canEditCurrentNote()) {
                 await ShareService.updateSharedNote(n.collabId, n)
             }
+            if (n.shareId) {
+                await ShareService.updateSharedNote(n.shareId, n)
+            }
             StateStore.update("editorDirty", false)
             autoSaveSnapshot = captureSnapshot()
             if (!options.silent) {

@@ -608,12 +608,12 @@ Object.assign(UI, {
             if (linkStatus) linkStatus.textContent = this.getText("share_link_ready", "Link ready")
             if (linkInput) linkInput.value = ShareService.buildLink("share", note.shareId)
             if (linkBlock) linkBlock.classList.remove("hidden")
-            if (copyButton) copyButton.classList.remove("hidden")
+            if (copyButton) copyButton.disabled = false
         } else {
             if (linkStatus) linkStatus.textContent = this.getText("share_link_status", "Link not created")
             if (linkInput) linkInput.value = ""
             if (linkBlock) linkBlock.classList.add("hidden")
-            if (copyButton) copyButton.classList.add("hidden")
+            if (copyButton) copyButton.disabled = true
         }
         const shareButton = document.querySelector('[data-action="share-note-native"]')
         if (shareButton) shareButton.classList.toggle("hidden", !navigator.share)
@@ -677,6 +677,7 @@ Object.assign(UI, {
             if (StateStore.read().currentNote?.id === note.id) {
                 StateActions.setCurrentNote({ ...note, shareId: token, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
             }
+            await ShareService.updateSharedNote(token, { ...note, shareId: token, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
             this.openShareModal(note.id)
             this.showToast(this.getText("share_link_ready", "Link ready"))
         } catch {
@@ -688,6 +689,10 @@ Object.assign(UI, {
         const linkInput = document.getElementById("share-link")
         if (!linkInput || !navigator.clipboard) {
             this.showToast(this.getText("copy_failed", "Unable to copy"))
+            return
+        }
+        if (!linkInput.value) {
+            this.showToast(this.getText("share_link_status", "Link not created"))
             return
         }
         try {
