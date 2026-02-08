@@ -13,7 +13,6 @@ const Editor = (() => {
     let pageIndex = 0
     let titleTouched = false
     let autoSaveSnapshot = null
-    let easterEggState = { triggered: false, audio: null }
     let isRenderingState = false
     const drawingState = window.EditorDrawing?.state
 
@@ -69,7 +68,6 @@ const Editor = (() => {
             els.title.addEventListener("input", () => {
                 titleTouched = true
                 queueSnapshot()
-                scheduleEasterEggCheck()
             }, { signal })
         }
 
@@ -84,7 +82,6 @@ const Editor = (() => {
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
             els.content.addEventListener("input", handleContentInput, { signal })
-            els.content.addEventListener("change", handleTodoToggle, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const link = e.target.closest("a")
@@ -202,40 +199,6 @@ const Editor = (() => {
     }
 
     const getActivePage = () => getPages()[pageIndex] || null
-
-    const normalizeEasterEggText = (text) => String(text || "")
-        .toLowerCase()
-        .replace(/ё/g, "е")
-        .replace(/[^a-zа-я0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-
-    const hasEasterEggPhrase = (text) => {
-        const tokens = normalizeEasterEggText(text).split(" ").filter(Boolean)
-        if (tokens.length < 2) return false
-        const phraseTokens = ["данил", "колбасенко"]
-        for (let i = 0; i <= tokens.length - phraseTokens.length; i += 1) {
-            const matchesFirst = tokens[i] === phraseTokens[0]
-            const matchesSecond = tokens[i + 1] === phraseTokens[1]
-            if (matchesFirst && matchesSecond) return true
-        }
-        return false
-    }
-
-    const playEasterEggSound = () => {
-        if (easterEggState.triggered) return
-        if (!easterEggState.audio) easterEggState.audio = new Audio("audio/danil-kolbasenko.mp3")
-        easterEggState.triggered = true
-        easterEggState.audio.currentTime = 0
-        easterEggState.audio.play().catch(() => null)
-    }
-
-    const scheduleEasterEggCheck = Utils.debounce(() => {
-        if (easterEggState.triggered) return
-        const titleText = els.title?.value || ""
-        const contentText = Utils.stripHtml(els.content?.innerHTML || "")
-        if (hasEasterEggPhrase(`${titleText} ${contentText}`)) playEasterEggSound()
-    }, 160)
 
     const canEditNote = (note) => {
         if (typeof CollaborationService === "undefined") return true
@@ -480,7 +443,6 @@ const Editor = (() => {
         { id: "strike", i: "strikethrough_s", label: "tool_strike", cmd: () => toggleStrikeThrough() },
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => document.execCommand("insertUnorderedList") },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => document.execCommand("insertOrderedList") },
-        { id: "todo", i: "checklist", label: "tool_todo", cmd: () => insertTodoList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => insertHorizontalRule() },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
             storeSelection()
@@ -785,7 +747,6 @@ const Editor = (() => {
             if (window.EditorAudio) EditorAudio.sync(els.content)
             syncLockButton(n)
             syncDrawingForActivePage()
-            syncTodoCheckboxes(els.content)
             syncAccessState(n)
             if (observer && els.content) {
                 observer.disconnect()
@@ -986,90 +947,6 @@ const Editor = (() => {
     const toggleStrikeThrough = () => {
         document.execCommand("strikeThrough")
         normalizeStrikeTags()
-    }
-
-    const buildTodoItem = (text) => {
-        const wrapper = document.createElement("div")
-        wrapper.className = "todo-item"
-        const checkbox = document.createElement("input")
-        checkbox.type = "checkbox"
-        checkbox.setAttribute("aria-label", UI.getText("todo_item", "Todo"))
-        const label = document.createElement("span")
-        label.className = "todo-label"
-        if (text) label.textContent = text
-        else label.appendChild(document.createElement("br"))
-        wrapper.appendChild(checkbox)
-        wrapper.appendChild(label)
-        return { wrapper, label }
-    }
-
-    const insertTodoList = () => {
-        const range = restoreSelection()
-        if (!range) return
-        const selection = window.getSelection()
-        const text = selection?.toString() || ""
-        const items = text ? text.split(/\r?\n/).map(item => item.trim()).filter(Boolean) : [""]
-        const fragment = document.createDocumentFragment()
-        let firstLabel = null
-        items.forEach(item => {
-            const { wrapper, label } = buildTodoItem(item)
-            if (!firstLabel) firstLabel = label
-            fragment.appendChild(wrapper)
-        })
-        range.deleteContents()
-        range.insertNode(fragment)
-        syncTodoCheckboxes(els.content)
-        if (firstLabel) {
-            const nextRange = document.createRange()
-            nextRange.selectNodeContents(firstLabel)
-            nextRange.collapse(!firstLabel.textContent)
-            const sel = window.getSelection()
-            if (sel) {
-                sel.removeAllRanges()
-                sel.addRange(nextRange)
-            }
-        }
-        storeSelection()
-    }
-
-    const syncTodoItemState = (checkbox) => {
-        const wrapper = checkbox.closest(".todo-item")
-        if (!wrapper) return
-        wrapper.classList.toggle("is-checked", checkbox.checked)
-        if (checkbox.checked) checkbox.setAttribute("checked", "checked")
-        else checkbox.removeAttribute("checked")
-    }
-
-    const syncTodoCheckboxes = (root) => {
-        if (!root) return
-        root.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
-            if (!(checkbox instanceof HTMLInputElement)) return
-            let wrapper = checkbox.closest(".todo-item")
-            if (!wrapper) {
-                const candidate = checkbox.parentElement
-                if (candidate && candidate !== root) {
-                    wrapper = candidate
-                    wrapper.classList.add("todo-item")
-                }
-            }
-            const label = checkbox.nextElementSibling
-            if (label instanceof HTMLElement) label.classList.add("todo-label")
-            if (!wrapper) return
-            syncTodoItemState(checkbox)
-        })
-    }
-
-    const handleTodoToggle = (event) => {
-        const checkbox = event.target
-        if (!(checkbox instanceof HTMLInputElement)) return
-        if (checkbox.type !== "checkbox") return
-        const wrapper = checkbox.closest(".todo-item") || checkbox.parentElement
-        if (!wrapper) return
-        wrapper.classList.add("todo-item")
-        const label = checkbox.nextElementSibling
-        if (label instanceof HTMLElement) label.classList.add("todo-label")
-        syncTodoItemState(checkbox)
-        queueSnapshot()
     }
 
     const insertHorizontalRule = () => {

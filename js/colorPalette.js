@@ -71,6 +71,25 @@ const ColorPalette = (() => {
         else if (activePicker === picker) activePicker = null
     }
 
+    const getBoundsContainer = (picker) => {
+        return picker.closest(".editor-toolbar")
+            || picker.closest(".note-content-wrapper")
+            || picker.closest(".note-editor")
+            || document.body
+    }
+
+    const resolveContainerRect = (container) => {
+        if (container && container !== document.body) return container.getBoundingClientRect()
+        return {
+            left: 0,
+            top: 0,
+            right: window.innerWidth,
+            bottom: window.innerHeight,
+            width: window.innerWidth,
+            height: window.innerHeight
+        }
+    }
+
     const positionPanel = (state) => {
         if (!state.panel || !state.picker) return
         const padding = 8
@@ -80,14 +99,22 @@ const ColorPalette = (() => {
         state.panel.style.bottom = "auto"
         const pickerRect = state.picker.getBoundingClientRect()
         const panelRect = state.panel.getBoundingClientRect()
+        const containerRect = resolveContainerRect(state.container)
+        const containerLeft = containerRect.left + padding
+        const containerRight = containerRect.right - padding
+        const containerWidth = Math.max(0, containerRight - containerLeft)
         let left = 0
+        if (panelRect.width > containerWidth && containerWidth > 0) {
+            const pickerOffset = pickerRect.left - containerRect.left
+            left = (containerRect.width - panelRect.width) / 2 - pickerOffset
+        }
         const expectedRight = pickerRect.left + left + panelRect.width
-        if (expectedRight > window.innerWidth - padding) {
-            left -= expectedRight - (window.innerWidth - padding)
+        if (expectedRight > containerRight) {
+            left -= expectedRight - containerRight
         }
         const expectedLeft = pickerRect.left + left
-        if (expectedLeft < padding) {
-            left += padding - expectedLeft
+        if (expectedLeft < containerLeft) {
+            left += containerLeft - expectedLeft
         }
         let top = pickerRect.height + 10
         const expectedBottom = pickerRect.top + top + panelRect.height
@@ -215,6 +242,7 @@ const ColorPalette = (() => {
             hueHandle,
             hexInput,
             swatch,
+            container: getBoundsContainer(picker),
             hue: 0,
             sat: 1,
             val: 1
@@ -271,6 +299,15 @@ const ColorPalette = (() => {
 
         if (panel) {
             panel.addEventListener("pointerdown", (event) => event.stopPropagation())
+        }
+
+        if (typeof ResizeObserver !== "undefined") {
+            const resizeObserver = new ResizeObserver(() => {
+                if (picker.classList.contains("is-open")) positionPanel(state)
+            })
+            if (state.panel) resizeObserver.observe(state.panel)
+            if (state.container) resizeObserver.observe(state.container)
+            state.resizeObserver = resizeObserver
         }
 
         instances.set(picker, state)

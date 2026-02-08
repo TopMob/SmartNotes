@@ -62,7 +62,6 @@ const NoteIO = {
 const SmartSearch = {
     stop: new Set(["the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it","и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"]),
     synonyms: new Map([
-        ["todo", ["задача", "дела", "список", "tasks", "checklist", "buy"]],
         ["важное", ["избранное", "favorite", "star", "important", "!"]],
         ["архив", ["archive", "скрыто", "старое", "old"]],
         ["код", ["code", "snippet", "js", "css", "html", "dev", "git"]],

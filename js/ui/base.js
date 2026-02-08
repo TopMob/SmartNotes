@@ -30,7 +30,6 @@ const UI = {
         this.updateSidebarLayout()
         window.addEventListener("resize", () => this.updateSidebarLayout())
         this.applyAppearanceSettings()
-        this.attachSecretAudio()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
     },
@@ -69,20 +68,5 @@ const UI = {
         })
     },
 
-    async attachSecretAudio() {
-        try {
-            const response = await fetch("audio/danil-kolbasenko.mp3", { method: "HEAD" })
-            if (!response.ok) return
-            if (document.getElementById("secret-audio")) return
-            const audio = document.createElement("audio")
-            audio.id = "secret-audio"
-            audio.src = "audio/danil-kolbasenko.mp3"
-            audio.preload = "none"
-            audio.setAttribute("aria-hidden", "true")
-            audio.style.display = "none"
-            document.body.appendChild(audio)
-        } catch {
-            return
-        }
-    }
+    
 }
