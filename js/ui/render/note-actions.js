@@ -93,6 +93,17 @@ Object.assign(UI, {
                     ${dict.future_clear || "Clear"}
                 </button>`
             : ""
+        const canShare = typeof CollaborationService !== "undefined" && CollaborationService.canManage(note)
+        const shareSection = canShare ? `
+            <div class="modal-actions-grid" style="margin-top:12px;">
+                <button type="button" class="btn-secondary" data-action="note-share-view" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.share_view || "Share (view)"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-share-edit" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.share_edit || "Share (edit)"}
+                </button>
+            </div>
+        ` : ""
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
@@ -131,6 +142,7 @@ Object.assign(UI, {
                     ${dict.export_pdf || "Export PDF"}
                 </button>
             </div>
+            ${shareSection}
         `
     },
 

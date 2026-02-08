@@ -352,6 +352,27 @@ const Editor = (() => {
         applyEpsteinMask()
     }, 120)
 
+    const canEditNote = (note) => {
+        if (typeof CollaborationService === "undefined") return true
+        return CollaborationService.canEdit(note)
+    }
+
+    const canManageNote = (note) => {
+        if (typeof CollaborationService === "undefined") return true
+        return CollaborationService.canManage(note)
+    }
+
+    const syncAccessState = (note) => {
+        const editable = canEditNote(note)
+        if (els.title) els.title.readOnly = !editable
+        if (els.toolbar) {
+            els.toolbar.querySelectorAll("button").forEach(btn => {
+                btn.disabled = !editable
+                btn.setAttribute("aria-disabled", editable ? "false" : "true")
+            })
+        }
+    }
+
     const handleContentInput = (event) => {
         if (event.isComposing) return
         scheduleEasterEggCheck()
@@ -359,7 +380,7 @@ const Editor = (() => {
     }
 
     const updateEditableState = () => {
-        const editable = !drawingState?.active
+        const editable = !drawingState?.active && canEditNote(StateStore.read().currentNote)
         getPages().forEach(page => {
             page.contentEditable = editable ? "true" : "false"
         })
@@ -775,6 +796,13 @@ const Editor = (() => {
     }
 
     const openFromList = async (note) => {
+        if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) {
+            const access = CollaborationService.getAccess(note)
+            if (!access?.ownerUid || !access?.noteId) {
+                UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
+                return
+            }
+        }
         if (note.lock && note.lock.hash) {
             const verified = await new Promise(resolve => {
                 UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
@@ -809,6 +837,13 @@ const Editor = (() => {
         if (observer) observer.disconnect()
     }
 
+    const refreshFromRemote = (note) => {
+        const current = StateStore.read().currentNote
+        if (!current || !note || current.id !== note.id) return
+        StateStore.update("currentNote", note)
+        renderState()
+    }
+
     const renderState = () => {
         const n = StateStore.read().currentNote
         if (!n) return
@@ -823,6 +858,7 @@ const Editor = (() => {
         syncLockButton(n)
         if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "", { recordHistory: true, replaceHistory: true })
         applyEpsteinMask()
+        syncAccessState(n)
         if (observer && els.content) {
             observer.disconnect()
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
@@ -1566,6 +1602,10 @@ const Editor = (() => {
     const toggleLock = async () => {
         const note = StateStore.read().currentNote
         if (!note) return
+        if (!canManageNote(note)) {
+            UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
+            return
+        }
         if (note.lock?.hash) {
             const verified = await new Promise(resolve => {
                 UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
@@ -1965,6 +2005,10 @@ const Editor = (() => {
 
         const currentNote = StateStore.read().currentNote
         if (!currentNote) return
+        if (!canEditNote(currentNote)) {
+            UI.showToast(UI.getText("share_readonly", "Read-only access"))
+            return
+        }
         const snapshot = captureSnapshot()
         const n = {
             ...currentNote,
@@ -1990,8 +2034,14 @@ const Editor = (() => {
         }
 
         StateStore.update("currentNote", n)
-        const payload = NoteIO.normalizeNote(n)
-        const ref = db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
+        const access = typeof CollaborationService === "undefined" ? null : CollaborationService.getAccess(n)
+        const targetId = access?.noteId || n.id
+        const payload = NoteIO.normalizeNote({ ...n, id: targetId })
+        delete payload.access
+        const ref = typeof CollaborationService === "undefined"
+            ? db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
+            : CollaborationService.getNoteReference(n, user)
+        if (!ref) return
         
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
@@ -2009,9 +2059,17 @@ const Editor = (() => {
     const deleteCurrent = () => {
         const n = StateStore.read().currentNote
         if (!n) return
+        if (!canManageNote(n)) {
+            UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
+            return
+        }
         UI.confirm("delete", async () => {
             if (!db || !StateStore.read().user) return
-            await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(n.id).delete()
+            const ref = typeof CollaborationService === "undefined"
+                ? db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(n.id)
+                : CollaborationService.getNoteReference(n, StateStore.read().user)
+            if (!ref) return
+            await ref.delete()
             UI.showToast(UI.getText("note_deleted", "Deleted"))
             close()
         })
@@ -2021,6 +2079,7 @@ const Editor = (() => {
         init,
         open,
         openFromList,
+        refreshFromRemote,
         close,
         save,
         undo,

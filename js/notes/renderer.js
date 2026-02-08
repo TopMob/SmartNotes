@@ -27,12 +27,13 @@ const NotesRenderer = (() => {
     const createCard = (note) => {
         const isLockedView = StateStore.read().view === "locked"
         const isLockedNote = isHiddenLocked(note)
+        const canManage = typeof CollaborationService !== "undefined" ? CollaborationService.canManage(note) : true
         const card = el("div", ["note-card"])
-        card.draggable = !(isLockedView && isLockedNote)
+        card.draggable = !(isLockedView && isLockedNote) && canManage
         card.dataset.noteId = encodeURIComponent(note.id)
 
         let actions = null
-        if (!(isLockedView && isLockedNote)) {
+        if (!(isLockedView && isLockedNote) && canManage) {
             actions = el("div", ["card-actions"])
             actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
             const favBtn = createBtn("note-favorite", note.isFavorite ? "star" : "star_border", UI.getText("favorite_note", "Favorite"), note.id)
