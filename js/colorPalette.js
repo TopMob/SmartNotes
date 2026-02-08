@@ -118,8 +118,8 @@ const ColorPalette = (() => {
     }
 
     const handleHuePointer = (state, event) => {
-        if (!state.hue) return
-        const rect = state.hue.getBoundingClientRect()
+        if (!state.hueElement) return
+        const rect = state.hueElement.getBoundingClientRect()
         const x = clamp((event.clientX - rect.left) / rect.width, 0, 1)
         state.hue = Math.round(x * 360)
         const hex = updateUi(state)
@@ -144,6 +144,22 @@ const ColorPalette = (() => {
         window.addEventListener("pointercancel", onUp)
     }
 
+    const suspendCanvasPointerEvents = (pointerId) => {
+        const canvas = window.EditorDrawing?.state?.canvas
+        if (!canvas) return () => {}
+        const previousPointerEvents = canvas.style.pointerEvents
+        canvas.style.pointerEvents = "none"
+        const restore = (event) => {
+            if (event.pointerId !== pointerId) return
+            window.removeEventListener("pointerup", restore)
+            window.removeEventListener("pointercancel", restore)
+            if (canvas.isConnected) canvas.style.pointerEvents = previousPointerEvents
+        }
+        window.addEventListener("pointerup", restore)
+        window.addEventListener("pointercancel", restore)
+        return restore
+    }
+
     const bindPicker = (picker) => {
         if (instances.has(picker)) return
         const input = picker.querySelector("[data-color-input]")
@@ -151,7 +167,7 @@ const ColorPalette = (() => {
         const panel = picker.querySelector("[data-color-panel]")
         const sv = picker.querySelector("[data-color-sv]")
         const svHandle = picker.querySelector("[data-color-sv-handle]")
-        const hue = picker.querySelector("[data-color-hue]")
+        const hueElement = picker.querySelector("[data-color-hue]")
         const hueHandle = picker.querySelector("[data-color-hue-handle]")
         const hexInput = picker.querySelector("[data-color-hex]")
         const swatch = picker.querySelector("[data-color-swatch]")
@@ -163,7 +179,7 @@ const ColorPalette = (() => {
             panel,
             sv,
             svHandle,
-            hue,
+            hueElement,
             hueHandle,
             hexInput,
             swatch,
@@ -189,17 +205,19 @@ const ColorPalette = (() => {
             sv.addEventListener("pointerdown", (event) => {
                 event.preventDefault()
                 event.stopPropagation()
+                suspendCanvasPointerEvents(event.pointerId)
                 sv.setPointerCapture?.(event.pointerId)
                 handleSvPointer(state, event)
                 trackPointer(event.pointerId, (moveEvent) => handleSvPointer(state, moveEvent))
             })
         }
 
-        if (hue) {
-            hue.addEventListener("pointerdown", (event) => {
+        if (hueElement) {
+            hueElement.addEventListener("pointerdown", (event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                hue.setPointerCapture?.(event.pointerId)
+                suspendCanvasPointerEvents(event.pointerId)
+                hueElement.setPointerCapture?.(event.pointerId)
                 handleHuePointer(state, event)
                 trackPointer(event.pointerId, (moveEvent) => handleHuePointer(state, moveEvent))
             })
