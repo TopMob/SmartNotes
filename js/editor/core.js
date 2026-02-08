@@ -232,9 +232,18 @@ const Editor = (() => {
         }
     }
 
+    const hasNonEmptySelection = () => {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false
+        if (!els.content) return false
+        const range = selection.getRangeAt(0)
+        return els.content.contains(range.commonAncestorContainer)
+    }
+
     const handleEditorKeyDown = (e) => {
         const isCut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x"
         if (!isCut) return
+        if (hasNonEmptySelection()) return
         if (cutCurrentLine()) e.preventDefault()
     }
 
@@ -701,6 +710,7 @@ const Editor = (() => {
     }
 
     const cutCurrentLine = () => {
+        if (hasNonEmptySelection()) return false
         const sel = window.getSelection()
         if (!sel || sel.rangeCount === 0) return false
         const range = sel.getRangeAt(0)
