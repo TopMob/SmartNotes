@@ -41,7 +41,7 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "button", "input"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
         const allowedClasses = new Set([
             "media-wrapper",
             "media-resize-handle",
@@ -66,11 +66,13 @@ export const Utils = {
             "note-page"
         ])
         const allowAttrs = {
-            a: new Set(["href"]),
+            a: new Set(["href", "target", "rel", "data-note-id"]),
             img: new Set(["src", "alt"]),
             audio: new Set(["src", "controls", "preload"]),
             button: new Set(["type", "aria-label"]),
-            input: new Set(["type", "min", "max", "step", "value", "aria-label"])
+            input: new Set(["type", "checked", "aria-label"]),
+            td: new Set(["colspan", "rowspan"]),
+            th: new Set(["colspan", "rowspan"])
         }
         const wrapper = document.createElement("div")
         wrapper.innerHTML = String(html || "")
@@ -118,6 +120,13 @@ export const Utils = {
                     } else if (String(href || "").startsWith("http")) {
                         child.setAttribute("rel", "noopener noreferrer")
                         child.setAttribute("target", "_blank")
+                    }
+                }
+                if (tag === "input") {
+                    const type = String(child.getAttribute("type") || "").toLowerCase()
+                    if (type !== "checkbox") {
+                        child.remove()
+                        return
                     }
                 }
                 if (tag === "img") {

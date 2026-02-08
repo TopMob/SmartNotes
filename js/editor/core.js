@@ -86,6 +86,21 @@ const Editor = (() => {
             els.content.addEventListener("input", scheduleEasterEggCheck, { signal })
             
             els.content.addEventListener("click", (e) => {
+                const link = e.target.closest("a")
+                if (link && els.content.contains(link)) {
+                    const noteId = link.dataset.noteId
+                    if (noteId) {
+                        e.preventDefault()
+                        openNoteById(noteId)
+                        return
+                    }
+                    const href = link.getAttribute("href")
+                    if (href) {
+                        e.preventDefault()
+                        window.open(href, "_blank", "noopener")
+                        return
+                    }
+                }
                 const wrapper = e.target.closest(".media-wrapper")
                 if (wrapper) {
                     selectMedia(wrapper)
@@ -388,8 +403,28 @@ const Editor = (() => {
         { id: "bold", i: "format_bold", label: "tool_bold", cmd: () => document.execCommand("bold") },
         { id: "italic", i: "format_italic", label: "tool_italic", cmd: () => document.execCommand("italic") },
         { id: "underline", i: "format_underlined", label: "tool_underline", cmd: () => document.execCommand("underline") },
+        { id: "strike", i: "strikethrough_s", label: "tool_strike", cmd: () => toggleStrikeThrough() },
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => document.execCommand("insertUnorderedList") },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => document.execCommand("insertOrderedList") },
+        { id: "todo", i: "checklist", label: "tool_todo", cmd: () => insertTodoList() },
+        { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => insertHorizontalRule() },
+        { id: "link", i: "link", label: "tool_link", cmd: () => {
+            storeSelection()
+            UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {
+                applyLink(value)
+            })
+        }},
+        { id: "note_link", i: "bookmarks", label: "tool_note_link", cmd: () => {
+            storeSelection()
+            UI.showPrompt(UI.getText("note_link_title", "Link to note"), UI.getText("note_link_placeholder", "Note id"), (value) => {
+                applyNoteLink(value)
+            })
+        }},
+        { id: "table", i: "table_chart", label: "tool_table", cmd: () => insertTable() },
+        { id: "table_row_add", i: "table_rows", label: "tool_table_row_add", cmd: () => insertTableRow() },
+        { id: "table_col_add", i: "view_column", label: "tool_table_col_add", cmd: () => insertTableColumn() },
+        { id: "table_row_delete", i: "remove_circle_outline", label: "tool_table_row_delete", cmd: () => deleteTableRow() },
+        { id: "table_col_delete", i: "remove_circle_outline", label: "tool_table_col_delete", cmd: () => deleteTableColumn() },
         { id: "image", i: "image", label: "tool_image", cmd: () => {
             storeSelection()
             document.getElementById("img-upload")?.click()
@@ -1117,6 +1152,268 @@ const Editor = (() => {
         } else {
             els.content.appendChild(fragment)
         }
+        storeSelection()
+    }
+
+    const insertNodeAtSelection = (node) => {
+        if (!els.content) return
+        const range = restoreSelection()
+        if (range) {
+            range.deleteContents()
+            range.insertNode(node)
+            range.setStartAfter(node)
+            range.collapse(true)
+            const sel = window.getSelection()
+            if (sel) {
+                sel.removeAllRanges()
+                sel.addRange(range)
+            }
+        } else {
+            els.content.appendChild(node)
+        }
+        storeSelection()
+    }
+
+    const normalizeStrikeTags = () => {
+        if (!els.content) return
+        els.content.querySelectorAll("strike").forEach(strike => {
+            const replacement = document.createElement("s")
+            while (strike.firstChild) replacement.appendChild(strike.firstChild)
+            strike.replaceWith(replacement)
+        })
+    }
+
+    const toggleStrikeThrough = () => {
+        document.execCommand("strikeThrough")
+        normalizeStrikeTags()
+    }
+
+    const buildTodoItem = (text) => {
+        const wrapper = document.createElement("div")
+        const checkbox = document.createElement("input")
+        checkbox.type = "checkbox"
+        checkbox.setAttribute("aria-label", UI.getText("todo_item", "Todo"))
+        const label = document.createElement("span")
+        if (text) label.textContent = text
+        else label.appendChild(document.createElement("br"))
+        wrapper.appendChild(checkbox)
+        wrapper.appendChild(label)
+        return { wrapper, label }
+    }
+
+    const insertTodoList = () => {
+        const range = restoreSelection()
+        if (!range) return
+        const selection = window.getSelection()
+        const text = selection?.toString() || ""
+        const items = text ? text.split(/\r?\n/).map(item => item.trim()).filter(Boolean) : [""]
+        const fragment = document.createDocumentFragment()
+        let firstLabel = null
+        items.forEach(item => {
+            const { wrapper, label } = buildTodoItem(item)
+            if (!firstLabel) firstLabel = label
+            fragment.appendChild(wrapper)
+        })
+        range.deleteContents()
+        range.insertNode(fragment)
+        if (firstLabel) {
+            const nextRange = document.createRange()
+            nextRange.selectNodeContents(firstLabel)
+            nextRange.collapse(!firstLabel.textContent)
+            const sel = window.getSelection()
+            if (sel) {
+                sel.removeAllRanges()
+                sel.addRange(nextRange)
+            }
+        }
+        storeSelection()
+    }
+
+    const insertHorizontalRule = () => {
+        const hr = document.createElement("hr")
+        insertNodeAtSelection(hr)
+    }
+
+    const wrapSelectionWithNode = (node) => {
+        const range = getActiveRangeInContent()
+        if (!range || range.collapsed) return null
+        const content = range.extractContents()
+        node.appendChild(content)
+        range.insertNode(node)
+        const nextRange = document.createRange()
+        nextRange.selectNodeContents(node)
+        nextRange.collapse(false)
+        const sel = window.getSelection()
+        if (sel) {
+            sel.removeAllRanges()
+            sel.addRange(nextRange)
+        }
+        storeSelection()
+        return node
+    }
+
+    const normalizeUrl = (value) => {
+        const url = String(value || "").trim()
+        if (!url) return ""
+        if (/^https?:\/\//i.test(url)) return url
+        if (/^mailto:/i.test(url)) return url
+        if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) return `https://${url}`
+        return url
+    }
+
+    const applyLink = (value) => {
+        const url = normalizeUrl(value)
+        if (!url) return
+        const range = getActiveRangeInContent()
+        if (!range || range.collapsed) {
+            UI.showToast(UI.getText("link_selection_required", "Select text to link"))
+            return
+        }
+        const link = document.createElement("a")
+        link.href = url
+        wrapSelectionWithNode(link)
+    }
+
+    const applyNoteLink = (value) => {
+        const noteId = String(value || "").trim()
+        if (!noteId) return
+        const range = getActiveRangeInContent()
+        if (!range || range.collapsed) {
+            UI.showToast(UI.getText("note_link_selection_required", "Select text to link"))
+            return
+        }
+        const note = StateStore.read().notes.find(item => item.id === noteId)
+        if (!note) {
+            UI.showToast(UI.getText("note_link_not_found", "Note not found"))
+            return
+        }
+        const link = document.createElement("a")
+        link.dataset.noteId = noteId
+        wrapSelectionWithNode(link)
+    }
+
+    const openNoteById = (noteId) => {
+        const note = StateStore.read().notes.find(item => item.id === noteId)
+        if (!note) {
+            UI.showToast(UI.getText("note_link_not_found", "Note not found"))
+            return
+        }
+        openFromList(note)
+    }
+
+    const parseTableDimension = (value, fallback) => {
+        const num = Number.parseInt(String(value || "").trim(), 10)
+        if (!Number.isFinite(num) || num < 1) return fallback
+        return Utils.clamp(num, 1, 20)
+    }
+
+    const buildTable = (rows, columns) => {
+        const table = document.createElement("table")
+        const body = document.createElement("tbody")
+        for (let r = 0; r < rows; r += 1) {
+            const row = document.createElement("tr")
+            for (let c = 0; c < columns; c += 1) {
+                const cell = document.createElement("td")
+                cell.appendChild(document.createElement("br"))
+                row.appendChild(cell)
+            }
+            body.appendChild(row)
+        }
+        table.appendChild(body)
+        return table
+    }
+
+    const insertTable = () => {
+        storeSelection()
+        UI.showPrompt(UI.getText("table_rows_title", "Table rows"), UI.getText("table_rows_placeholder", "Rows"), (rowsValue) => {
+            const rows = parseTableDimension(rowsValue, 2)
+            UI.showPrompt(UI.getText("table_cols_title", "Table columns"), UI.getText("table_cols_placeholder", "Columns"), (colsValue) => {
+                const cols = parseTableDimension(colsValue, 2)
+                const table = buildTable(rows, cols)
+                insertNodeAtSelection(table)
+            }, "2")
+        }, "2")
+    }
+
+    const getTableContext = () => {
+        const range = getActiveRangeInContent()
+        if (!range) return null
+        let node = range.startContainer
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+        if (!node) return null
+        const table = node.closest("table")
+        if (!table) return null
+        const row = node.closest("tr")
+        const cell = node.closest("td, th")
+        return { table, row, cell }
+    }
+
+    const insertTableRow = () => {
+        const context = getTableContext()
+        if (!context?.table) {
+            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
+            return
+        }
+        const row = context.row || context.table.querySelector("tr")
+        if (!row) return
+        const cells = Array.from(row.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
+        const nextRow = document.createElement("tr")
+        const count = cells.length || 1
+        for (let i = 0; i < count; i += 1) {
+            const cell = document.createElement("td")
+            cell.appendChild(document.createElement("br"))
+            nextRow.appendChild(cell)
+        }
+        row.after(nextRow)
+        storeSelection()
+    }
+
+    const insertTableColumn = () => {
+        const context = getTableContext()
+        if (!context?.table) {
+            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
+            return
+        }
+        const row = context.row || context.table.querySelector("tr")
+        if (!row) return
+        const cells = Array.from(row.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
+        const index = context.cell ? cells.indexOf(context.cell) + 1 : cells.length
+        context.table.querySelectorAll("tr").forEach(tr => {
+            const rowCells = Array.from(tr.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
+            const cell = document.createElement("td")
+            cell.appendChild(document.createElement("br"))
+            if (index >= rowCells.length) tr.appendChild(cell)
+            else rowCells[index].before(cell)
+        })
+        storeSelection()
+    }
+
+    const deleteTableRow = () => {
+        const context = getTableContext()
+        if (!context?.table || !context.row) {
+            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
+            return
+        }
+        context.row.remove()
+        if (!context.table.querySelector("tr")) context.table.remove()
+        storeSelection()
+    }
+
+    const deleteTableColumn = () => {
+        const context = getTableContext()
+        if (!context?.table || !context.cell) {
+            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
+            return
+        }
+        const row = context.cell.parentElement
+        const cells = Array.from(row.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
+        const index = cells.indexOf(context.cell)
+        if (index < 0) return
+        context.table.querySelectorAll("tr").forEach(tr => {
+            const rowCells = Array.from(tr.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
+            if (index < rowCells.length) rowCells[index].remove()
+        })
+        if (!context.table.querySelector("td, th")) context.table.remove()
         storeSelection()
     }
 
