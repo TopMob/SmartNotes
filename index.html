@@ -276,10 +276,22 @@
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
                 <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования">
+                    <div class="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
+                        <button type="button" class="drawing-tool-btn is-active" data-drawing-tool="pen" data-lang="drawing_tool_pen">Перо</button>
+                        <button type="button" class="drawing-tool-btn" data-drawing-tool="marker" data-lang="drawing_tool_marker">Маркер</button>
+                        <button type="button" class="drawing-tool-btn" data-drawing-tool="eraser" data-lang="drawing_tool_eraser">Ластик</button>
+                    </div>
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_color">Цвет</span>
                         <input id="drawing-color" type="color" class="input-area drawing-input" aria-label="Цвет">
                     </label>
+                    <div class="drawing-color-presets" role="group" aria-label="Палитра" data-lang-aria="drawing_presets">
+                        <button type="button" class="drawing-color-swatch is-active" data-drawing-color="#111111" style="--swatch-color:#111111;" aria-label="Черный"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#2563eb" style="--swatch-color:#2563eb;" aria-label="Синий"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#16a34a" style="--swatch-color:#16a34a;" aria-label="Зеленый"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#f97316" style="--swatch-color:#f97316;" aria-label="Оранжевый"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#dc2626" style="--swatch-color:#dc2626;" aria-label="Красный"></button>
+                    </div>
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_size">Размер</span>
                         <input id="drawing-size" type="range" class="drawing-range" min="1" max="16" value="3" aria-label="Размер">
@@ -378,50 +390,6 @@
         </div>
     </div>
 
-    <div id="share-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Поделиться заметкой" data-lang-aria="share_note">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="share_modal_title">Поделиться</h2>
-                <button type="button" class="btn-icon" data-action="close-modal" data-modal="share-modal" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round" aria-hidden="true">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <p class="muted" id="share-note-summary" data-lang="share_link_desc">Ссылка для просмотра</p>
-                <p class="muted" id="share-link-status" data-lang="share_link_status">Ссылка не создана</p>
-                <div id="share-link-block" class="collab-link-block hidden">
-                    <input id="share-link" type="text" class="input-area" readonly value="">
-                </div>
-                <div class="row-right">
-                    <button type="button" class="btn-secondary" data-action="share-enable" data-lang="share_link_enable">Создать ссылку</button>
-                    <button type="button" class="btn-secondary" data-action="copy-share-link" data-lang="copy" disabled>Копировать</button>
-                    <button type="button" class="btn-primary" data-action="share-note-native" data-lang="share_native">Поделиться</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="collab-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Совместное редактирование" data-lang-aria="collab_note">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="collab_title">Совместное редактирование</h2>
-                <button type="button" class="btn-icon" data-action="close-modal" data-modal="collab-modal" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round" aria-hidden="true">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <p class="muted" id="collab-status" data-lang="collab_desc">Включите режим совместного редактирования</p>
-                <div id="collab-link-block" class="collab-link-block hidden">
-                    <input id="collab-link" type="text" class="input-area" readonly value="">
-                </div>
-                <div class="row-right">
-                    <button type="button" class="btn-secondary" data-action="collab-enable" data-lang="collab_enable">Включить</button>
-                    <button type="button" class="btn-secondary" data-action="copy-collab-link" data-lang="copy">Копировать</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div id="lock-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Блокировка заметки" data-lang-aria="lock_note">
         <div class="modal-card">
             <header class="modal-header">
@@ -497,23 +465,6 @@
                 </button>
             </header>
             <div class="modal-body" id="settings-content"></div>
-        </div>
-    </div>
-
-    <div id="share-fallback-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Ссылка" data-lang-aria="share_title">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="share_title">Ссылка</h2>
-                <button type="button" class="btn-icon" data-action="close-modal" data-modal="share-fallback-modal" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round" aria-hidden="true">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <p id="share-fallback-message" class="muted" data-lang="share_invalid">Ссылка недействительна</p>
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-primary" data-action="close-modal" data-modal="share-fallback-modal" data-lang="close">Закрыть</button>
-            </footer>
         </div>
     </div>
 

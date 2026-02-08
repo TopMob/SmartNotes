@@ -13,7 +13,6 @@ const StateStore = (() => {
         mediaRecorder: null,
         editorDirty: false,
         orderHistory: [],
-        pendingShare: null,
         appearanceDraft: null
     }
 
@@ -45,7 +44,6 @@ const StateStore = (() => {
         mediaRecorder: null,
         editorDirty: false,
         orderHistory: [],
-        pendingShare: null,
         appearanceDraft: null,
         config: { ...initialState.config }
     }))

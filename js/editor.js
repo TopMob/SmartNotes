@@ -13,12 +13,11 @@ const Editor = (() => {
     let pageIndex = 0
     let titleTouched = false
     let autoSaveSnapshot = null
-    let collabUnsub = null
-    let isReadOnly = false
     let drawingState = {
         active: false,
         color: "#111111",
         size: 3,
+        tool: "pen",
         isDrawing: false,
         lastPoint: null,
         canvas: null,
@@ -31,65 +30,6 @@ const Editor = (() => {
         SNAPSHOT_DELAY: 300,
         MIN_IMG_WIDTH: 100,
         MAX_IMG_WIDTH: 860
-    }
-
-    const resolveAccessLevel = (note) => {
-        const user = StateStore.read().user
-        if (!note) return "edit"
-        if (user && note.ownerUid && note.ownerUid === user.uid) return "edit"
-        if (note.accessLevel === "edit") return "edit"
-        if (note.accessLevel === "view") return "view"
-        if (user && note.ownerUid && note.ownerUid !== user.uid) return "view"
-        return "edit"
-    }
-
-    const applyAccessState = (note) => {
-        const level = resolveAccessLevel(note)
-        const user = StateStore.read().user
-        const ownerUid = note.ownerUid || (user ? user.uid : null)
-        const next = { ...note, ownerUid, accessLevel: level }
-        StateStore.update("currentNote", next)
-        setReadOnly(level === "view")
-        return next
-    }
-
-    const setReadOnly = (flag) => {
-        isReadOnly = !!flag
-        if (els.title) els.title.readOnly = isReadOnly
-        if (els.tagsInput) els.tagsInput.disabled = isReadOnly
-        if (isReadOnly && drawingState.active) {
-            drawingState.active = false
-            if (els.drawingControls) {
-                els.drawingControls.classList.add("hidden")
-            }
-            if (drawingState.canvas?.parentElement) {
-                drawingState.canvas.parentElement.removeChild(drawingState.canvas)
-            }
-            drawingState.isDrawing = false
-            drawingState.lastPoint = null
-        }
-        const controls = document.querySelectorAll("[data-action='editor-save'],[data-action='editor-undo'],[data-action='editor-redo'],[data-action='editor-lock'],[data-action='editor-add-page'],[data-action='editor-voice']")
-        controls.forEach(btn => {
-            btn.disabled = isReadOnly
-            btn.classList.toggle("is-disabled", isReadOnly)
-        })
-        if (els.toolbar) {
-            els.toolbar.querySelectorAll(".tool-btn").forEach(btn => {
-                btn.disabled = isReadOnly
-                btn.classList.toggle("is-disabled", isReadOnly)
-            })
-        }
-        updateEditableState()
-        buildToolbar()
-    }
-
-    const canEditCurrentNote = () => {
-        if (isReadOnly) return false
-        const current = StateStore.read().currentNote
-        const user = StateStore.read().user
-        if (!current || !user) return false
-        if (current.ownerUid && current.ownerUid !== user.uid && current.accessLevel === "view") return false
-        return true
     }
 
     const init = () => {
@@ -247,7 +187,7 @@ const Editor = (() => {
         if (els.drawingColor) {
             els.drawingColor.value = drawingState.color
             els.drawingColor.addEventListener("input", (e) => {
-                drawingState.color = String(e.target.value || "#111111")
+                setDrawingColor(String(e.target.value || "#111111"))
             })
         }
         if (els.drawingSize) {
@@ -257,12 +197,67 @@ const Editor = (() => {
                 drawingState.size = Number.isFinite(next) ? Utils.clamp(next, 1, 24) : 3
             })
         }
+        if (els.drawingControls) {
+            els.drawingControls.querySelectorAll("[data-drawing-tool]").forEach(btn => {
+                btn.addEventListener("click", () => setDrawingTool(btn.dataset.drawingTool || "pen"))
+            })
+            els.drawingControls.querySelectorAll("[data-drawing-color]").forEach(btn => {
+                btn.addEventListener("click", () => setDrawingColor(btn.dataset.drawingColor || "#111111"))
+            })
+        }
+        updateDrawingToolButtons()
+        updateDrawingColorButtons()
         window.addEventListener("resize", () => {
             if (drawingState.active) refreshDrawingSurface()
         })
     }
 
     const getActivePage = () => getPages()[pageIndex] || null
+
+    const getDrawingToolSettings = () => {
+        if (drawingState.tool === "eraser") {
+            return { composite: "destination-out", opacity: 1, color: "#000000" }
+        }
+        if (drawingState.tool === "marker") {
+            return { composite: "source-over", opacity: 0.35, color: drawingState.color }
+        }
+        return { composite: "source-over", opacity: 1, color: drawingState.color }
+    }
+
+    const updateDrawingToolButtons = () => {
+        const toolButtons = els.drawingControls?.querySelectorAll("[data-drawing-tool]") || []
+        toolButtons.forEach(btn => {
+            btn.classList.toggle("is-active", btn.dataset.drawingTool === drawingState.tool)
+        })
+        const isEraser = drawingState.tool === "eraser"
+        if (els.drawingColor) els.drawingColor.disabled = isEraser
+        const colorButtons = els.drawingControls?.querySelectorAll("[data-drawing-color]") || []
+        colorButtons.forEach(btn => {
+            btn.disabled = isEraser
+        })
+    }
+
+    const updateDrawingColorButtons = () => {
+        const current = String(drawingState.color || "").toLowerCase()
+        const colorButtons = els.drawingControls?.querySelectorAll("[data-drawing-color]") || []
+        colorButtons.forEach(btn => {
+            const value = String(btn.dataset.drawingColor || "").toLowerCase()
+            btn.classList.toggle("is-active", value === current)
+        })
+    }
+
+    const setDrawingTool = (tool) => {
+        const nextTool = tool === "marker" || tool === "eraser" ? tool : "pen"
+        drawingState.tool = nextTool
+        updateDrawingToolButtons()
+    }
+
+    const setDrawingColor = (color) => {
+        if (!color) return
+        drawingState.color = color
+        if (els.drawingColor) els.drawingColor.value = color
+        updateDrawingColorButtons()
+    }
 
     const ensureDrawingLayer = () => {
         const page = getActivePage()
@@ -305,7 +300,7 @@ const Editor = (() => {
         if (!drawingState.canvas || !drawingState.ctx || !page) return
         const rect = page.getBoundingClientRect()
         const width = Math.max(1, Math.floor(rect.width))
-        const height = Math.max(1, Math.floor(rect.height))
+        const height = Math.max(1, Math.floor(Math.max(rect.height, page.scrollHeight)))
         if (drawingState.canvas.width === width && drawingState.canvas.height === height) return
         const snapshot = drawingState.canvas.toDataURL("image/png")
         drawingState.canvas.width = width
@@ -342,6 +337,19 @@ const Editor = (() => {
         return false
     }
 
+    const removeDrawingLayerIfEmpty = () => {
+        const page = getActivePage()
+        if (!page) return
+        const layer = page.querySelector(".note-drawing-layer")
+        if (!layer) return
+        const image = layer.querySelector(".note-drawing-image")
+        const hasImage = !!image?.getAttribute("src")
+        if (!hasImage) {
+            layer.remove()
+            drawingState.image = null
+        }
+    }
+
     const updateImageFromCanvas = () => {
         if (!drawingState.image || !drawingState.canvas) return
         if (!canvasHasDrawing()) {
@@ -361,7 +369,7 @@ const Editor = (() => {
     }
 
     const updateEditableState = () => {
-        const editable = !isReadOnly && !drawingState.active
+        const editable = !drawingState.active
         getPages().forEach(page => {
             page.contentEditable = editable ? "true" : "false"
         })
@@ -371,10 +379,6 @@ const Editor = (() => {
     }
 
     const toggleDrawingMode = () => {
-        if (isReadOnly) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
         drawingState.active = !drawingState.active
         if (els.drawingControls) {
             els.drawingControls.classList.toggle("hidden", !drawingState.active)
@@ -388,6 +392,7 @@ const Editor = (() => {
             }
             drawingState.isDrawing = false
             drawingState.lastPoint = null
+            removeDrawingLayerIfEmpty()
         }
         updateEditableState()
         buildToolbar()
@@ -403,7 +408,10 @@ const Editor = (() => {
             x: event.clientX - rect.left,
             y: event.clientY - rect.top
         }
-        drawingState.ctx.strokeStyle = drawingState.color
+        const tool = getDrawingToolSettings()
+        drawingState.ctx.globalCompositeOperation = tool.composite
+        drawingState.ctx.globalAlpha = tool.opacity
+        drawingState.ctx.strokeStyle = tool.color
         drawingState.ctx.lineWidth = drawingState.size
         drawingState.ctx.lineCap = "round"
         drawingState.ctx.lineJoin = "round"
@@ -496,7 +504,7 @@ const Editor = (() => {
     const createPageElement = (html = "") => {
         const page = document.createElement("div")
         page.className = "note-page"
-        page.contentEditable = isReadOnly ? "false" : "true"
+        page.contentEditable = "true"
         page.setAttribute("role", "textbox")
         page.setAttribute("aria-multiline", "true")
         const label = els.content?.getAttribute("aria-label")
@@ -553,7 +561,6 @@ const Editor = (() => {
     }
 
     const addPage = () => {
-        if (isReadOnly) return
         if (!els.content) return
         const pages = getPages()
         const page = createPageElement("")
@@ -659,10 +666,6 @@ const Editor = (() => {
     }
 
     const toggleRecording = () => {
-        if (isReadOnly) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
         const recording = StateStore.read().recording
         if (recording) stopRecording()
         else startRecording()
@@ -793,9 +796,8 @@ const Editor = (() => {
             order: Date.now()
         })
 
-        const user = StateStore.read().user
-        const withOwner = { ...base, ownerUid: base.ownerUid || (user ? user.uid : null) }
-        const prepared = applyAccessState(JSON.parse(JSON.stringify(withOwner)))
+        const prepared = JSON.parse(JSON.stringify(base))
+        StateStore.update("currentNote", prepared)
         pageIndex = 0
         titleTouched = !!prepared.title
         
@@ -810,45 +812,6 @@ const Editor = (() => {
         setTimeout(() => focusActivePage(), 50)
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
-        setupSharedSync(prepared)
-    }
-
-    const setupSharedSync = (note) => {
-        if (collabUnsub) {
-            collabUnsub()
-            collabUnsub = null
-        }
-        const sharedId = note?.collabId || note?.shareId
-        if (!db || !sharedId) return
-        const ref = db.collection("sharedNotes").doc(sharedId)
-        collabUnsub = ref.onSnapshot(snap => {
-            if (!snap.exists) return
-            const shared = snap.data()
-            if (!shared?.note) return
-            const user = StateStore.read().user
-            if (!user) return
-            const accessLevel = ShareService.resolveAccess(shared, user)
-            if (!accessLevel) return
-            if (StateStore.read().editorDirty) return
-            const incoming = NoteIO.normalizeNote({
-                ...shared.note,
-                id: note.id,
-                collabId: note.collabId,
-                shareId: note.shareId,
-                ownerUid: shared.ownerUid || shared.ownerId || note.ownerUid || shared.note?.ownerUid || null,
-                accessLevel
-            })
-            const current = StateStore.read().currentNote
-            if (!current) return
-            if (incoming.title === current.title && incoming.content === current.content && JSON.stringify(incoming.tags) === JSON.stringify(current.tags)) return
-            const updatedNote = { ...current, ...incoming }
-            StateStore.update("currentNote", updatedNote)
-            const updatedNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, ...incoming } : n)
-            StateActions.setNotes(updatedNotes)
-            db.collection("users").doc(user.uid).collection("notes").doc(note.id).set(incoming, { merge: true })
-            applyAccessState(updatedNote)
-            renderState()
-        })
     }
 
     const openFromList = async (note) => {
@@ -875,20 +838,17 @@ const Editor = (() => {
         pageIndex = 0
         titleTouched = false
         autoSaveSnapshot = null
-        if (collabUnsub) {
-            collabUnsub()
-            collabUnsub = null
-        }
         drawingState.active = false
         drawingState.isDrawing = false
         drawingState.lastPoint = null
+        updateImageFromCanvas()
         if (els.drawingControls) {
             els.drawingControls.classList.add("hidden")
         }
         if (drawingState.canvas?.parentElement) {
             drawingState.canvas.parentElement.removeChild(drawingState.canvas)
         }
-        setReadOnly(false)
+        removeDrawingLayerIfEmpty()
         if (observer) observer.disconnect()
     }
 
@@ -1133,10 +1093,6 @@ const Editor = (() => {
     }
 
     const toggleLock = async () => {
-        if (isReadOnly) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
         const note = StateStore.read().currentNote
         if (!note) return
         if (note.lock?.hash) {
@@ -1225,10 +1181,6 @@ const Editor = (() => {
     }
 
     const addTag = (tag) => {
-        if (isReadOnly) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
         const t = String(tag || "").trim().replace(/^#+/, "")
         if (!t) return
         const n = StateStore.read().currentNote
@@ -1242,10 +1194,6 @@ const Editor = (() => {
     }
 
     const removeTag = (tag) => {
-        if (isReadOnly) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
         const n = StateStore.read().currentNote
         if (!n) return
         const tags = (n.tags || []).filter(x => x.toLowerCase() !== tag.toLowerCase())
@@ -1565,10 +1513,6 @@ const Editor = (() => {
     }
 
     const deleteSelectedMedia = () => {
-        if (isReadOnly) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
         selectedMedia?.remove()
         deselectMedia()
     }
@@ -1578,10 +1522,6 @@ const Editor = (() => {
     const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
-        if (!canEditCurrentNote()) {
-            UI.showToast(UI.getText("share_view_only", "View only"))
-            return
-        }
 
         const currentNote = StateStore.read().currentNote
         if (!currentNote) return
@@ -1592,8 +1532,6 @@ const Editor = (() => {
             content: snapshot.content,
             tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : []
         }
-
-        if (!n.ownerUid) n.ownerUid = user.uid
 
         if (!titleTouched && !String(n.title || "").trim()) {
             n.title = buildAutoTitle(n.content || "")
@@ -1617,12 +1555,6 @@ const Editor = (() => {
         
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-            if (n.collabId && canEditCurrentNote()) {
-                await ShareService.updateSharedNote(n.collabId, n)
-            }
-            if (n.shareId) {
-                await ShareService.updateSharedNote(n.shareId, n)
-            }
             StateStore.update("editorDirty", false)
             autoSaveSnapshot = captureSnapshot()
             if (!options.silent) {

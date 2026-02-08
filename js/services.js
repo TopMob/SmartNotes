@@ -19,10 +19,6 @@ const NoteIO = {
             isPinned: !!safe.isPinned,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
             futureAt: safe.futureAt || null,
-            shareId: safe.shareId ? String(safe.shareId) : null,
-            collabId: safe.collabId ? String(safe.collabId) : null,
-            ownerUid: safe.ownerUid ? String(safe.ownerUid) : null,
-            accessLevel: safe.accessLevel === "view" || safe.accessLevel === "edit" ? safe.accessLevel : null,
             order: typeof safe.order === "number" ? safe.order : Date.now(),
             createdAt: safe.createdAt || now,
             updatedAt: safe.updatedAt || now
@@ -201,124 +197,6 @@ const LockService = {
             mismatch |= (a.charCodeAt(i) ^ b.charCodeAt(i))
         }
         return mismatch === 0
-    }
-}
-
-const ShareService = {
-    getBaseUrl() {
-        const u = new URL(window.location.href)
-        u.hash = ""
-        u.search = ""
-        return u.toString().replace(/\/index\.html\/?$/, "/")
-    },
-    base() {
-        return this.getBaseUrl()
-    },
-
-    buildLink(mode, token) {
-        return `${this.getBaseUrl()}#${mode}/${encodeURIComponent(token)}`
-    },
-
-    parseHash(hash) {
-        const h = String(hash || "").replace(/^#/, "")
-        const [mode, id] = h.split("/")
-        if ((mode === "share" || mode === "collab") && id) {
-            try {
-                return { mode, shareId: decodeURIComponent(id) }
-            } catch {
-                return null
-            }
-        }
-        return null
-    },
-
-    resolveAccess(shared, user) {
-        if (!shared || !user) return null
-        const ownerUid = shared.ownerUid || shared.ownerId || shared.note?.ownerUid || null
-        if (ownerUid && ownerUid === user.uid) return "edit"
-        const access = shared.access || {}
-        const level = access[user.uid]
-        return level === "edit" || level === "view" ? level : null
-    },
-
-    async grantAccess(shareId, uid, level) {
-        if (!db || !shareId || !uid) return null
-        const accessLevel = level === "edit" ? "edit" : "view"
-        const ref = db.collection("sharedNotes").doc(shareId)
-        await ref.set({
-            [`access.${uid}`]: accessLevel,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-        return accessLevel
-    },
-
-    async ensureShareMetadata(shareId, note, mode) {
-        if (!db || !shareId || !note || !StateStore.read().user) return
-        const owner = StateStore.read().user
-        const ref = db.collection("sharedNotes").doc(shareId)
-        await ref.set({
-            ownerUid: owner.uid,
-            ownerId: owner.uid,
-            noteId: note.id,
-            mode,
-            [`access.${owner.uid}`]: "edit",
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-    },
-
-    async ensureShareToken(note, mode) {
-        if (!db || !note || !StateStore.read().user) return null
-        const isCollab = mode === "collab"
-        const existing = isCollab ? note.collabId : note.shareId
-        if (existing) {
-            await this.ensureShareMetadata(existing, note, mode)
-            return existing
-        }
-        const ref = db.collection("sharedNotes").doc()
-        const owner = StateStore.read().user
-        const preparedNote = { ...note, ownerUid: note.ownerUid || owner.uid }
-        const payload = {
-            note: NoteIO.normalizeNote(preparedNote),
-            mode,
-            ownerUid: owner.uid,
-            ownerId: owner.uid,
-            noteId: note.id,
-            ownerEmail: owner.email || "",
-            ownerName: owner.displayName || "",
-            access: { [owner.uid]: "edit" },
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }
-        await ref.set(payload)
-        const patch = isCollab ? { collabId: ref.id } : { shareId: ref.id }
-        const noteRef = db.collection("users").doc(owner.uid).collection("notes").doc(note.id)
-        await noteRef.set(patch, { merge: true })
-        return ref.id
-    },
-
-    async fetchSharedNote(shareId) {
-        if (!db || !shareId) return null
-        const ref = db.collection("sharedNotes").doc(shareId)
-        const snap = await ref.get()
-        if (!snap.exists) return null
-        return { id: snap.id, ...snap.data() }
-    },
-
-    async updateSharedNote(collabId, note) {
-        const user = StateStore.read().user
-        if (!db || !collabId || !note || !user) return
-        if (note.ownerUid && note.ownerUid !== user.uid && note.accessLevel !== "edit") return
-        const ref = db.collection("sharedNotes").doc(collabId)
-        const payload = {
-            note: NoteIO.normalizeNote(note),
-            noteId: note.id,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }
-        if (note.ownerUid) {
-            payload.ownerUid = note.ownerUid
-            payload.ownerId = note.ownerUid
-        }
-        await ref.set(payload, { merge: true })
     }
 }
 
