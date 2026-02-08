@@ -27,6 +27,7 @@ const Editor = (() => {
         els = {
             wrapper: document.getElementById("note-editor"),
             title: document.getElementById("note-title"),
+            contentWrapper: document.querySelector(".note-content-wrapper"),
             content: document.getElementById("note-content-editable"),
             toolbar: document.getElementById("editor-toolbar"),
             pageIndicator: document.getElementById("editor-page-indicator"),
