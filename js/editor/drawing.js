@@ -19,11 +19,13 @@ const EditorDrawing = (() => {
     let elements = {}
     let buildToolbar = () => {}
     let updateEditableState = () => {}
+    let onDrawingChange = () => {}
 
-    const configure = ({ elements: nextElements, buildToolbar: nextBuildToolbar, updateEditableState: nextUpdateEditableState } = {}) => {
+    const configure = ({ elements: nextElements, buildToolbar: nextBuildToolbar, updateEditableState: nextUpdateEditableState, onDrawingChange: nextOnDrawingChange } = {}) => {
         elements = nextElements || {}
         if (typeof nextBuildToolbar === "function") buildToolbar = nextBuildToolbar
         if (typeof nextUpdateEditableState === "function") updateEditableState = nextUpdateEditableState
+        if (typeof nextOnDrawingChange === "function") onDrawingChange = nextOnDrawingChange
         drawingState.container = elements.contentWrapper || null
         drawingState.content = elements.content || null
     }
@@ -254,6 +256,41 @@ const EditorDrawing = (() => {
         scheduleLayoutSync()
     }
 
+    const clearCanvas = () => {
+        if (!drawingState.canvas || !drawingState.ctx) return
+        drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
+        drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
+        applyCanvasScale(drawingState.scale)
+    }
+
+    const getDrawingData = () => {
+        if (!drawingState.canvas) return ""
+        return drawingState.canvas.toDataURL("image/png")
+    }
+
+    const setDrawingData = (dataUrl) => {
+        refreshDrawingSurface()
+        const normalized = typeof dataUrl === "string" ? dataUrl : ""
+        if (!normalized) {
+            clearCanvas()
+            return
+        }
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (!drawingState.canvas || !drawingState.ctx) return
+                const image = new Image()
+                image.onload = () => {
+                    if (!drawingState.canvas || !drawingState.ctx) return
+                    drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
+                    drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
+                    drawingState.ctx.drawImage(image, 0, 0, drawingState.canvas.width, drawingState.canvas.height)
+                    applyCanvasScale(drawingState.scale)
+                }
+                image.src = normalized
+            })
+        })
+    }
+
     const toggleDrawingMode = () => {
         drawingState.active = !drawingState.active
         if (elements.drawingControls) {
@@ -313,6 +350,7 @@ const EditorDrawing = (() => {
         event?.preventDefault()
         drawingState.isDrawing = false
         drawingState.pointerId = null
+        onDrawingChange(getDrawingData())
     }
 
     return {
@@ -320,6 +358,8 @@ const EditorDrawing = (() => {
         state: drawingState,
         setupControls,
         refreshDrawingSurface,
+        getDrawingData,
+        setDrawingData,
         toggleDrawingMode,
         cleanup
     }

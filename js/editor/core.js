@@ -51,7 +51,8 @@ const Editor = (() => {
                 getPages,
                 getActivePage,
                 buildToolbar,
-                updateEditableState
+                updateEditableState,
+                onDrawingChange: persistDrawing
             })
             EditorDrawing.setupControls()
         }
@@ -646,7 +647,10 @@ const Editor = (() => {
         if (els.drawingControls) {
             els.drawingControls.classList.add("hidden")
         }
-        if (window.EditorDrawing) EditorDrawing.cleanup()
+        if (window.EditorDrawing) {
+            EditorDrawing.setDrawingData("")
+            EditorDrawing.cleanup()
+        }
         if (observer) observer.disconnect()
     }
 
@@ -662,6 +666,7 @@ const Editor = (() => {
         syncMediaSizes()
         syncAudioPlayers()
         syncLockButton(n)
+        if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "")
         if (observer && els.content) {
             observer.disconnect()
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
@@ -1286,6 +1291,20 @@ const Editor = (() => {
         content: els.content.innerHTML || "",
         tags: [...(StateStore.read().currentNote?.tags || [])]
     })
+
+    const persistDrawing = (drawingData) => {
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const nextDrawing = typeof drawingData === "string" ? drawingData : ""
+        if (currentNote.drawing === nextDrawing) return
+        StateStore.update("currentNote", {
+            ...currentNote,
+            drawing: nextDrawing,
+            updatedAt: Utils.serverTimestamp()
+        })
+        StateStore.update("editorDirty", true)
+        scheduleAutoSave()
+    }
 
     const snapshotsEqual = (a, b) => 
         a.title === b.title && 
