@@ -9,13 +9,6 @@
     font-weight: 600;
 }
 
-.input-color-round {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-}
-
 .range-compact {
     width: 110px;
 }

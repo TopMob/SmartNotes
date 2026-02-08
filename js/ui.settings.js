@@ -129,15 +129,81 @@ Object.assign(UI, {
                         <div class="settings-color-grid">
                             <label class="field">
                                 <span class="field-label">${dict.c_accent || "Accent"}</span>
-                                <input type="color" id="cp-primary" class="color-input" aria-label="${dict.color_accent || "Accent color"}">
+                                <div class="color-picker" data-color-picker>
+                                    <input type="text" id="cp-primary" class="color-picker-input" data-color-input aria-label="${dict.color_accent || "Accent color"}" autocomplete="off">
+                                    <button type="button" class="color-picker-trigger" data-color-trigger aria-label="${dict.color_accent || "Accent color"}">
+                                        <span class="color-picker-swatch" data-color-swatch></span>
+                                        <span class="color-picker-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" focusable="false">
+                                                <path d="M12 3c4.97 0 9 3.13 9 7 0 2.2-1.42 4.19-3.71 5.48-.79.44-1.28 1.28-1.28 2.18v.84c0 .83-.67 1.5-1.5 1.5h-2.5c-.83 0-1.5-.67-1.5-1.5v-1.3H9c-3.87 0-7-2.69-7-6s3.13-7 10-7zm-4 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7-2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm2 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <div class="color-picker-panel" data-color-panel role="dialog" aria-label="${dict.color_accent || "Accent color"}">
+                                        <div class="color-picker-sv" data-color-sv>
+                                            <span class="color-picker-sv-handle" data-color-sv-handle></span>
+                                        </div>
+                                        <div class="color-picker-hue" data-color-hue>
+                                            <span class="color-picker-hue-handle" data-color-hue-handle></span>
+                                        </div>
+                                        <div class="color-picker-hex-row">
+                                            <span class="color-picker-hex-label">#</span>
+                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                        </div>
+                                    </div>
+                                </div>
                             </label>
                             <label class="field">
                                 <span class="field-label">${dict.c_bg || "Background"}</span>
-                                <input type="color" id="cp-bg" class="color-input" aria-label="${dict.color_bg || "Background color"}">
+                                <div class="color-picker" data-color-picker>
+                                    <input type="text" id="cp-bg" class="color-picker-input" data-color-input aria-label="${dict.color_bg || "Background color"}" autocomplete="off">
+                                    <button type="button" class="color-picker-trigger" data-color-trigger aria-label="${dict.color_bg || "Background color"}">
+                                        <span class="color-picker-swatch" data-color-swatch></span>
+                                        <span class="color-picker-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" focusable="false">
+                                                <path d="M12 3c4.97 0 9 3.13 9 7 0 2.2-1.42 4.19-3.71 5.48-.79.44-1.28 1.28-1.28 2.18v.84c0 .83-.67 1.5-1.5 1.5h-2.5c-.83 0-1.5-.67-1.5-1.5v-1.3H9c-3.87 0-7-2.69-7-6s3.13-7 10-7zm-4 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7-2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm2 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <div class="color-picker-panel" data-color-panel role="dialog" aria-label="${dict.color_bg || "Background color"}">
+                                        <div class="color-picker-sv" data-color-sv>
+                                            <span class="color-picker-sv-handle" data-color-sv-handle></span>
+                                        </div>
+                                        <div class="color-picker-hue" data-color-hue>
+                                            <span class="color-picker-hue-handle" data-color-hue-handle></span>
+                                        </div>
+                                        <div class="color-picker-hex-row">
+                                            <span class="color-picker-hex-label">#</span>
+                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                        </div>
+                                    </div>
+                                </div>
                             </label>
                             <label class="field">
                                 <span class="field-label">${dict.c_text || "Text"}</span>
-                                <input type="color" id="cp-text" class="color-input" aria-label="${dict.color_text || "Text color"}">
+                                <div class="color-picker" data-color-picker>
+                                    <input type="text" id="cp-text" class="color-picker-input" data-color-input aria-label="${dict.color_text || "Text color"}" autocomplete="off">
+                                    <button type="button" class="color-picker-trigger" data-color-trigger aria-label="${dict.color_text || "Text color"}">
+                                        <span class="color-picker-swatch" data-color-swatch></span>
+                                        <span class="color-picker-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" focusable="false">
+                                                <path d="M12 3c4.97 0 9 3.13 9 7 0 2.2-1.42 4.19-3.71 5.48-.79.44-1.28 1.28-1.28 2.18v.84c0 .83-.67 1.5-1.5 1.5h-2.5c-.83 0-1.5-.67-1.5-1.5v-1.3H9c-3.87 0-7-2.69-7-6s3.13-7 10-7zm-4 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7-2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm2 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                    <div class="color-picker-panel" data-color-panel role="dialog" aria-label="${dict.color_text || "Text color"}">
+                                        <div class="color-picker-sv" data-color-sv>
+                                            <span class="color-picker-sv-handle" data-color-sv-handle></span>
+                                        </div>
+                                        <div class="color-picker-hue" data-color-hue>
+                                            <span class="color-picker-hue-handle" data-color-hue-handle></span>
+                                        </div>
+                                        <div class="color-picker-hex-row">
+                                            <span class="color-picker-hex-label">#</span>
+                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                        </div>
+                                    </div>
+                                </div>
                             </label>
                         </div>
                     </div>
@@ -147,6 +213,7 @@ Object.assign(UI, {
                     <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                 </div>
             `
+            if (window.ColorPalette) window.ColorPalette.init(root)
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
             if (hasSecretPresets) this.renderHiddenPresets()

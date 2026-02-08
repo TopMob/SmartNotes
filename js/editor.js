@@ -13,6 +13,7 @@ const Editor = (() => {
     let pageIndex = 0
     let titleTouched = false
     let autoSaveSnapshot = null
+    let easterEggState = { triggered: false, audio: null }
     let drawingState = {
         active: false,
         color: "#111111",
@@ -22,7 +23,10 @@ const Editor = (() => {
         lastPoint: null,
         canvas: null,
         ctx: null,
-        image: null
+        image: null,
+        scale: 1,
+        resizeObserver: null,
+        resizeFrame: null
     }
 
     const CONFIG = {
@@ -66,6 +70,7 @@ const Editor = (() => {
             els.title.addEventListener("input", () => {
                 titleTouched = true
                 queueSnapshot()
+                scheduleEasterEggCheck()
             }, { signal })
         }
 
@@ -80,6 +85,7 @@ const Editor = (() => {
             els.content.addEventListener("keyup", storeSelection, { signal })
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
+            els.content.addEventListener("input", scheduleEasterEggCheck, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const audioPlayer = e.target.closest(".audio-player")
@@ -204,6 +210,7 @@ const Editor = (() => {
             els.drawingControls.querySelectorAll("[data-drawing-color]").forEach(btn => {
                 btn.addEventListener("click", () => setDrawingColor(btn.dataset.drawingColor || "#111111"))
             })
+            if (window.ColorPalette) window.ColorPalette.init(els.drawingControls)
         }
         updateDrawingToolButtons()
         updateDrawingColorButtons()
@@ -219,7 +226,7 @@ const Editor = (() => {
             return { composite: "destination-out", opacity: 1, color: "#000000" }
         }
         if (drawingState.tool === "marker") {
-            return { composite: "source-over", opacity: 0.35, color: drawingState.color }
+            return { composite: "source-over", opacity: 0.4, color: drawingState.color }
         }
         return { composite: "source-over", opacity: 1, color: drawingState.color }
     }
@@ -235,6 +242,11 @@ const Editor = (() => {
         colorButtons.forEach(btn => {
             btn.disabled = isEraser
         })
+        const colorPicker = els.drawingControls?.querySelector("[data-color-picker]")
+        if (colorPicker) {
+            colorPicker.classList.toggle("is-disabled", isEraser)
+            colorPicker.setAttribute("aria-disabled", String(isEraser))
+        }
     }
 
     const updateDrawingColorButtons = () => {
@@ -256,7 +268,95 @@ const Editor = (() => {
         if (!color) return
         drawingState.color = color
         if (els.drawingColor) els.drawingColor.value = color
+        if (window.ColorPalette && els.drawingColor) window.ColorPalette.syncInput(els.drawingColor)
         updateDrawingColorButtons()
+    }
+
+    const normalizeEasterEggText = (text) => String(text || "")
+        .toLowerCase()
+        .replace(/ё/g, "е")
+        .replace(/[^a-zа-я0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+
+    const levenshteinDistance = (first, second) => {
+        if (first === second) return 0
+        const a = String(first || "")
+        const b = String(second || "")
+        const n = a.length
+        const m = b.length
+        if (!n) return m
+        if (!m) return n
+        const v0 = new Int16Array(m + 1)
+        const v1 = new Int16Array(m + 1)
+        for (let i = 0; i <= m; i += 1) v0[i] = i
+        for (let i = 0; i < n; i += 1) {
+            v1[0] = i + 1
+            for (let j = 0; j < m; j += 1) {
+                const cost = a[i] === b[j] ? 0 : 1
+                v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost)
+            }
+            v0.set(v1)
+        }
+        return v0[m]
+    }
+
+    const isSimilarWord = (word, target) => {
+        if (!word || !target) return false
+        if (word === target) return true
+        if (word.includes(target) || target.includes(word)) return true
+        const limit = target.length > 7 ? 3 : 2
+        return levenshteinDistance(word, target) <= limit
+    }
+
+    const hasEasterEggPhrase = (text) => {
+        const tokens = normalizeEasterEggText(text).split(" ").filter(Boolean)
+        if (tokens.length < 2) return false
+        const firstTarget = "данил"
+        const secondTarget = "колбасенко"
+        for (let i = 0; i < tokens.length - 1; i += 1) {
+            if (isSimilarWord(tokens[i], firstTarget) && isSimilarWord(tokens[i + 1], secondTarget)) return true
+        }
+        return false
+    }
+
+    const playEasterEggSound = () => {
+        if (easterEggState.triggered) return
+        if (!easterEggState.audio) easterEggState.audio = new Audio("audio/danil-kolbasenko.mp3")
+        easterEggState.triggered = true
+        easterEggState.audio.currentTime = 0
+        easterEggState.audio.play().catch(() => null)
+    }
+
+    const scheduleEasterEggCheck = Utils.debounce(() => {
+        if (easterEggState.triggered) return
+        const titleText = els.title?.value || ""
+        const contentText = Utils.stripHtml(els.content?.innerHTML || "")
+        if (hasEasterEggPhrase(`${titleText} ${contentText}`)) playEasterEggSound()
+    }, 160)
+
+    const applyCanvasScale = (scale) => {
+        if (!drawingState.ctx) return
+        drawingState.scale = scale
+        drawingState.ctx.setTransform(scale, 0, 0, scale, 0, 0)
+    }
+
+    const scheduleDrawingRefresh = () => {
+        if (!drawingState.active) return
+        if (drawingState.resizeFrame) return
+        drawingState.resizeFrame = requestAnimationFrame(() => {
+            drawingState.resizeFrame = null
+            refreshDrawingSurface()
+        })
+    }
+
+    const observeDrawingPage = (page) => {
+        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
+        drawingState.resizeObserver = null
+        if (!page || typeof ResizeObserver === "undefined") return
+        drawingState.resizeObserver = new ResizeObserver(() => scheduleDrawingRefresh())
+        drawingState.resizeObserver.observe(page)
+        if (els.content) drawingState.resizeObserver.observe(els.content)
     }
 
     const ensureDrawingLayer = () => {
@@ -299,29 +399,44 @@ const Editor = (() => {
     const updateDrawingCanvasSize = (page) => {
         if (!drawingState.canvas || !drawingState.ctx || !page) return
         const rect = page.getBoundingClientRect()
-        const width = Math.max(1, Math.floor(rect.width))
-        const height = Math.max(1, Math.floor(Math.max(rect.height, page.scrollHeight)))
-        if (drawingState.canvas.width === width && drawingState.canvas.height === height) return
+        const cssWidth = Math.max(1, Math.floor(rect.width))
+        const cssHeight = Math.max(1, Math.floor(Math.max(rect.height, page.scrollHeight)))
+        const scale = window.devicePixelRatio || 1
+        const width = Math.max(1, Math.floor(cssWidth * scale))
+        const height = Math.max(1, Math.floor(cssHeight * scale))
+        if (drawingState.canvas.width === width && drawingState.canvas.height === height && drawingState.scale === scale) return
         const snapshot = drawingState.canvas.toDataURL("image/png")
         drawingState.canvas.width = width
         drawingState.canvas.height = height
+        drawingState.canvas.style.width = `${cssWidth}px`
+        drawingState.canvas.style.height = `${cssHeight}px`
+        drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
         if (snapshot) {
             const image = new Image()
             image.onload = () => {
+                drawingState.ctx.clearRect(0, 0, width, height)
                 drawingState.ctx.drawImage(image, 0, 0, width, height)
+                applyCanvasScale(scale)
             }
             image.src = snapshot
+        } else {
+            applyCanvasScale(scale)
         }
     }
 
     const syncCanvasFromImage = () => {
         if (!drawingState.ctx || !drawingState.canvas || !drawingState.image) return
         const src = drawingState.image.getAttribute("src")
+        drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
-        if (!src) return
+        if (!src) {
+            applyCanvasScale(drawingState.scale)
+            return
+        }
         const image = new Image()
         image.onload = () => {
             drawingState.ctx.drawImage(image, 0, 0, drawingState.canvas.width, drawingState.canvas.height)
+            applyCanvasScale(drawingState.scale)
         }
         image.src = src
     }
@@ -366,6 +481,7 @@ const Editor = (() => {
         if (!canvas.parentElement) data.page.appendChild(canvas)
         updateDrawingCanvasSize(data.page)
         syncCanvasFromImage()
+        observeDrawingPage(data.page)
     }
 
     const updateEditableState = () => {
@@ -392,6 +508,10 @@ const Editor = (() => {
             }
             drawingState.isDrawing = false
             drawingState.lastPoint = null
+            if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
+            drawingState.resizeObserver = null
+            if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
+            drawingState.resizeFrame = null
             removeDrawingLayerIfEmpty()
         }
         updateEditableState()
@@ -403,6 +523,7 @@ const Editor = (() => {
         event.preventDefault()
         event.stopPropagation()
         const rect = drawingState.canvas.getBoundingClientRect()
+        drawingState.canvas.setPointerCapture?.(event.pointerId)
         drawingState.isDrawing = true
         drawingState.lastPoint = {
             x: event.clientX - rect.left,
@@ -421,13 +542,16 @@ const Editor = (() => {
         if (!drawingState.isDrawing || !drawingState.ctx || !drawingState.lastPoint || !drawingState.canvas) return
         event.preventDefault()
         const rect = drawingState.canvas.getBoundingClientRect()
-        const x = event.clientX - rect.left
-        const y = event.clientY - rect.top
-        drawingState.ctx.beginPath()
-        drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
-        drawingState.ctx.lineTo(x, y)
-        drawingState.ctx.stroke()
-        drawingState.lastPoint = { x, y }
+        const events = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [event]
+        events.forEach(pointerEvent => {
+            const x = pointerEvent.clientX - rect.left
+            const y = pointerEvent.clientY - rect.top
+            drawingState.ctx.beginPath()
+            drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
+            drawingState.ctx.lineTo(x, y)
+            drawingState.ctx.stroke()
+            drawingState.lastPoint = { x, y }
+        })
     }
 
     const endDrawing = (event) => {
@@ -848,6 +972,10 @@ const Editor = (() => {
         if (drawingState.canvas?.parentElement) {
             drawingState.canvas.parentElement.removeChild(drawingState.canvas)
         }
+        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
+        drawingState.resizeObserver = null
+        if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
+        drawingState.resizeFrame = null
         removeDrawingLayerIfEmpty()
         if (observer) observer.disconnect()
     }
