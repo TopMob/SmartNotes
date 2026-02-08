@@ -16,6 +16,9 @@ const EditorDrawing = (() => {
         scrollFrame: null,
         layoutFrame: null
     }
+    const drawingHistory = []
+    let lastDrawingSnapshot = ""
+    const historyLimit = 100
     let elements = {}
     let buildToolbar = () => {}
     let updateEditableState = () => {}
@@ -223,6 +226,21 @@ const EditorDrawing = (() => {
         drawingState.ctx.setTransform(scale, 0, 0, scale, 0, 0)
     }
 
+    const normalizeDrawingData = (value) => typeof value === "string" ? value : ""
+
+    const replaceDrawingHistory = (dataUrl) => {
+        drawingHistory.length = 0
+        drawingHistory.push(dataUrl)
+        lastDrawingSnapshot = dataUrl
+    }
+
+    const pushDrawingHistory = (dataUrl) => {
+        if (dataUrl === lastDrawingSnapshot) return
+        drawingHistory.push(dataUrl)
+        if (drawingHistory.length > historyLimit) drawingHistory.shift()
+        lastDrawingSnapshot = dataUrl
+    }
+
     const getCanvasPoint = (event) => {
         if (!drawingState.canvas) return null
         const rect = drawingState.canvas.getBoundingClientRect()
@@ -268,12 +286,24 @@ const EditorDrawing = (() => {
         return drawingState.canvas.toDataURL("image/png")
     }
 
-    const setDrawingData = (dataUrl) => {
+    const getDrawingSnapshot = () => lastDrawingSnapshot
+
+    const setDrawingData = (dataUrl, options = {}) => {
+        const { recordHistory = false, replaceHistory = false } = options
         refreshDrawingSurface()
-        const normalized = typeof dataUrl === "string" ? dataUrl : ""
+        const normalized = normalizeDrawingData(dataUrl)
+        lastDrawingSnapshot = normalized
         if (!normalized) {
             clearCanvas()
+            if (recordHistory) {
+                if (replaceHistory) replaceDrawingHistory("")
+                else pushDrawingHistory("")
+            }
             return
+        }
+        if (recordHistory) {
+            if (replaceHistory) replaceDrawingHistory(normalized)
+            else pushDrawingHistory(normalized)
         }
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -316,6 +346,7 @@ const EditorDrawing = (() => {
         drawingState.scrollFrame = null
         if (drawingState.layoutFrame) cancelAnimationFrame(drawingState.layoutFrame)
         drawingState.layoutFrame = null
+        replaceDrawingHistory("")
     }
 
     const startDrawing = (event) => {
@@ -350,7 +381,9 @@ const EditorDrawing = (() => {
         event?.preventDefault()
         drawingState.isDrawing = false
         drawingState.pointerId = null
-        onDrawingChange(getDrawingData())
+        const snapshot = getDrawingData()
+        pushDrawingHistory(snapshot)
+        onDrawingChange(snapshot)
     }
 
     return {
@@ -359,6 +392,7 @@ const EditorDrawing = (() => {
         setupControls,
         refreshDrawingSurface,
         getDrawingData,
+        getDrawingSnapshot,
         setDrawingData,
         toggleDrawingMode,
         cleanup
