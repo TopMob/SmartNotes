@@ -275,6 +275,16 @@
                 <input id="note-title" type="text" placeholder="Заголовок" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
+                <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования">
+                    <label class="drawing-control">
+                        <span class="drawing-control-label" data-lang="drawing_color">Цвет</span>
+                        <input id="drawing-color" type="color" class="input-area drawing-input" aria-label="Цвет">
+                    </label>
+                    <label class="drawing-control">
+                        <span class="drawing-control-label" data-lang="drawing_size">Размер</span>
+                        <input id="drawing-size" type="range" class="drawing-range" min="1" max="16" value="3" aria-label="Размер">
+                    </label>
+                </div>
 
                 <div class="editor-page-controls" aria-label="Страницы" data-lang-aria="editor_pages">
                     <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
@@ -291,18 +301,6 @@
 
                 <div class="note-content-wrapper">
                     <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
-                    <div id="inline-sketch-overlay" class="inline-sketch-overlay" aria-label="Рисование" data-lang-aria="sketch_inline_aria">
-                        <div class="inline-sketch-toolbar">
-                            <span data-lang="sketch_inline_title">Рисование</span>
-                            <div class="inline-sketch-actions">
-                                <button type="button" class="btn-secondary" data-action="inline-sketch-undo" data-lang="undo">Отменить</button>
-                                <button type="button" class="btn-secondary" data-action="inline-sketch-clear" data-lang="clear">Очистить</button>
-                                <button type="button" class="btn-secondary" data-action="inline-sketch-cancel" data-lang="cancel">Отмена</button>
-                                <button type="button" class="btn-primary" data-action="inline-sketch-apply" data-lang="insert">Вставить</button>
-                            </div>
-                        </div>
-                        <canvas id="inline-sketch-canvas" class="inline-sketch-canvas"></canvas>
-                    </div>
                 </div>
 
                 <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
@@ -389,10 +387,14 @@
                 </button>
             </header>
             <div class="modal-body">
-                <p class="muted" id="share-note-summary" data-lang="share_desc">Готовый текст заметки для отправки</p>
-                <textarea id="share-content" rows="6" class="input-area" readonly></textarea>
+                <p class="muted" id="share-note-summary" data-lang="share_link_desc">Ссылка для просмотра</p>
+                <p class="muted" id="share-link-status" data-lang="share_link_status">Ссылка не создана</p>
+                <div id="share-link-block" class="collab-link-block hidden">
+                    <input id="share-link" type="text" class="input-area" readonly value="">
+                </div>
                 <div class="row-right">
-                    <button type="button" class="btn-secondary" data-action="copy-share-text" data-lang="copy">Копировать</button>
+                    <button type="button" class="btn-secondary" data-action="share-enable" data-lang="share_link_enable">Создать ссылку</button>
+                    <button type="button" class="btn-secondary" data-action="copy-share-link" data-lang="copy" disabled>Копировать</button>
                     <button type="button" class="btn-primary" data-action="share-note-native" data-lang="share_native">Поделиться</button>
                 </div>
             </div>
@@ -581,6 +583,7 @@
                 <div id="survey-question" class="survey-question" data-lang="survey_question">Вопрос</div>
                 <textarea id="survey-answer" rows="4" class="input-area" aria-label="Ответ" data-lang-aria="poll_answer_label"></textarea>
                 <div id="survey-decision" class="survey-decision hidden">
+                    <p id="survey-decision-title" data-lang="survey_continue_prompt">Хотите продолжить опрос?</p>
                     <button type="button" class="btn-secondary" data-action="survey-finish" data-lang="survey_finish">Завершить</button>
                     <button type="button" class="btn-primary" data-action="survey-continue" data-lang="survey_continue">Продолжить</button>
                 </div>

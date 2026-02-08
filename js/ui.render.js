@@ -328,23 +328,43 @@ Object.assign(UI, {
         if (!payload.shareId) return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
         ShareService.fetchSharedNote(payload.shareId).then(async (shared) => {
             if (!shared || !shared.note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
+            const desiredAccess = payload.mode === "collab" ? "edit" : "view"
+            let accessLevel = ShareService.resolveAccess(shared, user)
+            if (!accessLevel) {
+                accessLevel = await ShareService.grantAccess(shared.id, user.uid, desiredAccess)
+            }
+            if (!accessLevel) return this.showShareFallback(this.getText("share_access_denied", "Access denied"))
+            if (payload.mode === "collab" && accessLevel !== "edit") {
+                return this.showShareFallback(this.getText("share_access_denied", "Access denied"))
+            }
+            const ownerUid = shared.ownerUid || shared.ownerId || shared.note?.ownerUid || null
             if (payload.mode === "collab") {
                 const existing = notes.find(n => n.collabId === payload.shareId)
                 if (existing) {
+                    const updated = { ...existing, ownerUid: ownerUid || existing.ownerUid, accessLevel }
+                    await db.collection("users").doc(user.uid).collection("notes").doc(updated.id).set(updated, { merge: true })
                     this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
-                    Editor.openFromList(existing)
+                    Editor.openFromList(updated)
                     return
                 }
                 const base = NoteIO.normalizeNote(shared.note)
                 const id = notes.some(n => n.id === payload.shareId) ? Utils.generateId() : payload.shareId
-                const collabNote = { ...base, id, collabId: payload.shareId, shareId: null }
+                const collabNote = { ...base, id, collabId: payload.shareId, shareId: null, ownerUid: ownerUid || base.ownerUid, accessLevel }
                 await db.collection("users").doc(user.uid).collection("notes").doc(id).set(collabNote, { merge: true })
                 this.showToast(this.getText("collab_enabled", "Collaboration enabled"))
                 Editor.openFromList(collabNote)
                 return
             }
             const base = NoteIO.normalizeNote(shared.note)
-            const sharedNote = { ...base, id: Utils.generateId(), shareId: null, collabId: null }
+            const existingShare = notes.find(n => n.shareId === payload.shareId)
+            if (existingShare) {
+                const updated = { ...existingShare, ownerUid: ownerUid || existingShare.ownerUid, accessLevel }
+                await db.collection("users").doc(user.uid).collection("notes").doc(updated.id).set(updated, { merge: true })
+                if (accessLevel === "view") this.showToast(this.getText("share_view_only", "View only"))
+                Editor.openFromList(updated)
+                return
+            }
+            const sharedNote = { ...base, id: Utils.generateId(), shareId: payload.shareId, collabId: null, ownerUid: ownerUid || base.ownerUid, accessLevel }
             await db.collection("users").doc(user.uid).collection("notes").doc(sharedNote.id).set(sharedNote, { merge: true })
             this.showToast(this.getText("share_imported", "Note added to your list"))
             Editor.openFromList(sharedNote)
@@ -530,23 +550,25 @@ Object.assign(UI, {
         const { user, config } = StateStore.read()
         const answers = this.surveyState?.answers || {}
         const questions = this.getSurveyQuestions()
-        const baseRef = db.collection("feedback").doc("user").collection("survey")
+        const payloadAnswers = questions
+            .map(question => ({
+                id: question.id,
+                question: question.text,
+                answer: answers[question.id] || ""
+            }))
+            .filter(item => item.answer)
         try {
-            for (const question of questions) {
-                const response = answers[question.id]
-                if (!response) continue
-                await baseRef.doc(`${question.id} Question`).collection("answers").add({
-                    uid: user.uid,
-                    email: user.email || "",
-                    displayName: user.displayName || "",
-                    question: question.text,
-                    answer: response,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    userAgent: navigator.userAgent || "",
-                    appVersion: "web",
-                    language: config.lang
-                })
-            }
+            await db.collection("feedback").add({
+                uid: user.uid,
+                email: user.email || "",
+                displayName: user.displayName || "",
+                answers: payloadAnswers,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                userAgent: navigator.userAgent || "",
+                appVersion: "web",
+                language: config.lang,
+                type: "survey"
+            })
             this.showToast(this.getText("poll_thanks", "Thanks!"))
             this.closeModal("poll-modal")
         } catch {
@@ -561,20 +583,38 @@ Object.assign(UI, {
         return StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
     },
 
-    buildShareText(note) {
-        const title = note.title?.trim() || this.getText("untitled_note", "Untitled")
-        const content = Utils.stripHtml(note.content || "").trim()
-        return content ? `${title}\n\n${content}` : title
+    canEditSharedNote(note) {
+        const user = StateStore.read().user
+        if (!note || !user) return false
+        if (!note.ownerUid || note.ownerUid === user.uid) return true
+        return note.accessLevel === "edit"
     },
 
     openShareModal(noteId) {
         const note = this.resolveNoteById(noteId)
         if (!note) return
+        if (!this.canEditSharedNote(note)) {
+            this.showToast(this.getText("share_access_denied", "Access denied"))
+            return
+        }
         this.currentShareNoteId = note.id
         const summary = document.getElementById("share-note-summary")
-        const content = document.getElementById("share-content")
+        const linkStatus = document.getElementById("share-link-status")
+        const linkInput = document.getElementById("share-link")
+        const linkBlock = document.getElementById("share-link-block")
+        const copyButton = document.querySelector('[data-action="copy-share-link"]')
         if (summary) summary.textContent = note.title?.trim() || this.getText("untitled_note", "Untitled")
-        if (content) content.value = this.buildShareText(note)
+        if (note.shareId) {
+            if (linkStatus) linkStatus.textContent = this.getText("share_link_ready", "Link ready")
+            if (linkInput) linkInput.value = ShareService.buildLink("share", note.shareId)
+            if (linkBlock) linkBlock.classList.remove("hidden")
+            if (copyButton) copyButton.disabled = false
+        } else {
+            if (linkStatus) linkStatus.textContent = this.getText("share_link_status", "Link not created")
+            if (linkInput) linkInput.value = ""
+            if (linkBlock) linkBlock.classList.add("hidden")
+            if (copyButton) copyButton.disabled = true
+        }
         const shareButton = document.querySelector('[data-action="share-note-native"]')
         if (shareButton) shareButton.classList.toggle("hidden", !navigator.share)
         this.openModal("share-modal")
@@ -588,23 +628,75 @@ Object.assign(UI, {
             return
         }
         try {
+            let shareId = note.shareId
+            if (!shareId) {
+                shareId = await ShareService.ensureShareToken(note, "share")
+                if (!shareId) {
+                    this.showToast(this.getText("share_failed", "Unable to share"))
+                    return
+                }
+                const ownerUid = StateStore.read().user.uid
+                const nextNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, shareId, ownerUid: n.ownerUid || ownerUid, accessLevel: "edit" } : n)
+                StateActions.setNotes(nextNotes)
+                if (StateStore.read().currentNote?.id === note.id) {
+                    StateActions.setCurrentNote({ ...note, shareId, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
+                }
+                this.openShareModal(note.id)
+            }
+            const link = ShareService.buildLink("share", shareId)
             await navigator.share({
                 title: note.title?.trim() || this.getText("untitled_note", "Untitled"),
-                text: this.buildShareText(note)
+                text: link,
+                url: link
             })
         } catch {
             this.showToast(this.getText("share_failed", "Unable to share"))
         }
     },
 
-    async copyShareText() {
-        const content = document.getElementById("share-content")
-        if (!content || !navigator.clipboard) {
-            this.showToast(this.getText("copy_failed", "Unable to copy"))
+    async enableShareLink() {
+        const note = this.resolveNoteById(this.currentShareNoteId)
+        if (!note) return
+        if (!this.canEditSharedNote(note)) {
+            this.showToast(this.getText("share_access_denied", "Access denied"))
+            return
+        }
+        if (!db || !StateStore.read().user) {
+            this.showToast(this.getText("share_failed", "Unable to share"))
             return
         }
         try {
-            await navigator.clipboard.writeText(content.value || "")
+            const token = await ShareService.ensureShareToken(note, "share")
+            if (!token) {
+                this.showToast(this.getText("share_failed", "Unable to share"))
+                return
+            }
+            const ownerUid = StateStore.read().user.uid
+            const nextNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, shareId: token, ownerUid: n.ownerUid || ownerUid, accessLevel: "edit" } : n)
+            StateActions.setNotes(nextNotes)
+            if (StateStore.read().currentNote?.id === note.id) {
+                StateActions.setCurrentNote({ ...note, shareId: token, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
+            }
+            await ShareService.updateSharedNote(token, { ...note, shareId: token, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
+            this.openShareModal(note.id)
+            this.showToast(this.getText("share_link_ready", "Link ready"))
+        } catch {
+            this.showToast(this.getText("share_failed", "Unable to share"))
+        }
+    },
+
+    async copyShareLink() {
+        const linkInput = document.getElementById("share-link")
+        if (!linkInput || !navigator.clipboard) {
+            this.showToast(this.getText("copy_failed", "Unable to copy"))
+            return
+        }
+        if (!linkInput.value) {
+            this.showToast(this.getText("share_link_status", "Link not created"))
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(linkInput.value || "")
             this.showToast(this.getText("copy_success", "Copied"))
         } catch {
             this.showToast(this.getText("copy_failed", "Unable to copy"))
@@ -614,6 +706,10 @@ Object.assign(UI, {
     openCollabModal(noteId) {
         const note = this.resolveNoteById(noteId)
         if (!note) return
+        if (!this.canEditSharedNote(note)) {
+            this.showToast(this.getText("share_access_denied", "Access denied"))
+            return
+        }
         this.currentCollabNoteId = note.id
         const status = document.getElementById("collab-status")
         const linkInput = document.getElementById("collab-link")
@@ -636,6 +732,10 @@ Object.assign(UI, {
     async enableCollaboration() {
         const note = this.resolveNoteById(this.currentCollabNoteId)
         if (!note) return
+        if (!this.canEditSharedNote(note)) {
+            this.showToast(this.getText("share_access_denied", "Access denied"))
+            return
+        }
         if (!db || !StateStore.read().user) {
             this.showToast(this.getText("collab_failed", "Unable to enable collaboration"))
             return
@@ -646,10 +746,11 @@ Object.assign(UI, {
                 this.showToast(this.getText("collab_failed", "Unable to enable collaboration"))
                 return
             }
-            const nextNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, collabId: token } : n)
+            const ownerUid = StateStore.read().user.uid
+            const nextNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, collabId: token, ownerUid: n.ownerUid || ownerUid, accessLevel: "edit" } : n)
             StateActions.setNotes(nextNotes)
             if (StateStore.read().currentNote?.id === note.id) {
-                StateActions.setCurrentNote({ ...note, collabId: token })
+                StateActions.setCurrentNote({ ...note, collabId: token, ownerUid: note.ownerUid || ownerUid, accessLevel: "edit" })
             }
             this.openCollabModal(note.id)
             this.showToast(this.getText("collab_enabled", "Collaboration enabled"))

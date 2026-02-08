@@ -693,6 +693,7 @@ const AppLifecycle = {
             .orderBy("order", "asc")
             .onSnapshot(snap => {
                 let notes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                notes = notes.map(note => note.ownerUid ? note : { ...note, ownerUid: user.uid })
                 notes = applyStoredFavorites(notes)
                 StateStore.update("notes", notes)
                 syncFavoritesStorage(notes)
