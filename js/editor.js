@@ -14,6 +14,7 @@ const Editor = (() => {
     let titleTouched = false
     let autoSaveSnapshot = null
     let collabUnsub = null
+    let isReadOnly = false
     let sketchState = {
         ctx: null,
         isDrawing: false,
@@ -26,6 +27,57 @@ const Editor = (() => {
         SNAPSHOT_DELAY: 300,
         MIN_IMG_WIDTH: 100,
         MAX_IMG_WIDTH: 860
+    }
+
+    const resolveAccessLevel = (note) => {
+        const user = StateStore.read().user
+        if (!note) return "edit"
+        if (user && note.ownerUid && note.ownerUid === user.uid) return "edit"
+        if (note.accessLevel === "edit") return "edit"
+        if (note.accessLevel === "view") return "view"
+        if (user && note.ownerUid && note.ownerUid !== user.uid) return "view"
+        return "edit"
+    }
+
+    const applyAccessState = (note) => {
+        const level = resolveAccessLevel(note)
+        const user = StateStore.read().user
+        const ownerUid = note.ownerUid || (user ? user.uid : null)
+        const next = { ...note, ownerUid, accessLevel: level }
+        StateStore.update("currentNote", next)
+        setReadOnly(level === "view")
+        return next
+    }
+
+    const setReadOnly = (flag) => {
+        isReadOnly = !!flag
+        if (els.title) els.title.readOnly = isReadOnly
+        if (els.tagsInput) els.tagsInput.disabled = isReadOnly
+        const controls = document.querySelectorAll("[data-action='editor-save'],[data-action='editor-undo'],[data-action='editor-redo'],[data-action='editor-lock'],[data-action='editor-add-page'],[data-action='editor-voice']")
+        controls.forEach(btn => {
+            btn.disabled = isReadOnly
+            btn.classList.toggle("is-disabled", isReadOnly)
+        })
+        if (els.toolbar) {
+            els.toolbar.querySelectorAll(".tool-btn").forEach(btn => {
+                btn.disabled = isReadOnly
+                btn.classList.toggle("is-disabled", isReadOnly)
+            })
+        }
+        if (els.content) {
+            getPages().forEach(page => {
+                page.contentEditable = isReadOnly ? "false" : "true"
+            })
+        }
+    }
+
+    const canEditCurrentNote = () => {
+        if (isReadOnly) return false
+        const current = StateStore.read().currentNote
+        const user = StateStore.read().user
+        if (!current || !user) return false
+        if (current.ownerUid && current.ownerUid !== user.uid && current.accessLevel === "view") return false
+        return true
     }
 
     const init = () => {
@@ -338,7 +390,7 @@ const Editor = (() => {
     const createPageElement = (html = "") => {
         const page = document.createElement("div")
         page.className = "note-page"
-        page.contentEditable = "true"
+        page.contentEditable = isReadOnly ? "false" : "true"
         page.setAttribute("role", "textbox")
         page.setAttribute("aria-multiline", "true")
         const label = els.content?.getAttribute("aria-label")
@@ -375,7 +427,7 @@ const Editor = (() => {
             els.content.appendChild(createPageElement(html))
         } else {
             pages.forEach(page => {
-                page.contentEditable = "true"
+                page.contentEditable = isReadOnly ? "false" : "true"
                 page.setAttribute("role", "textbox")
                 page.setAttribute("aria-multiline", "true")
             })
@@ -394,6 +446,7 @@ const Editor = (() => {
     }
 
     const addPage = () => {
+        if (isReadOnly) return
         if (!els.content) return
         const pages = getPages()
         const page = createPageElement("")
@@ -499,6 +552,10 @@ const Editor = (() => {
     }
 
     const toggleRecording = () => {
+        if (isReadOnly) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
         const recording = StateStore.read().recording
         if (recording) stopRecording()
         else startRecording()
@@ -622,16 +679,18 @@ const Editor = (() => {
         const current = StateStore.read()
         const folderId = current.view === "folder" ? current.activeFolderId : null
         
-        const n = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
+        const base = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
             id: Utils.generateId(),
             folderId,
             createdAt: Utils.serverTimestamp(),
             order: Date.now()
         })
 
-        StateStore.update("currentNote", JSON.parse(JSON.stringify(n)))
+        const user = StateStore.read().user
+        const withOwner = { ...base, ownerUid: base.ownerUid || (user ? user.uid : null) }
+        const prepared = applyAccessState(JSON.parse(JSON.stringify(withOwner)))
         pageIndex = 0
-        titleTouched = !!n.title
+        titleTouched = !!prepared.title
         
         history = []
         future = []
@@ -644,32 +703,43 @@ const Editor = (() => {
         setTimeout(() => focusActivePage(), 50)
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
-        setupCollabSync(n)
+        setupSharedSync(prepared)
     }
 
-    const setupCollabSync = (note) => {
+    const setupSharedSync = (note) => {
         if (collabUnsub) {
             collabUnsub()
             collabUnsub = null
         }
-        if (!db || !note?.collabId) return
-        const ref = db.collection("sharedNotes").doc(note.collabId)
+        const sharedId = note?.collabId || note?.shareId
+        if (!db || !sharedId) return
+        const ref = db.collection("sharedNotes").doc(sharedId)
         collabUnsub = ref.onSnapshot(snap => {
             if (!snap.exists) return
             const shared = snap.data()
             if (!shared?.note) return
+            const user = StateStore.read().user
+            if (!user) return
+            const accessLevel = ShareService.resolveAccess(shared, user)
+            if (!accessLevel) return
             if (StateStore.read().editorDirty) return
-            const incoming = NoteIO.normalizeNote({ ...shared.note, id: note.id, collabId: note.collabId, shareId: null })
+            const incoming = NoteIO.normalizeNote({
+                ...shared.note,
+                id: note.id,
+                collabId: note.collabId,
+                shareId: note.shareId,
+                ownerUid: shared.ownerUid || shared.ownerId || note.ownerUid || shared.note?.ownerUid || null,
+                accessLevel
+            })
             const current = StateStore.read().currentNote
             if (!current) return
             if (incoming.title === current.title && incoming.content === current.content && JSON.stringify(incoming.tags) === JSON.stringify(current.tags)) return
-            StateStore.update("currentNote", { ...current, ...incoming })
+            const updatedNote = { ...current, ...incoming }
+            StateStore.update("currentNote", updatedNote)
             const updatedNotes = StateStore.read().notes.map(n => n.id === note.id ? { ...n, ...incoming } : n)
             StateActions.setNotes(updatedNotes)
-            const user = StateStore.read().user
-            if (user) {
-                db.collection("users").doc(user.uid).collection("notes").doc(note.id).set(incoming, { merge: true })
-            }
+            db.collection("users").doc(user.uid).collection("notes").doc(note.id).set(incoming, { merge: true })
+            applyAccessState(updatedNote)
             renderState()
         })
     }
@@ -702,6 +772,7 @@ const Editor = (() => {
             collabUnsub()
             collabUnsub = null
         }
+        setReadOnly(false)
         if (observer) observer.disconnect()
     }
 
@@ -946,6 +1017,10 @@ const Editor = (() => {
     }
 
     const toggleLock = async () => {
+        if (isReadOnly) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
         const note = StateStore.read().currentNote
         if (!note) return
         if (note.lock?.hash) {
@@ -1034,6 +1109,10 @@ const Editor = (() => {
     }
 
     const addTag = (tag) => {
+        if (isReadOnly) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
         const t = String(tag || "").trim().replace(/^#+/, "")
         if (!t) return
         const n = StateStore.read().currentNote
@@ -1047,6 +1126,10 @@ const Editor = (() => {
     }
 
     const removeTag = (tag) => {
+        if (isReadOnly) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
         const n = StateStore.read().currentNote
         if (!n) return
         const tags = (n.tags || []).filter(x => x.toLowerCase() !== tag.toLowerCase())
@@ -1366,6 +1449,10 @@ const Editor = (() => {
     }
 
     const deleteSelectedMedia = () => {
+        if (isReadOnly) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
         selectedMedia?.remove()
         deselectMedia()
     }
@@ -1375,6 +1462,10 @@ const Editor = (() => {
     const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
+        if (!canEditCurrentNote()) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
 
         const currentNote = StateStore.read().currentNote
         if (!currentNote) return
@@ -1385,6 +1476,8 @@ const Editor = (() => {
             content: snapshot.content,
             tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : []
         }
+
+        if (!n.ownerUid) n.ownerUid = user.uid
 
         if (!titleTouched && !String(n.title || "").trim()) {
             n.title = buildAutoTitle(n.content || "")
@@ -1408,7 +1501,7 @@ const Editor = (() => {
         
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-            if (n.collabId) {
+            if (n.collabId && canEditCurrentNote()) {
                 await ShareService.updateSharedNote(n.collabId, n)
             }
             StateStore.update("editorDirty", false)

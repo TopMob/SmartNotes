@@ -468,6 +468,12 @@ const UI = {
             case "copy-share-text":
                 this.copyShareText()
                 break
+            case "share-enable":
+                this.enableShareLink()
+                break
+            case "copy-share-link":
+                this.copyShareLink()
+                break
             case "collab-enable":
                 this.enableCollaboration()
                 break
