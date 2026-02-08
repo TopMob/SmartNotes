@@ -17,17 +17,15 @@ const EditorDrawing = (() => {
         resizeFrame: null
     }
     let elements = {}
-    let getPages = () => []
-    let getActivePage = () => null
     let buildToolbar = () => {}
     let updateEditableState = () => {}
+    let getDrawingContainer = () => null
 
-    const configure = ({ elements: nextElements, getPages: nextGetPages, getActivePage: nextGetActivePage, buildToolbar: nextBuildToolbar, updateEditableState: nextUpdateEditableState } = {}) => {
+    const configure = ({ elements: nextElements, buildToolbar: nextBuildToolbar, updateEditableState: nextUpdateEditableState } = {}) => {
         elements = nextElements || {}
-        if (typeof nextGetPages === "function") getPages = nextGetPages
-        if (typeof nextGetActivePage === "function") getActivePage = nextGetActivePage
         if (typeof nextBuildToolbar === "function") buildToolbar = nextBuildToolbar
         if (typeof nextUpdateEditableState === "function") updateEditableState = nextUpdateEditableState
+        getDrawingContainer = () => elements.contentWrapper || null
     }
 
     const setupControls = () => {
@@ -46,7 +44,13 @@ const EditorDrawing = (() => {
         }
         if (elements.drawingControls) {
             elements.drawingControls.querySelectorAll("[data-drawing-tool]").forEach(btn => {
-                btn.addEventListener("click", () => setDrawingTool(btn.dataset.drawingTool || "pen"))
+                const tool = btn.dataset.drawingTool || "pen"
+                if (tool === "pen") {
+                    btn.addEventListener("click", () => setDrawingTool("pen"))
+                } else {
+                    btn.disabled = true
+                    btn.setAttribute("aria-disabled", "true")
+                }
             })
             elements.drawingControls.querySelectorAll("[data-drawing-color]").forEach(btn => {
                 btn.addEventListener("click", () => setDrawingColor(btn.dataset.drawingColor || "#111111"))
@@ -61,12 +65,6 @@ const EditorDrawing = (() => {
     }
 
     const getDrawingToolSettings = () => {
-        if (drawingState.tool === "eraser") {
-            return { composite: "destination-out", opacity: 1, color: "#000000" }
-        }
-        if (drawingState.tool === "marker") {
-            return { composite: "source-over", opacity: 0.4, color: drawingState.color }
-        }
         return { composite: "source-over", opacity: 1, color: drawingState.color }
     }
 
@@ -74,18 +72,11 @@ const EditorDrawing = (() => {
         const toolButtons = elements.drawingControls?.querySelectorAll("[data-drawing-tool]") || []
         toolButtons.forEach(btn => {
             btn.classList.toggle("is-active", btn.dataset.drawingTool === drawingState.tool)
+            if (btn.dataset.drawingTool !== "pen") {
+                btn.disabled = true
+                btn.setAttribute("aria-disabled", "true")
+            }
         })
-        const isEraser = drawingState.tool === "eraser"
-        if (elements.drawingColor) elements.drawingColor.disabled = isEraser
-        const colorButtons = elements.drawingControls?.querySelectorAll("[data-drawing-color]") || []
-        colorButtons.forEach(btn => {
-            btn.disabled = isEraser
-        })
-        const colorPicker = elements.drawingControls?.querySelector("[data-color-picker]")
-        if (colorPicker) {
-            colorPicker.classList.toggle("is-disabled", isEraser)
-            colorPicker.setAttribute("aria-disabled", String(isEraser))
-        }
     }
 
     const updateDrawingColorButtons = () => {
@@ -98,8 +89,7 @@ const EditorDrawing = (() => {
     }
 
     const setDrawingTool = (tool) => {
-        const nextTool = tool === "marker" || tool === "eraser" ? tool : "pen"
-        drawingState.tool = nextTool
+        drawingState.tool = tool === "pen" ? "pen" : "pen"
         updateDrawingToolButtons()
     }
 
@@ -171,19 +161,19 @@ const EditorDrawing = (() => {
         })
     }
 
-    const observeDrawingPage = (page) => {
+    const observeDrawingContainer = (container) => {
         if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
         drawingState.resizeObserver = null
-        if (!page || typeof ResizeObserver === "undefined") return
+        if (!container || typeof ResizeObserver === "undefined") return
         drawingState.resizeObserver = new ResizeObserver(() => scheduleDrawingRefresh())
-        drawingState.resizeObserver.observe(page)
+        drawingState.resizeObserver.observe(container)
         if (elements.content) drawingState.resizeObserver.observe(elements.content)
     }
 
     const ensureDrawingLayer = () => {
-        const page = getActivePage()
-        if (!page) return null
-        let layer = page.querySelector(".note-drawing-layer")
+        const container = getDrawingContainer()
+        if (!container) return null
+        let layer = container.querySelector(".note-drawing-layer")
         let image = layer ? layer.querySelector(".note-drawing-image") : null
         if (!layer) {
             layer = document.createElement("div")
@@ -194,10 +184,10 @@ const EditorDrawing = (() => {
             image.alt = ""
             image.draggable = false
             layer.appendChild(image)
-            page.prepend(layer)
+            container.prepend(layer)
         }
         drawingState.image = image
-        return { page, layer, image }
+        return { container, layer, image }
     }
 
     const ensureDrawingCanvas = () => {
@@ -217,11 +207,11 @@ const EditorDrawing = (() => {
         return drawingState.canvas
     }
 
-    const updateDrawingCanvasSize = (page) => {
-        if (!drawingState.canvas || !drawingState.ctx || !page) return
-        const rect = page.getBoundingClientRect()
+    const updateDrawingCanvasSize = (container) => {
+        if (!drawingState.canvas || !drawingState.ctx || !container) return
+        const rect = container.getBoundingClientRect()
         const cssWidth = Math.max(1, Math.floor(rect.width))
-        const cssHeight = Math.max(1, Math.floor(Math.max(rect.height, page.scrollHeight)))
+        const cssHeight = Math.max(1, Math.floor(Math.max(rect.height, container.scrollHeight)))
         const scale = window.devicePixelRatio || 1
         const width = Math.max(1, Math.floor(cssWidth * scale))
         const height = Math.max(1, Math.floor(cssHeight * scale))
@@ -274,9 +264,9 @@ const EditorDrawing = (() => {
     }
 
     const removeDrawingLayerIfEmpty = () => {
-        const page = getActivePage()
-        if (!page) return
-        const layer = page.querySelector(".note-drawing-layer")
+        const container = getDrawingContainer()
+        if (!container) return
+        const layer = container.querySelector(".note-drawing-layer")
         if (!layer) return
         const image = layer.querySelector(".note-drawing-image")
         const hasImage = !!image?.getAttribute("src")
@@ -299,10 +289,10 @@ const EditorDrawing = (() => {
         const data = ensureDrawingLayer()
         if (!data) return
         const canvas = ensureDrawingCanvas()
-        if (!canvas.parentElement) data.page.appendChild(canvas)
-        updateDrawingCanvasSize(data.page)
+        if (!canvas.parentElement) data.container.appendChild(canvas)
+        updateDrawingCanvasSize(data.container)
         syncCanvasFromImage()
-        observeDrawingPage(data.page)
+        observeDrawingContainer(data.container)
     }
 
     const toggleDrawingMode = () => {
