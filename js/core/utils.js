@@ -41,12 +41,36 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio"])
-        const allowedClasses = new Set(["media-wrapper", "media-resize-handle", "align-left", "align-right", "audio-wrapper", "audio-player", "audio-icon", "audio-label", "note-page"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "button", "input"])
+        const allowedClasses = new Set([
+            "media-wrapper",
+            "media-resize-handle",
+            "align-left",
+            "align-right",
+            "audio-wrapper",
+            "audio-player",
+            "audio-icon",
+            "audio-label",
+            "audio-block",
+            "audio-controls",
+            "audio-play",
+            "audio-play-icon",
+            "audio-timeline",
+            "audio-progress",
+            "audio-time",
+            "audio-current",
+            "audio-duration",
+            "audio-volume",
+            "audio-title",
+            "playing",
+            "note-page"
+        ])
         const allowAttrs = {
             a: new Set(["href"]),
             img: new Set(["src", "alt"]),
-            audio: new Set(["src", "controls", "preload"])
+            audio: new Set(["src", "controls", "preload"]),
+            button: new Set(["type", "aria-label"]),
+            input: new Set(["type", "min", "max", "step", "value", "aria-label"])
         }
         const wrapper = document.createElement("div")
         wrapper.innerHTML = String(html || "")
