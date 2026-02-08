@@ -232,13 +232,6 @@ const ShareService = {
         return null
     },
 
-    async createLink(note, mode) {
-        if (!db || !note || !StateStore.read().user) return ""
-        const token = await this.ensureShareToken(note, mode)
-        if (!token) return ""
-        return this.buildLink(mode, token)
-    },
-
     resolveAccess(shared, user) {
         if (!shared || !user) return null
         const ownerUid = shared.ownerUid || shared.ownerId || shared.note?.ownerUid || null
