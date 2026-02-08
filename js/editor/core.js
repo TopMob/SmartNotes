@@ -195,43 +195,14 @@ const Editor = (() => {
         .replace(/\s+/g, " ")
         .trim()
 
-    const levenshteinDistance = (first, second) => {
-        if (first === second) return 0
-        const a = String(first || "")
-        const b = String(second || "")
-        const n = a.length
-        const m = b.length
-        if (!n) return m
-        if (!m) return n
-        const v0 = new Int16Array(m + 1)
-        const v1 = new Int16Array(m + 1)
-        for (let i = 0; i <= m; i += 1) v0[i] = i
-        for (let i = 0; i < n; i += 1) {
-            v1[0] = i + 1
-            for (let j = 0; j < m; j += 1) {
-                const cost = a[i] === b[j] ? 0 : 1
-                v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost)
-            }
-            v0.set(v1)
-        }
-        return v0[m]
-    }
-
-    const isSimilarWord = (word, target) => {
-        if (!word || !target) return false
-        if (word === target) return true
-        if (word.includes(target) || target.includes(word)) return true
-        const limit = target.length > 7 ? 3 : 2
-        return levenshteinDistance(word, target) <= limit
-    }
-
     const hasEasterEggPhrase = (text) => {
         const tokens = normalizeEasterEggText(text).split(" ").filter(Boolean)
         if (tokens.length < 2) return false
-        const firstTarget = "данил"
-        const secondTarget = "колбасенко"
-        for (let i = 0; i < tokens.length - 1; i += 1) {
-            if (isSimilarWord(tokens[i], firstTarget) && isSimilarWord(tokens[i + 1], secondTarget)) return true
+        const phraseTokens = ["данил", "колбасенко"]
+        for (let i = 0; i <= tokens.length - phraseTokens.length; i += 1) {
+            const matchesFirst = tokens[i] === phraseTokens[0]
+            const matchesSecond = tokens[i + 1] === phraseTokens[1]
+            if (matchesFirst && matchesSecond) return true
         }
         return false
     }
