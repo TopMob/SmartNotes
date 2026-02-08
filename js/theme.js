@@ -443,6 +443,11 @@ export const ThemeManager = {
         if (primary) primary.value = this.normalizeHex(p)
         if (bgInput) bgInput.value = this.normalizeHex(bg)
         if (text) text.value = this.normalizeHex(t)
+        if (window.ColorPalette) {
+            if (primary) window.ColorPalette.syncInput(primary)
+            if (bgInput) window.ColorPalette.syncInput(bgInput)
+            if (text) window.ColorPalette.syncInput(text)
+        }
     },
     revertToLastSaved() {
         const saved = this.getSavedSettings()

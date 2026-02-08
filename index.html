@@ -22,7 +22,7 @@
 
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/layout.css">
-    <link rel="stylesheet" href="css/editor.css">
+    <link rel="stylesheet" href="css/editor/index.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/responsive.css">
     <link rel="stylesheet" href="css/presets/active.css">
@@ -36,6 +36,7 @@
 
     <script src="js/state.js" defer></script>
     <script src="js/stateActions.js" defer></script>
+    <script src="js/colorPalette.js" defer></script>
     <script src="js/lang.js" type="module"></script>
     <script src="js/theme.js" type="module"></script>
     <script src="js/core.js" type="module"></script>
@@ -46,7 +47,8 @@
     <script src="js/ui.settings.js" defer></script>
     <script src="js/ui.render.js" defer></script>
     <script src="js/notes.js" defer></script>
-    <script src="js/editor.js" defer></script>
+    <script src="js/editor/drawing.js" defer></script>
+    <script src="js/editor/core.js" defer></script>
 </head>
 
 <body>
@@ -283,7 +285,29 @@
                     </div>
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_color">Цвет</span>
-                        <input id="drawing-color" type="color" class="input-area drawing-input" aria-label="Цвет">
+                        <div class="color-picker" data-color-picker>
+                            <input id="drawing-color" type="text" class="color-picker-input" data-color-input value="#111111" aria-label="Цвет" autocomplete="off">
+                            <button type="button" class="color-picker-trigger" data-color-trigger aria-label="Цвет">
+                                <span class="color-picker-swatch" data-color-swatch></span>
+                                <span class="color-picker-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" focusable="false">
+                                        <path d="M12 3c4.97 0 9 3.13 9 7 0 2.2-1.42 4.19-3.71 5.48-.79.44-1.28 1.28-1.28 2.18v.84c0 .83-.67 1.5-1.5 1.5h-2.5c-.83 0-1.5-.67-1.5-1.5v-1.3H9c-3.87 0-7-2.69-7-6s3.13-7 10-7zm-4 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7-2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm2 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"></path>
+                                    </svg>
+                                </span>
+                            </button>
+                            <div class="color-picker-panel" data-color-panel role="dialog" aria-label="Палитра">
+                                <div class="color-picker-sv" data-color-sv>
+                                    <span class="color-picker-sv-handle" data-color-sv-handle></span>
+                                </div>
+                                <div class="color-picker-hue" data-color-hue>
+                                    <span class="color-picker-hue-handle" data-color-hue-handle></span>
+                                </div>
+                                <div class="color-picker-hex-row">
+                                    <span class="color-picker-hex-label">#</span>
+                                    <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
                     </label>
                     <div class="drawing-color-presets" role="group" aria-label="Палитра" data-lang-aria="drawing_presets">
                         <button type="button" class="drawing-color-swatch is-active" data-drawing-color="#111111" style="--swatch-color:#111111;" aria-label="Черный"></button>
@@ -435,7 +459,29 @@
             <header class="modal-header modal-header-tight">
                 <div class="row-left">
                     <h2 class="modal-title" data-lang="photo_editor">Редактор фото</h2>
-                    <input type="color" id="photo-color-picker" value="#00f2ff" class="input-color-custom input-color-round" aria-label="Цвет кисти" data-lang-aria="photo_color">
+                    <div class="color-picker" data-color-picker>
+                        <input type="text" id="photo-color-picker" value="#00f2ff" class="color-picker-input" data-color-input aria-label="Цвет кисти" data-lang-aria="photo_color" autocomplete="off">
+                        <button type="button" class="color-picker-trigger" data-color-trigger aria-label="Цвет кисти">
+                            <span class="color-picker-swatch" data-color-swatch></span>
+                            <span class="color-picker-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false">
+                                    <path d="M12 3c4.97 0 9 3.13 9 7 0 2.2-1.42 4.19-3.71 5.48-.79.44-1.28 1.28-1.28 2.18v.84c0 .83-.67 1.5-1.5 1.5h-2.5c-.83 0-1.5-.67-1.5-1.5v-1.3H9c-3.87 0-7-2.69-7-6s3.13-7 10-7zm-4 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7-2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm2 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"></path>
+                                </svg>
+                            </span>
+                        </button>
+                        <div class="color-picker-panel" data-color-panel role="dialog" aria-label="Палитра">
+                            <div class="color-picker-sv" data-color-sv>
+                                <span class="color-picker-sv-handle" data-color-sv-handle></span>
+                            </div>
+                            <div class="color-picker-hue" data-color-hue>
+                                <span class="color-picker-hue-handle" data-color-hue-handle></span>
+                            </div>
+                            <div class="color-picker-hex-row">
+                                <span class="color-picker-hex-label">#</span>
+                                <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
                     <input type="range" id="photo-width-picker" min="1" max="20" value="3" class="range-compact" aria-label="Толщина кисти" data-lang-aria="photo_width">
                 </div>
                 <div class="row-right">
