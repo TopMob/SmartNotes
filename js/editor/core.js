@@ -83,7 +83,7 @@ const Editor = (() => {
             els.content.addEventListener("keyup", storeSelection, { signal })
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
-            els.content.addEventListener("input", scheduleEasterEggCheck, { signal })
+            els.content.addEventListener("input", handleContentInput, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const link = e.target.closest("a")
@@ -235,6 +235,128 @@ const Editor = (() => {
         const contentText = Utils.stripHtml(els.content?.innerHTML || "")
         if (hasEasterEggPhrase(`${titleText} ${contentText}`)) playEasterEggSound()
     }, 160)
+
+    const epsteinTarget = "эпштейн"
+
+    const normalizeEpsteinText = (text) => String(text || "")
+        .normalize("NFC")
+        .toLowerCase()
+        .replace(/ё/g, "е")
+
+    const getEpsteinTextMap = (text) => {
+        const originalText = String(text || "")
+        const normalizedCharacters = []
+        const indexMap = []
+        for (let index = 0; index < originalText.length; index += 1) {
+            const normalized = normalizeEpsteinText(originalText[index])
+            for (const character of normalized) {
+                normalizedCharacters.push(character)
+                indexMap.push(index)
+            }
+        }
+        return { normalizedText: normalizedCharacters.join(""), indexMap }
+    }
+
+    const isEpsteinWordBoundary = (character) => {
+        if (!character) return true
+        return !/[a-zа-я0-9]/.test(character)
+    }
+
+    const findEpsteinMatches = (text) => {
+        const { normalizedText, indexMap } = getEpsteinTextMap(text)
+        const matches = []
+        let startIndex = normalizedText.indexOf(epsteinTarget)
+        while (startIndex !== -1) {
+            const endIndex = startIndex + epsteinTarget.length - 1
+            const beforeChar = normalizedText[startIndex - 1]
+            const afterChar = normalizedText[endIndex + 1]
+            if (isEpsteinWordBoundary(beforeChar) && isEpsteinWordBoundary(afterChar)) {
+                const startOriginal = indexMap[startIndex]
+                const endOriginal = indexMap[endIndex]
+                if (startOriginal !== undefined && endOriginal !== undefined) {
+                    matches.push({ start: startOriginal, end: endOriginal + 1 })
+                }
+            }
+            startIndex = normalizedText.indexOf(epsteinTarget, startIndex + epsteinTarget.length)
+        }
+        return matches
+    }
+
+    const clearEpsteinMask = (root) => {
+        const spans = root.querySelectorAll("span[data-epstein-mask='true']")
+        spans.forEach(span => {
+            const textNode = document.createTextNode(span.textContent || "")
+            span.replaceWith(textNode)
+        })
+    }
+
+    const wrapEpsteinMatchesInTextNode = (textNode, matches) => {
+        if (!matches.length) return
+        for (let index = matches.length - 1; index >= 0; index -= 1) {
+            const match = matches[index]
+            const textLength = textNode.textContent?.length || 0
+            if (match.end > textLength) continue
+            textNode.splitText(match.end)
+            const matchNode = textNode.splitText(match.start)
+            const span = document.createElement("span")
+            span.style.textDecoration = "line-through"
+            span.style.textDecorationColor = "#000"
+            span.style.color = "#000"
+            span.dataset.epsteinMask = "true"
+            span.textContent = matchNode.textContent || ""
+            matchNode.replaceWith(span)
+        }
+    }
+
+    const getSelectionOffsets = (root) => {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return null
+        const range = selection.getRangeAt(0)
+        if (!root.contains(range.commonAncestorContainer)) return null
+        const preRange = range.cloneRange()
+        preRange.selectNodeContents(root)
+        preRange.setEnd(range.startContainer, range.startOffset)
+        const startOffset = preRange.toString().length
+        const preRangeEnd = range.cloneRange()
+        preRangeEnd.selectNodeContents(root)
+        preRangeEnd.setEnd(range.endContainer, range.endOffset)
+        const endOffset = preRangeEnd.toString().length
+        return { start: startOffset, end: endOffset }
+    }
+
+    const restoreSelectionFromOffsets = (root, offsets) => {
+        if (!offsets) return
+        const range = createRangeFromOffsets(root, offsets.start, offsets.end)
+        if (!range) return
+        const selection = window.getSelection()
+        if (selection) {
+            selection.removeAllRanges()
+            selection.addRange(range)
+        }
+    }
+
+    const applyEpsteinMask = () => {
+        if (!els.content) return
+        const selectionOffsets = getSelectionOffsets(els.content)
+        clearEpsteinMask(els.content)
+        const textNodes = getTextNodes(els.content)
+        textNodes.forEach(node => {
+            const matches = findEpsteinMatches(node.textContent || "")
+            wrapEpsteinMatchesInTextNode(node, matches)
+        })
+        restoreSelectionFromOffsets(els.content, selectionOffsets)
+        storeSelection()
+    }
+
+    const scheduleEpsteinMask = Utils.debounce(() => {
+        applyEpsteinMask()
+    }, 120)
+
+    const handleContentInput = (event) => {
+        if (event.isComposing) return
+        scheduleEasterEggCheck()
+        scheduleEpsteinMask()
+    }
 
     const updateEditableState = () => {
         const editable = !drawingState?.active
@@ -700,6 +822,7 @@ const Editor = (() => {
         if (window.EditorAudio) EditorAudio.sync(els.content)
         syncLockButton(n)
         if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "", { recordHistory: true, replaceHistory: true })
+        applyEpsteinMask()
         if (observer && els.content) {
             observer.disconnect()
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
