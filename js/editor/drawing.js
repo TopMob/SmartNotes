@@ -11,6 +11,8 @@ const EditorDrawing = (() => {
         scale: 1,
         container: null,
         content: null,
+        pageElement: null,
+        scrollContainer: null,
         resizeObserver: null,
         mutationObserver: null,
         scrollFrame: null,
@@ -31,6 +33,8 @@ const EditorDrawing = (() => {
         if (typeof nextOnDrawingChange === "function") onDrawingChange = nextOnDrawingChange
         drawingState.container = elements.contentWrapper || null
         drawingState.content = elements.content || null
+        drawingState.scrollContainer = elements.content || null
+        drawingState.pageElement = elements.content?.querySelector(".note-page.is-active") || null
     }
 
     const setupControls = () => {
@@ -122,18 +126,20 @@ const EditorDrawing = (() => {
     }
 
     const attachObservers = () => {
-        if (!drawingState.content) return
+        const target = drawingState.pageElement || drawingState.content
+        if (!target || !drawingState.scrollContainer) return
         if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
         drawingState.resizeObserver = null
         if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
         drawingState.mutationObserver = null
+        drawingState.scrollContainer.removeEventListener("scroll", scheduleScrollSync)
         if (typeof ResizeObserver !== "undefined") {
             drawingState.resizeObserver = new ResizeObserver(() => scheduleLayoutSync())
-            drawingState.resizeObserver.observe(drawingState.content)
+            drawingState.resizeObserver.observe(target)
         }
         drawingState.mutationObserver = new MutationObserver(() => scheduleLayoutSync())
-        drawingState.mutationObserver.observe(drawingState.content, { childList: true, subtree: true, characterData: true })
-        drawingState.content.addEventListener("scroll", scheduleScrollSync, { passive: true })
+        drawingState.mutationObserver.observe(target, { childList: true, subtree: true, characterData: true })
+        drawingState.scrollContainer.addEventListener("scroll", scheduleScrollSync, { passive: true })
     }
 
     const detachObservers = () => {
@@ -141,7 +147,7 @@ const EditorDrawing = (() => {
         drawingState.resizeObserver = null
         if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
         drawingState.mutationObserver = null
-        drawingState.content?.removeEventListener("scroll", scheduleScrollSync)
+        drawingState.scrollContainer?.removeEventListener("scroll", scheduleScrollSync)
     }
 
     const bindControlsPointerGuard = () => {
@@ -181,17 +187,19 @@ const EditorDrawing = (() => {
     }
 
     const syncCanvasPosition = () => {
-        if (!drawingState.canvas || !drawingState.content) return
-        const top = drawingState.content.offsetTop - drawingState.content.scrollTop
-        const left = drawingState.content.offsetLeft
+        if (!drawingState.canvas || !drawingState.pageElement || !drawingState.scrollContainer) return
+        const top = drawingState.scrollContainer.offsetTop + drawingState.pageElement.offsetTop - drawingState.scrollContainer.scrollTop
+        const left = drawingState.scrollContainer.offsetLeft + drawingState.pageElement.offsetLeft - drawingState.scrollContainer.scrollLeft
         drawingState.canvas.style.top = `${top}px`
         drawingState.canvas.style.left = `${left}px`
     }
 
     const syncCanvasLayout = () => {
-        if (!drawingState.canvas || !drawingState.ctx || !drawingState.content) return
-        const cssWidth = Math.max(1, Math.floor(drawingState.content.clientWidth))
-        const cssHeight = Math.max(1, Math.floor(drawingState.content.scrollHeight))
+        if (!drawingState.canvas || !drawingState.ctx) return
+        const target = drawingState.pageElement || drawingState.content
+        if (!target) return
+        const cssWidth = Math.max(1, Math.floor(target.clientWidth))
+        const cssHeight = Math.max(1, Math.floor(target.scrollHeight))
         const scale = window.devicePixelRatio || 1
         const width = Math.max(1, Math.floor(cssWidth * scale))
         const height = Math.max(1, Math.floor(cssHeight * scale))
@@ -271,6 +279,13 @@ const EditorDrawing = (() => {
 
     const refreshDrawingSurface = () => {
         ensureCanvas()
+        scheduleLayoutSync()
+    }
+
+    const setActivePage = (pageElement) => {
+        if (pageElement && drawingState.pageElement === pageElement) return
+        drawingState.pageElement = pageElement
+        attachObservers()
         scheduleLayoutSync()
     }
 
@@ -391,6 +406,7 @@ const EditorDrawing = (() => {
         state: drawingState,
         setupControls,
         refreshDrawingSurface,
+        setActivePage,
         getDrawingData,
         getDrawingSnapshot,
         setDrawingData,

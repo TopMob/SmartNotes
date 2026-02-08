@@ -14,6 +14,7 @@ const Editor = (() => {
     let titleTouched = false
     let autoSaveSnapshot = null
     let easterEggState = { triggered: false, audio: null }
+    let isRenderingState = false
     const drawingState = window.EditorDrawing?.state
 
     const CONFIG = {
@@ -78,12 +79,12 @@ const Editor = (() => {
 
             els.content.addEventListener("paste", handlePaste, { signal })
             els.content.addEventListener("keydown", handleTagLineEnter, { signal })
-            els.content.addEventListener("keydown", handleEditorKeyDown, { signal })
             els.content.addEventListener("keydown", handleEquationConfirmKeyDown, { signal })
             els.content.addEventListener("keyup", storeSelection, { signal })
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
             els.content.addEventListener("input", handleContentInput, { signal })
+            els.content.addEventListener("change", handleTodoToggle, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const link = e.target.closest("a")
@@ -236,122 +237,6 @@ const Editor = (() => {
         if (hasEasterEggPhrase(`${titleText} ${contentText}`)) playEasterEggSound()
     }, 160)
 
-    const epsteinTarget = "эпштейн"
-
-    const normalizeEpsteinText = (text) => String(text || "")
-        .normalize("NFC")
-        .toLowerCase()
-        .replace(/ё/g, "е")
-
-    const getEpsteinTextMap = (text) => {
-        const originalText = String(text || "")
-        const normalizedCharacters = []
-        const indexMap = []
-        for (let index = 0; index < originalText.length; index += 1) {
-            const normalized = normalizeEpsteinText(originalText[index])
-            for (const character of normalized) {
-                normalizedCharacters.push(character)
-                indexMap.push(index)
-            }
-        }
-        return { normalizedText: normalizedCharacters.join(""), indexMap }
-    }
-
-    const isEpsteinWordBoundary = (character) => {
-        if (!character) return true
-        return !/[a-zа-я0-9]/.test(character)
-    }
-
-    const findEpsteinMatches = (text) => {
-        const { normalizedText, indexMap } = getEpsteinTextMap(text)
-        const matches = []
-        let startIndex = normalizedText.indexOf(epsteinTarget)
-        while (startIndex !== -1) {
-            const endIndex = startIndex + epsteinTarget.length - 1
-            const beforeChar = normalizedText[startIndex - 1]
-            const afterChar = normalizedText[endIndex + 1]
-            if (isEpsteinWordBoundary(beforeChar) && isEpsteinWordBoundary(afterChar)) {
-                const startOriginal = indexMap[startIndex]
-                const endOriginal = indexMap[endIndex]
-                if (startOriginal !== undefined && endOriginal !== undefined) {
-                    matches.push({ start: startOriginal, end: endOriginal + 1 })
-                }
-            }
-            startIndex = normalizedText.indexOf(epsteinTarget, startIndex + epsteinTarget.length)
-        }
-        return matches
-    }
-
-    const clearEpsteinMask = (root) => {
-        const spans = root.querySelectorAll("span[data-epstein-mask='true']")
-        spans.forEach(span => {
-            const textNode = document.createTextNode(span.textContent || "")
-            span.replaceWith(textNode)
-        })
-    }
-
-    const wrapEpsteinMatchesInTextNode = (textNode, matches) => {
-        if (!matches.length) return
-        for (let index = matches.length - 1; index >= 0; index -= 1) {
-            const match = matches[index]
-            const textLength = textNode.textContent?.length || 0
-            if (match.end > textLength) continue
-            textNode.splitText(match.end)
-            const matchNode = textNode.splitText(match.start)
-            const span = document.createElement("span")
-            span.style.textDecoration = "line-through"
-            span.style.textDecorationColor = "#000"
-            span.style.color = "#000"
-            span.dataset.epsteinMask = "true"
-            span.textContent = matchNode.textContent || ""
-            matchNode.replaceWith(span)
-        }
-    }
-
-    const getSelectionOffsets = (root) => {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return null
-        const range = selection.getRangeAt(0)
-        if (!root.contains(range.commonAncestorContainer)) return null
-        const preRange = range.cloneRange()
-        preRange.selectNodeContents(root)
-        preRange.setEnd(range.startContainer, range.startOffset)
-        const startOffset = preRange.toString().length
-        const preRangeEnd = range.cloneRange()
-        preRangeEnd.selectNodeContents(root)
-        preRangeEnd.setEnd(range.endContainer, range.endOffset)
-        const endOffset = preRangeEnd.toString().length
-        return { start: startOffset, end: endOffset }
-    }
-
-    const restoreSelectionFromOffsets = (root, offsets) => {
-        if (!offsets) return
-        const range = createRangeFromOffsets(root, offsets.start, offsets.end)
-        if (!range) return
-        const selection = window.getSelection()
-        if (selection) {
-            selection.removeAllRanges()
-            selection.addRange(range)
-        }
-    }
-
-    const applyEpsteinMask = () => {
-        if (!els.content) return
-        const selectionOffsets = getSelectionOffsets(els.content)
-        clearEpsteinMask(els.content)
-        const textNodes = getTextNodes(els.content)
-        textNodes.forEach(node => {
-            const matches = findEpsteinMatches(node.textContent || "")
-            wrapEpsteinMatchesInTextNode(node, matches)
-        })
-        restoreSelectionFromOffsets(els.content, selectionOffsets)
-        storeSelection()
-    }
-
-    const scheduleEpsteinMask = Utils.debounce(() => {
-        applyEpsteinMask()
-    }, 120)
-
     const canEditNote = (note) => {
         if (typeof CollaborationService === "undefined") return true
         return CollaborationService.canEdit(note)
@@ -376,7 +261,6 @@ const Editor = (() => {
     const handleContentInput = (event) => {
         if (event.isComposing) return
         scheduleEasterEggCheck()
-        scheduleEpsteinMask()
     }
 
     const updateEditableState = () => {
@@ -387,21 +271,6 @@ const Editor = (() => {
         if (els.content) {
             els.content.classList.toggle("drawing-active", !!drawingState?.active)
         }
-    }
-
-    const hasNonEmptySelection = () => {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false
-        if (!els.content) return false
-        const range = selection.getRangeAt(0)
-        return els.content.contains(range.commonAncestorContainer)
-    }
-
-    const handleEditorKeyDown = (e) => {
-        const isCut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x"
-        if (!isCut) return
-        if (hasNonEmptySelection()) return
-        if (cutCurrentLine()) e.preventDefault()
     }
 
     const handleEquationConfirmKeyDown = (e) => {
@@ -462,6 +331,56 @@ const Editor = (() => {
 
     const getPages = () => els.content ? Array.from(els.content.querySelectorAll(".note-page")) : []
 
+    const normalizePageDrawings = (note, totalPages) => {
+        const raw = Array.isArray(note?.pageDrawings) ? note.pageDrawings : []
+        const drawings = raw.map(value => typeof value === "string" ? value : "")
+        if (!drawings.length && typeof note?.drawing === "string" && note.drawing) {
+            drawings.push(note.drawing)
+        }
+        const count = Math.max(totalPages || 0, 1)
+        while (drawings.length < count) drawings.push("")
+        if (drawings.length > count) drawings.length = count
+        return drawings
+    }
+
+    const resolveActivePageDrawing = (note) => {
+        const drawings = normalizePageDrawings(note, getPages().length)
+        return drawings[pageIndex] || ""
+    }
+
+    const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
+        const normalized = Array.isArray(drawings) ? drawings.map(value => typeof value === "string" ? value : "") : []
+        const current = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
+        if (JSON.stringify(current) === JSON.stringify(normalized)) return note
+        const nextNote = { ...note, pageDrawings: normalized }
+        if (updateTimestamp) nextNote.updatedAt = Utils.serverTimestamp()
+        return nextNote
+    }
+
+    const storeActivePageDrawing = (options = {}) => {
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote || !window.EditorDrawing) return
+        const drawings = normalizePageDrawings(currentNote, getPages().length)
+        const snapshot = window.EditorDrawing.getDrawingSnapshot?.() ?? ""
+        if (drawings[pageIndex] === snapshot) return
+        drawings[pageIndex] = snapshot
+        const nextNote = updateNotePageDrawings(currentNote, drawings, options.updateTimestamp)
+        if (nextNote !== currentNote) {
+            StateStore.update("currentNote", nextNote)
+            StateStore.update("editorDirty", true)
+            if (options.queueSnapshot) queueSnapshot()
+        }
+    }
+
+    const syncDrawingForActivePage = () => {
+        const note = StateStore.read().currentNote
+        if (!note || !window.EditorDrawing) return
+        const page = getPages()[pageIndex] || null
+        EditorDrawing.setActivePage?.(page)
+        const drawing = resolveActivePageDrawing(note)
+        EditorDrawing.setDrawingData(drawing, { recordHistory: true, replaceHistory: true })
+    }
+
     const createPageElement = (html = "") => {
         const page = document.createElement("div")
         page.className = "note-page"
@@ -484,6 +403,7 @@ const Editor = (() => {
     const setActivePage = (index) => {
         const pages = getPages()
         if (!pages.length) return
+        if (!isRenderingState) storeActivePageDrawing({ updateTimestamp: true, queueSnapshot: false })
         pageIndex = Utils.clamp(index, 0, pages.length - 1)
         pages.forEach((page, idx) => {
             page.classList.toggle("is-active", idx === pageIndex)
@@ -491,7 +411,7 @@ const Editor = (() => {
         })
         updatePageIndicator()
         focusActivePage()
-        if (drawingState?.active && window.EditorDrawing) EditorDrawing.refreshDrawingSurface()
+        syncDrawingForActivePage()
     }
 
     const ensurePages = () => {
@@ -524,11 +444,22 @@ const Editor = (() => {
     const addPage = () => {
         if (!els.content) return
         const pages = getPages()
+        const previousCount = pages.length || 1
         const page = createPageElement("")
         const current = pages[pageIndex]
         if (current) current.after(page)
         else els.content.appendChild(page)
         ensurePages()
+        const currentNote = StateStore.read().currentNote
+        if (currentNote) {
+            const drawings = normalizePageDrawings(currentNote, previousCount)
+            drawings.splice(pageIndex + 1, 0, "")
+            const nextNote = updateNotePageDrawings(currentNote, drawings, true)
+            if (nextNote !== currentNote) {
+                StateStore.update("currentNote", nextNote)
+                StateStore.update("editorDirty", true)
+            }
+        }
         setActivePage(pageIndex + 1)
         queueSnapshot()
     }
@@ -563,11 +494,6 @@ const Editor = (() => {
                 applyNoteLink(value)
             })
         }},
-        { id: "table", i: "table_chart", label: "tool_table", cmd: () => insertTable() },
-        { id: "table_row_add", i: "table_rows", label: "tool_table_row_add", cmd: () => insertTableRow() },
-        { id: "table_col_add", i: "view_column", label: "tool_table_col_add", cmd: () => insertTableColumn() },
-        { id: "table_row_delete", i: "remove_circle_outline", label: "tool_table_row_delete", cmd: () => deleteTableRow() },
-        { id: "table_col_delete", i: "remove_circle_outline", label: "tool_table_col_delete", cmd: () => deleteTableColumn() },
         { id: "image", i: "image", label: "tool_image", cmd: () => {
             storeSelection()
             document.getElementById("img-upload")?.click()
@@ -847,21 +773,26 @@ const Editor = (() => {
     const renderState = () => {
         const n = StateStore.read().currentNote
         if (!n) return
-        els.title.value = n.title || ""
-        els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
-        ensurePages()
-        syncAutoTitle()
-        renderTags()
-        makeMediaDraggable()
-        syncMediaSizes()
-        if (window.EditorAudio) EditorAudio.sync(els.content)
-        syncLockButton(n)
-        if (window.EditorDrawing) EditorDrawing.setDrawingData(n.drawing || "", { recordHistory: true, replaceHistory: true })
-        applyEpsteinMask()
-        syncAccessState(n)
-        if (observer && els.content) {
-            observer.disconnect()
-            observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
+        isRenderingState = true
+        try {
+            els.title.value = n.title || ""
+            els.content.innerHTML = Utils.sanitizeHtml(n.content || "")
+            ensurePages()
+            syncAutoTitle()
+            renderTags()
+            makeMediaDraggable()
+            syncMediaSizes()
+            if (window.EditorAudio) EditorAudio.sync(els.content)
+            syncLockButton(n)
+            syncDrawingForActivePage()
+            syncTodoCheckboxes(els.content)
+            syncAccessState(n)
+            if (observer && els.content) {
+                observer.disconnect()
+                observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
+            }
+        } finally {
+            isRenderingState = false
         }
     }
 
@@ -882,48 +813,6 @@ const Editor = (() => {
         const range = sel.getRangeAt(0)
         if (!els.content || !els.content.contains(range.commonAncestorContainer)) return
         savedRange = range.cloneRange()
-    }
-
-    const copyTextToClipboard = async (text) => {
-        const value = String(text || "")
-        if (!value) return false
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            try {
-                await navigator.clipboard.writeText(value)
-                return true
-            } catch {
-                return false
-            }
-        }
-        const textarea = document.createElement("textarea")
-        textarea.value = value
-        textarea.setAttribute("readonly", "true")
-        textarea.style.position = "fixed"
-        textarea.style.opacity = "0"
-        document.body.appendChild(textarea)
-        textarea.select()
-        const ok = document.execCommand("copy")
-        document.body.removeChild(textarea)
-        return ok
-    }
-
-    const cutCurrentLine = () => {
-        if (hasNonEmptySelection()) return false
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return false
-        const range = sel.getRangeAt(0)
-        if (!els.content || !els.content.contains(range.commonAncestorContainer)) return false
-        let block = getActiveBlock()
-        if (!block) {
-            const node = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement
-            block = node?.closest("div, p, li") || node
-        }
-        if (!block || block === els.content) return false
-        const text = block.textContent || ""
-        copyTextToClipboard(text)
-        block.remove()
-        queueSnapshot()
-        return true
     }
 
     const getTextNodes = (root) => {
@@ -997,255 +886,6 @@ const Editor = (() => {
         return block
     }
 
-    const findExpressionAroundCaret = (text, caretOffset) => {
-        const allowed = /[0-9+\-*/().,%\s]/
-        let start = caretOffset
-        let end = caretOffset
-        while (start > 0 && allowed.test(text[start - 1])) start -= 1
-        while (end < text.length && allowed.test(text[end])) end += 1
-        const slice = text.slice(start, end)
-        const trimmed = slice.trim()
-        if (!trimmed) return null
-        if (!/[+\-*/%()]/.test(trimmed)) return null
-        const leadingSpace = slice.indexOf(trimmed)
-        const expressionStart = start + leadingSpace
-        const expressionEnd = expressionStart + trimmed.length
-        return { expression: trimmed, start: expressionStart, end: expressionEnd }
-    }
-
-    const tokenizeExpression = (expression) => {
-        const tokens = []
-        let index = 0
-        let lastType = "start"
-        const isNumberPart = (char) => /[0-9.,]/.test(char)
-        while (index < expression.length) {
-            const char = expression[index]
-            if (/\s/.test(char)) {
-                index += 1
-                continue
-            }
-            if (isNumberPart(char)) {
-                let numberText = ""
-                let separatorCount = 0
-                while (index < expression.length && isNumberPart(expression[index])) {
-                    const current = expression[index]
-                    if (current === "." || current === ",") {
-                        separatorCount += 1
-                        if (separatorCount > 1) return null
-                        numberText += "."
-                    } else {
-                        numberText += current
-                    }
-                    index += 1
-                }
-                if (!numberText || numberText === ".") return null
-                const value = Number(numberText)
-                if (!Number.isFinite(value)) return null
-                tokens.push({ type: "number", value })
-                lastType = "number"
-                continue
-            }
-            if (char === "(") {
-                tokens.push({ type: "leftParen" })
-                index += 1
-                lastType = "leftParen"
-                continue
-            }
-            if (char === ")") {
-                if (lastType === "operator" || lastType === "leftParen" || lastType === "start") return null
-                tokens.push({ type: "rightParen" })
-                index += 1
-                lastType = "rightParen"
-                continue
-            }
-            if (char === "%") {
-                if (!["number", "rightParen", "percent"].includes(lastType)) return null
-                tokens.push({ type: "percent" })
-                index += 1
-                lastType = "percent"
-                continue
-            }
-            if ("+-*/".includes(char)) {
-                const isUnary = lastType === "start" || lastType === "operator" || lastType === "leftParen"
-                if (isUnary) {
-                    if (char === "+") {
-                        index += 1
-                        continue
-                    }
-                    tokens.push({ type: "operator", value: "neg" })
-                    index += 1
-                    lastType = "operator"
-                    continue
-                }
-                tokens.push({ type: "operator", value: char })
-                index += 1
-                lastType = "operator"
-                continue
-            }
-            return null
-        }
-        if (lastType === "operator" || lastType === "leftParen") return null
-        return tokens
-    }
-
-    const toRpn = (tokens) => {
-        const output = []
-        const stack = []
-        const operatorInfo = {
-            "+": { precedence: 1, assoc: "left" },
-            "-": { precedence: 1, assoc: "left" },
-            "*": { precedence: 2, assoc: "left" },
-            "/": { precedence: 2, assoc: "left" },
-            "neg": { precedence: 3, assoc: "right" }
-        }
-        for (const token of tokens) {
-            if (token.type === "number") {
-                output.push(token)
-                continue
-            }
-            if (token.type === "percent") {
-                output.push(token)
-                continue
-            }
-            if (token.type === "operator") {
-                const currentInfo = operatorInfo[token.value]
-                while (stack.length) {
-                    const top = stack[stack.length - 1]
-                    if (top.type !== "operator") break
-                    const topInfo = operatorInfo[top.value]
-                    const shouldPop = topInfo.precedence > currentInfo.precedence
-                        || (topInfo.precedence === currentInfo.precedence && currentInfo.assoc === "left")
-                    if (!shouldPop) break
-                    output.push(stack.pop())
-                }
-                stack.push(token)
-                continue
-            }
-            if (token.type === "leftParen") {
-                stack.push(token)
-                continue
-            }
-            if (token.type === "rightParen") {
-                let found = false
-                while (stack.length) {
-                    const top = stack.pop()
-                    if (top.type === "leftParen") {
-                        found = true
-                        break
-                    }
-                    output.push(top)
-                }
-                if (!found) return null
-                continue
-            }
-            return null
-        }
-        while (stack.length) {
-            const top = stack.pop()
-            if (top.type === "leftParen" || top.type === "rightParen") return null
-            output.push(top)
-        }
-        return output
-    }
-
-    const evaluateRpn = (tokens) => {
-        const stack = []
-        for (const token of tokens) {
-            if (token.type === "number") {
-                stack.push(token.value)
-                continue
-            }
-            if (token.type === "percent") {
-                if (!stack.length) return null
-                const value = stack.pop()
-                if (typeof value !== "number") return null
-                stack.push({ type: "percent", value })
-                continue
-            }
-            if (token.type === "operator") {
-                if (token.value === "neg") {
-                    if (!stack.length) return null
-                    const value = stack.pop()
-                    if (typeof value === "number") {
-                        stack.push(-value)
-                    } else if (value?.type === "percent") {
-                        stack.push({ type: "percent", value: -value.value })
-                    } else {
-                        return null
-                    }
-                    continue
-                }
-                if (stack.length < 2) return null
-                const right = stack.pop()
-                const left = stack.pop()
-                if (typeof left !== "number") return null
-                let result = null
-                if (typeof right === "number") {
-                    switch (token.value) {
-                        case "+":
-                            result = left + right
-                            break
-                        case "-":
-                            result = left - right
-                            break
-                        case "*":
-                            result = left * right
-                            break
-                        case "/":
-                            result = right === 0 ? null : left / right
-                            break
-                        default:
-                            result = null
-                            break
-                    }
-                } else if (right?.type === "percent") {
-                    const ratio = right.value / 100
-                    switch (token.value) {
-                        case "+":
-                            result = left + left * ratio
-                            break
-                        case "-":
-                            result = left - left * ratio
-                            break
-                        case "*":
-                            result = left * ratio
-                            break
-                        case "/":
-                            result = ratio === 0 ? null : left / ratio
-                            break
-                        default:
-                            result = null
-                            break
-                    }
-                } else {
-                    result = null
-                }
-                if (!Number.isFinite(result)) return null
-                stack.push(result)
-                continue
-            }
-            return null
-        }
-        if (stack.length !== 1) return null
-        const finalValue = stack[0]
-        if (typeof finalValue === "number") return finalValue
-        if (finalValue?.type === "percent") return finalValue.value / 100
-        return null
-    }
-
-    const evaluateExpression = (expression) => {
-        const tokens = tokenizeExpression(expression)
-        if (!tokens) return null
-        const rpn = toRpn(tokens)
-        if (!rpn) return null
-        return evaluateRpn(rpn)
-    }
-
-    const formatEquationResult = (value) => {
-        const rounded = Math.round(value * 1000000000) / 1000000000
-        return String(rounded)
-    }
-
     const confirmEquationAtCaret = () => {
         const range = getActiveRangeInContent()
         if (!range || !range.collapsed) return false
@@ -1254,14 +894,15 @@ const Editor = (() => {
         const caretOffset = getCaretOffsetInBlock(target, range)
         if (caretOffset === null) return false
         const fullText = target.textContent || ""
-        const expressionData = findExpressionAroundCaret(fullText, caretOffset)
+        const expressionData = window.Calculator?.findExpressionAroundCaret?.(fullText, caretOffset)
         if (!expressionData) return false
-        const result = evaluateExpression(expressionData.expression)
+        const result = window.Calculator?.evaluateExpression?.(expressionData.expression)
         if (!Number.isFinite(result)) return false
         const replaceRange = createRangeFromOffsets(target, expressionData.start, expressionData.end)
         if (!replaceRange) return false
         replaceRange.deleteContents()
-        replaceRange.insertNode(document.createTextNode(formatEquationResult(result)))
+        const formatted = window.Calculator?.formatResult?.(result) ?? String(result)
+        replaceRange.insertNode(document.createTextNode(formatted))
         replaceRange.collapse(false)
         const sel = window.getSelection()
         if (sel) {
@@ -1349,10 +990,12 @@ const Editor = (() => {
 
     const buildTodoItem = (text) => {
         const wrapper = document.createElement("div")
+        wrapper.className = "todo-item"
         const checkbox = document.createElement("input")
         checkbox.type = "checkbox"
         checkbox.setAttribute("aria-label", UI.getText("todo_item", "Todo"))
         const label = document.createElement("span")
+        label.className = "todo-label"
         if (text) label.textContent = text
         else label.appendChild(document.createElement("br"))
         wrapper.appendChild(checkbox)
@@ -1375,6 +1018,7 @@ const Editor = (() => {
         })
         range.deleteContents()
         range.insertNode(fragment)
+        syncTodoCheckboxes(els.content)
         if (firstLabel) {
             const nextRange = document.createRange()
             nextRange.selectNodeContents(firstLabel)
@@ -1386,6 +1030,46 @@ const Editor = (() => {
             }
         }
         storeSelection()
+    }
+
+    const syncTodoItemState = (checkbox) => {
+        const wrapper = checkbox.closest(".todo-item")
+        if (!wrapper) return
+        wrapper.classList.toggle("is-checked", checkbox.checked)
+        if (checkbox.checked) checkbox.setAttribute("checked", "checked")
+        else checkbox.removeAttribute("checked")
+    }
+
+    const syncTodoCheckboxes = (root) => {
+        if (!root) return
+        root.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
+            if (!(checkbox instanceof HTMLInputElement)) return
+            let wrapper = checkbox.closest(".todo-item")
+            if (!wrapper) {
+                const candidate = checkbox.parentElement
+                if (candidate && candidate !== root) {
+                    wrapper = candidate
+                    wrapper.classList.add("todo-item")
+                }
+            }
+            const label = checkbox.nextElementSibling
+            if (label instanceof HTMLElement) label.classList.add("todo-label")
+            if (!wrapper) return
+            syncTodoItemState(checkbox)
+        })
+    }
+
+    const handleTodoToggle = (event) => {
+        const checkbox = event.target
+        if (!(checkbox instanceof HTMLInputElement)) return
+        if (checkbox.type !== "checkbox") return
+        const wrapper = checkbox.closest(".todo-item") || checkbox.parentElement
+        if (!wrapper) return
+        wrapper.classList.add("todo-item")
+        const label = checkbox.nextElementSibling
+        if (label instanceof HTMLElement) label.classList.add("todo-label")
+        syncTodoItemState(checkbox)
+        queueSnapshot()
     }
 
     const insertHorizontalRule = () => {
@@ -1458,122 +1142,6 @@ const Editor = (() => {
             return
         }
         openFromList(note)
-    }
-
-    const parseTableDimension = (value, fallback) => {
-        const num = Number.parseInt(String(value || "").trim(), 10)
-        if (!Number.isFinite(num) || num < 1) return fallback
-        return Utils.clamp(num, 1, 20)
-    }
-
-    const buildTable = (rows, columns) => {
-        const table = document.createElement("table")
-        const body = document.createElement("tbody")
-        for (let r = 0; r < rows; r += 1) {
-            const row = document.createElement("tr")
-            for (let c = 0; c < columns; c += 1) {
-                const cell = document.createElement("td")
-                cell.appendChild(document.createElement("br"))
-                row.appendChild(cell)
-            }
-            body.appendChild(row)
-        }
-        table.appendChild(body)
-        return table
-    }
-
-    const insertTable = () => {
-        storeSelection()
-        UI.showPrompt(UI.getText("table_rows_title", "Table rows"), UI.getText("table_rows_placeholder", "Rows"), (rowsValue) => {
-            const rows = parseTableDimension(rowsValue, 2)
-            UI.showPrompt(UI.getText("table_cols_title", "Table columns"), UI.getText("table_cols_placeholder", "Columns"), (colsValue) => {
-                const cols = parseTableDimension(colsValue, 2)
-                const table = buildTable(rows, cols)
-                insertNodeAtSelection(table)
-            }, "2")
-        }, "2")
-    }
-
-    const getTableContext = () => {
-        const range = getActiveRangeInContent()
-        if (!range) return null
-        let node = range.startContainer
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node) return null
-        const table = node.closest("table")
-        if (!table) return null
-        const row = node.closest("tr")
-        const cell = node.closest("td, th")
-        return { table, row, cell }
-    }
-
-    const insertTableRow = () => {
-        const context = getTableContext()
-        if (!context?.table) {
-            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
-            return
-        }
-        const row = context.row || context.table.querySelector("tr")
-        if (!row) return
-        const cells = Array.from(row.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
-        const nextRow = document.createElement("tr")
-        const count = cells.length || 1
-        for (let i = 0; i < count; i += 1) {
-            const cell = document.createElement("td")
-            cell.appendChild(document.createElement("br"))
-            nextRow.appendChild(cell)
-        }
-        row.after(nextRow)
-        storeSelection()
-    }
-
-    const insertTableColumn = () => {
-        const context = getTableContext()
-        if (!context?.table) {
-            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
-            return
-        }
-        const row = context.row || context.table.querySelector("tr")
-        if (!row) return
-        const cells = Array.from(row.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
-        const index = context.cell ? cells.indexOf(context.cell) + 1 : cells.length
-        context.table.querySelectorAll("tr").forEach(tr => {
-            const rowCells = Array.from(tr.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
-            const cell = document.createElement("td")
-            cell.appendChild(document.createElement("br"))
-            if (index >= rowCells.length) tr.appendChild(cell)
-            else rowCells[index].before(cell)
-        })
-        storeSelection()
-    }
-
-    const deleteTableRow = () => {
-        const context = getTableContext()
-        if (!context?.table || !context.row) {
-            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
-            return
-        }
-        context.row.remove()
-        if (!context.table.querySelector("tr")) context.table.remove()
-        storeSelection()
-    }
-
-    const deleteTableColumn = () => {
-        const context = getTableContext()
-        if (!context?.table || !context.cell) {
-            UI.showToast(UI.getText("table_action_outside", "Place cursor inside table"))
-            return
-        }
-        const row = context.cell.parentElement
-        const cells = Array.from(row.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
-        const index = cells.indexOf(context.cell)
-        if (index < 0) return
-        context.table.querySelectorAll("tr").forEach(tr => {
-            const rowCells = Array.from(tr.children).filter(cell => cell.tagName.toLowerCase() === "td" || cell.tagName.toLowerCase() === "th")
-            if (index < rowCells.length) rowCells[index].remove()
-        })
-        if (!context.table.querySelector("td, th")) context.table.remove()
-        storeSelection()
     }
 
     const getDropRange = (x, y) => {
@@ -1744,23 +1312,28 @@ const Editor = (() => {
         }
     }
 
-    const captureSnapshot = () => ({
-        title: els.title.value || "",
-        content: els.content.innerHTML || "",
-        tags: [...(StateStore.read().currentNote?.tags || [])],
-        drawing: window.EditorDrawing?.getDrawingSnapshot?.() ?? (StateStore.read().currentNote?.drawing || "")
-    })
+    const captureSnapshot = () => {
+        const currentNote = StateStore.read().currentNote
+        const drawings = normalizePageDrawings(currentNote, getPages().length)
+        const activeDrawing = window.EditorDrawing?.getDrawingSnapshot?.()
+        if (typeof activeDrawing === "string") drawings[pageIndex] = activeDrawing
+        return {
+            title: els.title.value || "",
+            content: els.content.innerHTML || "",
+            tags: [...(currentNote?.tags || [])],
+            pageDrawings: drawings
+        }
+    }
 
     const persistDrawing = (drawingData) => {
         const currentNote = StateStore.read().currentNote
         if (!currentNote) return
         const nextDrawing = typeof drawingData === "string" ? drawingData : ""
-        if (currentNote.drawing === nextDrawing) return
-        StateStore.update("currentNote", {
-            ...currentNote,
-            drawing: nextDrawing,
-            updatedAt: Utils.serverTimestamp()
-        })
+        const drawings = normalizePageDrawings(currentNote, getPages().length)
+        if (drawings[pageIndex] === nextDrawing) return
+        drawings[pageIndex] = nextDrawing
+        const nextNote = updateNotePageDrawings(currentNote, drawings, true)
+        StateStore.update("currentNote", nextNote)
         StateStore.update("editorDirty", true)
         queueSnapshot()
     }
@@ -1769,7 +1342,7 @@ const Editor = (() => {
         a.title === b.title &&
         a.content === b.content &&
         JSON.stringify(a.tags) === JSON.stringify(b.tags) &&
-        a.drawing === b.drawing
+        JSON.stringify(a.pageDrawings) === JSON.stringify(b.pageDrawings)
 
     const queueSnapshot = Utils.debounce(() => {
         syncAutoTitle()
@@ -1789,7 +1362,7 @@ const Editor = (() => {
                 ...n, 
                 title: current.title, 
                 content: current.content,
-                drawing: current.drawing,
+                pageDrawings: current.pageDrawings,
                 updatedAt: Utils.serverTimestamp()
             })
         }
@@ -1828,7 +1401,7 @@ const Editor = (() => {
             title: snap.title, 
             content: snap.content, 
             tags: snap.tags,
-            drawing: snap.drawing
+            pageDrawings: snap.pageDrawings
         })
         renderState()
     }
@@ -2014,7 +1587,8 @@ const Editor = (() => {
             ...currentNote,
             title: snapshot.title,
             content: snapshot.content,
-            tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : []
+            tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : [],
+            pageDrawings: Array.isArray(snapshot.pageDrawings) ? [...snapshot.pageDrawings] : []
         }
 
         if (!titleTouched && !String(n.title || "").trim()) {

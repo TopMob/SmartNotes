@@ -470,6 +470,7 @@ Object.assign(UI, {
             const button = document.createElement("button")
             button.type = "button"
             button.className = "hidden-preset-item"
+            button.classList.add(`hidden-preset-${item.key}`)
             if (draft?.preset === item.key) button.classList.add("active")
             button.textContent = item.label
             button.addEventListener("click", () => {
