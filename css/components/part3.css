@@ -304,6 +304,12 @@ select.input-area:focus {
     margin-bottom: 12px;
 }
 
+.modal-note-title {
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
 .hidden-presets-root {
     display: flex;
     flex-direction: column;

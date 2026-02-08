@@ -328,16 +328,21 @@ Object.assign(UI, {
         if (!payload.shareId) return this.showShareFallback(this.getText("share_invalid", "Invalid link"))
         ShareService.fetchSharedNote(payload.shareId).then(async (shared) => {
             if (!shared || !shared.note) return this.showShareFallback(this.getText("share_missing", "Note not found"))
+            const ownerUid = shared.ownerUid || shared.ownerId || shared.note?.ownerUid || null
             const desiredAccess = payload.mode === "collab" ? "edit" : "view"
             let accessLevel = ShareService.resolveAccess(shared, user)
             if (!accessLevel) {
                 accessLevel = await ShareService.grantAccess(shared.id, user.uid, desiredAccess)
             }
+            const isOwner = ownerUid && ownerUid === user.uid
+            if (payload.mode === "share" && !isOwner && accessLevel !== "view") {
+                const downgraded = await ShareService.grantAccess(shared.id, user.uid, "view")
+                accessLevel = downgraded || "view"
+            }
             if (!accessLevel) return this.showShareFallback(this.getText("share_access_denied", "Access denied"))
             if (payload.mode === "collab" && accessLevel !== "edit") {
                 return this.showShareFallback(this.getText("share_access_denied", "Access denied"))
             }
-            const ownerUid = shared.ownerUid || shared.ownerId || shared.note?.ownerUid || null
             if (payload.mode === "collab") {
                 const existing = notes.find(n => n.collabId === payload.shareId)
                 if (existing) {
@@ -598,12 +603,12 @@ Object.assign(UI, {
             return
         }
         this.currentShareNoteId = note.id
-        const summary = document.getElementById("share-note-summary")
+        const title = document.getElementById("share-note-title")
         const linkStatus = document.getElementById("share-link-status")
         const linkInput = document.getElementById("share-link")
         const linkBlock = document.getElementById("share-link-block")
         const copyButton = document.querySelector('[data-action="copy-share-link"]')
-        if (summary) summary.textContent = note.title?.trim() || this.getText("untitled_note", "Untitled")
+        if (title) title.textContent = note.title?.trim() || this.getText("untitled_note", "Untitled")
         if (note.shareId) {
             if (linkStatus) linkStatus.textContent = this.getText("share_link_ready", "Link ready")
             if (linkInput) linkInput.value = ShareService.buildLink("share", note.shareId)
@@ -711,10 +716,12 @@ Object.assign(UI, {
             return
         }
         this.currentCollabNoteId = note.id
+        const title = document.getElementById("collab-note-title")
         const status = document.getElementById("collab-status")
         const linkInput = document.getElementById("collab-link")
         const linkBlock = document.getElementById("collab-link-block")
         const copyButton = document.querySelector('[data-action="copy-collab-link"]')
+        if (title) title.textContent = note.title?.trim() || this.getText("untitled_note", "Untitled")
         if (note.collabId) {
             if (status) status.textContent = this.getText("collab_enabled", "Collaboration enabled")
             if (linkInput) linkInput.value = ShareService.buildLink("collab", note.collabId)
