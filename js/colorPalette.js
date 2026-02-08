@@ -126,20 +126,21 @@ const ColorPalette = (() => {
         emitChange(state, hex)
     }
 
-    const trackPointer = (element, moveHandler) => {
-        if (!element) return
+    const trackPointer = (pointerId, moveHandler) => {
         const onMove = (event) => {
+            if (event.pointerId !== pointerId) return
             if (event.buttons === 0 && event.pointerType === "mouse") return
             moveHandler(event)
         }
-        const onUp = () => {
-            element.removeEventListener("pointermove", onMove)
-            element.removeEventListener("pointerup", onUp)
-            element.removeEventListener("pointercancel", onUp)
+        const onUp = (event) => {
+            if (event.pointerId !== pointerId) return
+            window.removeEventListener("pointermove", onMove)
+            window.removeEventListener("pointerup", onUp)
+            window.removeEventListener("pointercancel", onUp)
         }
-        element.addEventListener("pointermove", onMove)
-        element.addEventListener("pointerup", onUp)
-        element.addEventListener("pointercancel", onUp)
+        window.addEventListener("pointermove", onMove)
+        window.addEventListener("pointerup", onUp)
+        window.addEventListener("pointercancel", onUp)
     }
 
     const bindPicker = (picker) => {
@@ -188,7 +189,7 @@ const ColorPalette = (() => {
                 event.preventDefault()
                 sv.setPointerCapture?.(event.pointerId)
                 handleSvPointer(state, event)
-                trackPointer(sv, (moveEvent) => handleSvPointer(state, moveEvent))
+                trackPointer(event.pointerId, (moveEvent) => handleSvPointer(state, moveEvent))
             })
         }
 
@@ -197,7 +198,7 @@ const ColorPalette = (() => {
                 event.preventDefault()
                 hue.setPointerCapture?.(event.pointerId)
                 handleHuePointer(state, event)
-                trackPointer(hue, (moveEvent) => handleHuePointer(state, moveEvent))
+                trackPointer(event.pointerId, (moveEvent) => handleHuePointer(state, moveEvent))
             })
         }
 

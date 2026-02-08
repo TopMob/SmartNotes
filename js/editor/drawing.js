@@ -6,6 +6,9 @@ const EditorDrawing = (() => {
         tool: "pen",
         isDrawing: false,
         lastPoint: null,
+        pointerId: null,
+        pendingPoints: [],
+        drawFrame: null,
         canvas: null,
         ctx: null,
         image: null,
@@ -112,6 +115,51 @@ const EditorDrawing = (() => {
         if (!drawingState.ctx) return
         drawingState.scale = scale
         drawingState.ctx.setTransform(scale, 0, 0, scale, 0, 0)
+    }
+
+    const getCanvasPoint = (event) => {
+        if (!drawingState.canvas) return null
+        const rect = drawingState.canvas.getBoundingClientRect()
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        }
+    }
+
+    const applyDrawingToolToContext = () => {
+        if (!drawingState.ctx) return
+        const tool = getDrawingToolSettings()
+        drawingState.ctx.globalCompositeOperation = tool.composite
+        drawingState.ctx.globalAlpha = tool.opacity
+        drawingState.ctx.strokeStyle = tool.color
+        drawingState.ctx.lineWidth = drawingState.size
+        drawingState.ctx.lineCap = "round"
+        drawingState.ctx.lineJoin = "round"
+    }
+
+    const drawPendingPoints = () => {
+        if (!drawingState.ctx || !drawingState.isDrawing || !drawingState.lastPoint) return
+        if (!drawingState.pendingPoints.length) return
+        drawingState.ctx.beginPath()
+        drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
+        drawingState.pendingPoints.forEach(point => {
+            const samePoint = point.x === drawingState.lastPoint.x && point.y === drawingState.lastPoint.y
+            const targetX = samePoint ? point.x + 0.01 : point.x
+            const targetY = samePoint ? point.y + 0.01 : point.y
+            drawingState.ctx.lineTo(targetX, targetY)
+            drawingState.lastPoint = point
+        })
+        drawingState.pendingPoints = []
+        drawingState.ctx.stroke()
+    }
+
+    const scheduleDraw = () => {
+        if (!drawingState.active) return
+        if (drawingState.drawFrame) return
+        drawingState.drawFrame = requestAnimationFrame(() => {
+            drawingState.drawFrame = null
+            drawPendingPoints()
+        })
     }
 
     const scheduleDrawingRefresh = () => {
@@ -271,6 +319,10 @@ const EditorDrawing = (() => {
             }
             drawingState.isDrawing = false
             drawingState.lastPoint = null
+            drawingState.pointerId = null
+            drawingState.pendingPoints = []
+            if (drawingState.drawFrame) cancelAnimationFrame(drawingState.drawFrame)
+            drawingState.drawFrame = null
             if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
             drawingState.resizeObserver = null
             if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
@@ -285,43 +337,39 @@ const EditorDrawing = (() => {
         if (!drawingState.active || !drawingState.ctx || !drawingState.canvas) return
         event.preventDefault()
         event.stopPropagation()
-        const rect = drawingState.canvas.getBoundingClientRect()
         drawingState.canvas.setPointerCapture?.(event.pointerId)
+        const point = getCanvasPoint(event)
+        if (!point) return
         drawingState.isDrawing = true
-        drawingState.lastPoint = {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top
-        }
-        const tool = getDrawingToolSettings()
-        drawingState.ctx.globalCompositeOperation = tool.composite
-        drawingState.ctx.globalAlpha = tool.opacity
-        drawingState.ctx.strokeStyle = tool.color
-        drawingState.ctx.lineWidth = drawingState.size
-        drawingState.ctx.lineCap = "round"
-        drawingState.ctx.lineJoin = "round"
+        drawingState.pointerId = event.pointerId
+        drawingState.lastPoint = point
+        drawingState.pendingPoints = [point]
+        applyDrawingToolToContext()
+        scheduleDraw()
     }
 
     const drawLine = (event) => {
         if (!drawingState.isDrawing || !drawingState.ctx || !drawingState.lastPoint || !drawingState.canvas) return
+        if (drawingState.pointerId !== event.pointerId) return
         event.preventDefault()
-        const rect = drawingState.canvas.getBoundingClientRect()
         const events = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [event]
         events.forEach(pointerEvent => {
-            const x = pointerEvent.clientX - rect.left
-            const y = pointerEvent.clientY - rect.top
-            drawingState.ctx.beginPath()
-            drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
-            drawingState.ctx.lineTo(x, y)
-            drawingState.ctx.stroke()
-            drawingState.lastPoint = { x, y }
+            const point = getCanvasPoint(pointerEvent)
+            if (!point) return
+            drawingState.pendingPoints.push(point)
         })
+        scheduleDraw()
     }
 
     const endDrawing = (event) => {
         if (event) event.preventDefault()
         if (!drawingState.isDrawing) return
+        if (event && drawingState.pointerId !== event.pointerId) return
+        drawPendingPoints()
         drawingState.isDrawing = false
         drawingState.lastPoint = null
+        drawingState.pointerId = null
+        drawingState.pendingPoints = []
         updateImageFromCanvas()
     }
 

@@ -87,6 +87,7 @@
         linear-gradient(to right, #ffffff, hsl(var(--picker-hue, 0deg) 100% 50%));
     border: 1px solid rgba(255, 255, 255, 0.14);
     cursor: crosshair;
+    touch-action: none;
 }
 
 .color-picker-sv-handle {
@@ -106,6 +107,7 @@
     background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
     border: 1px solid rgba(255, 255, 255, 0.12);
     cursor: pointer;
+    touch-action: none;
 }
 
 .color-picker-hue-handle {

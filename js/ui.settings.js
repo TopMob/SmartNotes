@@ -97,10 +97,13 @@ Object.assign(UI, {
                                 <option value="full">${dict.folder_view_full || "Full view"}</option>
                             </select>
                         </div>
-                        <label class="row-left">
-                            <input type="checkbox" id="settings-reduce-motion" aria-label="${dict.reduce_motion || "Reduce motion"}">
+                        <div class="settings-toggle-item">
                             <span>${dict.reduce_motion || "Reduce motion"}</span>
-                        </label>
+                            <label class="switch">
+                                <input type="checkbox" id="settings-reduce-motion" aria-label="${dict.reduce_motion || "Reduce motion"}">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             `
