@@ -14,20 +14,7 @@ const Editor = (() => {
     let titleTouched = false
     let autoSaveSnapshot = null
     let easterEggState = { triggered: false, audio: null }
-    let drawingState = {
-        active: false,
-        color: "#111111",
-        size: 3,
-        tool: "pen",
-        isDrawing: false,
-        lastPoint: null,
-        canvas: null,
-        ctx: null,
-        image: null,
-        scale: 1,
-        resizeObserver: null,
-        resizeFrame: null
-    }
+    const drawingState = window.EditorDrawing?.state
 
     const CONFIG = {
         MAX_HISTORY: 100,
@@ -57,7 +44,16 @@ const Editor = (() => {
         }
         loadToolSettings()
         buildToolbar()
-        setupDrawingControls()
+        if (window.EditorDrawing) {
+            EditorDrawing.configure({
+                elements: els,
+                getPages,
+                getActivePage,
+                buildToolbar,
+                updateEditableState
+            })
+            EditorDrawing.setupControls()
+        }
         bind()
     }
 
@@ -189,88 +185,7 @@ const Editor = (() => {
         document.execCommand("insertHTML", false, safeContent || text)
     }
 
-    const setupDrawingControls = () => {
-        if (els.drawingColor) {
-            els.drawingColor.value = drawingState.color
-            els.drawingColor.addEventListener("input", (e) => {
-                setDrawingColor(String(e.target.value || "#111111"))
-            })
-        }
-        if (els.drawingSize) {
-            els.drawingSize.value = String(drawingState.size)
-            els.drawingSize.addEventListener("input", (e) => {
-                const next = Number(e.target.value)
-                drawingState.size = Number.isFinite(next) ? Utils.clamp(next, 1, 24) : 3
-            })
-        }
-        if (els.drawingControls) {
-            els.drawingControls.querySelectorAll("[data-drawing-tool]").forEach(btn => {
-                btn.addEventListener("click", () => setDrawingTool(btn.dataset.drawingTool || "pen"))
-            })
-            els.drawingControls.querySelectorAll("[data-drawing-color]").forEach(btn => {
-                btn.addEventListener("click", () => setDrawingColor(btn.dataset.drawingColor || "#111111"))
-            })
-            if (window.ColorPalette) window.ColorPalette.init(els.drawingControls)
-        }
-        updateDrawingToolButtons()
-        updateDrawingColorButtons()
-        window.addEventListener("resize", () => {
-            if (drawingState.active) refreshDrawingSurface()
-        })
-    }
-
     const getActivePage = () => getPages()[pageIndex] || null
-
-    const getDrawingToolSettings = () => {
-        if (drawingState.tool === "eraser") {
-            return { composite: "destination-out", opacity: 1, color: "#000000" }
-        }
-        if (drawingState.tool === "marker") {
-            return { composite: "source-over", opacity: 0.4, color: drawingState.color }
-        }
-        return { composite: "source-over", opacity: 1, color: drawingState.color }
-    }
-
-    const updateDrawingToolButtons = () => {
-        const toolButtons = els.drawingControls?.querySelectorAll("[data-drawing-tool]") || []
-        toolButtons.forEach(btn => {
-            btn.classList.toggle("is-active", btn.dataset.drawingTool === drawingState.tool)
-        })
-        const isEraser = drawingState.tool === "eraser"
-        if (els.drawingColor) els.drawingColor.disabled = isEraser
-        const colorButtons = els.drawingControls?.querySelectorAll("[data-drawing-color]") || []
-        colorButtons.forEach(btn => {
-            btn.disabled = isEraser
-        })
-        const colorPicker = els.drawingControls?.querySelector("[data-color-picker]")
-        if (colorPicker) {
-            colorPicker.classList.toggle("is-disabled", isEraser)
-            colorPicker.setAttribute("aria-disabled", String(isEraser))
-        }
-    }
-
-    const updateDrawingColorButtons = () => {
-        const current = String(drawingState.color || "").toLowerCase()
-        const colorButtons = els.drawingControls?.querySelectorAll("[data-drawing-color]") || []
-        colorButtons.forEach(btn => {
-            const value = String(btn.dataset.drawingColor || "").toLowerCase()
-            btn.classList.toggle("is-active", value === current)
-        })
-    }
-
-    const setDrawingTool = (tool) => {
-        const nextTool = tool === "marker" || tool === "eraser" ? tool : "pen"
-        drawingState.tool = nextTool
-        updateDrawingToolButtons()
-    }
-
-    const setDrawingColor = (color) => {
-        if (!color) return
-        drawingState.color = color
-        if (els.drawingColor) els.drawingColor.value = color
-        if (window.ColorPalette && els.drawingColor) window.ColorPalette.syncInput(els.drawingColor)
-        updateDrawingColorButtons()
-    }
 
     const normalizeEasterEggText = (text) => String(text || "")
         .toLowerCase()
@@ -335,231 +250,14 @@ const Editor = (() => {
         if (hasEasterEggPhrase(`${titleText} ${contentText}`)) playEasterEggSound()
     }, 160)
 
-    const applyCanvasScale = (scale) => {
-        if (!drawingState.ctx) return
-        drawingState.scale = scale
-        drawingState.ctx.setTransform(scale, 0, 0, scale, 0, 0)
-    }
-
-    const scheduleDrawingRefresh = () => {
-        if (!drawingState.active) return
-        if (drawingState.resizeFrame) return
-        drawingState.resizeFrame = requestAnimationFrame(() => {
-            drawingState.resizeFrame = null
-            refreshDrawingSurface()
-        })
-    }
-
-    const observeDrawingPage = (page) => {
-        if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
-        drawingState.resizeObserver = null
-        if (!page || typeof ResizeObserver === "undefined") return
-        drawingState.resizeObserver = new ResizeObserver(() => scheduleDrawingRefresh())
-        drawingState.resizeObserver.observe(page)
-        if (els.content) drawingState.resizeObserver.observe(els.content)
-    }
-
-    const ensureDrawingLayer = () => {
-        const page = getActivePage()
-        if (!page) return null
-        let layer = page.querySelector(".note-drawing-layer")
-        let image = layer ? layer.querySelector(".note-drawing-image") : null
-        if (!layer) {
-            layer = document.createElement("div")
-            layer.className = "note-drawing-layer"
-            layer.setAttribute("contenteditable", "false")
-            image = document.createElement("img")
-            image.className = "note-drawing-image"
-            image.alt = ""
-            image.draggable = false
-            layer.appendChild(image)
-            page.prepend(layer)
-        }
-        drawingState.image = image
-        return { page, layer, image }
-    }
-
-    const ensureDrawingCanvas = () => {
-        if (!drawingState.canvas) {
-            const canvas = document.createElement("canvas")
-            canvas.className = "note-drawing-canvas"
-            canvas.setAttribute("aria-hidden", "true")
-            canvas.tabIndex = -1
-            canvas.addEventListener("pointerdown", startDrawing)
-            canvas.addEventListener("pointermove", drawLine)
-            canvas.addEventListener("pointerup", endDrawing)
-            canvas.addEventListener("pointerleave", endDrawing)
-            canvas.addEventListener("pointercancel", endDrawing)
-            drawingState.canvas = canvas
-            drawingState.ctx = canvas.getContext("2d")
-        }
-        return drawingState.canvas
-    }
-
-    const updateDrawingCanvasSize = (page) => {
-        if (!drawingState.canvas || !drawingState.ctx || !page) return
-        const rect = page.getBoundingClientRect()
-        const cssWidth = Math.max(1, Math.floor(rect.width))
-        const cssHeight = Math.max(1, Math.floor(Math.max(rect.height, page.scrollHeight)))
-        const scale = window.devicePixelRatio || 1
-        const width = Math.max(1, Math.floor(cssWidth * scale))
-        const height = Math.max(1, Math.floor(cssHeight * scale))
-        if (drawingState.canvas.width === width && drawingState.canvas.height === height && drawingState.scale === scale) return
-        const snapshot = drawingState.canvas.toDataURL("image/png")
-        drawingState.canvas.width = width
-        drawingState.canvas.height = height
-        drawingState.canvas.style.width = `${cssWidth}px`
-        drawingState.canvas.style.height = `${cssHeight}px`
-        drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
-        if (snapshot) {
-            const image = new Image()
-            image.onload = () => {
-                drawingState.ctx.clearRect(0, 0, width, height)
-                drawingState.ctx.drawImage(image, 0, 0, width, height)
-                applyCanvasScale(scale)
-            }
-            image.src = snapshot
-        } else {
-            applyCanvasScale(scale)
-        }
-    }
-
-    const syncCanvasFromImage = () => {
-        if (!drawingState.ctx || !drawingState.canvas || !drawingState.image) return
-        const src = drawingState.image.getAttribute("src")
-        drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
-        drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
-        if (!src) {
-            applyCanvasScale(drawingState.scale)
-            return
-        }
-        const image = new Image()
-        image.onload = () => {
-            drawingState.ctx.drawImage(image, 0, 0, drawingState.canvas.width, drawingState.canvas.height)
-            applyCanvasScale(drawingState.scale)
-        }
-        image.src = src
-    }
-
-    const canvasHasDrawing = () => {
-        if (!drawingState.ctx || !drawingState.canvas) return false
-        const { width, height } = drawingState.canvas
-        if (!width || !height) return false
-        const data = drawingState.ctx.getImageData(0, 0, width, height).data
-        for (let i = 3; i < data.length; i += 4) {
-            if (data[i] > 0) return true
-        }
-        return false
-    }
-
-    const removeDrawingLayerIfEmpty = () => {
-        const page = getActivePage()
-        if (!page) return
-        const layer = page.querySelector(".note-drawing-layer")
-        if (!layer) return
-        const image = layer.querySelector(".note-drawing-image")
-        const hasImage = !!image?.getAttribute("src")
-        if (!hasImage) {
-            layer.remove()
-            drawingState.image = null
-        }
-    }
-
-    const updateImageFromCanvas = () => {
-        if (!drawingState.image || !drawingState.canvas) return
-        if (!canvasHasDrawing()) {
-            drawingState.image.removeAttribute("src")
-            return
-        }
-        drawingState.image.src = drawingState.canvas.toDataURL("image/png")
-    }
-
-    const refreshDrawingSurface = () => {
-        const data = ensureDrawingLayer()
-        if (!data) return
-        const canvas = ensureDrawingCanvas()
-        if (!canvas.parentElement) data.page.appendChild(canvas)
-        updateDrawingCanvasSize(data.page)
-        syncCanvasFromImage()
-        observeDrawingPage(data.page)
-    }
-
     const updateEditableState = () => {
-        const editable = !drawingState.active
+        const editable = !drawingState?.active
         getPages().forEach(page => {
             page.contentEditable = editable ? "true" : "false"
         })
         if (els.content) {
-            els.content.classList.toggle("drawing-active", drawingState.active)
+            els.content.classList.toggle("drawing-active", !!drawingState?.active)
         }
-    }
-
-    const toggleDrawingMode = () => {
-        drawingState.active = !drawingState.active
-        if (els.drawingControls) {
-            els.drawingControls.classList.toggle("hidden", !drawingState.active)
-        }
-        if (drawingState.active) {
-            refreshDrawingSurface()
-        } else {
-            updateImageFromCanvas()
-            if (drawingState.canvas?.parentElement) {
-                drawingState.canvas.parentElement.removeChild(drawingState.canvas)
-            }
-            drawingState.isDrawing = false
-            drawingState.lastPoint = null
-            if (drawingState.resizeObserver) drawingState.resizeObserver.disconnect()
-            drawingState.resizeObserver = null
-            if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
-            drawingState.resizeFrame = null
-            removeDrawingLayerIfEmpty()
-        }
-        updateEditableState()
-        buildToolbar()
-    }
-
-    const startDrawing = (event) => {
-        if (!drawingState.active || !drawingState.ctx || !drawingState.canvas) return
-        event.preventDefault()
-        event.stopPropagation()
-        const rect = drawingState.canvas.getBoundingClientRect()
-        drawingState.canvas.setPointerCapture?.(event.pointerId)
-        drawingState.isDrawing = true
-        drawingState.lastPoint = {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top
-        }
-        const tool = getDrawingToolSettings()
-        drawingState.ctx.globalCompositeOperation = tool.composite
-        drawingState.ctx.globalAlpha = tool.opacity
-        drawingState.ctx.strokeStyle = tool.color
-        drawingState.ctx.lineWidth = drawingState.size
-        drawingState.ctx.lineCap = "round"
-        drawingState.ctx.lineJoin = "round"
-    }
-
-    const drawLine = (event) => {
-        if (!drawingState.isDrawing || !drawingState.ctx || !drawingState.lastPoint || !drawingState.canvas) return
-        event.preventDefault()
-        const rect = drawingState.canvas.getBoundingClientRect()
-        const events = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [event]
-        events.forEach(pointerEvent => {
-            const x = pointerEvent.clientX - rect.left
-            const y = pointerEvent.clientY - rect.top
-            drawingState.ctx.beginPath()
-            drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
-            drawingState.ctx.lineTo(x, y)
-            drawingState.ctx.stroke()
-            drawingState.lastPoint = { x, y }
-        })
-    }
-
-    const endDrawing = (event) => {
-        if (event) event.preventDefault()
-        if (!drawingState.isDrawing) return
-        drawingState.isDrawing = false
-        drawingState.lastPoint = null
-        updateImageFromCanvas()
     }
 
     const handleEditorKeyDown = (e) => {
@@ -654,7 +352,7 @@ const Editor = (() => {
         })
         updatePageIndicator()
         focusActivePage()
-        if (drawingState.active) refreshDrawingSurface()
+        if (drawingState?.active && window.EditorDrawing) EditorDrawing.refreshDrawingSurface()
     }
 
     const ensurePages = () => {
@@ -717,7 +415,7 @@ const Editor = (() => {
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             storeSelection()
-            toggleDrawingMode()
+            if (window.EditorDrawing) EditorDrawing.toggleDrawingMode()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => toggleAlignMenu(btn) },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
@@ -965,7 +663,7 @@ const Editor = (() => {
         drawingState.active = false
         drawingState.isDrawing = false
         drawingState.lastPoint = null
-        updateImageFromCanvas()
+        if (window.EditorDrawing) EditorDrawing.updateImageFromCanvas()
         if (els.drawingControls) {
             els.drawingControls.classList.add("hidden")
         }
@@ -976,7 +674,7 @@ const Editor = (() => {
         drawingState.resizeObserver = null
         if (drawingState.resizeFrame) cancelAnimationFrame(drawingState.resizeFrame)
         drawingState.resizeFrame = null
-        removeDrawingLayerIfEmpty()
+        if (window.EditorDrawing) EditorDrawing.removeDrawingLayerIfEmpty()
         if (observer) observer.disconnect()
     }
 
