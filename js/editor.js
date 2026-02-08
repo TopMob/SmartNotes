@@ -15,11 +15,15 @@ const Editor = (() => {
     let autoSaveSnapshot = null
     let collabUnsub = null
     let isReadOnly = false
-    let sketchState = {
-        ctx: null,
+    let drawingState = {
+        active: false,
+        color: "#111111",
+        size: 3,
         isDrawing: false,
-        history: [],
-        lastPoint: null
+        lastPoint: null,
+        canvas: null,
+        ctx: null,
+        image: null
     }
 
     const CONFIG = {
@@ -53,6 +57,17 @@ const Editor = (() => {
         isReadOnly = !!flag
         if (els.title) els.title.readOnly = isReadOnly
         if (els.tagsInput) els.tagsInput.disabled = isReadOnly
+        if (isReadOnly && drawingState.active) {
+            drawingState.active = false
+            if (els.drawingControls) {
+                els.drawingControls.classList.add("hidden")
+            }
+            if (drawingState.canvas?.parentElement) {
+                drawingState.canvas.parentElement.removeChild(drawingState.canvas)
+            }
+            drawingState.isDrawing = false
+            drawingState.lastPoint = null
+        }
         const controls = document.querySelectorAll("[data-action='editor-save'],[data-action='editor-undo'],[data-action='editor-redo'],[data-action='editor-lock'],[data-action='editor-add-page'],[data-action='editor-voice']")
         controls.forEach(btn => {
             btn.disabled = isReadOnly
@@ -64,11 +79,8 @@ const Editor = (() => {
                 btn.classList.toggle("is-disabled", isReadOnly)
             })
         }
-        if (els.content) {
-            getPages().forEach(page => {
-                page.contentEditable = isReadOnly ? "false" : "true"
-            })
-        }
+        updateEditableState()
+        buildToolbar()
     }
 
     const canEditCurrentNote = () => {
@@ -95,12 +107,13 @@ const Editor = (() => {
             ctxMenu: document.getElementById("media-context-menu"),
             alignMenu: document.getElementById("editor-align-menu"),
             scrollArea: document.querySelector(".editor-scroll-area"),
-            sketchPanel: document.getElementById("inline-sketch-overlay"),
-            sketchCanvas: document.getElementById("inline-sketch-canvas")
+            drawingControls: document.getElementById("drawing-controls"),
+            drawingColor: document.getElementById("drawing-color"),
+            drawingSize: document.getElementById("drawing-size")
         }
         loadToolSettings()
         buildToolbar()
-        setupInlineSketch()
+        setupDrawingControls()
         bind()
     }
 
@@ -230,98 +243,191 @@ const Editor = (() => {
         document.execCommand("insertHTML", false, safeContent || text)
     }
 
-    const setupInlineSketch = () => {
-        if (!els.sketchCanvas) return
-        sketchState.ctx = els.sketchCanvas.getContext("2d")
-        els.sketchCanvas.addEventListener("pointerdown", startSketchDraw)
-        els.sketchCanvas.addEventListener("pointermove", drawSketch)
-        els.sketchCanvas.addEventListener("pointerup", endSketchDraw)
-        els.sketchCanvas.addEventListener("pointerleave", endSketchDraw)
-        els.sketchCanvas.addEventListener("pointercancel", endSketchDraw)
+    const setupDrawingControls = () => {
+        if (els.drawingColor) {
+            els.drawingColor.value = drawingState.color
+            els.drawingColor.addEventListener("input", (e) => {
+                drawingState.color = String(e.target.value || "#111111")
+            })
+        }
+        if (els.drawingSize) {
+            els.drawingSize.value = String(drawingState.size)
+            els.drawingSize.addEventListener("input", (e) => {
+                const next = Number(e.target.value)
+                drawingState.size = Number.isFinite(next) ? Utils.clamp(next, 1, 24) : 3
+            })
+        }
         window.addEventListener("resize", () => {
-            if (els.sketchPanel?.classList.contains("active")) resizeSketchCanvas()
+            if (drawingState.active) refreshDrawingSurface()
         })
     }
 
-    const resizeSketchCanvas = () => {
-        if (!els.sketchCanvas || !sketchState.ctx) return
-        const rect = els.sketchCanvas.getBoundingClientRect()
-        if (!rect.width || !rect.height) return
-        const snapshot = sketchState.ctx.getImageData(0, 0, els.sketchCanvas.width, els.sketchCanvas.height)
-        els.sketchCanvas.width = Math.floor(rect.width)
-        els.sketchCanvas.height = Math.floor(rect.height)
-        if (snapshot) sketchState.ctx.putImageData(snapshot, 0, 0)
-    }
+    const getActivePage = () => getPages()[pageIndex] || null
 
-    const openInlineSketch = () => {
-        if (!els.sketchPanel || !els.sketchCanvas) return
-        els.sketchPanel.classList.add("active")
-        setTimeout(() => resizeSketchCanvas(), 0)
-    }
-
-    const closeInlineSketch = () => {
-        if (!els.sketchPanel) return
-        els.sketchPanel.classList.remove("active")
-        sketchState.history = []
-        sketchState.lastPoint = null
-        sketchState.isDrawing = false
-    }
-
-    const clearInlineSketch = () => {
-        if (!els.sketchCanvas || !sketchState.ctx) return
-        sketchState.history.push(sketchState.ctx.getImageData(0, 0, els.sketchCanvas.width, els.sketchCanvas.height))
-        sketchState.ctx.clearRect(0, 0, els.sketchCanvas.width, els.sketchCanvas.height)
-    }
-
-    const undoInlineSketch = () => {
-        if (!els.sketchCanvas || !sketchState.ctx || !sketchState.history.length) return
-        const last = sketchState.history.pop()
-        if (last) sketchState.ctx.putImageData(last, 0, 0)
-    }
-
-    const applyInlineSketch = () => {
-        if (!els.sketchCanvas) return
-        const dataUrl = els.sketchCanvas.toDataURL("image/png")
-        if (dataUrl) insertMedia(dataUrl, "image")
-        clearInlineSketch()
-        closeInlineSketch()
-    }
-
-    const cancelInlineSketch = () => {
-        clearInlineSketch()
-        closeInlineSketch()
-    }
-
-    const startSketchDraw = (e) => {
-        if (!els.sketchCanvas || !sketchState.ctx) return
-        sketchState.isDrawing = true
-        sketchState.history.push(sketchState.ctx.getImageData(0, 0, els.sketchCanvas.width, els.sketchCanvas.height))
-        const rect = els.sketchCanvas.getBoundingClientRect()
-        sketchState.lastPoint = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+    const ensureDrawingLayer = () => {
+        const page = getActivePage()
+        if (!page) return null
+        let layer = page.querySelector(".note-drawing-layer")
+        let image = layer ? layer.querySelector(".note-drawing-image") : null
+        if (!layer) {
+            layer = document.createElement("div")
+            layer.className = "note-drawing-layer"
+            layer.setAttribute("contenteditable", "false")
+            image = document.createElement("img")
+            image.className = "note-drawing-image"
+            image.alt = ""
+            image.draggable = false
+            layer.appendChild(image)
+            page.prepend(layer)
         }
-        sketchState.ctx.strokeStyle = "#000"
-        sketchState.ctx.lineWidth = 3
-        sketchState.ctx.lineCap = "round"
-        sketchState.ctx.lineJoin = "round"
+        drawingState.image = image
+        return { page, layer, image }
     }
 
-    const drawSketch = (e) => {
-        if (!sketchState.isDrawing || !sketchState.ctx || !sketchState.lastPoint || !els.sketchCanvas) return
-        const rect = els.sketchCanvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
-        sketchState.ctx.beginPath()
-        sketchState.ctx.moveTo(sketchState.lastPoint.x, sketchState.lastPoint.y)
-        sketchState.ctx.lineTo(x, y)
-        sketchState.ctx.stroke()
-        sketchState.lastPoint = { x, y }
+    const ensureDrawingCanvas = () => {
+        if (!drawingState.canvas) {
+            const canvas = document.createElement("canvas")
+            canvas.className = "note-drawing-canvas"
+            canvas.setAttribute("aria-hidden", "true")
+            canvas.tabIndex = -1
+            canvas.addEventListener("pointerdown", startDrawing)
+            canvas.addEventListener("pointermove", drawLine)
+            canvas.addEventListener("pointerup", endDrawing)
+            canvas.addEventListener("pointerleave", endDrawing)
+            canvas.addEventListener("pointercancel", endDrawing)
+            drawingState.canvas = canvas
+            drawingState.ctx = canvas.getContext("2d")
+        }
+        return drawingState.canvas
     }
 
-    const endSketchDraw = () => {
-        sketchState.isDrawing = false
-        sketchState.lastPoint = null
+    const updateDrawingCanvasSize = (page) => {
+        if (!drawingState.canvas || !drawingState.ctx || !page) return
+        const rect = page.getBoundingClientRect()
+        const width = Math.max(1, Math.floor(rect.width))
+        const height = Math.max(1, Math.floor(rect.height))
+        if (drawingState.canvas.width === width && drawingState.canvas.height === height) return
+        const snapshot = drawingState.canvas.toDataURL("image/png")
+        drawingState.canvas.width = width
+        drawingState.canvas.height = height
+        if (snapshot) {
+            const image = new Image()
+            image.onload = () => {
+                drawingState.ctx.drawImage(image, 0, 0, width, height)
+            }
+            image.src = snapshot
+        }
+    }
+
+    const syncCanvasFromImage = () => {
+        if (!drawingState.ctx || !drawingState.canvas || !drawingState.image) return
+        const src = drawingState.image.getAttribute("src")
+        drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
+        if (!src) return
+        const image = new Image()
+        image.onload = () => {
+            drawingState.ctx.drawImage(image, 0, 0, drawingState.canvas.width, drawingState.canvas.height)
+        }
+        image.src = src
+    }
+
+    const canvasHasDrawing = () => {
+        if (!drawingState.ctx || !drawingState.canvas) return false
+        const { width, height } = drawingState.canvas
+        if (!width || !height) return false
+        const data = drawingState.ctx.getImageData(0, 0, width, height).data
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i] > 0) return true
+        }
+        return false
+    }
+
+    const updateImageFromCanvas = () => {
+        if (!drawingState.image || !drawingState.canvas) return
+        if (!canvasHasDrawing()) {
+            drawingState.image.removeAttribute("src")
+            return
+        }
+        drawingState.image.src = drawingState.canvas.toDataURL("image/png")
+    }
+
+    const refreshDrawingSurface = () => {
+        const data = ensureDrawingLayer()
+        if (!data) return
+        const canvas = ensureDrawingCanvas()
+        if (!canvas.parentElement) data.page.appendChild(canvas)
+        updateDrawingCanvasSize(data.page)
+        syncCanvasFromImage()
+    }
+
+    const updateEditableState = () => {
+        const editable = !isReadOnly && !drawingState.active
+        getPages().forEach(page => {
+            page.contentEditable = editable ? "true" : "false"
+        })
+        if (els.content) {
+            els.content.classList.toggle("drawing-active", drawingState.active)
+        }
+    }
+
+    const toggleDrawingMode = () => {
+        if (isReadOnly) {
+            UI.showToast(UI.getText("share_view_only", "View only"))
+            return
+        }
+        drawingState.active = !drawingState.active
+        if (els.drawingControls) {
+            els.drawingControls.classList.toggle("hidden", !drawingState.active)
+        }
+        if (drawingState.active) {
+            refreshDrawingSurface()
+        } else {
+            updateImageFromCanvas()
+            if (drawingState.canvas?.parentElement) {
+                drawingState.canvas.parentElement.removeChild(drawingState.canvas)
+            }
+            drawingState.isDrawing = false
+            drawingState.lastPoint = null
+        }
+        updateEditableState()
+        buildToolbar()
+    }
+
+    const startDrawing = (event) => {
+        if (!drawingState.active || !drawingState.ctx || !drawingState.canvas) return
+        event.preventDefault()
+        event.stopPropagation()
+        const rect = drawingState.canvas.getBoundingClientRect()
+        drawingState.isDrawing = true
+        drawingState.lastPoint = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        }
+        drawingState.ctx.strokeStyle = drawingState.color
+        drawingState.ctx.lineWidth = drawingState.size
+        drawingState.ctx.lineCap = "round"
+        drawingState.ctx.lineJoin = "round"
+    }
+
+    const drawLine = (event) => {
+        if (!drawingState.isDrawing || !drawingState.ctx || !drawingState.lastPoint || !drawingState.canvas) return
+        event.preventDefault()
+        const rect = drawingState.canvas.getBoundingClientRect()
+        const x = event.clientX - rect.left
+        const y = event.clientY - rect.top
+        drawingState.ctx.beginPath()
+        drawingState.ctx.moveTo(drawingState.lastPoint.x, drawingState.lastPoint.y)
+        drawingState.ctx.lineTo(x, y)
+        drawingState.ctx.stroke()
+        drawingState.lastPoint = { x, y }
+    }
+
+    const endDrawing = (event) => {
+        if (event) event.preventDefault()
+        if (!drawingState.isDrawing) return
+        drawingState.isDrawing = false
+        drawingState.lastPoint = null
+        updateImageFromCanvas()
     }
 
     const handleEditorKeyDown = (e) => {
@@ -366,7 +472,7 @@ const Editor = (() => {
         
         root.innerHTML = tools.map((t, idx) => `
             <span class="tool-wrapper">
-                <button type="button" class="tool-btn" data-tool-idx="${idx}" aria-label="${t.i}">
+                <button type="button" class="tool-btn${t.id === "sketch" && drawingState.active ? " active" : ""}" data-tool-idx="${idx}" data-tool-id="${t.id}" aria-label="${t.i}">
                     <i class="material-icons-round" aria-hidden="true">${t.i}</i>
                 </button>
             </span>
@@ -416,6 +522,7 @@ const Editor = (() => {
         })
         updatePageIndicator()
         focusActivePage()
+        if (drawingState.active) refreshDrawingSurface()
     }
 
     const ensurePages = () => {
@@ -427,7 +534,6 @@ const Editor = (() => {
             els.content.appendChild(createPageElement(html))
         } else {
             pages.forEach(page => {
-                page.contentEditable = isReadOnly ? "false" : "true"
                 page.setAttribute("role", "textbox")
                 page.setAttribute("aria-multiline", "true")
             })
@@ -437,6 +543,7 @@ const Editor = (() => {
         if (pageIndex >= updatedPages.length) pageIndex = updatedPages.length - 1
         if (pageIndex < 0) pageIndex = 0
         setActivePage(pageIndex)
+        updateEditableState()
     }
 
     const focusActivePage = () => {
@@ -479,7 +586,7 @@ const Editor = (() => {
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             storeSelection()
-            openInlineSketch()
+            toggleDrawingMode()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => toggleAlignMenu(btn) },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
@@ -771,6 +878,15 @@ const Editor = (() => {
         if (collabUnsub) {
             collabUnsub()
             collabUnsub = null
+        }
+        drawingState.active = false
+        drawingState.isDrawing = false
+        drawingState.lastPoint = null
+        if (els.drawingControls) {
+            els.drawingControls.classList.add("hidden")
+        }
+        if (drawingState.canvas?.parentElement) {
+            drawingState.canvas.parentElement.removeChild(drawingState.canvas)
         }
         setReadOnly(false)
         if (observer) observer.disconnect()
@@ -1546,10 +1662,6 @@ const Editor = (() => {
         resetMediaTransform,
         alignMediaOrText,
         deleteSelectedMedia,
-        undoInlineSketch,
-        clearInlineSketch,
-        cancelInlineSketch,
-        applyInlineSketch,
         toggleRecording,
         addPage,
         nextPage,

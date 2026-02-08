@@ -450,18 +450,6 @@ const UI = {
             case "editor-align":
                 Editor.alignMediaOrText(el.dataset.align)
                 break
-            case "inline-sketch-undo":
-                Editor.undoInlineSketch()
-                break
-            case "inline-sketch-clear":
-                Editor.clearInlineSketch()
-                break
-            case "inline-sketch-cancel":
-                Editor.cancelInlineSketch()
-                break
-            case "inline-sketch-apply":
-                Editor.applyInlineSketch()
-                break
             case "share-note-native":
                 this.shareCurrentNoteNative()
                 break

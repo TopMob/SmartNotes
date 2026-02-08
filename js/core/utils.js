@@ -42,7 +42,7 @@ export const Utils = {
     },
     sanitizeHtml: (html) => {
         const allowedTags = new Set(["b", "strong", "i", "em", "u", "br", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio"])
-        const allowedClasses = new Set(["media-wrapper", "media-resize-handle", "align-left", "align-right", "audio-wrapper", "audio-player", "audio-icon", "audio-label", "note-page"])
+        const allowedClasses = new Set(["media-wrapper", "media-resize-handle", "align-left", "align-right", "audio-wrapper", "audio-player", "audio-icon", "audio-label", "note-page", "note-drawing-layer", "note-drawing-image"])
         const allowAttrs = {
             a: new Set(["href"]),
             img: new Set(["src", "alt"]),
