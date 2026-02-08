@@ -20,6 +20,15 @@ const buildPrintableNoteHtml = (note, dict) => {
     const formattedDate = Utils.formatDate(note.updatedAt || note.createdAt || Date.now())
     const safeTitle = Utils.escapeHtml(titleText || dict.untitled_note || "Untitled")
     const safeDate = Utils.escapeHtml(formattedDate)
+    const contentWrapper = document.createElement("div")
+    contentWrapper.innerHTML = note.content || ""
+    const pages = Array.from(contentWrapper.querySelectorAll(".note-page"))
+    const pageDrawings = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
+    const pageHtml = (pages.length ? pages : [contentWrapper]).map((page, index) => {
+        const drawing = pageDrawings[index] || ""
+        const drawingHtml = drawing ? `<img class="note-drawing" src="${drawing}" alt="">` : ""
+        return `<section class="note-page">${page.innerHTML || ""}${drawingHtml}</section>`
+    }).join("")
     return `<!doctype html>
 <html lang="${StateStore.read().config.lang || "ru"}">
 <head>
@@ -31,11 +40,17 @@ const buildPrintableNoteHtml = (note, dict) => {
         h1 { font-size: 24px; margin: 0 0 6px; }
         .note-date { font-size: 12px; color: #6f6f6f; margin-bottom: 18px; }
         .note-content { font-size: 14px; line-height: 1.6; }
+        .note-page { position: relative; padding: 18px; border: 1px solid #e6e6e6; border-radius: 12px; margin-bottom: 18px; min-height: 240px; }
+        .note-page:last-child { margin-bottom: 0; }
+        .note-drawing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
         .note-content img { max-width: 100%; height: auto; }
         .note-content ul, .note-content ol { padding-left: 22px; }
         .note-content p { margin: 0 0 10px; }
+        .todo-item { display: flex; align-items: flex-start; gap: 8px; }
+        .todo-item input:checked + .todo-label { text-decoration: line-through; opacity: 0.7; }
         @media print {
             body { margin: 20mm; }
+            .note-page { break-inside: avoid; }
         }
     </style>
 </head>
@@ -44,25 +59,43 @@ const buildPrintableNoteHtml = (note, dict) => {
         <h1>${safeTitle}</h1>
         <div class="note-date">${safeDate}</div>
     </header>
-    <main class="note-content">${note.content || ""}</main>
+    <main class="note-content">${pageHtml}</main>
 </body>
 </html>`
 }
 
 const openPrintWindow = (html, title, dict) => {
-    const printWindow = window.open("", "_blank", "noopener,noreferrer")
-    if (!printWindow) {
+    const frame = document.createElement("iframe")
+    frame.style.position = "fixed"
+    frame.style.right = "0"
+    frame.style.bottom = "0"
+    frame.style.width = "0"
+    frame.style.height = "0"
+    frame.style.border = "0"
+    frame.style.opacity = "0"
+    frame.setAttribute("aria-hidden", "true")
+    document.body.appendChild(frame)
+    const finalize = () => {
+        if (!frame.contentWindow) {
+            UI.showToast(dict.popup_blocked || "Allow popups to print")
+            frame.remove()
+            return
+        }
+        frame.contentDocument.title = title
+        frame.contentWindow.focus()
+        frame.contentWindow.print()
+        setTimeout(() => frame.remove(), 1200)
+    }
+    frame.addEventListener("load", finalize, { once: true })
+    const doc = frame.contentDocument
+    if (!doc) {
+        frame.remove()
         UI.showToast(dict.popup_blocked || "Allow popups to print")
         return
     }
-    printWindow.document.open()
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.document.title = title
-    printWindow.onload = () => {
-        printWindow.focus()
-        printWindow.print()
-    }
+    doc.open()
+    doc.write(html)
+    doc.close()
 }
 
 Object.assign(UI, {

@@ -420,6 +420,7 @@ export const ThemeManager = {
             wrapper.type = "button"
             wrapper.className = "theme-item-wrapper"
             wrapper.dataset.themeKey = item.key
+            wrapper.classList.add(`theme-item-${item.key}`)
             if (activeKey === item.key) wrapper.classList.add("active")
             const dot = document.createElement("span")
             dot.className = "theme-dot"

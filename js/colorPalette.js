@@ -63,8 +63,40 @@ const ColorPalette = (() => {
         picker.classList.toggle("is-open", isOpen)
         const trigger = picker.querySelector("[data-color-trigger]")
         if (trigger) trigger.setAttribute("aria-expanded", String(isOpen))
-        if (isOpen) activePicker = picker
+        if (isOpen) {
+            activePicker = picker
+            const state = instances.get(picker)
+            if (state) requestAnimationFrame(() => positionPanel(state))
+        }
         else if (activePicker === picker) activePicker = null
+    }
+
+    const positionPanel = (state) => {
+        if (!state.panel || !state.picker) return
+        const padding = 8
+        state.panel.style.left = "0"
+        state.panel.style.right = "auto"
+        state.panel.style.top = "calc(100% + 10px)"
+        state.panel.style.bottom = "auto"
+        const pickerRect = state.picker.getBoundingClientRect()
+        const panelRect = state.panel.getBoundingClientRect()
+        let left = 0
+        const expectedRight = pickerRect.left + left + panelRect.width
+        if (expectedRight > window.innerWidth - padding) {
+            left -= expectedRight - (window.innerWidth - padding)
+        }
+        const expectedLeft = pickerRect.left + left
+        if (expectedLeft < padding) {
+            left += padding - expectedLeft
+        }
+        let top = pickerRect.height + 10
+        const expectedBottom = pickerRect.top + top + panelRect.height
+        if (expectedBottom > window.innerHeight - padding) {
+            const spaceAbove = pickerRect.top - panelRect.height - 10
+            top = spaceAbove >= padding ? -panelRect.height - 10 : Math.max(padding - pickerRect.top, top)
+        }
+        state.panel.style.left = `${left}px`
+        state.panel.style.top = `${top}px`
     }
 
     const updateUi = (state) => {
