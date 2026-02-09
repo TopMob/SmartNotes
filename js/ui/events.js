@@ -168,17 +168,39 @@ Object.assign(UI, {
         }).join("")
     },
 
-    toggleFilterMenu(force) {
-        const menu = this.els.filterMenu
-        if (!menu) return
-        const next = typeof force === "boolean" ? force : !menu.classList.contains("active")
-        menu.classList.toggle("active", next)
-        if (next && this.els.filterButton) {
-            const rect = this.els.filterButton.getBoundingClientRect()
-            menu.style.top = `${rect.bottom + 10}px`
-            menu.style.left = `${Math.max(10, Math.min(window.innerWidth - menu.offsetWidth - 10, rect.right - menu.offsetWidth))}px`
-        }
-    },
+toggleFilterMenu(force) {
+  const menu = this.els.filterMenu
+  if (!menu) return
+
+  const next = typeof force === "boolean" ? force : !menu.classList.contains("active")
+  menu.classList.toggle("active", next)
+
+  if (next && this.els.filterButton) {
+    const isMobile = !window.matchMedia("(min-width: 1024px)").matches
+    const rect = this.els.filterButton.getBoundingClientRect()
+
+    if (isMobile) {
+      menu.style.position = "fixed"
+      menu.style.top = "unset"
+      menu.style.left = "10px"
+      menu.style.right = "10px"
+      menu.style.bottom = "10px"
+    } else {
+      menu.style.position = ""
+      menu.style.bottom = "unset"
+      menu.style.right = "unset"
+      menu.style.top = `${rect.bottom + 10}px`
+      menu.style.left = `${Math.max(
+        10,
+        Math.min(
+          window.innerWidth - menu.offsetWidth - 10,
+          rect.right - menu.offsetWidth
+        )
+      )}px`
+    }
+  }
+}
+
 
     handleAction(el, e) {
         const action = el.dataset.action
