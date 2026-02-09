@@ -457,28 +457,37 @@ export const EditorAPI = (() => {
         page.focus()
     }
 
-    const addPage = () => {
-        if (!elements.content) return
-        const pages = getPages()
-        const previousCount = pages.length || 1
-        const page = createPageElement("")
-        const current = pages[state.pageIndex]
-        if (current) current.after(page)
-        else elements.content.appendChild(page)
-        ensurePages()
-        const currentNote = StateStore.read().currentNote
-        if (currentNote) {
-            const drawings = normalizePageDrawings(currentNote, previousCount)
-            drawings.splice(state.pageIndex + 1, 0, "")
-            const nextNote = updateNotePageDrawings(currentNote, drawings, true)
-            if (nextNote !== currentNote) {
-                StateStore.update("currentNote", nextNote)
-                StateStore.update("editorDirty", true)
-            }
-        }
-        setActivePage(state.pageIndex + 1)
-        queueSnapshot()
+const addPage = () => {
+    if (!elements.content) return
+
+    const pages = getPages()
+    if (pages.length >= 99) {
+        UI?.showToast?.("Maximum 99 pages per note")
+        return
     }
+
+    const previousCount = pages.length || 1
+    const page = createPageElement("")
+    const current = pages[state.pageIndex]
+    if (current) current.after(page)
+    else elements.content.appendChild(page)
+    ensurePages()
+
+    const currentNote = StateStore.read().currentNote
+    if (currentNote) {
+        const drawings = normalizePageDrawings(currentNote, previousCount)
+        drawings.splice(state.pageIndex + 1, 0, "")
+        const nextNote = updateNotePageDrawings(currentNote, drawings, true)
+        if (nextNote !== currentNote) {
+            StateStore.update("currentNote", nextNote)
+            StateStore.update("editorDirty", true)
+        }
+    }
+
+    setActivePage(state.pageIndex + 1)
+    queueSnapshot()
+}
+
 
     const nextPage = () => {
         const pages = getPages()
