@@ -27,6 +27,8 @@
     <link rel="stylesheet" href="css/responsive.css">
     <link rel="stylesheet" href="css/presets/active.css">
 
+    <link rel="manifest" href="manifest.json" />
+
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js" defer></script>
@@ -621,5 +623,8 @@
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
+    <script> if ("serviceWorker" in navigator) {navigator.serviceWorker.register("/sw.js")}</script>
+
+    
 </body>
 </html>
