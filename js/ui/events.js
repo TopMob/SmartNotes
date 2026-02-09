@@ -198,11 +198,17 @@ Object.assign(UI, {
                 break
             }
             case "switch-view":
-                switchView(el.dataset.view)
-                break
+              switchView(el.dataset.view)
+              if (!window.matchMedia("(min-width: 1024px)").matches) {
+                this.toggleSidebar(false)
+              }
+              break
             case "open-folder":
-                switchView("folder", el.dataset.folderId)
-                break
+              switchView("folder", el.dataset.folderId)
+              if (!window.matchMedia("(min-width: 1024px)").matches) {
+                this.toggleSidebar(false)
+              }
+              break
             case "delete-folder":
                 deleteFolder(el.dataset.folderId)
                 break
