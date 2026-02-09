@@ -114,13 +114,3 @@ body {
 .scrollable {
     scrollbar-gutter: stable;
 }
-
-
-@media (max-width: 1023px) {
-  #notes-filter-menu {
-    position: fixed;
-    top: 60px !important;
-    left: 10px !important;
-    right: 10px;
-  }
-}
