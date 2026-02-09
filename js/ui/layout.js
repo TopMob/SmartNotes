@@ -50,6 +50,8 @@ Object.assign(UI, {
                 const batch = db.batch()
                 notes.forEach(note => {
                     let n = NoteIO.normalizeNote(note)
+                    n.ownerId = StateStore.read().user.uid
+
                     const current = StateStore.read()
                     if (current.notes.some(x => x.id === n.id)) n.id = Utils.generateId()
                     if (n.folderId && !current.folders.find(f => f.id === n.folderId)) n.folderId = null
@@ -85,7 +87,8 @@ Object.assign(UI, {
             if (!db || !StateStore.read().user) return
             await db.collection("users").doc(StateStore.read().user.uid).collection("folders").add({
                 name: trimmed,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                ownerId: StateStore.read().user.uid
             })
         })
     },
