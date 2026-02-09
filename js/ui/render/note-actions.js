@@ -72,28 +72,30 @@ const openPrintWindow = (html, title, dict) => {
     frame.style.border = "0"
     frame.style.opacity = "0"
     frame.setAttribute("aria-hidden", "true")
+    frame.src = "about:blank"
     document.body.appendChild(frame)
-    const finalize = () => {
-        if (!frame.contentWindow) {
-            UI.showToast(dict.popup_blocked || "Allow popups to print")
+    frame.addEventListener("load", () => {
+        const doc = frame.contentDocument
+        if (!doc) {
             frame.remove()
+            UI.showToast(dict.popup_blocked || "Allow popups to print")
             return
         }
-        frame.contentDocument.title = title
-        frame.contentWindow.focus()
-        frame.contentWindow.print()
-        setTimeout(() => frame.remove(), 1200)
-    }
-    frame.addEventListener("load", finalize, { once: true })
-    const doc = frame.contentDocument
-    if (!doc) {
-        frame.remove()
-        UI.showToast(dict.popup_blocked || "Allow popups to print")
-        return
-    }
-    doc.open()
-    doc.write(html)
-    doc.close()
+        doc.open()
+        doc.write(html)
+        doc.close()
+        requestAnimationFrame(() => {
+            if (!frame.contentWindow) {
+                UI.showToast(dict.popup_blocked || "Allow popups to print")
+                frame.remove()
+                return
+            }
+            frame.contentDocument.title = title
+            frame.contentWindow.focus()
+            frame.contentWindow.print()
+            setTimeout(() => frame.remove(), 1200)
+        })
+    }, { once: true })
 }
 
 Object.assign(UI, {
@@ -250,10 +252,4 @@ Object.assign(UI, {
         this.closeModal("note-actions-modal")
     },
 
-    uploadSelectedNote() {
-        const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
-        if (!note) return
-        DriveService.uploadNote(note)
-        this.closeModal("note-actions-modal")
-    }
 })

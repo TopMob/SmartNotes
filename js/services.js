@@ -213,26 +213,6 @@ const LockService = {
     }
 }
 
-const DriveService = {
-    ready: false,
-    async init() {
-        if (typeof gapi !== "undefined") {
-            this.ready = true
-        }
-    },
-    async uploadNote(note) {
-        if (!this.ready) return UI.showToast(UI.getText("drive_unavailable", "Drive unavailable"))
-        return UI.showToast(UI.getText("drive_saved", "Uploaded"))
-    }
-}
-
-const ReminderService = {
-    init() {
-        const el = document.getElementById("voice-indicator")
-        if (el) el.classList.remove("active")
-    }
-}
-
 const CollaborationService = {
     shareCollection: "noteShares",
     sharedNotesCollection: "sharedNotes",
@@ -243,11 +223,15 @@ const CollaborationService = {
     },
     getRole(note) {
         const access = this.getAccess(note)
-        return access?.role === "edit" || access?.role === "view" ? access.role : "owner"
+        const role = access?.role
+        if (role === "owner" || role === "editor" || role === "viewer") return role
+        if (role === "edit") return "editor"
+        if (role === "view") return "viewer"
+        return "owner"
     },
     canEdit(note) {
         const role = this.getRole(note)
-        return role === "owner" || role === "edit"
+        return role === "owner" || role === "editor"
     },
     canManage(note) {
         return this.getRole(note) === "owner"
@@ -261,7 +245,7 @@ const CollaborationService = {
         return `shared_${ownerUid}_${noteId}`
     },
     normalizePermission(value) {
-        return value === "edit" ? "edit" : "view"
+        return value === "editor" || value === "edit" ? "editor" : "viewer"
     },
     async generateToken() {
         if (window.crypto?.getRandomValues) {

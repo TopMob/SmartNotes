@@ -1,11 +1,3 @@
-const buildHiddenPreset = (overrides) => ({
-    p: overrides.p,
-    bg: overrides.bg || "#050505",
-    t: overrides.t || "#ffffff",
-    brandName: overrides.brandName || "SmartNotes",
-    basePreset: overrides.basePreset || "dark"
-})
-
 export const ThemeManager = {
     themes: {
         dark: {
@@ -356,7 +348,7 @@ export const ThemeManager = {
     applyToRoot(theme) {
         const root = document.documentElement
         const rgb = this.hexToRgb(theme.p)
-        const reduceMotion = !!(window.StateStore && StateStore.read()?.config?.reduceMotion)
+        const reduceMotion = !!(typeof StateStore !== "undefined" && StateStore.read()?.config?.reduceMotion)
         root.style.setProperty("--primary", theme.p)
         root.style.setProperty("--primary-rgb", rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : "0, 242, 255")
         root.style.setProperty("--bg", theme.bg)
@@ -458,10 +450,10 @@ export const ThemeManager = {
         if (primary) primary.value = this.normalizeHex(p)
         if (bgInput) bgInput.value = this.normalizeHex(bg)
         if (text) text.value = this.normalizeHex(t)
-        if (window.ColorPalette) {
-            if (primary) window.ColorPalette.syncInput(primary)
-            if (bgInput) window.ColorPalette.syncInput(bgInput)
-            if (text) window.ColorPalette.syncInput(text)
+        if (typeof ColorPalette !== "undefined") {
+            if (primary) ColorPalette.syncInput(primary)
+            if (bgInput) ColorPalette.syncInput(bgInput)
+            if (text) ColorPalette.syncInput(text)
         }
     },
     revertToLastSaved() {
@@ -497,40 +489,4 @@ export const ThemeManager = {
     }
 }
 
-const HiddenPresets = {
-    cyber_edge: buildHiddenPreset({ p: "#ff2a6d", bg: "#05000f", t: "#f8f7ff" }),
-    lego_world: buildHiddenPreset({ p: "#e11d48", bg: "#ffef7a", t: "#1f2937", basePreset: "light" }),
-    app_smartlib: buildHiddenPreset({ p: "#ff7ad9", bg: "#1a0a20", t: "#fff5ff", brandName: "SmartLib" }),
-    site_smarthub: buildHiddenPreset({ p: "#ff8a00", bg: "#111111", t: "#f9f9f9", brandName: "SmartHub" }),
-    windows_classic: buildHiddenPreset({ p: "#2563eb", bg: "#e5f2ff", t: "#0b1220", basePreset: "light" }),
-    game_zzz: buildHiddenPreset({ p: "#22d3ee", bg: "#061824", t: "#e6fbff" }),
-    game_dark_souls: buildHiddenPreset({ p: "#fbbf24", bg: "#0f0a04", t: "#fff8e6" }),
-    game_minecraft: buildHiddenPreset({ p: "#22c55e", bg: "#08120a", t: "#eafff0" }),
-    game_dota: buildHiddenPreset({ p: "#ef4444", bg: "#140707", t: "#fff1f1" }),
-    game_cs: buildHiddenPreset({ p: "#f59e0b", bg: "#1a1208", t: "#fff6e6" }),
-    game_fortnite: buildHiddenPreset({ p: "#38bdf8", bg: "#08121a", t: "#e6f6ff" }),
-    anime_taiga: buildHiddenPreset({ p: "#f97316", bg: "#1b0f0a", t: "#fff1e6" }),
-    anime_asuka: buildHiddenPreset({ p: "#ef4444", bg: "#160707", t: "#fff5f5" }),
-    anime_asuna: buildHiddenPreset({ p: "#f59e0b", bg: "#1a1206", t: "#fff7e6" }),
-    anime_rei: buildHiddenPreset({ p: "#22d3ee", bg: "#031017", t: "#e6fbff" }),
-    anime_oshi_no_ko: buildHiddenPreset({ p: "#ec4899", bg: "#140812", t: "#ffe6f4" }),
-    anime_healer_mage: buildHiddenPreset({ p: "#10b981", bg: "#04110b", t: "#ecfff8" }),
-    anime_rem: buildHiddenPreset({ p: "#60a5fa", bg: "#0a0f1a", t: "#eef6ff" }),
-    anime_zero: buildHiddenPreset({ p: "#a78bfa", bg: "#0f0a1a", t: "#f4efff" }),
-    anime_emilia: buildHiddenPreset({ p: "#7c3aed", bg: "#0f0816", t: "#f3e8ff" }),
-    anime_nezuko: buildHiddenPreset({ p: "#f472b6", bg: "#160812", t: "#ffe9f5" }),
-    anime_mai: buildHiddenPreset({ p: "#fb7185", bg: "#160a0d", t: "#fff1f3" }),
-    anime_hinata: buildHiddenPreset({ p: "#38bdf8", bg: "#050f19", t: "#e6f7ff" }),
-    anime_monika: buildHiddenPreset({ p: "#84cc16", bg: "#0b1306", t: "#f5ffe6" }),
-    anime_helltaker: buildHiddenPreset({ p: "#f43f5e", bg: "#14070c", t: "#ffe6ec" }),
-    anime_yor: buildHiddenPreset({ p: "#22c55e", bg: "#08120d", t: "#ecfff6" }),
-    anime_power: buildHiddenPreset({ p: "#f97316", bg: "#1b0c06", t: "#fff2e6" }),
-    anime_megumin: buildHiddenPreset({ p: "#e11d48", bg: "#19040a", t: "#ffe6eb" }),
-    anime_toru: buildHiddenPreset({ p: "#14b8a6", bg: "#041311", t: "#e7fffb" }),
-    anime_nobara: buildHiddenPreset({ p: "#f472b6", bg: "#1a0a12", t: "#ffe8f4" }),
-    anime_casca: buildHiddenPreset({ p: "#d97706", bg: "#1a0f06", t: "#fff6e6" }),
-    anime_misa: buildHiddenPreset({ p: "#9333ea", bg: "#100714", t: "#f5e6ff" })
-}
-
 window.ThemeManager = ThemeManager
-window.HiddenPresets = HiddenPresets

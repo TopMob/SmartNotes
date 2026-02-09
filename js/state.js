@@ -13,6 +13,7 @@ const StateStore = (() => {
         mediaRecorder: null,
         editorDirty: false,
         isEditing: false,
+        isTyping: false,
         orderHistory: [],
         appearanceDraft: null
     }
@@ -45,6 +46,7 @@ const StateStore = (() => {
         mediaRecorder: null,
         editorDirty: false,
         isEditing: false,
+        isTyping: false,
         orderHistory: [],
         appearanceDraft: null,
         config: { ...initialState.config }
@@ -59,5 +61,3 @@ const StateStore = (() => {
         initialState: () => ({ ...initialState, config: { ...initialState.config } })
     }
 })()
-
-window.StateStore = StateStore

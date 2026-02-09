@@ -237,11 +237,11 @@ async function shareNoteLink(noteId, permission) {
 }
 
 async function shareNoteView(noteId) {
-    await shareNoteLink(noteId, "view")
+    await shareNoteLink(noteId, "viewer")
 }
 
 async function shareNoteEdit(noteId) {
-    await shareNoteLink(noteId, "edit")
+    await shareNoteLink(noteId, "editor")
 }
 
 window.deleteFolder = deleteFolder

@@ -64,7 +64,7 @@ const EditorDrawing = (() => {
             elements.drawingControls.querySelectorAll("[data-drawing-color]").forEach(btn => {
                 btn.addEventListener("click", () => setDrawingColor(btn.dataset.drawingColor || "#111111"))
             })
-            if (window.ColorPalette) window.ColorPalette.init(elements.drawingControls)
+            if (typeof ColorPalette !== "undefined") ColorPalette.init(elements.drawingControls)
         }
         updateDrawingToolButtons()
         updateDrawingColorButtons()
@@ -100,7 +100,7 @@ const EditorDrawing = (() => {
         if (!color) return
         drawingState.color = color
         if (elements.drawingColor) elements.drawingColor.value = color
-        if (window.ColorPalette && elements.drawingColor) window.ColorPalette.syncInput(elements.drawingColor)
+        if (typeof ColorPalette !== "undefined" && elements.drawingColor) ColorPalette.syncInput(elements.drawingColor)
         updateDrawingColorButtons()
     }
 
@@ -414,5 +414,3 @@ const EditorDrawing = (() => {
         cleanup
     }
 })()
-
-window.EditorDrawing = EditorDrawing

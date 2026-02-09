@@ -13,8 +13,6 @@ const AppLifecycle = {
     async initializeOnce() {
         if (this.initialized) return
         this.initialized = true
-        await DriveService.init()
-        ReminderService.init()
         if (typeof Editor !== "undefined") Editor.init()
         UI.init()
         UI.setLang(localStorage.getItem("app-lang") || "ru")
@@ -57,6 +55,19 @@ const AppLifecycle = {
         if (!this.shouldIgnoreSharedError(error)) return false
         this.disableSharedSync()
         return true
+    },
+    removeSharedEntry(id, options = {}) {
+        const entry = this.sharedEntries.get(id)
+        if (!entry) return
+        const unsub = this.sharedNoteUnsubs.get(id)
+        if (typeof unsub === "function") unsub()
+        this.sharedNoteUnsubs.delete(id)
+        this.sharedEntries.delete(id)
+        this.sharedNotes.delete(id)
+        if (options.removeRemote && db && this.activeUid) {
+            db.collection("users").doc(this.activeUid).collection(CollaborationService.sharedNotesCollection).doc(id).delete()
+        }
+        this.updateNotesState()
     },
 
     stopUserSession() {
@@ -144,7 +155,7 @@ const AppLifecycle = {
         notes = NotesStorage.applyStoredFavorites(notes)
         StateStore.update("notes", notes)
         NotesStorage.syncFavoritesStorage(notes)
-        if (StateStore.read().isEditing) return
+        if (StateStore.read().isEditing || StateStore.read().isTyping) return
         this.syncOpenNote(notes)
         filterAndRender(document.getElementById("search-input")?.value || "")
     },
@@ -165,13 +176,13 @@ const AppLifecycle = {
             if (!entries.has(id)) removed.push(id)
         })
         removed.forEach(id => {
-            const unsub = this.sharedNoteUnsubs.get(id)
-            if (typeof unsub === "function") unsub()
-            this.sharedNoteUnsubs.delete(id)
-            this.sharedEntries.delete(id)
-            this.sharedNotes.delete(id)
+            this.removeSharedEntry(id)
         })
         entries.forEach((entry, id) => {
+            if (!entry.permission) {
+                this.removeSharedEntry(id, { removeRemote: true })
+                return
+            }
             const existing = this.sharedEntries.get(id)
             this.sharedEntries.set(id, entry)
             if (existing) {
@@ -192,8 +203,7 @@ const AppLifecycle = {
             const unsub = db.collection("users").doc(entry.ownerUid).collection("notes").doc(entry.noteId)
                 .onSnapshot(doc => {
                     if (!doc.exists) {
-                        this.sharedNotes.delete(id)
-                        this.updateNotesState()
+                        this.removeSharedEntry(id)
                         return
                     }
                     const baseNote = NoteIO.normalizeNote({ id: entry.noteId, ...doc.data() })
@@ -214,7 +224,10 @@ const AppLifecycle = {
                         if (typeof Editor !== "undefined") Editor.openFromList(sharedNote)
                     }
                 }, error => {
-                    if (this.handleSharedError(error)) return
+                    if (this.shouldIgnoreSharedError(error)) {
+                        this.removeSharedEntry(id, { removeRemote: true })
+                        return
+                    }
                     UI.showToast(UI.getText("sync_error", "Sync error"))
                     console.error("Shared note sync error", error)
                 })
