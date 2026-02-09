@@ -8,6 +8,7 @@ const AppLifecycle = {
     sharedUnsub: null,
     sharedNoteUnsubs: new Map(),
     pendingShareEntryId: null,
+    sharedSyncEnabled: true,
 
     async initializeOnce() {
         if (this.initialized) return
@@ -35,9 +36,32 @@ const AppLifecycle = {
         this.ownedNotes = []
         this.pendingShareEntryId = null
     },
+    disableSharedSync() {
+        this.sharedSyncEnabled = false
+        if (typeof this.sharedUnsub === "function") this.sharedUnsub()
+        this.sharedUnsub = null
+        this.sharedNoteUnsubs.forEach(unsub => {
+            if (typeof unsub === "function") unsub()
+        })
+        this.sharedNoteUnsubs = new Map()
+        this.sharedEntries = new Map()
+        this.sharedNotes = new Map()
+    },
+    shouldIgnoreSharedError(error) {
+        if (!error) return false
+        if (error.code === "permission-denied") return true
+        if (typeof error.message === "string" && error.message.includes("Missing or insufficient permissions")) return true
+        return false
+    },
+    handleSharedError(error) {
+        if (!this.shouldIgnoreSharedError(error)) return false
+        this.disableSharedSync()
+        return true
+    },
 
     stopUserSession() {
         this.activeUid = null
+        this.sharedSyncEnabled = true
         this.clearSubscriptions()
     },
 
@@ -79,7 +103,7 @@ const AppLifecycle = {
 
         this.unsubscribers = [folderUnsub, notesUnsub]
 
-        if (typeof CollaborationService !== "undefined") {
+        if (typeof CollaborationService !== "undefined" && this.sharedSyncEnabled) {
             this.sharedUnsub = db.collection("users").doc(user.uid).collection(CollaborationService.sharedNotesCollection)
                 .onSnapshot(snap => {
                     const entries = new Map()
@@ -96,6 +120,7 @@ const AppLifecycle = {
                     })
                     this.applySharedEntries(entries)
                 }, error => {
+                    if (this.handleSharedError(error)) return
                     UI.showToast(UI.getText("sync_error", "Sync error"))
                     console.error("Shared notes sync error", error)
                 })
@@ -119,6 +144,7 @@ const AppLifecycle = {
         notes = NotesStorage.applyStoredFavorites(notes)
         StateStore.update("notes", notes)
         NotesStorage.syncFavoritesStorage(notes)
+        if (StateStore.read().isEditing) return
         this.syncOpenNote(notes)
         filterAndRender(document.getElementById("search-input")?.value || "")
     },
@@ -188,6 +214,7 @@ const AppLifecycle = {
                         if (typeof Editor !== "undefined") Editor.openFromList(sharedNote)
                     }
                 }, error => {
+                    if (this.handleSharedError(error)) return
                     UI.showToast(UI.getText("sync_error", "Sync error"))
                     console.error("Shared note sync error", error)
                 })

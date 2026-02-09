@@ -81,7 +81,6 @@ const Editor = (() => {
             els.content.addEventListener("keyup", storeSelection, { signal })
             els.content.addEventListener("mouseup", storeSelection, { signal })
             els.content.addEventListener("touchend", storeSelection, { signal })
-            els.content.addEventListener("input", handleContentInput, { signal })
             
             els.content.addEventListener("click", (e) => {
                 const link = e.target.closest("a")
@@ -221,10 +220,6 @@ const Editor = (() => {
         }
     }
 
-    const handleContentInput = (event) => {
-        if (event.isComposing) return
-        scheduleEasterEggCheck()
-    }
 
     const updateEditableState = () => {
         const editable = !drawingState?.active && canEditNote(StateStore.read().currentNote)
@@ -667,6 +662,7 @@ const Editor = (() => {
 
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)
+        StateStore.update("isEditing", true)
         pageIndex = 0
         titleTouched = !!prepared.title
         
@@ -708,6 +704,7 @@ const Editor = (() => {
     const close = () => {
         els.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
+        StateStore.update("isEditing", false)
         deselectMedia()
         stopRecording()
         pageIndex = 0
@@ -723,10 +720,12 @@ const Editor = (() => {
             EditorDrawing.cleanup()
         }
         if (observer) observer.disconnect()
+        filterAndRender(document.getElementById("search-input")?.value || "")
     }
 
     const refreshFromRemote = (note) => {
         const current = StateStore.read().currentNote
+        if (StateStore.read().isEditing) return
         if (!current || !note || current.id !== note.id) return
         StateStore.update("currentNote", note)
         renderState()
@@ -1239,8 +1238,7 @@ const Editor = (() => {
                 ...n, 
                 title: current.title, 
                 content: current.content,
-                pageDrawings: current.pageDrawings,
-                updatedAt: Utils.serverTimestamp()
+                pageDrawings: current.pageDrawings
             })
         }
         scheduleAutoSave()
