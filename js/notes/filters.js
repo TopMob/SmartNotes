@@ -178,11 +178,3 @@ function switchView(view, folderId = null) {
     const searchInput = document.getElementById("search-input")
     filterAndRender(searchInput ? searchInput.value : "")
 }
-
-window.normalizeVisibleNotes = normalizeVisibleNotes
-window.getTimestampValue = getTimestampValue
-window.isHiddenLocked = isHiddenLocked
-window.isFutureNote = isFutureNote
-window.getLockedNotes = getLockedNotes
-window.filterAndRender = filterAndRender
-window.switchView = switchView

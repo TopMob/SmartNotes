@@ -1,8 +1,8 @@
-window.EditorAudio = (() => {
+const EditorAudio = (() => {
     const state = { container: null }
 
     const getText = (key, fallback) => {
-        if (window.UI && typeof UI.getText === "function") {
+        if (typeof UI !== "undefined" && typeof UI.getText === "function") {
             return UI.getText(key, fallback)
         }
         return fallback

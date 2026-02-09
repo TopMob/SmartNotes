@@ -1,28 +1,4 @@
 const Editor = (() => {
-    let els = {}
-    let history = []
-    let future = []
-    let selectedMedia = null
-    let resizeState = null
-    let dragState = null
-    let observer = null
-    let abortController = null
-    let recordingStream = null
-    let savedRange = null
-    let alignMenuTarget = null
-    let pageIndex = 0
-    let titleTouched = false
-    let autoSaveSnapshot = null
-    let isRenderingState = false
-    const drawingState = window.EditorDrawing?.state
-
-    const CONFIG = {
-        MAX_HISTORY: 100,
-        SNAPSHOT_DELAY: 300,
-        MIN_IMG_WIDTH: 100,
-        MAX_IMG_WIDTH: 860
-    }
-
     const init = () => {
         els = {
             wrapper: document.getElementById("note-editor"),
@@ -45,7 +21,7 @@ const Editor = (() => {
         }
         loadToolSettings()
         buildToolbar()
-        if (window.EditorDrawing) {
+        if (typeof EditorDrawing !== "undefined") {
             EditorDrawing.configure({
                 elements: els,
                 getPages,
@@ -72,7 +48,7 @@ const Editor = (() => {
         }
 
         if (els.content) {
-            observer = new MutationObserver(queueSnapshot)
+            observer = new MutationObserver(scheduleSnapshotFrame)
             observer.observe(els.content, { childList: true, subtree: true, characterData: true, attributes: true })
 
             els.content.addEventListener("paste", handlePaste, { signal })
@@ -142,7 +118,7 @@ const Editor = (() => {
             }, { signal })
         }
 
-        if (window.EditorAudio) {
+        if (typeof EditorAudio !== "undefined") {
             EditorAudio.bind({ container: els.content, signal })
         }
 
@@ -166,35 +142,13 @@ const Editor = (() => {
         }
     }
 
-    const handlePaste = async (e) => {
-        const items = Array.from(e.clipboardData?.items || [])
-        const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
-        if (imageItem) {
-            e.preventDefault()
-            const file = imageItem.getAsFile()
-            if (!file) return
-            const url = await fileToDataUrl(file)
-            insertMedia(url, "image")
-            return
-        }
-
-        e.preventDefault()
-        const text = e.clipboardData.getData("text/plain")
-        const html = e.clipboardData.getData("text/html")
-        
-        let safeContent = text
-        if (html) {
-            const div = document.createElement("div")
-            div.innerHTML = html
-            div.querySelectorAll("*").forEach(el => {
-                el.removeAttribute("style")
-                el.removeAttribute("class")
-                if (el.tagName === "IMG") el.remove()
-            })
-            safeContent = div.innerHTML
-        }
-        
-        document.execCommand("insertHTML", false, safeContent || text)
+    const scheduleSnapshotFrame = () => {
+        if (isRenderingState) return
+        if (snapshotFrame) return
+        snapshotFrame = requestAnimationFrame(() => {
+            snapshotFrame = null
+            queueSnapshot()
+        })
     }
 
     const getActivePage = () => getPages()[pageIndex] || null
@@ -229,12 +183,6 @@ const Editor = (() => {
         if (els.content) {
             els.content.classList.toggle("drawing-active", !!drawingState?.active)
         }
-    }
-
-    const handleEquationConfirmKeyDown = (e) => {
-        if (e.key !== "Enter") return
-        if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
-        if (confirmEquationAtCaret()) e.preventDefault()
     }
 
     const handleLockApply = async () => {
@@ -317,9 +265,9 @@ const Editor = (() => {
 
     const storeActivePageDrawing = (options = {}) => {
         const currentNote = StateStore.read().currentNote
-        if (!currentNote || !window.EditorDrawing) return
+        if (!currentNote || typeof EditorDrawing === "undefined") return
         const drawings = normalizePageDrawings(currentNote, getPages().length)
-        const snapshot = window.EditorDrawing.getDrawingSnapshot?.() ?? ""
+        const snapshot = EditorDrawing.getDrawingSnapshot?.() ?? ""
         if (drawings[pageIndex] === snapshot) return
         drawings[pageIndex] = snapshot
         const nextNote = updateNotePageDrawings(currentNote, drawings, options.updateTimestamp)
@@ -332,7 +280,7 @@ const Editor = (() => {
 
     const syncDrawingForActivePage = () => {
         const note = StateStore.read().currentNote
-        if (!note || !window.EditorDrawing) return
+        if (!note || typeof EditorDrawing === "undefined") return
         const page = getPages()[pageIndex] || null
         EditorDrawing.setActivePage?.(page)
         const drawing = resolveActivePageDrawing(note)
@@ -457,7 +405,7 @@ const Editor = (() => {
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             storeSelection()
-            if (window.EditorDrawing) EditorDrawing.toggleDrawingMode()
+            if (typeof EditorDrawing !== "undefined") EditorDrawing.toggleDrawingMode()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => toggleAlignMenu(btn) },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
@@ -536,119 +484,6 @@ const Editor = (() => {
     }
 
 
-    const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-        const r = new FileReader()
-        r.onload = () => resolve(String(r.result || ""))
-        r.onerror = () => reject(new Error("File read failed"))
-        r.readAsDataURL(file)
-    })
-
-    const handleResizeStart = (e) => {
-        const handle = e.target.closest(".media-resize-handle")
-        if (!handle) return
-        
-        const wrapper = e.target.closest(".media-wrapper")
-        const img = wrapper?.querySelector("img")
-        if (!wrapper || !img) return
-
-        e.preventDefault()
-        e.stopPropagation()
-
-        const rect = img.getBoundingClientRect()
-        const page = getPages()[pageIndex] || els.content
-        const parentWidth = page.getBoundingClientRect().width - 40
-        
-        resizeState = {
-            startX: e.clientX || e.touches?.[0].clientX,
-            startWidth: rect.width,
-            ratio: rect.width / Math.max(1, rect.height),
-            maxWidth: Math.min(CONFIG.MAX_IMG_WIDTH, parentWidth),
-            wrapper,
-            img
-        }
-
-        handle.setPointerCapture?.(e.pointerId)
-        document.addEventListener("pointermove", handleResizeMove, { passive: false })
-        document.addEventListener("pointerup", handleResizeEnd, { once: true })
-        document.addEventListener("pointercancel", handleResizeEnd, { once: true })
-    }
-
-    const handleResizeMove = (e) => {
-        if (!resizeState) return
-        e.preventDefault()
-        
-        const clientX = e.clientX
-        const dx = clientX - resizeState.startX
-        let w = resizeState.startWidth + dx
-        
-        w = Utils.clamp(Utils.snap(w, 8), CONFIG.MIN_IMG_WIDTH, resizeState.maxWidth)
-        const h = w / resizeState.ratio
-
-        resizeState.img.style.width = `${w}px`
-        resizeState.img.style.height = `${h}px`
-        resizeState.wrapper.dataset.width = w
-        resizeState.wrapper.dataset.height = h
-    }
-
-    const handleResizeEnd = () => {
-        resizeState = null
-        document.removeEventListener("pointermove", handleResizeMove)
-        queueSnapshot()
-    }
-
-    const handleMediaDragStart = (e) => {
-        if (e.button && e.button !== 0) return
-        if (e.target.closest(".media-resize-handle")) return
-        const wrapper = e.target.closest(".media-wrapper")
-        if (!wrapper || !els.content.contains(wrapper)) return
-        dragState = {
-            wrapper,
-            trailingBreak: wrapper.nextSibling && wrapper.nextSibling.nodeName === "BR" ? wrapper.nextSibling : null,
-            startX: e.clientX,
-            startY: e.clientY,
-            moved: false
-        }
-        wrapper.setPointerCapture?.(e.pointerId)
-        document.addEventListener("pointermove", handleMediaDragMove, { passive: false })
-        document.addEventListener("pointerup", handleMediaDragEnd, { once: true })
-        document.addEventListener("pointercancel", handleMediaDragEnd, { once: true })
-    }
-
-    const handleMediaDragMove = (e) => {
-        if (!dragState) return
-        const dx = e.clientX - dragState.startX
-        const dy = e.clientY - dragState.startY
-        if (!dragState.moved && Math.hypot(dx, dy) < 6) return
-        dragState.moved = true
-        dragState.wrapper.classList.add("dragging")
-        dragState.wrapper.style.transform = `translate(${dx}px, ${dy}px)`
-        dragState.wrapper.style.pointerEvents = "none"
-        e.preventDefault()
-    }
-
-    const handleMediaDragEnd = (e) => {
-        if (!dragState) return
-        const { wrapper, trailingBreak, moved } = dragState
-        wrapper.classList.remove("dragging")
-        wrapper.style.transform = ""
-        wrapper.style.pointerEvents = ""
-        if (moved) {
-            const range = getDropRange(e.clientX, e.clientY)
-            if (range && els.content.contains(range.commonAncestorContainer)) {
-                const fragment = document.createDocumentFragment()
-                fragment.appendChild(wrapper)
-                if (trailingBreak) fragment.appendChild(trailingBreak)
-                range.insertNode(fragment)
-            } else {
-                els.content.appendChild(wrapper)
-                if (trailingBreak) els.content.appendChild(trailingBreak)
-            }
-            queueSnapshot()
-        }
-        dragState = null
-        document.removeEventListener("pointermove", handleMediaDragMove)
-    }
-
     const open = (note = null) => {
         const current = StateStore.read()
         const folderId = current.view === "folder" ? current.activeFolderId : null
@@ -663,6 +498,7 @@ const Editor = (() => {
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)
         StateStore.update("isEditing", true)
+        StateStore.update("isTyping", false)
         pageIndex = 0
         titleTouched = !!prepared.title
         
@@ -705,17 +541,20 @@ const Editor = (() => {
         els.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
+        StateStore.update("isTyping", false)
         deselectMedia()
         stopRecording()
         pageIndex = 0
         titleTouched = false
         autoSaveSnapshot = null
+        if (snapshotFrame) cancelAnimationFrame(snapshotFrame)
+        snapshotFrame = null
         drawingState.active = false
         drawingState.isDrawing = false
         if (els.drawingControls) {
             els.drawingControls.classList.add("hidden")
         }
-        if (window.EditorDrawing) {
+        if (typeof EditorDrawing !== "undefined") {
             EditorDrawing.setDrawingData("", { recordHistory: true, replaceHistory: true })
             EditorDrawing.cleanup()
         }
@@ -743,7 +582,7 @@ const Editor = (() => {
             renderTags()
             makeMediaDraggable()
             syncMediaSizes()
-            if (window.EditorAudio) EditorAudio.sync(els.content)
+            if (typeof EditorAudio !== "undefined") EditorAudio.sync(els.content)
             syncLockButton(n)
             syncDrawingForActivePage()
             syncAccessState(n)
@@ -754,283 +593,6 @@ const Editor = (() => {
         } finally {
             isRenderingState = false
         }
-    }
-
-    const focusEditable = (el) => {
-        const sel = window.getSelection()
-        if (!sel) return
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        range.collapse(true)
-        sel.removeAllRanges()
-        sel.addRange(range)
-        els.content?.focus()
-    }
-
-    const storeSelection = () => {
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return
-        const range = sel.getRangeAt(0)
-        if (!els.content || !els.content.contains(range.commonAncestorContainer)) return
-        savedRange = range.cloneRange()
-    }
-
-    const getTextNodes = (root) => {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
-        const nodes = []
-        let current = walker.nextNode()
-        while (current) {
-            nodes.push(current)
-            current = walker.nextNode()
-        }
-        return nodes
-    }
-
-    const getActiveRangeInContent = () => {
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount) {
-            const range = sel.getRangeAt(0)
-            if (els.content && els.content.contains(range.commonAncestorContainer)) return range
-        }
-        if (savedRange && els.content && els.content.contains(savedRange.commonAncestorContainer)) return savedRange
-        return null
-    }
-
-    const getCaretOffsetInBlock = (block, range) => {
-        const targetRange = range || getActiveRangeInContent()
-        if (!targetRange || !targetRange.collapsed) return null
-        const nodes = getTextNodes(block)
-        let offset = 0
-        for (const node of nodes) {
-            if (node === targetRange.startContainer) {
-                return offset + targetRange.startOffset
-            }
-            offset += node.textContent?.length || 0
-        }
-        return null
-    }
-
-    const createRangeFromOffsets = (root, start, end) => {
-        const range = document.createRange()
-        const nodes = getTextNodes(root)
-        let offset = 0
-        let startNode = null
-        let startOffset = 0
-        let endNode = null
-        let endOffset = 0
-        for (const node of nodes) {
-            const len = node.textContent?.length || 0
-            if (!startNode && start <= offset + len) {
-                startNode = node
-                startOffset = Math.max(0, start - offset)
-            }
-            if (!endNode && end <= offset + len) {
-                endNode = node
-                endOffset = Math.max(0, end - offset)
-            }
-            offset += len
-        }
-        if (!startNode || !endNode) return null
-        range.setStart(startNode, startOffset)
-        range.setEnd(endNode, endOffset)
-        return range
-    }
-
-    const getBlockFromRange = (range) => {
-        let node = range.startContainer
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || node === els.content) return null
-        if (node.classList?.contains("note-page")) return null
-        const block = node.closest("div, p")
-        if (block?.classList?.contains("note-page")) return null
-        return block
-    }
-
-    const confirmEquationAtCaret = () => {
-        const range = getActiveRangeInContent()
-        if (!range || !range.collapsed) return false
-        const target = getBlockFromRange(range) || getPages()[pageIndex] || els.content
-        if (!target) return false
-        const caretOffset = getCaretOffsetInBlock(target, range)
-        if (caretOffset === null) return false
-        const fullText = target.textContent || ""
-        const expressionData = window.Calculator?.findExpressionAroundCaret?.(fullText, caretOffset)
-        if (!expressionData) return false
-        const result = window.Calculator?.evaluateExpression?.(expressionData.expression)
-        if (!Number.isFinite(result)) return false
-        const replaceRange = createRangeFromOffsets(target, expressionData.start, expressionData.end)
-        if (!replaceRange) return false
-        replaceRange.deleteContents()
-        const formatted = window.Calculator?.formatResult?.(result) ?? String(result)
-        replaceRange.insertNode(document.createTextNode(formatted))
-        replaceRange.collapse(false)
-        const sel = window.getSelection()
-        if (sel) {
-            sel.removeAllRanges()
-            sel.addRange(replaceRange)
-        }
-        queueSnapshot()
-        return true
-    }
-
-    const restoreSelection = () => {
-        if (!els.content) return null
-        const sel = window.getSelection()
-        let range = null
-        if (savedRange && els.content.contains(savedRange.commonAncestorContainer)) {
-            range = savedRange
-        } else if (sel && sel.rangeCount && els.content.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-            range = sel.getRangeAt(0)
-        } else {
-            range = document.createRange()
-            range.selectNodeContents(els.content)
-            range.collapse(false)
-        }
-        if (sel) {
-            sel.removeAllRanges()
-            sel.addRange(range)
-        }
-        return range
-    }
-
-    const insertHtmlAtSelection = (html) => {
-        if (!els.content) return
-        const range = restoreSelection()
-        const container = document.createElement("div")
-        container.innerHTML = html
-        const fragment = document.createDocumentFragment()
-        while (container.firstChild) fragment.appendChild(container.firstChild)
-        if (range) {
-            range.deleteContents()
-            range.insertNode(fragment)
-            range.collapse(false)
-            const sel = window.getSelection()
-            if (sel) {
-                sel.removeAllRanges()
-                sel.addRange(range)
-            }
-        } else {
-            els.content.appendChild(fragment)
-        }
-        storeSelection()
-    }
-
-    const insertNodeAtSelection = (node) => {
-        if (!els.content) return
-        const range = restoreSelection()
-        if (range) {
-            range.deleteContents()
-            range.insertNode(node)
-            range.setStartAfter(node)
-            range.collapse(true)
-            const sel = window.getSelection()
-            if (sel) {
-                sel.removeAllRanges()
-                sel.addRange(range)
-            }
-        } else {
-            els.content.appendChild(node)
-        }
-        storeSelection()
-    }
-
-    const normalizeStrikeTags = () => {
-        if (!els.content) return
-        els.content.querySelectorAll("strike").forEach(strike => {
-            const replacement = document.createElement("s")
-            while (strike.firstChild) replacement.appendChild(strike.firstChild)
-            strike.replaceWith(replacement)
-        })
-    }
-
-    const toggleStrikeThrough = () => {
-        document.execCommand("strikeThrough")
-        normalizeStrikeTags()
-    }
-
-    const insertHorizontalRule = () => {
-        const hr = document.createElement("hr")
-        insertNodeAtSelection(hr)
-    }
-
-    const wrapSelectionWithNode = (node) => {
-        const range = getActiveRangeInContent()
-        if (!range || range.collapsed) return null
-        const content = range.extractContents()
-        node.appendChild(content)
-        range.insertNode(node)
-        const nextRange = document.createRange()
-        nextRange.selectNodeContents(node)
-        nextRange.collapse(false)
-        const sel = window.getSelection()
-        if (sel) {
-            sel.removeAllRanges()
-            sel.addRange(nextRange)
-        }
-        storeSelection()
-        return node
-    }
-
-    const normalizeUrl = (value) => {
-        const url = String(value || "").trim()
-        if (!url) return ""
-        if (/^https?:\/\//i.test(url)) return url
-        if (/^mailto:/i.test(url)) return url
-        if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) return `https://${url}`
-        return url
-    }
-
-    const applyLink = (value) => {
-        const url = normalizeUrl(value)
-        if (!url) return
-        const range = getActiveRangeInContent()
-        if (!range || range.collapsed) {
-            UI.showToast(UI.getText("link_selection_required", "Select text to link"))
-            return
-        }
-        const link = document.createElement("a")
-        link.href = url
-        wrapSelectionWithNode(link)
-    }
-
-    const applyNoteLink = (value) => {
-        const noteId = String(value || "").trim()
-        if (!noteId) return
-        const range = getActiveRangeInContent()
-        if (!range || range.collapsed) {
-            UI.showToast(UI.getText("note_link_selection_required", "Select text to link"))
-            return
-        }
-        const note = StateStore.read().notes.find(item => item.id === noteId)
-        if (!note) {
-            UI.showToast(UI.getText("note_link_not_found", "Note not found"))
-            return
-        }
-        const link = document.createElement("a")
-        link.dataset.noteId = noteId
-        wrapSelectionWithNode(link)
-    }
-
-    const openNoteById = (noteId) => {
-        const note = StateStore.read().notes.find(item => item.id === noteId)
-        if (!note) {
-            UI.showToast(UI.getText("note_link_not_found", "Note not found"))
-            return
-        }
-        openFromList(note)
-    }
-
-    const getDropRange = (x, y) => {
-        if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y)
-        if (document.caretPositionFromPoint) {
-            const pos = document.caretPositionFromPoint(x, y)
-            if (!pos) return null
-            const range = document.createRange()
-            range.setStart(pos.offsetNode, pos.offset)
-            range.collapse(true)
-            return range
-        }
-        return null
     }
 
     const syncLockButton = (note) => {
@@ -1070,381 +632,6 @@ const Editor = (() => {
         UI.openModal("lock-modal")
     }
 
-    const getTextFromHtml = (html) => {
-        const text = Utils.stripHtml(html || "")
-        return text.replace(/\s+/g, " ").trim()
-    }
-
-    const getMediaCountsFromHtml = (html) => {
-        const wrapper = document.createElement("div")
-        wrapper.innerHTML = html || ""
-        return {
-            images: wrapper.querySelectorAll("img").length,
-            audio: wrapper.querySelectorAll("audio").length
-        }
-    }
-
-    const getCountLabel = (count, singleKey, pluralKey) => {
-        if (count === 1) return UI.getText(singleKey, singleKey)
-        return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
-    }
-
-    const formatMediaSummary = (counts) => {
-        const parts = []
-        if (counts.images) {
-            parts.push(`${counts.images} ${getCountLabel(counts.images, "media_photo", "media_photos")}`)
-        }
-        if (counts.audio) {
-            parts.push(`${counts.audio} ${getCountLabel(counts.audio, "media_audio", "media_audios")}`)
-        }
-        return parts.join(" · ")
-    }
-
-    const buildAutoTitle = (html) => {
-        const text = getTextFromHtml(html)
-        if (text) {
-            const line = text.split(/\r?\n/).find(l => l.trim()) || text
-            const normalized = line.trim()
-            return normalized.length > 60 ? `${normalized.slice(0, 57)}…` : normalized
-        }
-        return formatMediaSummary(getMediaCountsFromHtml(html)) || UI.getText("untitled_note", "Untitled")
-    }
-
-    const extractHashtags = (value) => {
-        const res = new Set()
-        const text = String(value || "")
-        for (const match of text.matchAll(/#([\p{L}\p{N}_-]{2,})/gu)) {
-            const tag = match[1]?.trim()
-            if (tag) res.add(tag)
-        }
-        return [...res]
-    }
-
-    const collectSuggestedTags = (title, content) => {
-        const text = `${title || ""} ${Utils.stripHtml(content || "")}`
-        const fromSmart = SmartSearch.suggestTags(title || "", content || "")
-        const fromHash = extractHashtags(text)
-        return [...new Set([...fromSmart, ...fromHash])]
-    }
-
-    const syncAutoTitle = () => {
-        if (!els.title || titleTouched) return
-        const html = els.content?.innerHTML || ""
-        const next = buildAutoTitle(html)
-        if (!next) return
-        if (els.title.value !== next) els.title.value = next
-    }
-
-    const addTag = (tag) => {
-        const t = String(tag || "").trim().replace(/^#+/, "")
-        if (!t) return
-        const n = StateStore.read().currentNote
-        const tags = n.tags ? [...n.tags] : []
-        if (tags.some(x => x.toLowerCase() === t.toLowerCase())) return
-        
-        tags.push(t)
-        StateStore.update("currentNote", { ...n, tags })
-        renderTags()
-        queueSnapshot()
-    }
-
-    const removeTag = (tag) => {
-        const n = StateStore.read().currentNote
-        if (!n) return
-        const tags = (n.tags || []).filter(x => x.toLowerCase() !== tag.toLowerCase())
-        StateStore.update("currentNote", { ...n, tags })
-        renderTags()
-        queueSnapshot()
-    }
-
-    const renderTags = () => {
-        const n = StateStore.read().currentNote
-        if (!n || !els.tagsContainer) return
-        const tags = n.tags || []
-        
-        els.tagsContainer.innerHTML = tags.map(t => `
-            <span class="tag-chip" data-action="remove-tag" data-tag="${encodeURIComponent(t)}">
-                <i class="material-icons-round" aria-hidden="true">tag</i>
-                <span>${Utils.escapeHtml(t)}</span>
-            </span>
-        `).join("")
-
-        const sugs = collectSuggestedTags(n.title, n.content)
-            .filter(x => !tags.some(t => t.toLowerCase() === x.toLowerCase()))
-            .slice(0, 5)
-
-        if (sugs.length) {
-            const wrap = document.createElement("div")
-            wrap.style.cssText = "display:flex; flex-wrap:wrap; gap:8px;"
-            sugs.forEach(t => {
-                const b = document.createElement("span")
-                b.className = "tag-suggest"
-                b.textContent = `#${t}`
-                b.dataset.action = "add-tag"
-                b.dataset.tag = encodeURIComponent(t)
-                wrap.appendChild(b)
-            })
-            els.tagsContainer.appendChild(wrap)
-        }
-    }
-
-    const captureSnapshot = () => {
-        const currentNote = StateStore.read().currentNote
-        const drawings = normalizePageDrawings(currentNote, getPages().length)
-        const activeDrawing = window.EditorDrawing?.getDrawingSnapshot?.()
-        if (typeof activeDrawing === "string") drawings[pageIndex] = activeDrawing
-        return {
-            title: els.title.value || "",
-            content: els.content.innerHTML || "",
-            tags: [...(currentNote?.tags || [])],
-            pageDrawings: drawings
-        }
-    }
-
-    const persistDrawing = (drawingData) => {
-        const currentNote = StateStore.read().currentNote
-        if (!currentNote) return
-        const nextDrawing = typeof drawingData === "string" ? drawingData : ""
-        const drawings = normalizePageDrawings(currentNote, getPages().length)
-        if (drawings[pageIndex] === nextDrawing) return
-        drawings[pageIndex] = nextDrawing
-        const nextNote = updateNotePageDrawings(currentNote, drawings, true)
-        StateStore.update("currentNote", nextNote)
-        StateStore.update("editorDirty", true)
-        queueSnapshot()
-    }
-
-    const snapshotsEqual = (a, b) =>
-        a.title === b.title &&
-        a.content === b.content &&
-        JSON.stringify(a.tags) === JSON.stringify(b.tags) &&
-        JSON.stringify(a.pageDrawings) === JSON.stringify(b.pageDrawings)
-
-    const queueSnapshot = Utils.debounce(() => {
-        syncAutoTitle()
-        StateStore.update("editorDirty", true)
-        const prev = history[history.length - 1]
-        const current = captureSnapshot()
-        
-        if (prev && snapshotsEqual(prev, current)) return
-
-        history.push(current)
-        if (history.length > CONFIG.MAX_HISTORY) history.shift()
-        future = []
-        
-        const n = StateStore.read().currentNote
-        if (n) {
-            StateStore.update("currentNote", { 
-                ...n, 
-                title: current.title, 
-                content: current.content,
-                pageDrawings: current.pageDrawings
-            })
-        }
-        scheduleAutoSave()
-    }, CONFIG.SNAPSHOT_DELAY)
-
-    const scheduleAutoSave = Utils.debounce(async () => {
-        const currentNote = StateStore.read().currentNote
-        if (!currentNote || !StateStore.read().editorDirty) return
-        const snap = captureSnapshot()
-        if (autoSaveSnapshot && snapshotsEqual(autoSaveSnapshot, snap)) return
-        await save({ silent: true })
-        autoSaveSnapshot = captureSnapshot()
-    }, 1200)
-
-    const undo = () => {
-        if (history.length <= 1) return
-        const current = history.pop()
-        future.push(current)
-        const prev = history[history.length - 1]
-        applySnapshot(prev)
-    }
-
-    const redo = () => {
-        const next = future.pop()
-        if (!next) return
-        history.push(next)
-        applySnapshot(next)
-    }
-
-    const applySnapshot = (snap) => {
-        if (!snap) return
-        const n = StateStore.read().currentNote
-        StateStore.update("currentNote", { 
-            ...n, 
-            title: snap.title, 
-            content: snap.content, 
-            tags: snap.tags,
-            pageDrawings: snap.pageDrawings
-        })
-        renderState()
-    }
-
-    const insertMedia = (src, type) => {
-        if (type !== "image") return
-        const id = Utils.generateId()
-        const html = `
-            <div class="media-wrapper" id="${id}" contenteditable="false" draggable="true">
-                <img src="${Utils.escapeHtml(src)}" alt="">
-                <span class="media-resize-handle" aria-hidden="true"></span>
-            </div><br>
-        `
-        insertHtmlAtSelection(html)
-        makeMediaDraggable()
-        syncMediaSizes()
-    }
-
-    const insertAudio = (src) => {
-        if (!window.EditorAudio) return
-        const html = EditorAudio.createAudioBlockHtml(src)
-        insertHtmlAtSelection(html)
-        EditorAudio.sync(els.content)
-    }
-
-    const makeMediaDraggable = () => {
-        els.content.querySelectorAll(".media-wrapper").forEach(w => {
-            w.setAttribute("draggable", "true")
-            w.contentEditable = "false"
-        })
-    }
-
-    const syncMediaSizes = () => {
-        if (!els.content) return
-        const page = getPages()[pageIndex] || els.content
-        const parentWidth = page.getBoundingClientRect().width - 40
-        const maxWidth = Math.min(CONFIG.MAX_IMG_WIDTH, parentWidth)
-        els.content.querySelectorAll(".media-wrapper").forEach(wrapper => {
-            const img = wrapper.querySelector("img")
-            if (!img) return
-            const apply = () => {
-                const width = parseFloat(wrapper.dataset.width || "")
-                const height = parseFloat(wrapper.dataset.height || "")
-                if (width && height) {
-                    img.style.width = `${width}px`
-                    img.style.height = `${height}px`
-                    return
-                }
-                const naturalWidth = img.naturalWidth || img.width
-                const naturalHeight = img.naturalHeight || img.height
-                if (!naturalWidth || !naturalHeight) return
-                const ratio = naturalWidth / Math.max(1, naturalHeight)
-                const targetWidth = Utils.clamp(naturalWidth, CONFIG.MIN_IMG_WIDTH, maxWidth)
-                const targetHeight = targetWidth / ratio
-                img.style.width = `${targetWidth}px`
-                img.style.height = `${targetHeight}px`
-                wrapper.dataset.width = targetWidth
-                wrapper.dataset.height = targetHeight
-            }
-            if (img.complete) apply()
-            else img.addEventListener("load", apply, { once: true })
-        })
-    }
-
-    const selectMedia = (el) => {
-        deselectMedia()
-        selectedMedia = el
-        selectedMedia.classList.add("selected")
-        
-        const menu = els.ctxMenu
-        if (!menu) return
-        
-        menu.classList.remove("hidden")
-        const rect = el.getBoundingClientRect()
-        const top = rect.top - 60
-        const left = rect.left + (rect.width / 2) - (menu.offsetWidth / 2)
-        
-        menu.style.top = `${Math.max(10, top)}px`
-        menu.style.left = `${Math.max(10, Math.min(window.innerWidth - menu.offsetWidth - 10, left))}px`
-    }
-
-    const deselectMedia = () => {
-        if (selectedMedia) selectedMedia.classList.remove("selected")
-        selectedMedia = null
-        els.ctxMenu?.classList.add("hidden")
-    }
-
-    const resetMediaTransform = () => {
-        if (!selectedMedia) return
-        const img = selectedMedia.querySelector("img")
-        if (img) {
-            img.style.width = ""
-            img.style.height = ""
-            delete selectedMedia.dataset.width
-            delete selectedMedia.dataset.height
-        }
-    }
-
-    const alignMediaOrText = (side) => {
-        if (selectedMedia) {
-            selectedMedia.classList.remove("align-left", "align-right")
-            if (side !== "center") selectedMedia.classList.add(`align-${side}`)
-        } else {
-            const cmd = side === "center" ? "justifyCenter" : (side === "right" ? "justifyRight" : "justifyLeft")
-            document.execCommand(cmd)
-        }
-        closeAlignMenu()
-    }
-
-    const toggleAlignMenu = (btn) => {
-        const menu = els.alignMenu
-        if (!menu || !btn) return
-        if (menu.classList.contains("active") && alignMenuTarget === btn) {
-            closeAlignMenu()
-            return
-        }
-        alignMenuTarget = btn
-        const rect = btn.getBoundingClientRect()
-        menu.classList.remove("hidden")
-        menu.classList.add("active")
-        const left = Math.min(window.innerWidth - menu.offsetWidth - 10, rect.left)
-        menu.style.left = `${Math.max(10, left)}px`
-        menu.style.top = `${rect.bottom + 8}px`
-    }
-
-    const closeAlignMenu = () => {
-        const menu = els.alignMenu
-        if (!menu) return
-        menu.classList.remove("active")
-        menu.classList.add("hidden")
-        alignMenuTarget = null
-    }
-
-    const getActiveBlock = () => {
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return null
-        let node = sel.anchorNode
-        if (!node) return null
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || node === els.content) return null
-        if (node.classList?.contains("note-page")) return null
-        const block = node.closest("div, p")
-        if (block?.classList?.contains("note-page")) return null
-        return block
-    }
-
-    const handleTagLineEnter = (e) => {
-        if (e.key !== "Enter") return
-        const block = getActiveBlock()
-        if (!block || !els.content.contains(block)) return
-        const text = block.textContent.trim()
-        if (/^#\S+$/.test(text)) {
-            e.preventDefault()
-            block.classList.add("tag-line")
-        } else {
-            block.classList.remove("tag-line")
-        }
-    }
-
-    const deleteSelectedMedia = () => {
-        selectedMedia?.remove()
-        deselectMedia()
-    }
-
-    const confirmEquation = () => {
-        confirmEquationAtCaret()
-    }
-
     const toggleToolbar = () => els.toolbar?.classList.toggle("is-hidden")
 
     const save = async (options = {}) => {
@@ -1466,20 +653,23 @@ const Editor = (() => {
             pageDrawings: Array.isArray(snapshot.pageDrawings) ? [...snapshot.pageDrawings] : []
         }
 
-        if (!titleTouched && !String(n.title || "").trim()) {
-            n.title = buildAutoTitle(n.content || "")
-            if (els.title) els.title.value = n.title
-        }
+        const isAutoSave = !!options.autoSave
+        if (!isAutoSave) {
+            if (!titleTouched && !String(n.title || "").trim()) {
+                n.title = buildAutoTitle(n.content || "")
+                if (els.title) els.title.value = n.title
+            }
 
-        const autoTags = collectSuggestedTags(n.title, n.content)
-        const currentTags = new Set(n.tags.map(t => t.toLowerCase()))
-        autoTags.forEach(t => {
-            if (!currentTags.has(t.toLowerCase())) n.tags.push(t)
-        })
+            const autoTags = collectSuggestedTags(n.title, n.content)
+            const currentTags = new Set(n.tags.map(t => t.toLowerCase()))
+            autoTags.forEach(t => {
+                if (!currentTags.has(t.toLowerCase())) n.tags.push(t)
+            })
 
-        if (!n.folderId) {
-            const suggested = SmartSearch.suggestFolderId(n, StateStore.read().folders)
-            if (suggested) n.folderId = suggested
+            if (!n.folderId) {
+                const suggested = SmartSearch.suggestFolderId(n, StateStore.read().folders)
+                if (suggested) n.folderId = suggested
+            }
         }
 
         StateStore.update("currentNote", n)

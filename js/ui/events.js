@@ -323,9 +323,6 @@ Object.assign(UI, {
             case "export-note-pdf":
                 this.exportSelectedNoteAsPdf()
                 break
-            case "upload-note":
-                this.uploadSelectedNote()
-                break
             case "lock-pin":
                 this.toggleLockPin(el.dataset.noteId || "")
                 break

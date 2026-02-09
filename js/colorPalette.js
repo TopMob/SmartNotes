@@ -66,9 +66,17 @@ const ColorPalette = (() => {
         if (isOpen) {
             activePicker = picker
             const state = instances.get(picker)
-            if (state) requestAnimationFrame(() => positionPanel(state))
-        }
-        else if (activePicker === picker) activePicker = null
+            if (state) schedulePanelPosition(state)
+        } else if (activePicker === picker) activePicker = null
+    }
+
+    const schedulePanelPosition = (state) => {
+        if (!state) return
+        if (state.positionFrame) return
+        state.positionFrame = requestAnimationFrame(() => {
+            state.positionFrame = null
+            if (state.picker?.classList.contains("is-open")) positionPanel(state)
+        })
     }
 
     const getBoundsContainer = (picker) => {
@@ -204,7 +212,7 @@ const ColorPalette = (() => {
     }
 
     const suspendCanvasPointerEvents = (pointerId) => {
-        const canvas = window.EditorDrawing?.state?.canvas
+        const canvas = typeof EditorDrawing === "undefined" ? null : EditorDrawing.state?.canvas
         if (!canvas) return () => {}
         const previousPointerEvents = canvas.style.pointerEvents
         canvas.style.pointerEvents = "none"
@@ -303,7 +311,7 @@ const ColorPalette = (() => {
 
         if (typeof ResizeObserver !== "undefined") {
             const resizeObserver = new ResizeObserver(() => {
-                if (picker.classList.contains("is-open")) positionPanel(state)
+                schedulePanelPosition(state)
             })
             if (state.panel) resizeObserver.observe(state.panel)
             if (state.container) resizeObserver.observe(state.container)

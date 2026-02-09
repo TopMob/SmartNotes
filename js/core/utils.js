@@ -12,7 +12,7 @@ export const Utils = {
     formatDate: (timestamp) => {
         if (!timestamp) return ""
         const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp)
-        const lang = (window.StateStore && StateStore.read().config && StateStore.read().config.lang) || "ru"
+        const lang = (typeof StateStore !== "undefined" && StateStore.read().config && StateStore.read().config.lang) || "ru"
         try {
             return new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date)
         } catch {
