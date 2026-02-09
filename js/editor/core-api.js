@@ -129,14 +129,22 @@ export const EditorAPI = (() => {
         }
 
         StateStore.update("currentNote", note)
-        const access = typeof CollaborationService === "undefined" ? null : CollaborationService.getAccess(note)
-        const targetId = access?.noteId || note.id
-        const payload = NoteIO.normalizeNote({ ...note, id: targetId })
-        delete payload.access
-        const ref = typeof CollaborationService === "undefined"
-            ? db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
-            : CollaborationService.getNoteReference(note, user)
-        if (!ref) return
+        const access = typeof CollaborationService === "undefined"
+  ? null
+  : CollaborationService.getAccess(note)
+
+const targetId = access?.noteId || note.id
+
+const payload = NoteIO.normalizeNote({ ...note, id: targetId })
+delete payload.access
+
+payload.ownerId = access?.ownerUid || user.uid
+
+const ref = typeof CollaborationService === "undefined"
+  ? db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
+  : CollaborationService.getNoteReference(note, user)
+
+if (!ref) return
 
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
@@ -626,16 +634,19 @@ const addPage = () => {
     }
 
     const open = (note = null) => {
-        const current = StateStore.read()
-        const folderId = current.view === "folder" ? current.activeFolderId : null
+  const current = StateStore.read()
+  const folderId = current.view === "folder" ? current.activeFolderId : null
+  const user = current.user
 
-        const base = note ? NoteIO.normalizeNote(note) : NoteIO.normalizeNote({
-            id: Utils.generateId(),
-            folderId,
-            createdAt: Utils.serverTimestamp(),
-            order: Date.now()
-        })
-
+  const base = note
+    ? NoteIO.normalizeNote(note)
+    : NoteIO.normalizeNote({
+        id: Utils.generateId(),
+        folderId,
+        createdAt: Utils.serverTimestamp(),
+        order: Date.now(),
+        ownerId: user?.uid || null
+      })
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)
         StateStore.update("isEditing", true)
