@@ -656,7 +656,7 @@ const Editor = (() => {
         const isAutoSave = !!options.autoSave
         if (!isAutoSave) {
             if (!titleTouched && !String(n.title || "").trim()) {
-                n.title = buildAutoTitle(n.content || "")
+                n.title = NoteText.buildAutoTitle({ content: n.content || "" })
                 if (els.title) els.title.value = n.title
             }
 

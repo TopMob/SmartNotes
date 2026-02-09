@@ -223,46 +223,6 @@ const wrapSelectionWithNode = (node) => {
     return node
 }
 
-const getTextFromHtml = (html) => {
-    const text = Utils.stripHtml(html || "")
-    return text.replace(/\s+/g, " ").trim()
-}
-
-const getMediaCountsFromHtml = (html) => {
-    const wrapper = document.createElement("div")
-    wrapper.innerHTML = html || ""
-    return {
-        images: wrapper.querySelectorAll("img").length,
-        audio: wrapper.querySelectorAll("audio").length
-    }
-}
-
-const getCountLabel = (count, singleKey, pluralKey) => {
-    if (count === 1) return UI.getText(singleKey, singleKey)
-    return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
-}
-
-const formatMediaSummary = (counts) => {
-    const parts = []
-    if (counts.images) {
-        parts.push(`${counts.images} ${getCountLabel(counts.images, "media_photo", "media_photos")}`)
-    }
-    if (counts.audio) {
-        parts.push(`${counts.audio} ${getCountLabel(counts.audio, "media_audio", "media_audios")}`)
-    }
-    return parts.join(" · ")
-}
-
-const buildAutoTitle = (html) => {
-    const text = getTextFromHtml(html)
-    if (text) {
-        const line = text.split(/\r?\n/).find(l => l.trim()) || text
-        const normalized = line.trim()
-        return normalized.length > 60 ? `${normalized.slice(0, 57)}…` : normalized
-    }
-    return formatMediaSummary(getMediaCountsFromHtml(html)) || UI.getText("untitled_note", "Untitled")
-}
-
 const extractHashtags = (value) => {
     const res = new Set()
     const text = String(value || "")
@@ -283,7 +243,7 @@ const collectSuggestedTags = (title, content) => {
 const syncAutoTitle = () => {
     if (!els.title || titleTouched) return
     const html = els.content?.innerHTML || ""
-    const next = buildAutoTitle(html)
+    const next = NoteText.buildAutoTitle({ content: html || "" })
     if (!next) return
     if (els.title.value !== next) els.title.value = next
 }
