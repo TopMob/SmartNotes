@@ -1,3 +1,5 @@
+import { getCountLabel } from "../editor/core-utils.js"
+
 const getCleanText = (html) => {
     const text = Utils.stripHtml(html || "")
     return text.replace(/\s+/g, " ").trim()
@@ -11,11 +13,6 @@ const getMediaCounts = (html) => {
         images: wrapper.querySelectorAll("img").length,
         audio: wrapper.querySelectorAll("audio").length
     }
-}
-
-const getCountLabel = (count, singleKey, pluralKey) => {
-    if (count === 1) return UI.getText(singleKey, singleKey)
-    return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
 }
 
 const formatMediaSummary = (counts) => {

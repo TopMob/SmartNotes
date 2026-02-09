@@ -71,7 +71,7 @@ Object.assign(UI, {
             this.createFolder()
             return
         }
-        Editor.open()
+        window.SmartNotesEditor?.open()
     },
 
     createFolder() {

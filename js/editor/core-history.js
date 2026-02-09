@@ -1,27 +1,20 @@
-const undo = () => {
-    if (history.length <= 1) return
-    const current = history.pop()
-    future.push(current)
-    const prev = history[history.length - 1]
-    applySnapshot(prev)
-}
+export const createHistoryHandlers = (context) => {
+    const { state, applySnapshot } = context
 
-const redo = () => {
-    const next = future.pop()
-    if (!next) return
-    history.push(next)
-    applySnapshot(next)
-}
+    const undo = () => {
+        if (state.history.length <= 1) return
+        const current = state.history.pop()
+        state.future.push(current)
+        const prev = state.history[state.history.length - 1]
+        applySnapshot(prev)
+    }
 
-const applySnapshot = (snap) => {
-    if (!snap) return
-    const n = StateStore.read().currentNote
-    StateStore.update("currentNote", {
-        ...n,
-        title: snap.title,
-        content: snap.content,
-        tags: snap.tags,
-        pageDrawings: snap.pageDrawings
-    })
-    renderState()
+    const redo = () => {
+        const next = state.future.pop()
+        if (!next) return
+        state.history.push(next)
+        applySnapshot(next)
+    }
+
+    return { undo, redo }
 }

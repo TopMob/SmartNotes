@@ -13,7 +13,7 @@ const AppLifecycle = {
     async initializeOnce() {
         if (this.initialized) return
         this.initialized = true
-        if (typeof Editor !== "undefined") Editor.init()
+        window.SmartNotesEditor?.init()
         UI.init()
         UI.setLang(localStorage.getItem("app-lang") || "ru")
     },
@@ -166,9 +166,7 @@ const AppLifecycle = {
         if (!updated) return
         const canEdit = typeof CollaborationService === "undefined" ? true : CollaborationService.canEdit(current)
         if (StateStore.read().editorDirty && canEdit) return
-        if (typeof Editor !== "undefined" && Editor.refreshFromRemote) {
-            Editor.refreshFromRemote(updated)
-        }
+        window.SmartNotesEditor?.refreshFromRemote?.(updated)
     },
     applySharedEntries(entries) {
         const removed = []
@@ -207,6 +205,13 @@ const AppLifecycle = {
                         return
                     }
                     const baseNote = NoteIO.normalizeNote({ id: entry.noteId, ...doc.data() })
+                    const accessList = Array.isArray(baseNote.access) ? baseNote.access : null
+                    const currentUser = StateStore.read().user
+                    if (accessList && currentUser?.uid && !accessList.includes(currentUser.uid)) {
+                        UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
+                        this.removeSharedEntry(id, { removeRemote: true })
+                        return
+                    }
                     const sharedNote = {
                         ...baseNote,
                         id: CollaborationService.sharedNoteId(entry.ownerUid, entry.noteId),
@@ -221,7 +226,7 @@ const AppLifecycle = {
                     this.updateNotesState()
                     if (this.pendingShareEntryId === id) {
                         this.pendingShareEntryId = null
-                        if (typeof Editor !== "undefined") Editor.openFromList(sharedNote)
+                        window.SmartNotesEditor?.openFromList?.(sharedNote)
                     }
                 }, error => {
                     if (this.shouldIgnoreSharedError(error)) {
