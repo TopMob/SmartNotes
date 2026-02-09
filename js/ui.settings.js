@@ -545,9 +545,9 @@ Object.assign(UI, {
 
     renderEditorSettings() {
         const root = document.getElementById("editor-tools-list")
-        if (!root || typeof Editor === "undefined") return
-        const tools = Editor.getToolList()
-        const enabled = Editor.getEnabledTools()
+        if (!root || !window.SmartNotesEditor) return
+        const tools = window.SmartNotesEditor.getToolList()
+        const enabled = window.SmartNotesEditor.getEnabledTools()
         root.innerHTML = ""
         tools.forEach(tool => {
             const row = document.createElement("div")
@@ -564,7 +564,7 @@ Object.assign(UI, {
             input.checked = enabled[tool.id] !== false
             input.setAttribute("aria-label", label.textContent)
             input.addEventListener("change", () => {
-                Editor.setToolEnabled(tool.id, input.checked)
+                window.SmartNotesEditor.setToolEnabled(tool.id, input.checked)
             })
             
             const slider = document.createElement("span")

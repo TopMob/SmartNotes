@@ -82,7 +82,7 @@ Object.assign(UI, {
             if (!card) return
             const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
             const note = StateStore.read().notes.find(n => n.id === id)
-            if (note) await Editor.openFromList(note)
+            if (note) await window.SmartNotesEditor?.openFromList?.(note)
         })
 
         this.els.grid?.addEventListener("dragstart", (e) => {
@@ -243,40 +243,40 @@ Object.assign(UI, {
                 this.triggerImport()
                 break
             case "editor-undo":
-                Editor.undo()
+                window.SmartNotesEditor?.undo()
                 break
             case "editor-redo":
-                Editor.redo()
+                window.SmartNotesEditor?.redo()
                 break
             case "editor-delete":
-                Editor.deleteCurrent()
+                window.SmartNotesEditor?.deleteCurrent()
                 break
             case "editor-lock":
-                Editor.toggleLock()
+                window.SmartNotesEditor?.toggleLock()
                 break
             case "editor-save":
-                Editor.save()
+                window.SmartNotesEditor?.save()
                 break
             case "editor-prev-page":
-                Editor.prevPage()
+                window.SmartNotesEditor?.prevPage()
                 break
             case "editor-next-page":
-                Editor.nextPage()
+                window.SmartNotesEditor?.nextPage()
                 break
             case "editor-add-page":
-                Editor.addPage()
+                window.SmartNotesEditor?.addPage()
                 break
             case "editor-voice":
-                Editor.toggleRecording()
+                window.SmartNotesEditor?.toggleRecording()
                 break
             case "editor-calc":
-                Editor.confirmEquation()
+                window.SmartNotesEditor?.confirmEquation()
                 break
             case "close-editor":
-                Editor.close()
+                window.SmartNotesEditor?.close()
                 break
             case "toggle-toolbar":
-                Editor.toggleToolbar()
+                window.SmartNotesEditor?.toggleToolbar()
                 break
             case "note-pin":
                 togglePin(decodeURIComponent(el.dataset.noteId || ""))
@@ -351,16 +351,16 @@ Object.assign(UI, {
                 this.submitFeedback()
                 break
             case "media-reset":
-                Editor.resetMediaTransform()
+                window.SmartNotesEditor?.resetMediaTransform()
                 break
             case "media-align":
-                Editor.alignMediaOrText(el.dataset.align)
+                window.SmartNotesEditor?.alignMediaOrText(el.dataset.align)
                 break
             case "media-delete":
-                Editor.deleteSelectedMedia()
+                window.SmartNotesEditor?.deleteSelectedMedia()
                 break
             case "editor-align":
-                Editor.alignMediaOrText(el.dataset.align)
+                window.SmartNotesEditor?.alignMediaOrText(el.dataset.align)
                 break
             case "survey-next":
                 this.advanceSurvey()

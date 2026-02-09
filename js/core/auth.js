@@ -131,8 +131,8 @@ export function createAuthManager({ auth }) {
             }
             const search = document.getElementById("search-input")
             if (search) search.value = ""
-            if (typeof Editor !== "undefined" && Editor && typeof Editor.close === "function") {
-                try { Editor.close() } catch {}
+            if (typeof window.SmartNotesEditor?.close === "function") {
+                try { window.SmartNotesEditor.close() } catch {}
             }
         },
         applySignedInUI(user) {
