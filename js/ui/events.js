@@ -190,25 +190,30 @@ const rect = anchor.getBoundingClientRect()
 
 
             if (isMobile) {
-menu.style.position = "fixed"
-menu.style.top = `${rect.bottom + 8}px`
-menu.style.left = "10px"
-menu.style.right = "10px"
-menu.style.bottom = "unset"
+  const anchor = document.getElementById("search-input")
+  if (!anchor) return
 
-            } else {
-                menu.style.position = ""
-                menu.style.bottom = "unset"
-                menu.style.right = "unset"
-                menu.style.top = `${rect.bottom + 10}px`
-                menu.style.left = `${Math.max(
-                    10,
-                    Math.min(
-                        window.innerWidth - menu.offsetWidth - 10,
-                        rect.right - menu.offsetWidth
-                    )
-                )}px`
-            }
+  const rect = anchor.getBoundingClientRect()
+
+  menu.style.position = "fixed"
+  menu.style.top = `${rect.bottom + 8}px`
+  menu.style.left = "10px"
+  menu.style.right = "10px"
+  menu.style.bottom = "unset"
+} else {
+  menu.style.position = ""
+  menu.style.bottom = "unset"
+  menu.style.right = "unset"
+  menu.style.top = `${rect.bottom + 10}px`
+  menu.style.left = `${Math.max(
+    10,
+    Math.min(
+      window.innerWidth - menu.offsetWidth - 10,
+      rect.right - menu.offsetWidth
+    )
+  )}px`
+}
+
         }
     },
 
