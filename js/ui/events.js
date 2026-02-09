@@ -180,14 +180,22 @@ Object.assign(UI, {
 
         if (next && this.els.filterButton) {
             const isMobile = !window.matchMedia("(min-width: 1024px)").matches
-            const rect = this.els.filterButton.getBoundingClientRect()
+            const anchor = isMobile
+  ? document.getElementById("search-input")
+  : this.els.filterButton
+
+if (!anchor) return
+
+const rect = anchor.getBoundingClientRect()
+
 
             if (isMobile) {
-                menu.style.position = "fixed"
-                menu.style.top = "unset"
-                menu.style.left = "10px"
-                menu.style.right = "10px"
-                menu.style.bottom = "10px"
+menu.style.position = "fixed"
+menu.style.top = `${rect.bottom + 8}px`
+menu.style.left = "10px"
+menu.style.right = "10px"
+menu.style.bottom = "unset"
+
             } else {
                 menu.style.position = ""
                 menu.style.bottom = "unset"
