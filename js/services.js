@@ -13,24 +13,27 @@ const NoteIO = {
         
         const now = Utils.serverTimestamp()
         
-        return {
-            id: safe.id ? String(safe.id) : Utils.generateId(),
-            title: safe.title ? String(safe.title).trim() : "",
-            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
-            pageDrawings,
-            tags,
-            folderId: safe.folderId ? String(safe.folderId) : null,
-            folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
-            isArchived: !!safe.isArchived,
-            isFavorite: !!safe.isFavorite,
-            isPinned: !!safe.isPinned,
-            access,
-            lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
-            futureAt: safe.futureAt || null,
-            order: typeof safe.order === "number" ? safe.order : Date.now(),
-            createdAt: safe.createdAt || now,
-            updatedAt: safe.updatedAt || now
-        }
+return {
+  id: safe.id ? String(safe.id) : Utils.generateId(),
+  title: safe.title ? String(safe.title).trim() : "",
+  content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
+  pageDrawings,
+  tags,
+  folderId: safe.folderId ? String(safe.folderId) : null,
+  folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
+  isArchived: !!safe.isArchived,
+  isFavorite: !!safe.isFavorite,
+  isPinned: !!safe.isPinned,
+  access,
+  lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
+  futureAt: safe.futureAt || null,
+  order: typeof safe.order === "number" ? safe.order : Date.now(),
+  createdAt: safe.createdAt || now,
+  updatedAt: safe.updatedAt || now,
+  ownerId: safe.ownerId
+      ? String(safe.ownerId)
+      : StateStore.read().user?.uid || null
+}
     },
 
     exportNote(note) {
