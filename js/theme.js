@@ -69,7 +69,9 @@ export const ThemeManager = {
                     key: String(item.key || Utils.generateId()),
                     p: this.normalizeHex(item.p),
                     bg: this.normalizeHex(item.bg),
-                    t: this.normalizeHex(item.t)
+                    t: this.normalizeHex(item.t),
+                    mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
+                    sidebarBackgroundImage: typeof item.sidebarBackgroundImage === "string" ? item.sidebarBackgroundImage : ""
                 }))
                 .slice(0, this.maxCustomPresets)
         } catch {
@@ -88,10 +90,30 @@ export const ThemeManager = {
             key: Utils.generateId(),
             p: this.normalizeHex(colors?.p),
             bg: this.normalizeHex(colors?.bg),
-            t: this.normalizeHex(colors?.t)
+            t: this.normalizeHex(colors?.t),
+            mainBackgroundImage: typeof colors?.mainBackgroundImage === "string" ? colors.mainBackgroundImage : "",
+            sidebarBackgroundImage: typeof colors?.sidebarBackgroundImage === "string" ? colors.sidebarBackgroundImage : ""
         }
         this.saveCustomPresets([...presets, nextPreset])
         return { ok: true, key: `custom:${nextPreset.key}` }
+    },
+    updateCustomPreset(presetKey, updates) {
+        if (!String(presetKey || "").startsWith("custom:")) return false
+        const id = String(presetKey).slice(7)
+        const presets = this.getCustomPresets()
+        const nextPresets = presets.map(item => {
+            if (item.key !== id) return item
+            return {
+                ...item,
+                p: this.normalizeHex(updates?.p ?? item.p),
+                bg: this.normalizeHex(updates?.bg ?? item.bg),
+                t: this.normalizeHex(updates?.t ?? item.t),
+                mainBackgroundImage: typeof updates?.mainBackgroundImage === "string" ? updates.mainBackgroundImage : item.mainBackgroundImage,
+                sidebarBackgroundImage: typeof updates?.sidebarBackgroundImage === "string" ? updates.sidebarBackgroundImage : item.sidebarBackgroundImage
+            }
+        })
+        this.saveCustomPresets(nextPresets)
+        return true
     },
     getCustomPresetByKey(presetKey) {
         if (!String(presetKey || "").startsWith("custom:")) return null

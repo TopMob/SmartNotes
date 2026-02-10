@@ -302,6 +302,7 @@ Object.assign(UI, {
                 }
             } else {
                 const preset = ThemeManager.resolvePreset(key)
+                const customPreset = ThemeManager.getCustomPresetByKey(key)
                 nextDraft = {
                     preset: key,
                     p: preset.p,
@@ -309,8 +310,8 @@ Object.assign(UI, {
                     t: preset.t,
                     brandName: "SmartNotes",
                     basePreset: key,
-                    mainBackgroundImage: draft.mainBackgroundImage || "",
-                    sidebarBackgroundImage: draft.sidebarBackgroundImage || ""
+                    mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
+                    sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || "")
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -335,7 +336,22 @@ Object.assign(UI, {
         ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
         ThemeManager.setupColorInputs((type, val) => {
             const current = StateStore.read().appearanceDraft || draft
-            const next = { ...current, preset: "manual", [type]: val }
+            const normalizedValue = ThemeManager.normalizeHex(val)
+            if (String(current.preset || "").startsWith("custom:")) {
+                ThemeManager.updateCustomPreset(current.preset, { [type]: normalizedValue })
+                const customPreset = ThemeManager.getCustomPresetByKey(current.preset)
+                const next = {
+                    ...current,
+                    p: customPreset?.p || current.p,
+                    bg: customPreset?.bg || current.bg,
+                    t: customPreset?.t || current.t
+                }
+                StateStore.update("appearanceDraft", next)
+                ThemeManager.applySettings(next, false)
+                this.renderAppearanceDraft()
+                return
+            }
+            const next = { ...current, preset: "manual", [type]: normalizedValue }
             StateStore.update("appearanceDraft", next)
             ThemeManager.applySettings(next, false)
             ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey: "manual", manualColor: next.p })
@@ -457,6 +473,9 @@ Object.assign(UI, {
     },
     updateAppearanceBackground(key, value) {
         const current = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        if (String(current.preset || "").startsWith("custom:")) {
+            ThemeManager.updateCustomPreset(current.preset, { [key]: value })
+        }
         const next = {
             ...current,
             [key]: value

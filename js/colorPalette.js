@@ -111,7 +111,7 @@ const ColorPalette = (() => {
         const containerLeft = containerRect.left + padding
         const containerRight = containerRect.right - padding
         const containerWidth = Math.max(0, containerRight - containerLeft)
-        let left = 0
+        let left = (pickerRect.width - panelRect.width) / 2
         if (panelRect.width > containerWidth && containerWidth > 0) {
             const pickerOffset = pickerRect.left - containerRect.left
             left = (containerRect.width - panelRect.width) / 2 - pickerOffset

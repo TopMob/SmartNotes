@@ -375,3 +375,8 @@ select.input-area:focus {
     cursor: not-allowed;
 }
 
+
+.settings-color-grid,
+.settings-color-grid .field {
+    overflow: visible;
+}
