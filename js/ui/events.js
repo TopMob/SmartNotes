@@ -26,6 +26,30 @@ Object.assign(UI, {
         if (this.els.sidebarOverlay) {
             this.els.sidebarOverlay.addEventListener("click", () => this.toggleSidebar(false))
         }
+        if (this.els.folderList) {
+            this.els.folderList.addEventListener("dragstart", event => {
+                const folderElement = event.target.closest("[data-folder-draggable='true']")
+                if (!folderElement) return
+                this.draggedFolderId = folderElement.dataset.folderId
+            })
+            this.els.folderList.addEventListener("dragover", event => {
+                if (!this.draggedFolderId) return
+                const targetElement = event.target.closest("[data-folder-draggable='true']")
+                if (!targetElement || targetElement.dataset.folderId === this.draggedFolderId) return
+                event.preventDefault()
+            })
+            this.els.folderList.addEventListener("drop", event => {
+                if (!this.draggedFolderId) return
+                const targetElement = event.target.closest("[data-folder-draggable='true']")
+                if (!targetElement) return
+                event.preventDefault()
+                this.reorderFolders(this.draggedFolderId, targetElement.dataset.folderId)
+                this.draggedFolderId = null
+            })
+            this.els.folderList.addEventListener("dragend", () => {
+                this.draggedFolderId = null
+            })
+        }
 
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && this.els.sidebar?.classList.contains("active")) {
@@ -156,7 +180,7 @@ Object.assign(UI, {
         this.els.filterSort.value = current.sort || "updated"
         const items = []
         items.push({ id: "none", name: this.getText("folder_none", "No folder") })
-        folders.forEach(folder => items.push({ id: folder.id, name: folder.name }))
+        folders.filter(folder => !folder.isHidden && !folder.trashedAt).forEach(folder => items.push({ id: folder.id, name: folder.name }))
         this.els.filterFolders.innerHTML = items.map(item => {
             const checked = current.folders?.includes(item.id) ? "checked" : ""
             return `
@@ -225,6 +249,12 @@ Object.assign(UI, {
             case "login":
                 Auth.login()
                 break
+            case "login-guest":
+                Auth.loginGuest()
+                break
+            case "login-email":
+                Auth.loginWithEmail()
+                break
             case "toggle-sidebar": {
                 const forceAttr = el.dataset.force
                 const force = typeof forceAttr === "string" ? forceAttr === "true" : undefined
@@ -245,6 +275,12 @@ Object.assign(UI, {
               break
             case "delete-folder":
                 deleteFolder(el.dataset.folderId)
+                break
+            case "toggle-folder-hidden":
+                this.toggleFolderHidden(el.dataset.folderId)
+                break
+            case "folder-unhide":
+                this.setFolderHidden(el.dataset.folderId, false)
                 break
             case "primary-action":
                 this.primaryAction()
@@ -339,20 +375,17 @@ Object.assign(UI, {
             case "note-copy-text":
                 copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
                 break
-            case "note-future-set":
-                scheduleFutureNote(decodeURIComponent(el.dataset.noteId || ""))
+            case "note-reminder-set":
+                scheduleReminder(decodeURIComponent(el.dataset.noteId || ""))
                 break
-            case "note-future-clear":
-                clearFutureNote(decodeURIComponent(el.dataset.noteId || ""))
+            case "note-reminder-clear":
+                clearReminder(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-restore":
+                restoreNoteById(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-move-folder":
                 this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-share-view":
-                shareNoteView(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-share-edit":
-                shareNoteEdit(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "download-note":
                 this.downloadSelectedNote()

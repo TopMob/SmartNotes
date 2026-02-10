@@ -38,6 +38,7 @@
 
     <script src="js/state.js" defer></script>
     <script src="js/stateActions.js" defer></script>
+    <script src="js/core/dataPath.js" defer></script>
     <script src="js/colorPalette.js" defer></script>
     <script src="js/lang.js" type="module"></script>
     <script src="js/theme.js" type="module"></script>
@@ -79,6 +80,8 @@
                     <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="" width="20" height="20">
                     <span data-lang="login_google">Войти через Google</span>
                 </button>
+                <button type="button" class="btn-auth" data-action="login-guest"><span>Войти как гость</span></button>
+                <button type="button" class="btn-auth" data-action="login-email"><span>Войти по email</span></button>
             </div>
         </div>
     </div>
@@ -109,11 +112,16 @@
                         <span data-lang="archive">Архив</span>
                     </button>
 
-                    <button type="button" class="nav-item" data-action="switch-view" data-view="future">
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="reminders">
                         <i class="material-icons-round" aria-hidden="true">schedule</i>
-                        <span data-lang="future_notes">На будущее</span>
+                        <span data-lang="future_notes">Напоминания</span>
                     </button>
 
+
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="trash">
+                        <i class="material-icons-round" aria-hidden="true">delete</i>
+                        <span>Корзина</span>
+                    </button>
                     <button type="button" class="nav-item" data-action="switch-view" data-view="folders">
                         <i class="material-icons-round" aria-hidden="true">folder</i>
                         <span data-lang="folders_overview">Папки</span>
@@ -135,6 +143,10 @@
                     <button type="button" class="nav-item" data-action="switch-view" data-view="locked">
                         <i class="material-icons-round" aria-hidden="true">lock</i>
                         <span data-lang="lock_center">Защита заметок</span>
+                    </button>
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="hidden_folders">
+                        <i class="material-icons-round" aria-hidden="true">visibility_off</i>
+                        <span>Скрытые папки</span>
                     </button>
                 </div>
             </nav>
@@ -290,7 +302,7 @@
             </header>
 
             <div class="editor-scroll-area scrollable">
-                <input id="note-title" type="text" placeholder="Заголовок" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
+                <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
                 <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования">

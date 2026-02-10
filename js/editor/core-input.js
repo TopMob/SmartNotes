@@ -252,11 +252,8 @@ export const createInputHandlers = (context) => {
     }
 
     const syncAutoTitle = () => {
-        if (!elements.title || state.titleTouched) return
-        const html = elements.content?.innerHTML || ""
-        const next = NoteText.buildAutoTitle({ content: html || "" })
-        if (!next) return
-        if (elements.title.value !== next) elements.title.value = next
+        if (!elements.title) return
+        elements.title.classList.toggle("title-has-value", !!elements.title.value.trim())
     }
 
     const addTag = (tag) => {

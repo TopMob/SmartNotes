@@ -141,7 +141,7 @@ delete payload.access
 payload.ownerId = access?.ownerUid || user.uid
 
 const ref = typeof CollaborationService === "undefined"
-  ? db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
+  ? DataPath.getUserNotesCollection(user).doc(payload.id)
   : CollaborationService.getNoteReference(note, user)
 
 if (!ref) return
@@ -232,7 +232,8 @@ if (!ref) return
 
         if (elements.title) {
             elements.title.addEventListener("input", () => {
-                state.titleTouched = true
+                state.titleTouched = !!elements.title.value.trim()
+                inputHandlers.syncAutoTitle()
                 queueSnapshot()
             }, { signal })
         }
@@ -278,6 +279,13 @@ if (!ref) return
         }
 
         document.addEventListener("selectionchange", inputHandlers.storeSelection, { signal })
+        document.addEventListener("keydown", async (event) => {
+            if (event.key !== "Escape") return
+            if (!elements.wrapper?.classList.contains("active")) return
+            event.preventDefault()
+            await save({ silent: true })
+            close()
+        }, { signal })
         document.addEventListener("click", (event) => {
             if (!elements.alignMenu || !elements.alignMenu.classList.contains("active")) return
             if (event.target.closest("#editor-align-menu")) return
@@ -796,7 +804,7 @@ const addPage = () => {
         UI.confirm("delete", async () => {
             if (!db || !StateStore.read().user) return
             const ref = typeof CollaborationService === "undefined"
-                ? db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(note.id)
+                ? DataPath.getUserNotesCollection(StateStore.read().user).doc(note.id)
                 : CollaborationService.getNoteReference(note, StateStore.read().user)
             if (!ref) return
             await ref.delete()

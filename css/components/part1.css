@@ -104,10 +104,11 @@
 .modal-card {
     width: min(92vw, 520px);
     max-height: 86vh;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     border-radius: var(--radius-xl);
-    background: rgba(15, 15, 17, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface-transparent);
+    border: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
     backdrop-filter: blur(var(--blur-strength));
 }
@@ -122,7 +123,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--border);
 }
 
 .modal-body {
@@ -133,7 +134,7 @@
 
 .modal-footer {
     padding: 14px 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--border);
     display: flex;
     justify-content: flex-end;
     gap: 10px;

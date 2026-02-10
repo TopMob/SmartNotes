@@ -1,4 +1,5 @@
 import { isSafari } from "./authSafariFix.js"
+import { createLocalAuthManager } from "./localAuth.js"
 
 export function createAuthManager({ auth }) {
     const state = {
@@ -102,6 +103,24 @@ export function createAuthManager({ auth }) {
             }
 
             this._setLoginBusy(false)
+        },
+        async loginGuest() {
+            const localAuthManager = createLocalAuthManager({
+                auth,
+                setLoginBusy: (flag) => this._setLoginBusy(flag),
+                handleAuthError: (error) => this.handleAuthError(error),
+                getText: (key, fallback) => this._t(key, fallback)
+            })
+            await localAuthManager.loginGuest()
+        },
+        async loginWithEmail() {
+            const localAuthManager = createLocalAuthManager({
+                auth,
+                setLoginBusy: (flag) => this._setLoginBusy(flag),
+                handleAuthError: (error) => this.handleAuthError(error),
+                getText: (key, fallback) => this._t(key, fallback)
+            })
+            await localAuthManager.loginWithEmail()
         },
         async logout() {
             if (!auth) return

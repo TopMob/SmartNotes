@@ -79,7 +79,7 @@ Object.assign(UI, {
 
         const batch = db.batch()
         updates.forEach(update => {
-            const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(update.id)
+            const ref = DataPath.getUserNotesCollection(StateStore.read().user).doc(update.id)
             batch.update(ref, { [orderKey]: update.value })
         })
         batch.commit()
@@ -103,7 +103,7 @@ Object.assign(UI, {
         })
         StateActions.setNotes(updatedNotes)
         last.items.forEach(item => {
-            const ref = db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(item.id)
+            const ref = DataPath.getUserNotesCollection(StateStore.read().user).doc(item.id)
             batch.update(ref, { [orderKey]: item.value })
         })
         batch.commit()

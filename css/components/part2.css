@@ -300,3 +300,23 @@
     min-width: 0;
     text-align: center;
 }
+
+.login-box,
+.confirm-box,
+.lock-card,
+.dropdown-menu {
+    background: var(--surface-transparent);
+    border-color: var(--border);
+}
+
+.confirm-layer,
+.sidebar-overlay {
+    background: color-mix(in srgb, var(--bg) 46%, black 54%);
+}
+
+.team-member,
+.lock-list-item,
+.lock-note-content {
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    border-color: var(--border);
+}

@@ -60,8 +60,8 @@ function isHiddenLocked(note) {
     return !!(note && note.lock && note.lock.hidden)
 }
 
-function isFutureNote(note) {
-    const timestamp = getTimestampValue(note?.futureAt)
+function isReminderNote(note) {
+    const timestamp = getTimestampValue(note?.reminderAt)
     return timestamp > Date.now()
 }
 
@@ -103,16 +103,20 @@ function filterAndRender(query) {
         list = list.filter(n => !isHiddenLocked(n))
     }
 
-    if (view === "future") {
-        list = list.filter(n => isFutureNote(n) && !n.isArchived)
+    if (view === "reminders") {
+        list = list.filter(n => isReminderNote(n) && !n.isArchived && !n.trashedAt)
+    }
+
+    if (view === "trash") {
+        list = list.filter(n => !!n.trashedAt)
     } else {
-        list = list.filter(n => !isFutureNote(n))
+        list = list.filter(n => !n.trashedAt)
     }
 
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
-    else if (view !== "locked" && view !== "future") list = list.filter(n => !n.isArchived)
+    else if (view !== "locked" && view !== "reminders" && view !== "trash") list = list.filter(n => !n.isArchived)
 
     if (view !== "folder" && view !== "folders" && selectedFolders.length) {
         list = list.filter(note => {
@@ -146,11 +150,15 @@ function filterAndRender(query) {
 
     if (view === "folders") {
         UI.renderFolderGrid()
+    } else if (view === "hidden_folders") {
+        UI.renderHiddenFolders()
     } else {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))
-        } else if (view === "future") {
-            UI.updateEmptyState("schedule", UI.getText("future_empty", "No future notes"))
+        } else if (view === "reminders") {
+            UI.updateEmptyState("schedule", UI.getText("future_empty", "No reminders"))
+        } else if (view === "trash") {
+            UI.updateEmptyState("delete", UI.getText("trash_empty", "Trash is empty"))
         } else {
             UI.updateEmptyState("note_add", UI.getText("empty", "Nothing here yet"))
         }

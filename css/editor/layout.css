@@ -363,3 +363,11 @@
     clear: both;
     flex-wrap: wrap;
 }
+
+#note-title::placeholder {
+    color: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+#note-title.title-has-value::placeholder {
+    color: transparent;
+}

@@ -254,7 +254,7 @@ Object.assign(UI, {
                 bg: saved.bg || preset.bg,
                 t: saved.t || preset.t,
                 brandName: saved.brandName || "SmartNotes",
-                basePreset: saved.basePreset || "dark",
+                basePreset: saved.basePreset || "oled",
                 mainBackgroundImage: saved.mainBackgroundImage || "",
                 sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
             })
@@ -262,11 +262,11 @@ Object.assign(UI, {
         }
         StateStore.update("appearanceDraft", {
             preset: "manual",
-            p: saved.p || ThemeManager.themes.dark.p,
-            bg: saved.bg || ThemeManager.themes.dark.bg,
-            t: saved.t || ThemeManager.themes.dark.t,
+            p: saved.p || ThemeManager.themes.oled.p,
+            bg: saved.bg || ThemeManager.themes.oled.bg,
+            t: saved.t || ThemeManager.themes.oled.t,
             brandName: saved.brandName || "SmartNotes",
-            basePreset: saved.basePreset || "dark",
+            basePreset: saved.basePreset || "oled",
             mainBackgroundImage: saved.mainBackgroundImage || "",
             sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
         })
@@ -298,10 +298,11 @@ Object.assign(UI, {
                     ...draft,
                     preset: "manual",
                     brandName: "SmartNotes",
-                    basePreset: "dark"
+                    basePreset: "oled"
                 }
             } else {
                 const preset = ThemeManager.resolvePreset(key)
+                const customPreset = ThemeManager.getCustomPresetByKey(key)
                 nextDraft = {
                     preset: key,
                     p: preset.p,
@@ -309,19 +310,51 @@ Object.assign(UI, {
                     t: preset.t,
                     brandName: "SmartNotes",
                     basePreset: key,
-                    mainBackgroundImage: draft.mainBackgroundImage || "",
-                    sidebarBackgroundImage: draft.sidebarBackgroundImage || ""
+                    mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
+                    sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || "")
                 }
             }
             this.applyAppearanceDraft(nextDraft)
         }
-        ThemeManager.renderPicker({ onSelect, activeKey, manualColor: draft.p })
+        const onCreateCustomPreset = () => {
+            const currentDraft = StateStore.read().appearanceDraft || draft
+            const result = ThemeManager.addCustomPreset(currentDraft)
+            if (!result.ok) {
+                UI.showToast("Максимум 5 пользовательских пресетов")
+                return
+            }
+            const preset = ThemeManager.resolvePreset(result.key)
+            this.applyAppearanceDraft({
+                ...currentDraft,
+                preset: result.key,
+                p: preset.p,
+                bg: preset.bg,
+                t: preset.t,
+                basePreset: result.key
+            })
+        }
+        ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
         ThemeManager.setupColorInputs((type, val) => {
             const current = StateStore.read().appearanceDraft || draft
-            const next = { ...current, preset: "manual", [type]: val }
+            const normalizedValue = ThemeManager.normalizeHex(val)
+            if (String(current.preset || "").startsWith("custom:")) {
+                ThemeManager.updateCustomPreset(current.preset, { [type]: normalizedValue })
+                const customPreset = ThemeManager.getCustomPresetByKey(current.preset)
+                const next = {
+                    ...current,
+                    p: customPreset?.p || current.p,
+                    bg: customPreset?.bg || current.bg,
+                    t: customPreset?.t || current.t
+                }
+                StateStore.update("appearanceDraft", next)
+                ThemeManager.applySettings(next, false)
+                ThemeManager.syncInputs(next.p, next.bg, next.t)
+                return
+            }
+            const next = { ...current, preset: "manual", [type]: normalizedValue }
             StateStore.update("appearanceDraft", next)
             ThemeManager.applySettings(next, false)
-            ThemeManager.renderPicker({ onSelect, activeKey: "manual", manualColor: next.p })
+            ThemeManager.syncInputs(next.p, next.bg, next.t)
         })
     },
 
@@ -347,9 +380,9 @@ Object.assign(UI, {
         } else {
             draft = {
                 preset: "manual",
-                p: ThemeManager.themes.dark.p,
-                bg: ThemeManager.themes.dark.bg,
-                t: ThemeManager.themes.dark.t,
+                p: ThemeManager.themes.oled.p,
+                bg: ThemeManager.themes.oled.bg,
+                t: ThemeManager.themes.oled.t,
                 mainBackgroundImage: "",
                 sidebarBackgroundImage: ""
             }
@@ -440,6 +473,9 @@ Object.assign(UI, {
     },
     updateAppearanceBackground(key, value) {
         const current = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        if (String(current.preset || "").startsWith("custom:")) {
+            ThemeManager.updateCustomPreset(current.preset, { [key]: value })
+        }
         const next = {
             ...current,
             [key]: value
