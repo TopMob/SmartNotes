@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function noteDocumentPath(userId, noteId) {
+      return /databases/$(database)/documents/users/$(userId)/notes/$(noteId);
+    }
+
+    function noteData(userId, noteId) {
+      return get(noteDocumentPath(userId, noteId)).data;
+    }
+
+    function shareRoleForUser(note, uid) {
+      return note.access.roles[uid];
+    }
+
+    function hasSharedAccess(note, uid) {
+      return note.access is map
+        && note.access.ownerUid is string
+        && note.access.roles is map
+        && uid in note.access.roles;
+    }
+
+    function canReadSharedNote(userId, noteId) {
+      let note = noteData(userId, noteId);
+      return hasSharedAccess(note, request.auth.uid);
+    }
+
+    function canEditSharedNote(userId, noteId) {
+      let note = noteData(userId, noteId);
+      return hasSharedAccess(note, request.auth.uid)
+        && shareRoleForUser(note, request.auth.uid) in ['editor', 'owner'];
+    }
+
+    function canDeleteSharedNote(userId, noteId) {
+      let note = noteData(userId, noteId);
+      return hasSharedAccess(note, request.auth.uid)
+        && shareRoleForUser(note, request.auth.uid) == 'owner';
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /notes/{noteId} {
+        allow read: if isOwner(userId) || canReadSharedNote(userId, noteId);
+        allow create: if isOwner(userId)
+          && request.resource.data.ownerId == request.auth.uid;
+        allow update: if isOwner(userId) || canEditSharedNote(userId, noteId);
+        allow delete: if isOwner(userId) || canDeleteSharedNote(userId, noteId);
+      }
+
+      match /folders/{folderId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /sharedNotes/{entryId} {
+        allow read, create, delete: if isOwner(userId);
+        allow update: if false;
+      }
+    }
+
+    match /noteShares/{token} {
+      allow create: if isAuthenticated()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.noteId is string
+        && request.resource.data.permission in ['viewer', 'editor'];
+      allow read: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isAuthenticated()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /feedback/{id} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
