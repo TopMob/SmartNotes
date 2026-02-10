@@ -172,7 +172,7 @@ export const ThemeManager = {
             sectionElement.appendChild(titleElement)
 
             const presetsGrid = document.createElement("div")
-            presetsGrid.className = "theme-presets-grid"
+            presetsGrid.className = "theme-presets-row"
 
             group.items.forEach(key => {
                 const buttonElement = document.createElement("button")
