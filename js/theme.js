@@ -152,27 +152,28 @@ export const ThemeManager = {
         root.style.setProperty("--main-bg-image", theme.mainBackgroundImage || "none")
         root.style.setProperty("--sidebar-bg-image", theme.sidebarBackgroundImage || "none")
     },
-    renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor } = {}) {
+    renderPicker({ onSelect, onCreateCustomPreset, activeKey } = {}) {
         const root = document.getElementById("theme-picker-root")
         if (!root) return
         const customPresetKeys = this.getCustomPresets().map(item => `custom:${item.key}`)
         const groups = [
-            { key: "dark", title: "Тёмные", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal"] },
-            { key: "light", title: "Светлые", items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
-            { key: "custom", title: "Пользовательские", items: [...customPresetKeys, "manual"] }
+            { title: "Тёмные темы", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal"] },
+            { title: "Светлые темы", items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
+            { title: "Пользовательские", items: customPresetKeys }
         ]
         root.innerHTML = ""
         groups.forEach(group => {
-            const detailsElement = document.createElement("details")
-            detailsElement.className = "theme-group"
-            detailsElement.open = true
-            const summaryElement = document.createElement("summary")
-            summaryElement.className = "theme-group-title"
-            summaryElement.textContent = group.title
-            detailsElement.appendChild(summaryElement)
+            const sectionElement = document.createElement("section")
+            sectionElement.className = "theme-group"
 
-            const rowElement = document.createElement("div")
-            rowElement.className = "theme-horizontal-row"
+            const titleElement = document.createElement("h4")
+            titleElement.className = "theme-group-title"
+            titleElement.textContent = group.title
+            sectionElement.appendChild(titleElement)
+
+            const presetsGrid = document.createElement("div")
+            presetsGrid.className = "theme-presets-grid"
+
             group.items.forEach(key => {
                 const buttonElement = document.createElement("button")
                 buttonElement.type = "button"
@@ -181,22 +182,24 @@ export const ThemeManager = {
                 if (activeKey === key) buttonElement.classList.add("active")
                 const dotElement = document.createElement("span")
                 dotElement.className = "theme-dot"
-                dotElement.style.background = key === "manual" ? (manualColor || this.themes.oled.p) : this.resolvePreset(key).p
+                dotElement.style.background = this.resolvePreset(key).p
                 buttonElement.appendChild(dotElement)
                 buttonElement.addEventListener("click", () => onSelect?.(key))
-                rowElement.appendChild(buttonElement)
+                presetsGrid.appendChild(buttonElement)
             })
-            if (group.key === "custom") {
+
+            if (group.title === "Пользовательские") {
                 const addButton = document.createElement("button")
                 addButton.type = "button"
                 addButton.className = "theme-custom-add"
                 addButton.textContent = "+"
                 addButton.disabled = customPresetKeys.length >= this.maxCustomPresets
                 addButton.addEventListener("click", () => onCreateCustomPreset?.())
-                rowElement.appendChild(addButton)
+                presetsGrid.appendChild(addButton)
             }
-            detailsElement.appendChild(rowElement)
-            root.appendChild(detailsElement)
+
+            sectionElement.appendChild(presetsGrid)
+            root.appendChild(sectionElement)
         })
     },
     setupColorInputs(onChange) {
