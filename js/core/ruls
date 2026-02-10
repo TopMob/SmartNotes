@@ -10,51 +10,70 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function noteDocumentPath(userId, noteId) {
-      return /databases/$(database)/documents/users/$(userId)/notes/$(noteId);
+    function hasLegacyAccessMap(noteData) {
+      return noteData.access is map
+        && noteData.access.ownerUid is string
+        && noteData.access.allow is list;
     }
 
-    function noteData(userId, noteId) {
-      return get(noteDocumentPath(userId, noteId)).data;
+    function hasRoleMapAccess(noteData) {
+      return noteData.access is map
+        && noteData.access.ownerUid is string
+        && noteData.access.roles is map;
     }
 
-    function shareRoleForUser(note, uid) {
-      return note.access.roles[uid];
+    function canReadByLegacyAccess(noteData, ownerId) {
+      return hasLegacyAccessMap(noteData)
+        && noteData.access.ownerUid == ownerId
+        && isAuthenticated()
+        && request.auth.uid in noteData.access.allow;
     }
 
-    function hasSharedAccess(note, uid) {
-      return note.access is map
-        && note.access.ownerUid is string
-        && note.access.roles is map
-        && uid in note.access.roles;
+    function canReadByRoleMap(noteData, ownerId) {
+      return hasRoleMapAccess(noteData)
+        && noteData.access.ownerUid == ownerId
+        && isAuthenticated()
+        && request.auth.uid in noteData.access.roles;
     }
 
-    function canReadSharedNote(userId, noteId) {
-      let note = noteData(userId, noteId);
-      return hasSharedAccess(note, request.auth.uid);
+    function canEditByLegacyAccess(noteData, ownerId) {
+      return canReadByLegacyAccess(noteData, ownerId)
+        && noteData.access.role == 'editor';
     }
 
-    function canEditSharedNote(userId, noteId) {
-      let note = noteData(userId, noteId);
-      return hasSharedAccess(note, request.auth.uid)
-        && shareRoleForUser(note, request.auth.uid) in ['editor', 'owner'];
+    function canEditByRoleMap(noteData, ownerId) {
+      return canReadByRoleMap(noteData, ownerId)
+        && noteData.access.roles[request.auth.uid] in ['editor', 'owner'];
     }
 
-    function canDeleteSharedNote(userId, noteId) {
-      let note = noteData(userId, noteId);
-      return hasSharedAccess(note, request.auth.uid)
-        && shareRoleForUser(note, request.auth.uid) == 'owner';
+    function canDeleteByLegacyAccess(noteData, ownerId) {
+      return canReadByLegacyAccess(noteData, ownerId)
+        && noteData.access.role == 'owner';
+    }
+
+    function canDeleteByRoleMap(noteData, ownerId) {
+      return canReadByRoleMap(noteData, ownerId)
+        && noteData.access.roles[request.auth.uid] == 'owner';
     }
 
     match /users/{userId} {
       allow read, write: if isOwner(userId);
 
       match /notes/{noteId} {
-        allow read: if isOwner(userId) || canReadSharedNote(userId, noteId);
+        allow read: if isOwner(userId)
+          || canReadByLegacyAccess(resource.data, userId)
+          || canReadByRoleMap(resource.data, userId);
+
         allow create: if isOwner(userId)
           && request.resource.data.ownerId == request.auth.uid;
-        allow update: if isOwner(userId) || canEditSharedNote(userId, noteId);
-        allow delete: if isOwner(userId) || canDeleteSharedNote(userId, noteId);
+
+        allow update: if isOwner(userId)
+          || canEditByLegacyAccess(resource.data, userId)
+          || canEditByRoleMap(resource.data, userId);
+
+        allow delete: if isOwner(userId)
+          || canDeleteByLegacyAccess(resource.data, userId)
+          || canDeleteByRoleMap(resource.data, userId);
       }
 
       match /folders/{folderId} {
@@ -72,8 +91,10 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.noteId is string
         && request.resource.data.permission in ['viewer', 'editor'];
+
       allow read: if isAuthenticated();
       allow update: if false;
+
       allow delete: if isAuthenticated()
         && resource.data.ownerUid == request.auth.uid;
     }
