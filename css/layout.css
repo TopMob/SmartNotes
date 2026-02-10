@@ -348,17 +348,17 @@
     transition: transform var(--animation-duration) var(--ease-out), background var(--animation-duration) var(--ease-out);
 }
 
-.filter-toggle-option input:checked + .filter-toggle-track {
+.filter-toggle-option input:checked ~ .filter-toggle-track {
     background: color-mix(in srgb, var(--primary) 34%, var(--surface) 66%);
     border-color: color-mix(in srgb, var(--primary) 46%, var(--border) 54%);
 }
 
-.filter-toggle-option input:checked + .filter-toggle-track .filter-toggle-thumb {
+.filter-toggle-option input:checked ~ .filter-toggle-track .filter-toggle-thumb {
     transform: translateX(16px);
     background: color-mix(in srgb, var(--text) 92%, transparent);
 }
 
-.filter-toggle-option input:disabled + .filter-toggle-track {
+.filter-toggle-option input:disabled ~ .filter-toggle-track {
     opacity: 0.45;
 }
 
