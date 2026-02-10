@@ -323,7 +323,10 @@ select.input-area:focus {
 #theme-picker-root {
     display: grid;
     gap: 14px;
-    width: 100%;
+    width: calc(100% + 32px);
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 0 16px;
     overflow-x: hidden;
 }
 
@@ -354,10 +357,7 @@ select.input-area:focus {
 .theme-group {
     display: grid;
     gap: 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    padding: 10px 0;
 }
 
 .theme-group-title {
@@ -370,7 +370,10 @@ select.input-area:focus {
 #theme-picker-root {
     display: grid;
     gap: 14px;
-    width: 100%;
+    width: calc(100% + 32px);
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 0 16px;
     overflow-x: hidden;
 }
 
