@@ -147,14 +147,14 @@ Object.assign(UI, {
         }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
-        this.updateFolderRenameButton()
+        this.updateActiveFolderMenu()
     },
 
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
         const label = StateStore.read().view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
-        this.updateFolderRenameButton()
+        this.updateActiveFolderMenu()
     },
 
 
@@ -164,10 +164,15 @@ Object.assign(UI, {
         await DataPath.getUserFoldersCollection(user).doc(folderId).update({ isHidden: !!hiddenState })
     },
 
-    async toggleFolderHidden(folderId) {
+    async toggleFolderHidden(folderId, options = {}) {
         const folder = StateStore.read().folders.find(item => item.id === folderId)
         if (!folder) return
-        await this.setFolderHidden(folderId, !folder.isHidden)
+        const nextHiddenState = !folder.isHidden
+        if (nextHiddenState && !options.skipConfirmation) {
+            this.confirm("hide_f", () => this.setFolderHidden(folderId, true))
+            return
+        }
+        await this.setFolderHidden(folderId, nextHiddenState)
     },
 
     async reorderFolders(draggedFolderId, targetFolderId) {
@@ -187,11 +192,27 @@ Object.assign(UI, {
         })
         await batch.commit()
     },
-    updateFolderRenameButton() {
-        const button = document.getElementById("rename-folder-button")
-        if (!button) return
-        const { view, activeFolderId } = StateStore.read()
+    toggleActiveFolderMenu(force) {
+        const menu = this.els.activeFolderMenu
+        if (!menu) return
+        menu.classList.toggle("active", typeof force === "boolean" ? force : !menu.classList.contains("active"))
+    },
+
+    updateActiveFolderMenu() {
+        const wrapper = this.els.activeFolderMenuWrapper
+        const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
+        const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
+        if (!wrapper) return
+        const { view, activeFolderId, folders } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
-        button.classList.toggle("hidden", !isVisible)
+        wrapper.classList.toggle("hidden", !isVisible)
+        if (!isVisible) {
+            this.toggleActiveFolderMenu(false)
+            return
+        }
+        const folder = folders.find(item => item.id === activeFolderId)
+        if (!folder) return
+        if (hideLabel) hideLabel.textContent = folder.isHidden ? this.getText("show_folder", "Show folder") : this.getText("hide_folder", "Hide folder")
+        if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"
     }
 })

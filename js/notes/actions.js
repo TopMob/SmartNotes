@@ -3,12 +3,26 @@ async function deleteFolder(folderId) {
     UI.confirm("delete_f", async () => {
         const user = StateStore.read().user
         if (!db || !user) return
-        const folderRef = DataPath.getUserFoldersCollection(user).doc(folderId)
-        await folderRef.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        const foldersCollection = DataPath.getUserFoldersCollection(user)
+        const notesCollection = DataPath.getUserNotesCollection(user)
+        const movedAt = firebase.firestore.FieldValue.serverTimestamp()
+        const folderRef = foldersCollection.doc(folderId)
+        const notesSnapshot = await notesCollection.where("folderId", "==", folderId).get()
+        const batch = db.batch()
+        notesSnapshot.forEach(noteDoc => {
+            batch.update(noteDoc.ref, {
+                folderId: null,
+                trashedAt: movedAt,
+                updatedAt: movedAt
+            })
+        })
+        batch.update(folderRef, { trashedAt: movedAt, isHidden: false })
+        await batch.commit()
         if (StateStore.read().activeFolderId === folderId) switchView("notes")
         UI.showToast(UI.getText("folder_deleted", "Folder moved to trash"))
     })
 }
+
 
 const getNoteById = (noteId) => StateStore.read().notes.find(n => n.id === noteId)
 

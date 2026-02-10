@@ -517,7 +517,8 @@ Object.assign(UI, {
             delete: this.getText("confirm_delete", "Delete?"),
             exit: this.getText("confirm_exit", "Sign out?"),
             account: this.getText("confirm_account", "Switch account?"),
-            delete_f: this.getText("confirm_delete_folder", "Delete folder?")
+            delete_f: this.getText("confirm_delete_folder", "Delete folder?"),
+            hide_f: this.getText("confirm_hide_folder", "Do you want to hide this folder?")
         }
         const titleEl = document.getElementById("confirm-title")
         if (titleEl) titleEl.textContent = titles[type] || this.getText("confirm_default", "Confirm")

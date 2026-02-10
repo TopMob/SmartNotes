@@ -96,6 +96,7 @@ function filterAndRender(query) {
     let list = current.notes.slice()
     const notesFilter = current.config.notesFilter || { sort: "manual", folders: [] }
     const selectedFolders = Array.isArray(notesFilter.folders) ? notesFilter.folders : []
+    const hiddenFolderIds = new Set(current.folders.filter(folder => folder.isHidden && !folder.trashedAt).map(folder => folder.id))
 
     if (view === "locked") {
         list = list.filter(n => isHiddenLocked(n))
@@ -117,6 +118,10 @@ function filterAndRender(query) {
     else if (view === "archive") list = list.filter(n => n.isArchived)
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
     else if (view !== "locked" && view !== "reminders" && view !== "trash") list = list.filter(n => !n.isArchived)
+
+    if (view !== "folder") {
+        list = list.filter(note => !note.folderId || !hiddenFolderIds.has(note.folderId))
+    }
 
     if (view !== "folder" && view !== "folders" && selectedFolders.length) {
         list = list.filter(note => {
