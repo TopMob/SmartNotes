@@ -349,3 +349,46 @@ select.input-area:focus {
 .settings-background-actions .btn-secondary:hover {
     filter: brightness(1.06);
 }
+
+.theme-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    padding: 8px 10px;
+}
+
+.theme-group-title {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.theme-group-title::-webkit-details-marker {
+    display: none;
+}
+
+.theme-horizontal-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 8px 0 2px;
+}
+
+.theme-custom-add {
+    min-width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.theme-custom-add:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

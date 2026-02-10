@@ -55,7 +55,7 @@ Object.assign(UI, {
                     const current = StateStore.read()
                     if (current.notes.some(x => x.id === n.id)) n.id = Utils.generateId()
                     if (n.folderId && !current.folders.find(f => f.id === n.folderId)) n.folderId = null
-                    const ref = db.collection("users").doc(current.user.uid).collection("notes").doc(n.id)
+                    const ref = DataPath.getUserNotesCollection(current.user).doc(n.id)
                     batch.set(ref, n, { merge: true })
                 })
                 await batch.commit()
@@ -85,7 +85,7 @@ Object.assign(UI, {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
-            await db.collection("users").doc(StateStore.read().user.uid).collection("folders").add({
+            await DataPath.getUserFoldersCollection(StateStore.read().user).add({
                 name: trimmed,
                 isHidden: false,
                 trashedAt: null,
@@ -109,7 +109,7 @@ Object.assign(UI, {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
-            await db.collection("users").doc(StateStore.read().user.uid).collection("folders").doc(id).update({
+            await DataPath.getUserFoldersCollection(StateStore.read().user).doc(id).update({
                 name: trimmed
             })
         }, String(folder.name || ""))
@@ -136,7 +136,8 @@ Object.assign(UI, {
             trash: dict.trash || "Trash",
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
-            locked: dict.view_locked || dict.lock_center || "Note Protection"
+            locked: dict.view_locked || dict.lock_center || "Note Protection",
+            hidden_folders: "Скрытые папки"
         }
         const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"
@@ -157,12 +158,16 @@ Object.assign(UI, {
     },
 
 
-    async toggleFolderHidden(folderId) {
+    async setFolderHidden(folderId, hiddenState) {
         const user = StateStore.read().user
         if (!db || !user || !folderId) return
+        await DataPath.getUserFoldersCollection(user).doc(folderId).update({ isHidden: !!hiddenState })
+    },
+
+    async toggleFolderHidden(folderId) {
         const folder = StateStore.read().folders.find(item => item.id === folderId)
         if (!folder) return
-        await db.collection("users").doc(user.uid).collection("folders").doc(folderId).update({ isHidden: !folder.isHidden })
+        await this.setFolderHidden(folderId, !folder.isHidden)
     },
 
     async reorderFolders(draggedFolderId, targetFolderId) {
@@ -177,7 +182,7 @@ Object.assign(UI, {
         reordered.splice(toIndex, 0, dragged)
         const batch = db.batch()
         reordered.forEach((folder, index) => {
-            const ref = db.collection("users").doc(user.uid).collection("folders").doc(folder.id)
+            const ref = DataPath.getUserFoldersCollection(user).doc(folder.id)
             batch.update(ref, { folderOrder: index + 1 })
         })
         await batch.commit()

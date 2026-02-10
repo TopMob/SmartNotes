@@ -85,7 +85,9 @@ const AppLifecycle = {
         this.sharedEntries.delete(id)
         this.sharedNotes.delete(id)
         if (options.removeRemote && db && this.activeUid) {
-            db.collection("users").doc(this.activeUid).collection(CollaborationService.sharedNotesCollection).doc(id).delete()
+            const currentUser = StateStore.read().user
+            const sharedCollection = DataPath.getUserSharedCollection(currentUser, CollaborationService.sharedNotesCollection)
+            if (sharedCollection) sharedCollection.doc(id).delete()
         }
         this.updateNotesState()
     },
@@ -108,7 +110,7 @@ const AppLifecycle = {
         this.stopUserSession()
         this.activeUid = user.uid
 
-        const folderUnsub = db.collection("users").doc(user.uid).collection("folders")
+        const folderUnsub = DataPath.getUserFoldersCollection(user)
             .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
                 const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -122,7 +124,7 @@ const AppLifecycle = {
                 console.error("Folders sync error", error)
             })
 
-        const notesUnsub = db.collection("users").doc(user.uid).collection("notes")
+        const notesUnsub = DataPath.getUserNotesCollection(user)
             .orderBy("order", "asc")
             .onSnapshot(snap => {
                 this.ownedNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -135,7 +137,7 @@ const AppLifecycle = {
         this.unsubscribers = [folderUnsub, notesUnsub]
 
         if (typeof CollaborationService !== "undefined" && this.sharedSyncEnabled) {
-            this.sharedUnsub = db.collection("users").doc(user.uid).collection(CollaborationService.sharedNotesCollection)
+            this.sharedUnsub = DataPath.getUserSharedCollection(user, CollaborationService.sharedNotesCollection)
                 .onSnapshot(snap => {
                     const entries = new Map()
                     snap.docs.forEach(doc => {
@@ -144,6 +146,7 @@ const AppLifecycle = {
                         entries.set(doc.id, {
                             id: doc.id,
                             ownerUid: String(data.ownerUid),
+                            ownerCollection: String(data.ownerCollection || "users"),
                             noteId: String(data.noteId),
                             permission: CollaborationService.normalizePermission(data.permission),
                             shareToken: data.shareToken || ""
@@ -219,7 +222,7 @@ const AppLifecycle = {
                 }
                 return
             }
-            const unsub = db.collection("users").doc(entry.ownerUid).collection("notes").doc(entry.noteId)
+            const unsub = db.collection(entry.ownerCollection || "users").doc(entry.ownerUid).collection("notes").doc(entry.noteId)
                 .onSnapshot(doc => {
                     if (!doc.exists) {
                         this.removeSharedEntry(id)
@@ -239,6 +242,7 @@ const AppLifecycle = {
                         access: {
                             role: entry.permission,
                             ownerUid: entry.ownerUid,
+                            ownerCollection: entry.ownerCollection || "users",
                             noteId: entry.noteId,
                             shareId: id
                         }

@@ -1,4 +1,5 @@
 import { isSafari } from "./authSafariFix.js"
+import { createLocalAuthManager } from "./localAuth.js"
 
 export function createAuthManager({ auth }) {
     const state = {
@@ -103,33 +104,23 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
         },
-
         async loginGuest() {
-            if (!auth) return
-            this._setLoginBusy(true)
-            try {
-                await auth.signInAnonymously()
-            } catch (error) {
-                this.handleAuthError(error)
-            }
-            this._setLoginBusy(false)
+            const localAuthManager = createLocalAuthManager({
+                auth,
+                setLoginBusy: (flag) => this._setLoginBusy(flag),
+                handleAuthError: (error) => this.handleAuthError(error),
+                getText: (key, fallback) => this._t(key, fallback)
+            })
+            await localAuthManager.loginGuest()
         },
         async loginWithEmail() {
-            if (!auth) return
-            const email = prompt(this._t("email_prompt", "Email"), "")
-            const password = prompt(this._t("password_prompt", "Password"), "")
-            if (!email || !password) return
-            this._setLoginBusy(true)
-            try {
-                await auth.signInWithEmailAndPassword(email.trim(), password)
-            } catch {
-                try {
-                    await auth.createUserWithEmailAndPassword(email.trim(), password)
-                } catch (error) {
-                    this.handleAuthError(error)
-                }
-            }
-            this._setLoginBusy(false)
+            const localAuthManager = createLocalAuthManager({
+                auth,
+                setLoginBusy: (flag) => this._setLoginBusy(flag),
+                handleAuthError: (error) => this.handleAuthError(error),
+                getText: (key, fallback) => this._t(key, fallback)
+            })
+            await localAuthManager.loginWithEmail()
         },
         async logout() {
             if (!auth) return

@@ -141,7 +141,7 @@ delete payload.access
 payload.ownerId = access?.ownerUid || user.uid
 
 const ref = typeof CollaborationService === "undefined"
-  ? db.collection("users").doc(user.uid).collection("notes").doc(payload.id)
+  ? DataPath.getUserNotesCollection(user).doc(payload.id)
   : CollaborationService.getNoteReference(note, user)
 
 if (!ref) return
@@ -804,7 +804,7 @@ const addPage = () => {
         UI.confirm("delete", async () => {
             if (!db || !StateStore.read().user) return
             const ref = typeof CollaborationService === "undefined"
-                ? db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(note.id)
+                ? DataPath.getUserNotesCollection(StateStore.read().user).doc(note.id)
                 : CollaborationService.getNoteReference(note, StateStore.read().user)
             if (!ref) return
             await ref.delete()

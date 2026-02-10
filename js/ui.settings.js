@@ -254,7 +254,7 @@ Object.assign(UI, {
                 bg: saved.bg || preset.bg,
                 t: saved.t || preset.t,
                 brandName: saved.brandName || "SmartNotes",
-                basePreset: saved.basePreset || "dark",
+                basePreset: saved.basePreset || "oled",
                 mainBackgroundImage: saved.mainBackgroundImage || "",
                 sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
             })
@@ -266,7 +266,7 @@ Object.assign(UI, {
             bg: saved.bg || ThemeManager.themes.oled.bg,
             t: saved.t || ThemeManager.themes.oled.t,
             brandName: saved.brandName || "SmartNotes",
-            basePreset: saved.basePreset || "dark",
+            basePreset: saved.basePreset || "oled",
             mainBackgroundImage: saved.mainBackgroundImage || "",
             sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
         })
@@ -298,7 +298,7 @@ Object.assign(UI, {
                     ...draft,
                     preset: "manual",
                     brandName: "SmartNotes",
-                    basePreset: "dark"
+                    basePreset: "oled"
                 }
             } else {
                 const preset = ThemeManager.resolvePreset(key)
@@ -315,13 +315,30 @@ Object.assign(UI, {
             }
             this.applyAppearanceDraft(nextDraft)
         }
-        ThemeManager.renderPicker({ onSelect, activeKey, manualColor: draft.p })
+        const onCreateCustomPreset = () => {
+            const currentDraft = StateStore.read().appearanceDraft || draft
+            const result = ThemeManager.addCustomPreset(currentDraft)
+            if (!result.ok) {
+                UI.showToast("Максимум 5 пользовательских пресетов")
+                return
+            }
+            const preset = ThemeManager.resolvePreset(result.key)
+            this.applyAppearanceDraft({
+                ...currentDraft,
+                preset: result.key,
+                p: preset.p,
+                bg: preset.bg,
+                t: preset.t,
+                basePreset: result.key
+            })
+        }
+        ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
         ThemeManager.setupColorInputs((type, val) => {
             const current = StateStore.read().appearanceDraft || draft
             const next = { ...current, preset: "manual", [type]: val }
             StateStore.update("appearanceDraft", next)
             ThemeManager.applySettings(next, false)
-            ThemeManager.renderPicker({ onSelect, activeKey: "manual", manualColor: next.p })
+            ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey: "manual", manualColor: next.p })
         })
     },
 

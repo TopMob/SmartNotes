@@ -100,7 +100,7 @@ Object.assign(UI, {
         this.renderLockCenter()
         if (!db || !StateStore.read().user) return
         try {
-            await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(id).update({
+            await DataPath.getUserNotesCollection(StateStore.read().user).doc(id).update({
                 "lock.hidden": false
             })
         } catch (error) {
@@ -133,7 +133,7 @@ Object.assign(UI, {
             if (firebase?.firestore?.FieldValue?.delete) {
                 payload.lock = firebase.firestore.FieldValue.delete()
             }
-            await db.collection("users").doc(StateStore.read().user.uid).collection("notes").doc(id).update(payload)
+            await DataPath.getUserNotesCollection(StateStore.read().user).doc(id).update(payload)
         } catch (error) {
             this.showToast(this.getText("unlock_failed", "Unable to unlock note"))
             console.error("Unlock failed", error)

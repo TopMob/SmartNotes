@@ -3,7 +3,7 @@ async function deleteFolder(folderId) {
     UI.confirm("delete_f", async () => {
         const user = StateStore.read().user
         if (!db || !user) return
-        const folderRef = db.collection("users").doc(user.uid).collection("folders").doc(folderId)
+        const folderRef = DataPath.getUserFoldersCollection(user).doc(folderId)
         await folderRef.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() })
         if (StateStore.read().activeFolderId === folderId) switchView("notes")
         UI.showToast(UI.getText("folder_deleted", "Folder moved to trash"))
@@ -21,7 +21,7 @@ const ensureManageAccess = (note) => {
 
 const getNoteReference = (note, user) => {
     if (typeof CollaborationService !== "undefined") return CollaborationService.getNoteReference(note, user)
-    return db.collection("users").doc(user.uid).collection("notes").doc(note.id)
+    return DataPath.getUserNotesCollection(user).doc(note.id)
 }
 
 function openNoteActions(noteId) {

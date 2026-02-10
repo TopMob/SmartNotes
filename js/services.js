@@ -294,8 +294,10 @@ const CollaborationService = {
         if (ownerUid !== user.uid) return ""
         const noteId = access?.noteId || note.id
         const token = await this.generateToken()
+        const ownerCollection = DataPath.getUserStorageCollectionName(user)
         const payload = {
             ownerUid,
+            ownerCollection,
             noteId,
             permission: this.normalizePermission(permission),
             createdAt: Utils.serverTimestamp()
@@ -315,12 +317,13 @@ const CollaborationService = {
         const entryId = `${data.ownerUid}_${data.noteId}`
         const entry = {
             ownerUid: data.ownerUid,
+            ownerCollection: data.ownerCollection || "users",
             noteId: data.noteId,
             permission,
             shareToken: trimmed,
             updatedAt: Utils.serverTimestamp()
         }
-        await db.collection("users").doc(user.uid).collection(this.sharedNotesCollection).doc(entryId).set(entry, { merge: true })
+        await DataPath.getUserSharedCollection(user, this.sharedNotesCollection).doc(entryId).set(entry, { merge: true })
         return { id: entryId, ...entry }
     },
     getNoteReference(note, user) {
@@ -328,7 +331,8 @@ const CollaborationService = {
         const access = this.getAccess(note)
         const ownerUid = access?.ownerUid || user.uid
         const noteId = access?.noteId || note.id
-        return db.collection("users").doc(ownerUid).collection("notes").doc(noteId)
+        const ownerCollection = access?.ownerCollection || "users"
+        return db.collection(ownerCollection).doc(ownerUid).collection("notes").doc(noteId)
     },
     async copyToClipboard(text) {
         const value = String(text || "")

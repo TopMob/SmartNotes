@@ -279,6 +279,9 @@ Object.assign(UI, {
             case "toggle-folder-hidden":
                 this.toggleFolderHidden(el.dataset.folderId)
                 break
+            case "folder-unhide":
+                this.setFolderHidden(el.dataset.folderId, false)
+                break
             case "primary-action":
                 this.primaryAction()
                 break

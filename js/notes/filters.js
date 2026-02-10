@@ -150,6 +150,8 @@ function filterAndRender(query) {
 
     if (view === "folders") {
         UI.renderFolderGrid()
+    } else if (view === "hidden_folders") {
+        UI.renderHiddenFolders()
     } else {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))

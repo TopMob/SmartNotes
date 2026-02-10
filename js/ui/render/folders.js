@@ -32,6 +32,22 @@ Object.assign(UI, {
         this.renderFilterMenu()
     },
 
+
+    renderHiddenFolders() {
+        this.updateEmptyState("visibility_off", "Скрытых папок нет")
+        const { folders } = StateStore.read()
+        const hiddenFolders = folders.filter(folder => !!folder.isHidden && !folder.trashedAt)
+        this.els.empty.classList.toggle("hidden", hiddenFolders.length > 0)
+        this.els.grid.classList.add("folder-grid")
+        this.els.grid.innerHTML = hiddenFolders.map(folder => `
+            <div class="folder-card">
+                <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
+                <div class="folder-meta">Скрытая папка</div>
+                <button type="button" class="btn-secondary" data-action="folder-unhide" data-folder-id="${folder.id}">Показать</button>
+            </div>
+        `).join("")
+    },
+
     renderFolderGrid() {
         this.updateEmptyState("folder_open", this.getText("folders_empty", "No folders yet"))
         const { folders, notes } = StateStore.read()
