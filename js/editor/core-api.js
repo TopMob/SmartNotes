@@ -130,21 +130,27 @@ export const EditorAPI = (() => {
 
         StateStore.update("currentNote", note)
         const access = typeof CollaborationService === "undefined"
-  ? null
-  : CollaborationService.getAccess(note)
+            ? null
+            : CollaborationService.getAccess(note)
 
-const targetId = access?.noteId || note.id
+        const targetId = access?.noteId || note.id
+        const ownerUid = access?.ownerUid || user.uid
+        const existingRoles = access?.roles && typeof access.roles === "object" ? access.roles : {}
+        const payload = NoteIO.normalizeNote({ ...note, id: targetId, ownerUid })
+        payload.ownerUid = ownerUid
+        payload.access = {
+            ownerUid,
+            roles: {
+                ...existingRoles,
+                [ownerUid]: "owner"
+            }
+        }
 
-const payload = NoteIO.normalizeNote({ ...note, id: targetId })
-delete payload.access
+        const ref = typeof CollaborationService === "undefined"
+            ? DataPath.getUserNotesCollection(user).doc(payload.id)
+            : CollaborationService.getNoteReference(note, user)
 
-payload.ownerId = access?.ownerUid || user.uid
-
-const ref = typeof CollaborationService === "undefined"
-  ? DataPath.getUserNotesCollection(user).doc(payload.id)
-  : CollaborationService.getNoteReference(note, user)
-
-if (!ref) return
+        if (!ref) return
 
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
@@ -653,7 +659,7 @@ const addPage = () => {
         folderId,
         createdAt: Utils.serverTimestamp(),
         order: Date.now(),
-        ownerId: user?.uid || null
+        ownerUid: user?.uid || null
       })
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)

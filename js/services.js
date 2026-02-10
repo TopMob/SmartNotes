@@ -9,33 +9,59 @@ const NoteIO = {
         if (!pageDrawings.length && typeof safe.drawing === "string" && safe.drawing) {
             pageDrawings.push(safe.drawing)
         }
-        const access = safe.access && typeof safe.access === "object" ? safe.access : null
-        
         const now = Utils.serverTimestamp()
-        
-return {
-  id: safe.id ? String(safe.id) : Utils.generateId(),
-  title: safe.title ? String(safe.title).trim() : "",
-  content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
-  pageDrawings,
-  tags,
-  folderId: safe.folderId ? String(safe.folderId) : null,
-  folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
-  isArchived: !!safe.isArchived,
-  isFavorite: !!safe.isFavorite,
-  isPinned: !!safe.isPinned,
-  access,
-  lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
-  reminderAt: safe.reminderAt || safe.futureAt || null,
-  trashedAt: safe.trashedAt || null,
-  contentType: safe.contentType ? String(safe.contentType) : "text",
-  order: typeof safe.order === "number" ? safe.order : Date.now(),
-  createdAt: safe.createdAt || now,
-  updatedAt: safe.updatedAt || now,
-  ownerId: safe.ownerId
-      ? String(safe.ownerId)
-      : StateStore.read().user?.uid || null
-}
+        const ownerUid = safe.ownerUid
+            ? String(safe.ownerUid)
+            : (safe.ownerId ? String(safe.ownerId) : (StateStore.read().user?.uid || null))
+        const rolesSource = safe.access && typeof safe.access === "object" && safe.access.roles && typeof safe.access.roles === "object"
+            ? safe.access.roles
+            : null
+        const allowSource = safe.access && typeof safe.access === "object" && Array.isArray(safe.access.allow)
+            ? safe.access.allow
+            : []
+        const roles = {}
+        if (rolesSource) {
+            Object.entries(rolesSource).forEach(([uid, role]) => {
+                const normalizedUid = String(uid || "").trim()
+                if (!normalizedUid) return
+                const normalizedRole = role === "owner" || role === "editor" || role === "viewer"
+                    ? role
+                    : "viewer"
+                roles[normalizedUid] = normalizedRole
+            })
+        }
+        allowSource.forEach(uid => {
+            const normalizedUid = String(uid || "").trim()
+            if (!normalizedUid) return
+            if (!roles[normalizedUid]) roles[normalizedUid] = "viewer"
+        })
+        if (ownerUid) roles[ownerUid] = "owner"
+        const access = {
+            ownerUid,
+            roles
+        }
+
+        return {
+            id: safe.id ? String(safe.id) : Utils.generateId(),
+            title: safe.title ? String(safe.title).trim() : "",
+            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
+            pageDrawings,
+            tags,
+            folderId: safe.folderId ? String(safe.folderId) : null,
+            folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
+            isArchived: !!safe.isArchived,
+            isFavorite: !!safe.isFavorite,
+            isPinned: !!safe.isPinned,
+            access,
+            lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
+            reminderAt: safe.reminderAt || safe.futureAt || null,
+            trashedAt: safe.trashedAt || null,
+            contentType: safe.contentType ? String(safe.contentType) : "text",
+            order: typeof safe.order === "number" ? safe.order : Date.now(),
+            createdAt: safe.createdAt || now,
+            updatedAt: safe.updatedAt || now,
+            ownerUid
+        }
     },
 
     exportNote(note) {
@@ -228,11 +254,12 @@ const CollaborationService = {
     },
     getRole(note) {
         const access = this.getAccess(note)
-        const role = access?.role
+        const currentUserUid = StateStore.read().user?.uid || ""
+        if (!currentUserUid) return "viewer"
+        if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
+        const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
-        if (role === "edit") return "editor"
-        if (role === "view") return "viewer"
-        return "owner"
+        return "viewer"
     },
     canEdit(note) {
         const role = this.getRole(note)
@@ -294,7 +321,7 @@ const CollaborationService = {
         if (ownerUid !== user.uid) return ""
         const noteId = access?.noteId || note.id
         const token = await this.generateToken()
-        const ownerCollection = DataPath.getUserStorageCollectionName(user)
+        const ownerCollection = "users"
         const payload = {
             ownerUid,
             ownerCollection,
@@ -317,7 +344,7 @@ const CollaborationService = {
         const entryId = `${data.ownerUid}_${data.noteId}`
         const entry = {
             ownerUid: data.ownerUid,
-            ownerCollection: data.ownerCollection || "users",
+            ownerCollection: "users",
             noteId: data.noteId,
             permission,
             shareToken: trimmed,
@@ -331,8 +358,7 @@ const CollaborationService = {
         const access = this.getAccess(note)
         const ownerUid = access?.ownerUid || user.uid
         const noteId = access?.noteId || note.id
-        const ownerCollection = access?.ownerCollection || "users"
-        return db.collection(ownerCollection).doc(ownerUid).collection("notes").doc(noteId)
+        return db.collection("users").doc(ownerUid).collection("notes").doc(noteId)
     },
     async copyToClipboard(text) {
         const value = String(text || "")

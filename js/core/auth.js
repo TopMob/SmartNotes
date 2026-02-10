@@ -7,7 +7,8 @@ export function createAuthManager({ auth }) {
         loginInFlight: false,
         authReady: false,
         currentUser: null,
-        loginButton: null
+        loginButton: null,
+        localAuthManager: null
     }
 
     const manager = {
@@ -45,7 +46,12 @@ export function createAuthManager({ auth }) {
                 "auth/popup-blocked": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
                 "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
                 "auth/web-storage-unsupported": this._t("auth_storage_failed", "Storage is blocked in this browser"),
-                "auth/operation-not-supported-in-this-environment": this._t("auth_env_failed", "Authentication is blocked in this browser")
+                "auth/operation-not-supported-in-this-environment": this._t("auth_env_failed", "Authentication is blocked in this browser"),
+                "auth/invalid-email": this._t("auth_fill_required", "Fill in all required fields"),
+                "auth/wrong-password": this._t("login_failed", "Sign-in failed"),
+                "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
+                "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
+                "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
             const text = map[code] || (serviceUnavailable
@@ -104,23 +110,21 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
         },
-        async loginGuest() {
-            const localAuthManager = createLocalAuthManager({
+        _ensureLocalAuthManager() {
+            if (state.localAuthManager) return state.localAuthManager
+            state.localAuthManager = createLocalAuthManager({
                 auth,
                 setLoginBusy: (flag) => this._setLoginBusy(flag),
                 handleAuthError: (error) => this.handleAuthError(error),
                 getText: (key, fallback) => this._t(key, fallback)
             })
-            await localAuthManager.loginGuest()
+            return state.localAuthManager
+        },
+        async loginGuest() {
+            await this._ensureLocalAuthManager().loginGuest()
         },
         async loginWithEmail() {
-            const localAuthManager = createLocalAuthManager({
-                auth,
-                setLoginBusy: (flag) => this._setLoginBusy(flag),
-                handleAuthError: (error) => this.handleAuthError(error),
-                getText: (key, fallback) => this._t(key, fallback)
-            })
-            await localAuthManager.loginWithEmail()
+            await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {
             if (!auth) return
@@ -214,6 +218,7 @@ export function createAuthManager({ auth }) {
             state.initialized = true
 
             this._setLoginBusy(false)
+            this._ensureLocalAuthManager().bindUi()
 
             try {
                 await auth.getRedirectResult()
