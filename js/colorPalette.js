@@ -80,7 +80,9 @@ const ColorPalette = (() => {
     }
 
     const getBoundsContainer = (picker) => {
-        return picker.closest(".editor-toolbar")
+        return picker.closest("#settings-content")
+            || picker.closest(".modal-card")
+            || picker.closest(".editor-toolbar")
             || picker.closest(".note-content-wrapper")
             || picker.closest(".note-editor")
             || document.body
@@ -111,10 +113,12 @@ const ColorPalette = (() => {
         const containerLeft = containerRect.left + padding
         const containerRight = containerRect.right - padding
         const containerWidth = Math.max(0, containerRight - containerLeft)
-        let left = (pickerRect.width - panelRect.width) / 2
+        const pickerOffset = pickerRect.left - containerRect.left
+        const centeredInPicker = (pickerRect.width - panelRect.width) / 2
+        const centeredInContainer = (containerRect.width - panelRect.width) / 2 - pickerOffset
+        let left = state.container?.id === "settings-content" ? centeredInContainer : centeredInPicker
         if (panelRect.width > containerWidth && containerWidth > 0) {
-            const pickerOffset = pickerRect.left - containerRect.left
-            left = (containerRect.width - panelRect.width) / 2 - pickerOffset
+            left = centeredInContainer
         }
         const expectedRight = pickerRect.left + left + panelRect.width
         if (expectedRight > containerRight) {
@@ -156,11 +160,43 @@ const ColorPalette = (() => {
         return hex
     }
 
-    const emitChange = (state, hex) => {
+    const emitNow = (state, hex) => {
         if (!state.input) return
+        state.input.value = hex.toUpperCase()
+        state.input.setAttribute("value", hex.toUpperCase())
         const event = new Event("input", { bubbles: true })
         state.input.dispatchEvent(event)
-        state.input.setAttribute("value", hex)
+        state.lastEmittedHex = hex
+        state.lastEmittedAt = Date.now()
+    }
+
+    const emitChange = (state, hex, options = {}) => {
+        if (!state.input) return
+        const force = !!options.force
+        const now = Date.now()
+        const interval = 300
+        if (force) {
+            if (state.pendingEmitTimer) {
+                clearTimeout(state.pendingEmitTimer)
+                state.pendingEmitTimer = null
+            }
+            emitNow(state, hex)
+            return
+        }
+        if (!state.lastEmittedAt || now - state.lastEmittedAt >= interval) {
+            emitNow(state, hex)
+            return
+        }
+        state.pendingHex = hex
+        if (state.pendingEmitTimer) return
+        const remaining = interval - (now - state.lastEmittedAt)
+        state.pendingEmitTimer = setTimeout(() => {
+            state.pendingEmitTimer = null
+            if (!state.pendingHex) return
+            const nextHex = state.pendingHex
+            state.pendingHex = ""
+            emitNow(state, nextHex)
+        }, remaining)
     }
 
     const setColorFromHex = (state, hex, notify = true) => {
@@ -193,7 +229,7 @@ const ColorPalette = (() => {
         emitChange(state, hex)
     }
 
-    const trackPointer = (pointerId, moveHandler) => {
+    const trackPointer = (pointerId, moveHandler, upHandler) => {
         const onMove = (event) => {
             if (event.pointerId !== pointerId) return
             if (event.buttons === 0 && event.pointerType === "mouse") return
@@ -205,6 +241,7 @@ const ColorPalette = (() => {
             window.removeEventListener("pointermove", onMove)
             window.removeEventListener("pointerup", onUp)
             window.removeEventListener("pointercancel", onUp)
+            if (typeof upHandler === "function") upHandler(event)
         }
         window.addEventListener("pointermove", onMove)
         window.addEventListener("pointerup", onUp)
@@ -253,7 +290,11 @@ const ColorPalette = (() => {
             container: getBoundsContainer(picker),
             hue: 0,
             sat: 1,
-            val: 1
+            val: 1,
+            lastEmittedAt: 0,
+            lastEmittedHex: "",
+            pendingHex: "",
+            pendingEmitTimer: null
         }
         setColorFromHex(state, initial, false)
         if (input) input.value = initial.toUpperCase()
@@ -276,7 +317,7 @@ const ColorPalette = (() => {
                 suspendCanvasPointerEvents(event.pointerId)
                 sv.setPointerCapture?.(event.pointerId)
                 handleSvPointer(state, event)
-                trackPointer(event.pointerId, (moveEvent) => handleSvPointer(state, moveEvent))
+                trackPointer(event.pointerId, (moveEvent) => handleSvPointer(state, moveEvent), () => emitChange(state, updateUi(state), { force: true }))
             })
         }
 
@@ -287,7 +328,7 @@ const ColorPalette = (() => {
                 suspendCanvasPointerEvents(event.pointerId)
                 hueElement.setPointerCapture?.(event.pointerId)
                 handleHuePointer(state, event)
-                trackPointer(event.pointerId, (moveEvent) => handleHuePointer(state, moveEvent))
+                trackPointer(event.pointerId, (moveEvent) => handleHuePointer(state, moveEvent), () => emitChange(state, updateUi(state), { force: true }))
             })
         }
 
@@ -301,6 +342,13 @@ const ColorPalette = (() => {
                 const next = normalizeHex(event.target.value)
                 event.target.value = next.toUpperCase()
                 setColorFromHex(state, next)
+            })
+            hexInput.addEventListener("keydown", (event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                const next = normalizeHex(event.target.value)
+                event.target.value = next.toUpperCase()
+                setColorFromHex(state, next, true)
             })
         }
 

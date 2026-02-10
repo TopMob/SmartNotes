@@ -380,3 +380,12 @@ select.input-area:focus {
 .settings-color-grid .field {
     overflow: visible;
 }
+
+#settings-modal .modal-card {
+    width: min(96vw, 760px);
+    max-height: 90vh;
+}
+
+.settings-appearance-page .settings-color-grid .color-picker {
+    justify-content: center;
+}
