@@ -23,10 +23,6 @@ Object.assign(UI, {
             <button type="button" class="nav-item ${activeFolderId === folder.id ? "active" : ""}" data-action="open-folder" data-folder-id="${folder.id}" draggable="true" data-folder-draggable="true">
                 <i class="material-icons-round" aria-hidden="true">folder</i>
                 <span>${Utils.escapeHtml(folder.name)}</span>
-                <span class="folder-action-group">
-                    <i class="material-icons-round folder-action" data-action="toggle-folder-hidden" data-folder-id="${folder.id}" aria-hidden="true">visibility_off</i>
-                    <i class="material-icons-round folder-action" data-action="delete-folder" data-folder-id="${folder.id}" aria-hidden="true">close</i>
-                </span>
             </button>
         `).join("")
         this.renderFilterMenu()
@@ -43,15 +39,48 @@ Object.assign(UI, {
             <div class="folder-card">
                 <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
                 <div class="folder-meta">Скрытая папка</div>
-                <button type="button" class="btn-secondary" data-action="folder-unhide" data-folder-id="${folder.id}">Показать</button>
+                <div class="row-left">
+                    <button type="button" class="btn-secondary" data-action="open-folder" data-folder-id="${folder.id}">Открыть</button>
+                    <button type="button" class="btn-secondary" data-action="folder-unhide" data-folder-id="${folder.id}">${this.getText("show_folder", "Show folder")}</button>
+                </div>
             </div>
         `).join("")
+    },
+
+
+    renderTrash(trashedNotes) {
+        const { folders } = StateStore.read()
+        const trashedFolders = folders.filter(folder => !!folder.trashedAt)
+        const hasNotes = Array.isArray(trashedNotes) && trashedNotes.length > 0
+        const hasFolders = trashedFolders.length > 0
+        this.els.empty.classList.toggle("hidden", hasNotes || hasFolders)
+        this.els.grid.classList.remove("folder-grid")
+        if (!hasFolders) {
+            NotesRenderer.render(trashedNotes)
+            return
+        }
+        const foldersMarkup = trashedFolders.map(folder => `
+            <div class="note-card trashed-folder-card">
+                <h3>${Utils.escapeHtml(folder.name)}</h3>
+                <p>${this.getText("folder_trashed", "Folder in trash")}</p>
+                <div class="row-left">
+                    <button type="button" class="btn-secondary" data-action="folder-restore" data-folder-id="${folder.id}">${this.getText("restore_note", "Restore")}</button>
+                    <button type="button" class="btn-danger" data-action="folder-delete-permanent" data-folder-id="${folder.id}">${this.getText("delete_permanently", "Delete permanently")}</button>
+                </div>
+            </div>
+        `).join("")
+        if (!hasNotes) {
+            this.els.grid.innerHTML = foldersMarkup
+            return
+        }
+        NotesRenderer.render(trashedNotes)
+        this.els.grid.insertAdjacentHTML("afterbegin", foldersMarkup)
     },
 
     renderFolderGrid() {
         this.updateEmptyState("folder_open", this.getText("folders_empty", "No folders yet"))
         const { folders, notes } = StateStore.read()
-        const visibleFolders = folders.filter(folder => !folder.trashedAt)
+        const visibleFolders = folders.filter(folder => !folder.trashedAt && !folder.isHidden)
         this.els.empty.classList.toggle("hidden", visibleFolders.length > 0)
         this.els.grid.classList.add("folder-grid")
         this.els.grid.innerHTML = visibleFolders.map(folder => {

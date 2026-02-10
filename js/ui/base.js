@@ -22,7 +22,11 @@ const UI = {
             filterMenu: document.getElementById("notes-filter-menu"),
             filterButton: document.getElementById("notes-filter-toggle"),
             filterFolders: document.getElementById("notes-folder-filters"),
-            filterSort: document.getElementById("notes-sort-select")
+            filterSort: document.getElementById("notes-sort-select"),
+            activeFolderMenu: document.getElementById("active-folder-menu"),
+            activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
+            activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
+            activeFolderHideButton: document.getElementById("active-folder-hide-button")
         }
         this.bindEvents()
         if (window.matchMedia("(min-width: 1024px)").matches) {

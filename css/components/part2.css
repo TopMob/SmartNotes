@@ -72,8 +72,9 @@
 }
 
 .toast {
-    background: rgba(15,15,17,0.92);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: color-mix(in srgb, var(--surface) 94%, black 6%);
+    border: 1px solid var(--border);
+    color: var(--text);
     border-radius: var(--radius-lg);
     padding: 12px 14px;
     box-shadow: var(--shadow-lg);
@@ -303,9 +304,13 @@
 
 .login-box,
 .confirm-box,
-.lock-card,
-.dropdown-menu {
+.lock-card {
     background: var(--surface-transparent);
+    border-color: var(--border);
+}
+
+.dropdown-menu {
+    background: color-mix(in srgb, var(--surface) 96%, black 4%);
     border-color: var(--border);
 }
 

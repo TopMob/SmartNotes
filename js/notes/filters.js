@@ -96,6 +96,7 @@ function filterAndRender(query) {
     let list = current.notes.slice()
     const notesFilter = current.config.notesFilter || { sort: "manual", folders: [] }
     const selectedFolders = Array.isArray(notesFilter.folders) ? notesFilter.folders : []
+    const hiddenFolderIds = new Set(current.folders.filter(folder => folder.isHidden && !folder.trashedAt).map(folder => folder.id))
 
     if (view === "locked") {
         list = list.filter(n => isHiddenLocked(n))
@@ -118,7 +119,13 @@ function filterAndRender(query) {
     else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
     else if (view !== "locked" && view !== "reminders" && view !== "trash") list = list.filter(n => !n.isArchived)
 
-    if (view !== "folder" && view !== "folders" && selectedFolders.length) {
+    if (view !== "folder") {
+        list = list.filter(note => !note.folderId || !hiddenFolderIds.has(note.folderId))
+    }
+
+    const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash"
+
+    if (canUseFolderFilters && selectedFolders.length) {
         list = list.filter(note => {
             if (!note.folderId) return selectedFolders.includes("none")
             return selectedFolders.includes(note.folderId)
@@ -152,6 +159,8 @@ function filterAndRender(query) {
         UI.renderFolderGrid()
     } else if (view === "hidden_folders") {
         UI.renderHiddenFolders()
+    } else if (view === "trash") {
+        UI.renderTrash(list)
     } else {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))

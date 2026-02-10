@@ -16,6 +16,9 @@ Object.assign(UI, {
             if (this.els.filterMenu?.classList.contains("active") && !e.target.closest("#notes-filter-menu") && !e.target.closest("#notes-filter-toggle")) {
                 this.toggleFilterMenu(false)
             }
+            if (this.els.activeFolderMenu?.classList.contains("active") && !e.target.closest("#active-folder-menu-wrapper")) {
+                this.toggleActiveFolderMenu(false)
+            }
 
             const overlay = e.target.closest(".modal-overlay")
             if (overlay && e.target === overlay && !overlay.dataset.modalStatic) {
@@ -175,18 +178,27 @@ Object.assign(UI, {
 
     renderFilterMenu() {
         if (!this.els.filterFolders || !this.els.filterSort) return
-        const { folders, config } = StateStore.read()
+        const { folders, config, view } = StateStore.read()
         const current = config.notesFilter || { sort: "manual", folders: [] }
+        const visibleFolderIds = new Set(folders.filter(folder => !folder.isHidden && !folder.trashedAt).map(folder => folder.id))
+        const sanitizedFolders = Array.isArray(current.folders) ? current.folders.filter(folderId => folderId === "none" || visibleFolderIds.has(folderId)) : []
+        if (sanitizedFolders.length !== (current.folders || []).length) {
+            this.updateFilterConfig({ folders: sanitizedFolders })
+            return
+        }
+        const folderFiltersBlocked = view === "archive" || view === "trash"
         this.els.filterSort.value = current.sort || "updated"
         const items = []
         items.push({ id: "none", name: this.getText("folder_none", "No folder") })
         folders.filter(folder => !folder.isHidden && !folder.trashedAt).forEach(folder => items.push({ id: folder.id, name: folder.name }))
         this.els.filterFolders.innerHTML = items.map(item => {
-            const checked = current.folders?.includes(item.id) ? "checked" : ""
+            const checked = !folderFiltersBlocked && sanitizedFolders.includes(item.id) ? "checked" : ""
+            const disabled = folderFiltersBlocked ? "disabled" : ""
             return `
-                <label class="filter-option">
-                    <input type="checkbox" value="${item.id}" ${checked}>
+                <label class="filter-option filter-toggle-option">
+                    <input type="checkbox" value="${item.id}" ${checked} ${disabled}>
                     <span>${Utils.escapeHtml(item.name || "")}</span>
+                    <span class="filter-toggle-track" aria-hidden="true"><span class="filter-toggle-thumb"></span></span>
                 </label>
             `
         }).join("")
@@ -242,7 +254,7 @@ Object.assign(UI, {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "delete-folder", "rename-active-folder"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -273,14 +285,25 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
-            case "delete-folder":
-                deleteFolder(el.dataset.folderId)
-                break
-            case "toggle-folder-hidden":
-                this.toggleFolderHidden(el.dataset.folderId)
-                break
             case "folder-unhide":
                 this.setFolderHidden(el.dataset.folderId, false)
+                break
+            case "folder-restore":
+                restoreFolderById(el.dataset.folderId)
+                break
+            case "folder-delete-permanent":
+                deleteFolderPermanently(el.dataset.folderId)
+                break
+            case "toggle-active-folder-menu":
+                this.toggleActiveFolderMenu()
+                break
+            case "toggle-active-folder-hidden":
+                this.toggleFolderHidden(StateStore.read().activeFolderId)
+                this.toggleActiveFolderMenu(false)
+                break
+            case "delete-active-folder":
+                deleteFolder(StateStore.read().activeFolderId)
+                this.toggleActiveFolderMenu(false)
                 break
             case "primary-action":
                 this.primaryAction()
@@ -290,6 +313,7 @@ Object.assign(UI, {
                 break
             case "rename-active-folder":
                 this.renameFolder(StateStore.read().activeFolderId)
+                this.toggleActiveFolderMenu(false)
                 break
             case "open-modal":
                 this.openModal(el.dataset.modal)

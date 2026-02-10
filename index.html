@@ -184,9 +184,25 @@
                     </button>
                     <div class="view-title-group">
                         <h2 id="current-view-title" class="mobile-only-title">SmartNotes</h2>
-                        <button type="button" id="rename-folder-button" class="btn-icon hidden" data-action="rename-active-folder" aria-label="Переименовать папку" data-lang-aria="rename_folder">
-                            <i class="material-icons-round" aria-hidden="true">edit</i>
-                        </button>
+                        <div id="active-folder-menu-wrapper" class="active-folder-menu-wrapper hidden">
+                            <button type="button" id="active-folder-menu-toggle" class="btn-icon" data-action="toggle-active-folder-menu" aria-label="Действия с папкой" data-lang-aria="folder_actions">
+                                <i class="material-icons-round" aria-hidden="true">more_vert</i>
+                            </button>
+                            <div id="active-folder-menu" class="dropdown-menu active-folder-menu" role="menu" aria-label="Действия с папкой" data-lang-aria="folder_actions">
+                                <button type="button" class="dropdown-item" data-action="rename-active-folder">
+                                    <i class="material-icons-round" aria-hidden="true">edit</i>
+                                    <span data-lang="rename_folder">Переименовать папку</span>
+                                </button>
+                                <button type="button" id="active-folder-hide-button" class="dropdown-item" data-action="toggle-active-folder-hidden">
+                                    <i class="material-icons-round" aria-hidden="true">visibility_off</i>
+                                    <span data-lang="hide_folder">Скрыть папку</span>
+                                </button>
+                                <button type="button" class="dropdown-item danger" data-action="delete-active-folder">
+                                    <i class="material-icons-round" aria-hidden="true">delete</i>
+                                    <span data-lang="delete_folder">Удалить папку</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

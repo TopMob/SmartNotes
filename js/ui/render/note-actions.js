@@ -135,7 +135,7 @@ Object.assign(UI, {
                     ${dict.copy_text || "Copy text"}
                 </button>
                 <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.delete_note || "Delete"}
+                    ${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
                 </button>
                 ${note.trashedAt ? `<button type="button" class="btn-secondary" data-action="note-restore" data-note-id="${encodeURIComponent(note.id)}">${dict.restore_note || "Restore"}</button>` : ""}
             </div>
