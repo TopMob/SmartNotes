@@ -538,7 +538,7 @@
 .footer-link:hover,
 .dropdown-item:hover,
 .note-card:hover {
-    background: color-mix(in srgb, var(--surface) 84%, var(--text) 16%);
+    background: color-mix(in srgb, var(--surface) 84%, var(--primary) 16%);
 }
 
 .footer-link,
@@ -568,12 +568,12 @@
 }
 
 .search-container {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 26%, transparent);
 }
 
 .search-container:focus-within {
     border-color: color-mix(in srgb, var(--primary) 50%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--text) 38%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--primary) 42%, transparent);
 }
 
 .search-container input::placeholder {
