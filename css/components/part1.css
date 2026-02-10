@@ -194,6 +194,13 @@ select.input-area {
     background-repeat: no-repeat;
 }
 
+
+select.input-area option,
+select.input-area optgroup {
+    background: var(--surface);
+    color: var(--text);
+}
+
 .prompt-input {
     margin-top: 12px;
     text-align: center;

@@ -123,7 +123,9 @@ function filterAndRender(query) {
         list = list.filter(note => !note.folderId || !hiddenFolderIds.has(note.folderId))
     }
 
-    if (view !== "folder" && view !== "folders" && selectedFolders.length) {
+    const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash"
+
+    if (canUseFolderFilters && selectedFolders.length) {
         list = list.filter(note => {
             if (!note.folderId) return selectedFolders.includes("none")
             return selectedFolders.includes(note.folderId)
@@ -157,6 +159,8 @@ function filterAndRender(query) {
         UI.renderFolderGrid()
     } else if (view === "hidden_folders") {
         UI.renderHiddenFolders()
+    } else if (view === "trash") {
+        UI.renderTrash(list)
     } else {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))

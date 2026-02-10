@@ -259,8 +259,9 @@ select.input-area {
     appearance: none;
     -webkit-appearance: none;
     padding-right: 42px;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: color-mix(in srgb, var(--surface) 88%, transparent);
+    border: 1px solid var(--border);
+    color: var(--text);
     cursor: pointer;
     transition: all 0.2s ease;
     background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%),
@@ -271,15 +272,21 @@ select.input-area {
 }
 
 select.input-area:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    border-color: rgba(var(--primary-rgb), 0.4);
+    background-color: color-mix(in srgb, var(--surface) 84%, var(--primary) 16%);
+    border-color: color-mix(in srgb, var(--primary) 44%, var(--border) 56%);
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 select.input-area:focus {
     border-color: var(--primary);
-    background-color: rgba(15, 15, 17, 0.95);
+    background-color: color-mix(in srgb, var(--surface) 94%, black 6%);
     box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.15);
+}
+
+select.input-area option,
+select.input-area optgroup {
+    background: var(--surface);
+    color: var(--text);
 }
 
 .survey-header {

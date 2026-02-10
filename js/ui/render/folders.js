@@ -41,10 +41,40 @@ Object.assign(UI, {
                 <div class="folder-meta">Скрытая папка</div>
                 <div class="row-left">
                     <button type="button" class="btn-secondary" data-action="open-folder" data-folder-id="${folder.id}">Открыть</button>
-                    <button type="button" class="btn-secondary" data-action="folder-unhide" data-folder-id="${folder.id}">Показать</button>
+                    <button type="button" class="btn-secondary" data-action="folder-unhide" data-folder-id="${folder.id}">${this.getText("show_folder", "Show folder")}</button>
                 </div>
             </div>
         `).join("")
+    },
+
+
+    renderTrash(trashedNotes) {
+        const { folders } = StateStore.read()
+        const trashedFolders = folders.filter(folder => !!folder.trashedAt)
+        const hasNotes = Array.isArray(trashedNotes) && trashedNotes.length > 0
+        const hasFolders = trashedFolders.length > 0
+        this.els.empty.classList.toggle("hidden", hasNotes || hasFolders)
+        this.els.grid.classList.remove("folder-grid")
+        if (!hasFolders) {
+            NotesRenderer.render(trashedNotes)
+            return
+        }
+        const foldersMarkup = trashedFolders.map(folder => `
+            <div class="note-card trashed-folder-card">
+                <h3>${Utils.escapeHtml(folder.name)}</h3>
+                <p>${this.getText("folder_trashed", "Folder in trash")}</p>
+                <div class="row-left">
+                    <button type="button" class="btn-secondary" data-action="folder-restore" data-folder-id="${folder.id}">${this.getText("restore_note", "Restore")}</button>
+                    <button type="button" class="btn-danger" data-action="folder-delete-permanent" data-folder-id="${folder.id}">${this.getText("delete_permanently", "Delete permanently")}</button>
+                </div>
+            </div>
+        `).join("")
+        if (!hasNotes) {
+            this.els.grid.innerHTML = foldersMarkup
+            return
+        }
+        NotesRenderer.render(trashedNotes)
+        this.els.grid.insertAdjacentHTML("afterbegin", foldersMarkup)
     },
 
     renderFolderGrid() {

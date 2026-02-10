@@ -178,7 +178,7 @@ Object.assign(UI, {
 
     renderFilterMenu() {
         if (!this.els.filterFolders || !this.els.filterSort) return
-        const { folders, config } = StateStore.read()
+        const { folders, config, view } = StateStore.read()
         const current = config.notesFilter || { sort: "manual", folders: [] }
         const visibleFolderIds = new Set(folders.filter(folder => !folder.isHidden && !folder.trashedAt).map(folder => folder.id))
         const sanitizedFolders = Array.isArray(current.folders) ? current.folders.filter(folderId => folderId === "none" || visibleFolderIds.has(folderId)) : []
@@ -186,16 +186,19 @@ Object.assign(UI, {
             this.updateFilterConfig({ folders: sanitizedFolders })
             return
         }
+        const folderFiltersBlocked = view === "archive" || view === "trash"
         this.els.filterSort.value = current.sort || "updated"
         const items = []
         items.push({ id: "none", name: this.getText("folder_none", "No folder") })
         folders.filter(folder => !folder.isHidden && !folder.trashedAt).forEach(folder => items.push({ id: folder.id, name: folder.name }))
         this.els.filterFolders.innerHTML = items.map(item => {
-            const checked = sanitizedFolders.includes(item.id) ? "checked" : ""
+            const checked = !folderFiltersBlocked && sanitizedFolders.includes(item.id) ? "checked" : ""
+            const disabled = folderFiltersBlocked ? "disabled" : ""
             return `
-                <label class="filter-option">
-                    <input type="checkbox" value="${item.id}" ${checked}>
+                <label class="filter-option filter-toggle-option">
+                    <input type="checkbox" value="${item.id}" ${checked} ${disabled}>
                     <span>${Utils.escapeHtml(item.name || "")}</span>
+                    <span class="filter-toggle-track" aria-hidden="true"><span class="filter-toggle-thumb"></span></span>
                 </label>
             `
         }).join("")
@@ -284,6 +287,12 @@ Object.assign(UI, {
               break
             case "folder-unhide":
                 this.setFolderHidden(el.dataset.folderId, false)
+                break
+            case "folder-restore":
+                restoreFolderById(el.dataset.folderId)
+                break
+            case "folder-delete-permanent":
+                deleteFolderPermanently(el.dataset.folderId)
                 break
             case "toggle-active-folder-menu":
                 this.toggleActiveFolderMenu()

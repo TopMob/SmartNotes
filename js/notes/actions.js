@@ -51,9 +51,15 @@ async function deleteNoteById(noteId) {
     if (!note || !ensureManageAccess(note)) return
     UI.closeModal("note-actions-modal")
     UI.confirm("delete", async () => {
-        if (!db || !StateStore.read().user) return
-        const ref = getNoteReference(note, StateStore.read().user)
+        const user = StateStore.read().user
+        if (!db || !user) return
+        const ref = getNoteReference(note, user)
         if (!ref) return
+        if (note.trashedAt) {
+            await ref.delete()
+            UI.showToast(UI.getText("note_deleted_permanent", "Deleted permanently"))
+            return
+        }
         await ref.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
         UI.showToast(UI.getText("note_deleted", "Moved to trash"))
     })
@@ -160,6 +166,20 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
     await ref.update({ folderId: folderId || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
 }
 
+
+async function restoreFolderById(folderId) {
+    const user = StateStore.read().user
+    if (!db || !user || !folderId) return
+    await DataPath.getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    UI.showToast(UI.getText("restored", "Restored"))
+}
+
+async function deleteFolderPermanently(folderId) {
+    const user = StateStore.read().user
+    if (!db || !user || !folderId) return
+    await DataPath.getUserFoldersCollection(user).doc(folderId).delete()
+    UI.showToast(UI.getText("folder_deleted_permanent", "Folder deleted permanently"))
+}
 window.deleteFolder = deleteFolder
 window.openNoteActions = openNoteActions
 window.deleteNoteById = deleteNoteById
@@ -171,3 +191,5 @@ window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive
 window.moveNoteToFolder = moveNoteToFolder
+window.restoreFolderById = restoreFolderById
+window.deleteFolderPermanently = deleteFolderPermanently
