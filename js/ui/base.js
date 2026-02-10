@@ -4,6 +4,7 @@ const UI = {
     draggedNoteId: null,
     dragTargetId: null,
     dragPosition: null,
+    draggedFolderId: null,
     visibleNotes: [],
     settingsPage: null,
 

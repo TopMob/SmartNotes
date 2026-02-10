@@ -9,6 +9,26 @@ const AppLifecycle = {
     sharedNoteUnsubs: new Map(),
     pendingShareEntryId: null,
     sharedSyncEnabled: true,
+    reminderTimers: new Map(),
+    scheduleReminders(notes) {
+        this.reminderTimers.forEach(timer => clearTimeout(timer))
+        this.reminderTimers.clear()
+        notes.forEach(note => {
+            const reminderAt = note?.reminderAt?.toDate ? note.reminderAt.toDate().getTime() : Date.parse(note?.reminderAt || "")
+            if (!reminderAt || Number.isNaN(reminderAt)) return
+            const delay = reminderAt - Date.now()
+            if (delay <= 0 || delay > 2147483647) return
+            const timer = setTimeout(() => {
+                UI.showToast(`${UI.getText("future_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
+                if (window.Notification && Notification.permission === "granted") {
+                    new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("future_note", "Reminder") })
+                }
+            }, delay)
+            this.reminderTimers.set(note.id, timer)
+        })
+        if (window.Notification && Notification.permission === "default") Notification.requestPermission().catch(() => null)
+    },
+
 
     async initializeOnce() {
         if (this.initialized) return
@@ -89,7 +109,7 @@ const AppLifecycle = {
         this.activeUid = user.uid
 
         const folderUnsub = db.collection("users").doc(user.uid).collection("folders")
-            .orderBy("createdAt", "asc")
+            .orderBy("folderOrder", "asc")
             .onSnapshot(snap => {
                 const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                 StateStore.update("folders", folders)
@@ -155,6 +175,7 @@ const AppLifecycle = {
         notes = NotesStorage.applyStoredFavorites(notes)
         StateStore.update("notes", notes)
         NotesStorage.syncFavoritesStorage(notes)
+        this.scheduleReminders(notes)
         if (StateStore.read().isEditing || StateStore.read().isTyping) return
         this.syncOpenNote(notes)
         filterAndRender(document.getElementById("search-input")?.value || "")

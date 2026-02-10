@@ -293,7 +293,13 @@ const ColorPalette = (() => {
 
         if (hexInput) {
             hexInput.addEventListener("input", (event) => {
+                const rawValue = String(event.target.value || "").trim()
+                if (/^#?[0-9a-fA-F]{0,6}$/.test(rawValue)) return
+                event.target.value = normalizeHex(rawValue).toUpperCase()
+            })
+            hexInput.addEventListener("blur", (event) => {
                 const next = normalizeHex(event.target.value)
+                event.target.value = next.toUpperCase()
                 setColorFromHex(state, next)
             })
         }

@@ -87,6 +87,9 @@ Object.assign(UI, {
             if (!db || !StateStore.read().user) return
             await db.collection("users").doc(StateStore.read().user.uid).collection("folders").add({
                 name: trimmed,
+                isHidden: false,
+                trashedAt: null,
+                folderOrder: Date.now(),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 ownerId: StateStore.read().user.uid
             })
@@ -129,7 +132,8 @@ Object.assign(UI, {
             notes: dict.view_notes || "Notes",
             favorites: dict.view_favorites || "Favorites",
             archive: dict.view_archive || "Archive",
-            future: dict.view_future || "Future",
+            reminders: dict.view_future || "Reminders",
+            trash: dict.trash || "Trash",
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection"
@@ -152,6 +156,32 @@ Object.assign(UI, {
         this.updateFolderRenameButton()
     },
 
+
+    async toggleFolderHidden(folderId) {
+        const user = StateStore.read().user
+        if (!db || !user || !folderId) return
+        const folder = StateStore.read().folders.find(item => item.id === folderId)
+        if (!folder) return
+        await db.collection("users").doc(user.uid).collection("folders").doc(folderId).update({ isHidden: !folder.isHidden })
+    },
+
+    async reorderFolders(draggedFolderId, targetFolderId) {
+        const user = StateStore.read().user
+        if (!db || !user || !draggedFolderId || !targetFolderId || draggedFolderId === targetFolderId) return
+        const folders = StateStore.read().folders.filter(folder => !folder.trashedAt).sort((a, b) => (a.folderOrder || 0) - (b.folderOrder || 0))
+        const fromIndex = folders.findIndex(folder => folder.id === draggedFolderId)
+        const toIndex = folders.findIndex(folder => folder.id === targetFolderId)
+        if (fromIndex < 0 || toIndex < 0) return
+        const reordered = folders.slice()
+        const [dragged] = reordered.splice(fromIndex, 1)
+        reordered.splice(toIndex, 0, dragged)
+        const batch = db.batch()
+        reordered.forEach((folder, index) => {
+            const ref = db.collection("users").doc(user.uid).collection("folders").doc(folder.id)
+            batch.update(ref, { folderOrder: index + 1 })
+        })
+        await batch.commit()
+    },
     updateFolderRenameButton() {
         const button = document.getElementById("rename-folder-button")
         if (!button) return

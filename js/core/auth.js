@@ -103,6 +103,34 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
         },
+
+        async loginGuest() {
+            if (!auth) return
+            this._setLoginBusy(true)
+            try {
+                await auth.signInAnonymously()
+            } catch (error) {
+                this.handleAuthError(error)
+            }
+            this._setLoginBusy(false)
+        },
+        async loginWithEmail() {
+            if (!auth) return
+            const email = prompt(this._t("email_prompt", "Email"), "")
+            const password = prompt(this._t("password_prompt", "Password"), "")
+            if (!email || !password) return
+            this._setLoginBusy(true)
+            try {
+                await auth.signInWithEmailAndPassword(email.trim(), password)
+            } catch {
+                try {
+                    await auth.createUserWithEmailAndPassword(email.trim(), password)
+                } catch (error) {
+                    this.handleAuthError(error)
+                }
+            }
+            this._setLoginBusy(false)
+        },
         async logout() {
             if (!auth) return
             this._setLoginBusy(false)

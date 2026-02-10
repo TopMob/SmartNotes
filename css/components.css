@@ -2,3 +2,15 @@
 @import url("./components/part2.css");
 @import url("./components/part3.css");
 @import url("./components/color-picker.css");
+
+[data-appearance-bg-file],
+[data-appearance-bg-clear] {
+    min-height: 40px;
+    border-radius: var(--radius-md);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+[data-appearance-bg-file]:hover,
+[data-appearance-bg-clear]:hover {
+    transform: translateY(-1px);
+}

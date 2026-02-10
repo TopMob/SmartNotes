@@ -3,24 +3,10 @@ async function deleteFolder(folderId) {
     UI.confirm("delete_f", async () => {
         const user = StateStore.read().user
         if (!db || !user) return
-
-        const notes = StateStore.read().notes.filter(n => n.folderId === folderId)
-        const batch = db.batch()
-
-        notes.forEach(n => {
-            const ref = db.collection("users").doc(user.uid).collection("notes").doc(n.id)
-            batch.update(ref, { folderId: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        })
-
         const folderRef = db.collection("users").doc(user.uid).collection("folders").doc(folderId)
-        batch.delete(folderRef)
-
-        await batch.commit()
-
-        if (StateStore.read().activeFolderId === folderId) {
-            switchView("notes")
-        }
-        UI.showToast(UI.getText("folder_deleted", "Folder deleted"))
+        await folderRef.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        if (StateStore.read().activeFolderId === folderId) switchView("notes")
+        UI.showToast(UI.getText("folder_deleted", "Folder moved to trash"))
     })
 }
 
@@ -48,81 +34,63 @@ function openNoteActions(noteId) {
 
 async function deleteNoteById(noteId) {
     const note = getNoteById(noteId)
-    if (!note) return
-    if (!ensureManageAccess(note)) return
+    if (!note || !ensureManageAccess(note)) return
+    UI.closeModal("note-actions-modal")
     UI.confirm("delete", async () => {
         if (!db || !StateStore.read().user) return
         const ref = getNoteReference(note, StateStore.read().user)
         if (!ref) return
-        await ref.delete()
-        UI.showToast(UI.getText("note_deleted", "Deleted"))
-        UI.closeModal("note-actions-modal")
+        await ref.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        UI.showToast(UI.getText("note_deleted", "Moved to trash"))
     })
 }
 
-async function scheduleFutureNote(noteId) {
+async function restoreNoteById(noteId) {
     const user = StateStore.read().user
-    if (!db || !user) return
     const note = getNoteById(noteId)
-    if (!ensureManageAccess(note)) return
-    const input = document.querySelector(`.note-future-input[data-note-id="${encodeURIComponent(noteId)}"]`)
+    if (!db || !user || !note || !ensureManageAccess(note)) return
+    const ref = getNoteReference(note, user)
+    if (!ref) return
+    await ref.update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    UI.showToast(UI.getText("restored", "Restored"))
+}
+
+async function scheduleReminder(noteId) {
+    const user = StateStore.read().user
+    const note = getNoteById(noteId)
+    if (!db || !user || !note || !ensureManageAccess(note)) return
+    const input = document.querySelector(`.note-reminder-input[data-note-id="${encodeURIComponent(noteId)}"]`)
     const value = input ? input.value : ""
-    if (!value) {
-        UI.showToast(UI.getText("future_required", "Pick a date"))
-        return
-    }
     const date = new Date(value)
-    if (Number.isNaN(date.getTime())) {
-        UI.showToast(UI.getText("future_required", "Pick a date"))
+    if (!value || Number.isNaN(date.getTime())) {
+        UI.showToast(UI.getText("future_required", "Pick date and time"))
         return
     }
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({
-        futureAt: date.toISOString(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-    UI.showToast(UI.getText("future_saved", "Scheduled"))
+    await ref.update({ reminderAt: date.toISOString(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    UI.showToast(UI.getText("future_saved", "Reminder saved"))
     UI.closeModal("note-actions-modal")
 }
 
-async function clearFutureNote(noteId) {
+async function clearReminder(noteId) {
     const user = StateStore.read().user
-    if (!db || !user) return
     const note = getNoteById(noteId)
-    if (!ensureManageAccess(note)) return
+    if (!db || !user || !note || !ensureManageAccess(note)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({
-        futureAt: null,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-    UI.showToast(UI.getText("future_cleared", "Schedule cleared"))
+    await ref.update({ reminderAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    UI.showToast(UI.getText("future_cleared", "Reminder cleared"))
     UI.closeModal("note-actions-modal")
 }
 
 async function copyNoteTextById(noteId) {
     const note = getNoteById(noteId)
     if (!note) return
-    if (note.lock?.hash) {
-        UI.showToast(UI.getText("lock_download_blocked", "Note is locked"))
-        return
-    }
+    if (note.lock?.hash) return UI.showToast(UI.getText("lock_download_blocked", "Note is locked"))
     const text = Utils.stripHtml(note.content || "")
     try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(text)
-        } else {
-            const textarea = document.createElement("textarea")
-            textarea.value = text
-            textarea.setAttribute("readonly", "true")
-            textarea.style.position = "fixed"
-            textarea.style.opacity = "0"
-            document.body.appendChild(textarea)
-            textarea.select()
-            document.execCommand("copy")
-            document.body.removeChild(textarea)
-        }
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text)
         UI.showToast(UI.getText("copy_success", "Copied"))
         UI.closeModal("note-actions-modal")
     } catch {
@@ -132,127 +100,60 @@ async function copyNoteTextById(noteId) {
 
 async function toggleFavorite(noteId) {
     const note = getNoteById(noteId)
-    if (!note) return
-    if (isHiddenLocked(note)) return
-
+    if (!note || isHiddenLocked(note)) return
     const nextValue = !note.isFavorite
     const nextNotes = StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: nextValue } : n)
     StateActions.setNotes(nextNotes)
     NotesStorage.syncFavoritesStorage(nextNotes)
     filterAndRender(document.getElementById("search-input")?.value || "")
-
     const user = StateStore.read().user
     if (!db || !user) return
-
     if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
     try {
-        await ref.update({
-            isFavorite: nextValue
-        })
-    } catch (error) {
-        const revertedNotes = StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: note.isFavorite } : n)
-        StateActions.setNotes(revertedNotes)
-        NotesStorage.syncFavoritesStorage(revertedNotes)
-        filterAndRender(document.getElementById("search-input")?.value || "")
-        UI.showToast(UI.getText("favorite_failed", "Unable to update favorite"))
-        console.error("Favorite update failed", error)
+        await ref.update({ isFavorite: nextValue })
+    } catch {
+        StateActions.setNotes(StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: note.isFavorite } : n))
     }
 }
 
 async function togglePin(noteId, options = {}) {
     const user = StateStore.read().user
-    if (!db || !user) return
-
     const note = getNoteById(noteId)
-    if (!note) return
-    if (!ensureManageAccess(note)) return
-    if (isHiddenLocked(note) && !options.allowLocked) return
-
+    if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({
-        isPinned: !note.isPinned
-    })
-
-    const card = document.querySelector(`.note-card[data-note-id="${encodeURIComponent(noteId)}"]`)
-    if (card) {
-        card.classList.add("pinning")
-        setTimeout(() => card.classList.remove("pinning"), 520)
-    }
+    await ref.update({ isPinned: !note.isPinned })
 }
 
 async function toggleArchive(noteId, archive, options = {}) {
     const user = StateStore.read().user
-    if (!db || !user) return
-
     const note = getNoteById(noteId)
-    if (!note) return
-    if (!ensureManageAccess(note)) return
-    if (isHiddenLocked(note) && !options.allowLocked) return
-
+    if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({
-        isArchived: !!archive,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-
+    await ref.update({ isArchived: !!archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
 }
 
 async function moveNoteToFolder(noteId, folderId, options = {}) {
     const user = StateStore.read().user
-    if (!db || !user) return
     const note = getNoteById(noteId)
-    if (!note) return
-    if (!ensureManageAccess(note)) return
-    if (isHiddenLocked(note) && !options.allowLocked) return
+    if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({
-        folderId: folderId || null,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-}
-
-async function shareNoteLink(noteId, permission) {
-    const note = getNoteById(noteId)
-    if (!note) return
-    if (typeof CollaborationService === "undefined") {
-        UI.showToast(UI.getText("share_link_failed", "Unable to share"))
-        return
-    }
-    if (!ensureManageAccess(note)) return
-    const link = await CollaborationService.createShareLink(note, permission)
-    if (!link) {
-        UI.showToast(UI.getText("share_link_failed", "Unable to share"))
-        return
-    }
-    const copied = await CollaborationService.copyToClipboard(link)
-    UI.showToast(copied ? UI.getText("share_link_copied", "Link copied") : UI.getText("share_link_failed", "Unable to share"))
-    UI.closeModal("note-actions-modal")
-    UI.showPrompt(UI.getText("share_link_title", "Share link"), UI.getText("share_link_placeholder", "Copy the link"), () => null, link)
-}
-
-async function shareNoteView(noteId) {
-    await shareNoteLink(noteId, "viewer")
-}
-
-async function shareNoteEdit(noteId) {
-    await shareNoteLink(noteId, "editor")
+    await ref.update({ folderId: folderId || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
 }
 
 window.deleteFolder = deleteFolder
 window.openNoteActions = openNoteActions
 window.deleteNoteById = deleteNoteById
-window.scheduleFutureNote = scheduleFutureNote
-window.clearFutureNote = clearFutureNote
+window.restoreNoteById = restoreNoteById
+window.scheduleReminder = scheduleReminder
+window.clearReminder = clearReminder
 window.copyNoteTextById = copyNoteTextById
 window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive
 window.moveNoteToFolder = moveNoteToFolder
-window.shareNoteView = shareNoteView
-window.shareNoteEdit = shareNoteEdit

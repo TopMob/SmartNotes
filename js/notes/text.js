@@ -1,8 +1,11 @@
 import { getCountLabel } from "../editor/core-utils.js"
 
 const getCleanText = (html) => {
-    const text = Utils.stripHtml(html || "")
-    return text.replace(/\s+/g, " ").trim()
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html || ""
+    wrapper.querySelectorAll("br").forEach(element => element.replaceWith("\n"))
+    const text = wrapper.textContent || ""
+    return text.replace(/\n{3,}/g, "\n\n").trim()
 }
 
 const getMediaCounts = (html) => {

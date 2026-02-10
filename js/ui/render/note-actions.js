@@ -119,24 +119,13 @@ Object.assign(UI, {
             const selected = note.folderId === f.id ? "selected" : ""
             folderOptions.push(`<option value="${f.id}" ${selected}>${Utils.escapeHtml(f.name)}</option>`)
         })
-        const futureStamp = note.futureAt?.toDate ? note.futureAt.toDate() : (note.futureAt ? new Date(note.futureAt) : null)
-        const futureValue = futureStamp ? new Date(futureStamp.getTime() - futureStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
-        const futureClearButton = futureValue
-            ? `<button type="button" class="btn-secondary" data-action="note-future-clear" data-note-id="${encodeURIComponent(note.id)}">
+        const reminderStamp = note.reminderAt?.toDate ? note.reminderAt.toDate() : (note.reminderAt ? new Date(note.reminderAt) : null)
+        const reminderValue = reminderStamp ? new Date(reminderStamp.getTime() - reminderStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
+        const reminderClearButton = reminderValue
+            ? `<button type="button" class="btn-secondary" data-action="note-reminder-clear" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.future_clear || "Clear"}
                 </button>`
             : ""
-        const canShare = typeof CollaborationService !== "undefined" && CollaborationService.canManage(note)
-        const shareSection = canShare ? `
-            <div class="modal-actions-grid" style="margin-top:12px;">
-                <button type="button" class="btn-secondary" data-action="note-share-view" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.share_view || "Share (view)"}
-                </button>
-                <button type="button" class="btn-secondary" data-action="note-share-edit" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.share_edit || "Share (edit)"}
-                </button>
-            </div>
-        ` : ""
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
@@ -148,6 +137,7 @@ Object.assign(UI, {
                 <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.delete_note || "Delete"}
                 </button>
+                ${note.trashedAt ? `<button type="button" class="btn-secondary" data-action="note-restore" data-note-id="${encodeURIComponent(note.id)}">${dict.restore_note || "Restore"}</button>` : ""}
             </div>
             <div class="lock-center-folder" style="margin-top:12px;">
                 <select class="input-area lock-center-select note-actions-select" data-note-id="${encodeURIComponent(note.id)}" aria-label="${dict.folder_view_aria || "Folder"}">
@@ -158,11 +148,11 @@ Object.assign(UI, {
                 </button>
             </div>
             <div class="lock-center-folder" style="margin-top:12px;">
-                <input type="datetime-local" class="input-area note-future-input" data-note-id="${encodeURIComponent(note.id)}" value="${futureValue}" aria-label="${dict.future_note || "Future note"}">
-                <button type="button" class="btn-primary" data-action="note-future-set" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.future_note || "Future note"}
+                <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.future_note || "Reminder"}">
+                <button type="button" class="btn-primary" data-action="note-reminder-set" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.future_note || "Reminder"}
                 </button>
-                ${futureClearButton}
+                ${reminderClearButton}
             </div>
             <div class="modal-actions-grid" style="margin-top:12px;">
                 <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">
@@ -175,7 +165,6 @@ Object.assign(UI, {
                     ${dict.export_pdf || "Export PDF"}
                 </button>
             </div>
-            ${shareSection}
         `
     },
 

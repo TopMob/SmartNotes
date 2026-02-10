@@ -232,7 +232,8 @@ if (!ref) return
 
         if (elements.title) {
             elements.title.addEventListener("input", () => {
-                state.titleTouched = true
+                state.titleTouched = !!elements.title.value.trim()
+                inputHandlers.syncAutoTitle()
                 queueSnapshot()
             }, { signal })
         }
@@ -278,6 +279,13 @@ if (!ref) return
         }
 
         document.addEventListener("selectionchange", inputHandlers.storeSelection, { signal })
+        document.addEventListener("keydown", async (event) => {
+            if (event.key !== "Escape") return
+            if (!elements.wrapper?.classList.contains("active")) return
+            event.preventDefault()
+            await save({ silent: true })
+            close()
+        }, { signal })
         document.addEventListener("click", (event) => {
             if (!elements.alignMenu || !elements.alignMenu.classList.contains("active")) return
             if (event.target.closest("#editor-align-menu")) return

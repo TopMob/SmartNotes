@@ -262,9 +262,9 @@ Object.assign(UI, {
         }
         StateStore.update("appearanceDraft", {
             preset: "manual",
-            p: saved.p || ThemeManager.themes.dark.p,
-            bg: saved.bg || ThemeManager.themes.dark.bg,
-            t: saved.t || ThemeManager.themes.dark.t,
+            p: saved.p || ThemeManager.themes.oled.p,
+            bg: saved.bg || ThemeManager.themes.oled.bg,
+            t: saved.t || ThemeManager.themes.oled.t,
             brandName: saved.brandName || "SmartNotes",
             basePreset: saved.basePreset || "dark",
             mainBackgroundImage: saved.mainBackgroundImage || "",
@@ -347,9 +347,9 @@ Object.assign(UI, {
         } else {
             draft = {
                 preset: "manual",
-                p: ThemeManager.themes.dark.p,
-                bg: ThemeManager.themes.dark.bg,
-                t: ThemeManager.themes.dark.t,
+                p: ThemeManager.themes.oled.p,
+                bg: ThemeManager.themes.oled.bg,
+                t: ThemeManager.themes.oled.t,
                 mainBackgroundImage: "",
                 sidebarBackgroundImage: ""
             }

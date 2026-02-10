@@ -51,6 +51,12 @@ const NotesRenderer = (() => {
         const meta = el("div", ["note-meta"])
         meta.appendChild(createIcon("schedule"))
         const dateSpan = el("span", [], Utils.formatDate(note.updatedAt || note.createdAt || Date.now()))
+
+        const contentTypeLabel = note.contentType === "handwriting" ? "✍️" : (String(note.content || "").includes("<audio") ? "🎵" : "")
+        if (contentTypeLabel) {
+            const contentTypeSpan = el("span", [], contentTypeLabel)
+            meta.appendChild(contentTypeSpan)
+        }
         const tagsSpan = el("span", [])
         tagsSpan.style.marginLeft = "auto"
         tagsSpan.style.opacity = "0.8"

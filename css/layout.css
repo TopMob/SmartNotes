@@ -438,9 +438,9 @@
     font-size: 0.95rem;
     line-height: 1.55;
     opacity: 0.85;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 6.2em;
     overflow: hidden;
 }
 

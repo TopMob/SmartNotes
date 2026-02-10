@@ -19,6 +19,8 @@ const authReady = new Promise(resolve => {
 
 const AuthProxy = {
     login: () => authReady.then(auth => auth.login()),
+    loginGuest: () => authReady.then(auth => auth.loginGuest()),
+    loginWithEmail: () => authReady.then(auth => auth.loginWithEmail()),
     logout: () => authReady.then(auth => auth.logout()),
     switchAccount: () => authReady.then(auth => auth.switchAccount())
 }
