@@ -110,7 +110,20 @@ const AppLifecycle = {
         this.stopUserSession()
         this.activeUid = user.uid
 
-        const folderUnsub = DataPath.getUserFoldersCollection(user)
+        const userRootReference = await DataPath.ensureUserDocument(user)
+        if (!userRootReference) {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            return
+        }
+
+        const userFoldersCollection = DataPath.getUserFoldersCollection(user)
+        const userNotesCollection = DataPath.getUserNotesCollection(user)
+        if (!userFoldersCollection || !userNotesCollection) {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            return
+        }
+
+        const folderUnsub = userFoldersCollection
             .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
                 const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -124,7 +137,7 @@ const AppLifecycle = {
                 console.error("Folders sync error", error)
             })
 
-        const notesUnsub = DataPath.getUserNotesCollection(user)
+        const notesUnsub = userNotesCollection
             .orderBy("order", "asc")
             .onSnapshot(snap => {
                 this.ownedNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -146,7 +159,7 @@ const AppLifecycle = {
                         entries.set(doc.id, {
                             id: doc.id,
                             ownerUid: String(data.ownerUid),
-                            ownerCollection: String(data.ownerCollection || "users"),
+                            ownerCollection: "users",
                             noteId: String(data.noteId),
                             permission: CollaborationService.normalizePermission(data.permission),
                             shareToken: data.shareToken || ""
@@ -209,12 +222,15 @@ const AppLifecycle = {
             this.sharedEntries.set(id, entry)
             if (existing) {
                 const currentNote = this.sharedNotes.get(id)
-                if (currentNote?.access?.role !== entry.permission) {
+                if (currentNote?.access?.roles?.[StateStore.read().user?.uid || ""] !== entry.permission) {
+                    const currentUserUid = StateStore.read().user?.uid || ""
+                    const nextRoles = { ...(currentNote.access?.roles || {}) }
+                    if (currentUserUid) nextRoles[currentUserUid] = entry.permission
                     const updated = {
                         ...currentNote,
                         access: {
                             ...currentNote.access,
-                            role: entry.permission
+                            roles: nextRoles
                         }
                     }
                     this.sharedNotes.set(id, updated)
@@ -222,16 +238,18 @@ const AppLifecycle = {
                 }
                 return
             }
-            const unsub = db.collection(entry.ownerCollection || "users").doc(entry.ownerUid).collection("notes").doc(entry.noteId)
+            const unsub = db.collection("users").doc(entry.ownerUid).collection("notes").doc(entry.noteId)
                 .onSnapshot(doc => {
                     if (!doc.exists) {
                         this.removeSharedEntry(id)
                         return
                     }
                     const baseNote = NoteIO.normalizeNote({ id: entry.noteId, ...doc.data() })
-                    const accessList = Array.isArray(baseNote.access) ? baseNote.access : null
-                    const currentUser = StateStore.read().user
-                    if (accessList && currentUser?.uid && !accessList.includes(currentUser.uid)) {
+                    const currentUserUid = StateStore.read().user?.uid || ""
+                    const remoteRoles = baseNote.access?.roles && typeof baseNote.access.roles === "object"
+                        ? baseNote.access.roles
+                        : {}
+                    if (currentUserUid && !remoteRoles[currentUserUid]) {
                         UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
                         this.removeSharedEntry(id, { removeRemote: true })
                         return
@@ -240,11 +258,14 @@ const AppLifecycle = {
                         ...baseNote,
                         id: CollaborationService.sharedNoteId(entry.ownerUid, entry.noteId),
                         access: {
-                            role: entry.permission,
                             ownerUid: entry.ownerUid,
-                            ownerCollection: entry.ownerCollection || "users",
+                            ownerCollection: "users",
                             noteId: entry.noteId,
-                            shareId: id
+                            shareId: id,
+                            roles: {
+                                ...remoteRoles,
+                                ...(currentUserUid ? { [currentUserUid]: entry.permission } : {})
+                            }
                         }
                     }
                     this.sharedNotes.set(id, sharedNote)

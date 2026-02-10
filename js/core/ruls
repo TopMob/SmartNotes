@@ -10,50 +10,37 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function hasLegacyAccessMap(noteData) {
-      return noteData.access is map
-        && noteData.access.ownerUid is string
-        && noteData.access.allow is list;
-    }
-
-    function hasRoleMapAccess(noteData) {
+    function hasAccessRoles(noteData) {
       return noteData.access is map
         && noteData.access.ownerUid is string
         && noteData.access.roles is map;
     }
 
-    function canReadByLegacyAccess(noteData, ownerId) {
-      return hasLegacyAccessMap(noteData)
-        && noteData.access.ownerUid == ownerId
-        && isAuthenticated()
-        && request.auth.uid in noteData.access.allow;
+    function requesterRole(noteData) {
+      return noteData.access.roles[request.auth.uid];
     }
 
-    function canReadByRoleMap(noteData, ownerId) {
-      return hasRoleMapAccess(noteData)
+    function canReadShared(noteData, ownerId) {
+      return isAuthenticated()
+        && hasAccessRoles(noteData)
         && noteData.access.ownerUid == ownerId
-        && isAuthenticated()
         && request.auth.uid in noteData.access.roles;
     }
 
-    function canEditByLegacyAccess(noteData, ownerId) {
-      return canReadByLegacyAccess(noteData, ownerId)
-        && noteData.access.role == 'editor';
+    function canEditShared(noteData, ownerId) {
+      return canReadShared(noteData, ownerId)
+        && requesterRole(noteData) in ['editor', 'owner'];
     }
 
-    function canEditByRoleMap(noteData, ownerId) {
-      return canReadByRoleMap(noteData, ownerId)
-        && noteData.access.roles[request.auth.uid] in ['editor', 'owner'];
+    function canDeleteShared(noteData, ownerId) {
+      return canReadShared(noteData, ownerId)
+        && requesterRole(noteData) == 'owner';
     }
 
-    function canDeleteByLegacyAccess(noteData, ownerId) {
-      return canReadByLegacyAccess(noteData, ownerId)
-        && noteData.access.role == 'owner';
-    }
-
-    function canDeleteByRoleMap(noteData, ownerId) {
-      return canReadByRoleMap(noteData, ownerId)
-        && noteData.access.roles[request.auth.uid] == 'owner';
+    function isValidOwnerPayload(ownerId) {
+      return request.resource.data.ownerUid == ownerId
+        && request.resource.data.access.ownerUid == ownerId
+        && request.resource.data.access.roles[ownerId] == 'owner';
     }
 
     match /users/{userId} {
@@ -61,19 +48,17 @@ service cloud.firestore {
 
       match /notes/{noteId} {
         allow read: if isOwner(userId)
-          || canReadByLegacyAccess(resource.data, userId)
-          || canReadByRoleMap(resource.data, userId);
+          || canReadShared(resource.data, userId);
 
         allow create: if isOwner(userId)
-          && request.resource.data.ownerId == request.auth.uid;
+          && hasAccessRoles(request.resource.data)
+          && isValidOwnerPayload(userId);
 
         allow update: if isOwner(userId)
-          || canEditByLegacyAccess(resource.data, userId)
-          || canEditByRoleMap(resource.data, userId);
+          || canEditShared(resource.data, userId);
 
         allow delete: if isOwner(userId)
-          || canDeleteByLegacyAccess(resource.data, userId)
-          || canDeleteByRoleMap(resource.data, userId);
+          || canDeleteShared(resource.data, userId);
       }
 
       match /folders/{folderId} {
