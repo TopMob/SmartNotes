@@ -14,3 +14,28 @@
 [data-appearance-bg-clear]:hover {
     transform: translateY(-1px);
 }
+
+[data-appearance-bg-file] {
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+}
+
+[data-appearance-bg-file]::file-selector-button {
+    min-height: 40px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+    background: color-mix(in srgb, var(--surface) 78%, var(--primary) 22%);
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+[data-appearance-bg-file]::file-selector-button:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+}

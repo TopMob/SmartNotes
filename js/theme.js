@@ -112,22 +112,36 @@ export const ThemeManager = {
     renderPicker({ onSelect, activeKey, manualColor } = {}) {
         const root = document.getElementById("theme-picker-root")
         if (!root) return
-        const items = [
-            "oled","standard_light","soft_slate","retro_typewriter","ice_cloud","midnight","spring_mint","dark_forest","sticky_note","warm_sunset","soft_rose","wine_night","barbie_style","lavender_dream","deep_purple","silver","graphite","terminal","manual"
+        const groups = [
+            { title: "Темные", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal"] },
+            { title: "Светлые", items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
+            { title: "Пользовательская", items: ["manual"] }
         ]
         root.innerHTML = ""
-        items.forEach(key => {
-            const wrapper = document.createElement("button")
-            wrapper.type = "button"
-            wrapper.className = "theme-item-wrapper"
-            wrapper.dataset.themeKey = key
-            if (activeKey === key) wrapper.classList.add("active")
-            const dot = document.createElement("span")
-            dot.className = "theme-dot"
-            dot.style.background = key === "manual" ? (manualColor || this.themes.oled.p) : this.resolvePreset(key).p
-            wrapper.appendChild(dot)
-            wrapper.addEventListener("click", () => onSelect?.(key))
-            root.appendChild(wrapper)
+        groups.forEach(group => {
+            const groupElement = document.createElement("div")
+            groupElement.className = "theme-group"
+            const titleElement = document.createElement("div")
+            titleElement.className = "theme-group-title"
+            titleElement.textContent = group.title
+            groupElement.appendChild(titleElement)
+            const gridElement = document.createElement("div")
+            gridElement.className = "settings-theme-grid"
+            group.items.forEach(key => {
+                const buttonElement = document.createElement("button")
+                buttonElement.type = "button"
+                buttonElement.className = "theme-item-wrapper"
+                buttonElement.dataset.themeKey = key
+                if (activeKey === key) buttonElement.classList.add("active")
+                const dotElement = document.createElement("span")
+                dotElement.className = "theme-dot"
+                dotElement.style.background = key === "manual" ? (manualColor || this.themes.oled.p) : this.resolvePreset(key).p
+                buttonElement.appendChild(dotElement)
+                buttonElement.addEventListener("click", () => onSelect?.(key))
+                gridElement.appendChild(buttonElement)
+            })
+            groupElement.appendChild(gridElement)
+            root.appendChild(groupElement)
         })
     },
     setupColorInputs(onChange) {

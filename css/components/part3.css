@@ -308,3 +308,44 @@ select.input-area:focus {
     gap: 10px;
     margin-top: 12px;
 }
+
+.theme-group {
+    display: grid;
+    gap: 8px;
+}
+
+.theme-group-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-dim);
+}
+
+#theme-picker-root {
+    display: grid;
+    gap: 14px;
+    width: 100%;
+    overflow-x: hidden;
+}
+
+#settings-content,
+#settings-content * {
+    box-sizing: border-box;
+}
+
+#settings-content {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.settings-background-actions .btn-secondary {
+    min-width: 110px;
+    justify-content: center;
+    background: color-mix(in srgb, var(--surface) 78%, var(--primary) 22%);
+    border-color: color-mix(in srgb, var(--text) 16%, transparent);
+    color: var(--text);
+}
+
+.settings-background-actions .btn-secondary:hover {
+    filter: brightness(1.06);
+}

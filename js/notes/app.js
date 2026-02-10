@@ -109,7 +109,7 @@ const AppLifecycle = {
         this.activeUid = user.uid
 
         const folderUnsub = db.collection("users").doc(user.uid).collection("folders")
-            .orderBy("folderOrder", "asc")
+            .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
                 const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                 StateStore.update("folders", folders)
