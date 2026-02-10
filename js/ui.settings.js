@@ -348,13 +348,13 @@ Object.assign(UI, {
                 }
                 StateStore.update("appearanceDraft", next)
                 ThemeManager.applySettings(next, false)
-                this.renderAppearanceDraft()
+                ThemeManager.syncInputs(next.p, next.bg, next.t)
                 return
             }
             const next = { ...current, preset: "manual", [type]: normalizedValue }
             StateStore.update("appearanceDraft", next)
             ThemeManager.applySettings(next, false)
-            ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey: "manual", manualColor: next.p })
+            ThemeManager.syncInputs(next.p, next.bg, next.t)
         })
     },
 

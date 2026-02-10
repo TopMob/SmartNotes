@@ -225,7 +225,10 @@ export const ThemeManager = {
         })
     },
     setupColorInputs(onChange) {
-        const bind = (el, type) => el?.addEventListener("input", event => onChange?.(type, event.target.value))
+        const bind = (element, type) => {
+            if (!element) return
+            element.oninput = event => onChange?.(type, event.target.value)
+        }
         bind(document.getElementById("cp-primary"), "p")
         bind(document.getElementById("cp-bg"), "bg")
         bind(document.getElementById("cp-text"), "t")
