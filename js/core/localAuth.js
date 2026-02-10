@@ -57,6 +57,10 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
 
     const normalizeEmail = value => String(value || "").trim().toLowerCase()
 
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+
+    const isEmailFormatValid = email => emailPattern.test(String(email || ""))
+
     const readSignInCredentials = () => {
         const email = normalizeEmail(getElement(elementIds.signInEmail)?.value)
         const password = String(getElement(elementIds.signInPassword)?.value || "")
@@ -75,12 +79,20 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
             setFeedback(getText("auth_fill_required", "Fill in email and password"))
             return false
         }
+        if (!isEmailFormatValid(credentials.email)) {
+            setFeedback(getText("auth_invalid_email_format", "Введите корректный email"))
+            return false
+        }
         return true
     }
 
     const validateSignUpCredentials = credentials => {
         if (!credentials.email || !credentials.password || !credentials.passwordRepeat) {
             setFeedback(getText("auth_fill_required", "Fill in all required fields"))
+            return false
+        }
+        if (!isEmailFormatValid(credentials.email)) {
+            setFeedback(getText("auth_invalid_email_format", "Введите корректный email"))
             return false
         }
         if (credentials.password.length < 6) {
@@ -113,6 +125,10 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         if (!validateSignInCredentials(credentials)) return
 
         const methods = await fetchMethods(credentials.email)
+        if (!methods.length) {
+            setFeedback(getText("auth_email_not_found", "Аккаунт с таким email не найден"))
+            return
+        }
         if (methods.length && !methods.includes("password")) {
             if (isGoogleOnlyAccount(methods)) {
                 setFeedback(getText("auth_email_google_only", "Этот email зарегистрирован через Google. Войдите через Google."))
@@ -165,6 +181,10 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         const email = normalizeEmail(getElement(elementIds.signInEmail)?.value)
         if (!email) {
             setFeedback(getText("auth_reset_enter_email", "Введите email для восстановления пароля"))
+            return
+        }
+        if (!isEmailFormatValid(email)) {
+            setFeedback(getText("auth_invalid_email_format", "Введите корректный email"))
             return
         }
 
