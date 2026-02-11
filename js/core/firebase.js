@@ -26,15 +26,19 @@ function detectBraveBrowser() {
 function resolveFirestoreSettings() {
     const baseSettings = {
         ignoreUndefinedProperties: true,
-        experimentalAutoDetectLongPolling: true,
         useFetchStreams: false
     }
 
-    if (!detectBraveBrowser()) return baseSettings
+    if (detectBraveBrowser()) {
+        return {
+            ...baseSettings,
+            experimentalForceLongPolling: true
+        }
+    }
 
     return {
         ...baseSettings,
-        experimentalForceLongPolling: true
+        experimentalAutoDetectLongPolling: true
     }
 }
 
