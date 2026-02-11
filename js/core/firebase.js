@@ -25,13 +25,23 @@ function detectBraveBrowser() {
     return brands.includes("brave")
 }
 
+function isMobileDevice() {
+    if (typeof navigator === "undefined") return false
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    return /android|iphone|ipad|ipod|mobile/.test(userAgent)
+}
+
 function resolveFirestoreSettings() {
     const baseSettings = {
         ignoreUndefinedProperties: true,
-        useFetchStreams: false
+        useFetchStreams: false,
+        merge: true
     }
 
-    if (detectBraveBrowser()) {
+    const braveBrowser = detectBraveBrowser()
+    const mobileDevice = isMobileDevice()
+
+    if (braveBrowser && !mobileDevice) {
         return {
             ...baseSettings,
             experimentalForceLongPolling: true
