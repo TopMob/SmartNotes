@@ -1,5 +1,8 @@
 const EditorAudio = (() => {
-    const state = { container: null }
+    const state = {
+        container: null,
+        activeAudio: null
+    }
 
     const getText = (key, fallback) => {
         if (typeof UI !== "undefined" && typeof UI.getText === "function") {
@@ -10,17 +13,12 @@ const EditorAudio = (() => {
 
     const formatTime = (value) => {
         const totalSeconds = Math.max(0, Math.floor(Number(value) || 0))
-        const hours = Math.floor(totalSeconds / 3600)
-        const minutes = Math.floor((totalSeconds % 3600) / 60)
+        const minutes = Math.floor(totalSeconds / 60)
         const seconds = totalSeconds % 60
-        if (hours > 0) {
-            return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-        }
         return `${minutes}:${String(seconds).padStart(2, "0")}`
     }
 
     const getAudioBlock = (element) => element ? element.closest(".audio-block") : null
-
     const getAudioElement = (block) => block ? block.querySelector("audio") : null
 
     const updatePlayState = (block, audio) => {
@@ -29,6 +27,7 @@ const EditorAudio = (() => {
         const isPlaying = !audio.paused && !audio.ended
         if (icon) icon.textContent = isPlaying ? "pause" : "play_arrow"
         block.classList.toggle("playing", isPlaying)
+        if (isPlaying) state.activeAudio = audio
     }
 
     const updateProgress = (block, audio) => {
@@ -51,18 +50,10 @@ const EditorAudio = (() => {
         if (duration) duration.textContent = formatTime(audio.duration)
     }
 
-    const updateVolume = (block, audio) => {
-        if (!block || !audio) return
-        const volume = block.querySelector(".audio-volume")
-        if (!volume || document.activeElement === volume) return
-        volume.value = String(Math.round(audio.volume * 100))
-    }
-
     const updateUi = (block, audio) => {
         updatePlayState(block, audio)
         updateProgress(block, audio)
         updateTimes(block, audio)
-        updateVolume(block, audio)
     }
 
     const pauseOtherAudio = (currentAudio) => {
@@ -72,11 +63,37 @@ const EditorAudio = (() => {
         })
     }
 
+    const removeAudioBlock = (block) => {
+        if (!block) return
+        const audio = getAudioElement(block)
+        if (audio) {
+            audio.pause()
+            if (state.activeAudio === audio) state.activeAudio = null
+        }
+        const siblingBreak = block.nextSibling
+        block.remove()
+        if (siblingBreak && siblingBreak.nodeName === "BR") siblingBreak.remove()
+        if (typeof SmartNotesEditor !== "undefined" && typeof SmartNotesEditor.saveSnapshot === "function") {
+            SmartNotesEditor.saveSnapshot()
+        }
+    }
+
     const ensureControls = (block, label) => {
         const controls = block.querySelector(".audio-controls")
         if (controls) return
-        const createdControls = document.createElement("div")
-        createdControls.className = "audio-controls"
+
+        const wrapper = document.createElement("div")
+        wrapper.className = "audio-controls"
+
+        const dragButton = document.createElement("button")
+        dragButton.type = "button"
+        dragButton.className = "audio-drag-handle"
+        dragButton.setAttribute("aria-label", getText("audio_drag", "Move audio"))
+        const dragIcon = document.createElement("i")
+        dragIcon.className = "material-icons-round"
+        dragIcon.setAttribute("aria-hidden", "true")
+        dragIcon.textContent = "drag_indicator"
+        dragButton.appendChild(dragIcon)
 
         const playButton = document.createElement("button")
         playButton.type = "button"
@@ -91,6 +108,23 @@ const EditorAudio = (() => {
         const timeline = document.createElement("div")
         timeline.className = "audio-timeline"
 
+        const titleRow = document.createElement("div")
+        titleRow.className = "audio-title-row"
+        const title = document.createElement("span")
+        title.className = "audio-title"
+        title.textContent = label || getText("audio_note", "Audio")
+
+        const time = document.createElement("div")
+        time.className = "audio-time"
+        const current = document.createElement("span")
+        current.className = "audio-current"
+        current.textContent = "0:00"
+        const duration = document.createElement("span")
+        duration.className = "audio-duration"
+        duration.textContent = "0:00"
+        time.append(current, duration)
+        titleRow.append(title, time)
+
         const progress = document.createElement("input")
         progress.type = "range"
         progress.min = "0"
@@ -100,41 +134,29 @@ const EditorAudio = (() => {
         progress.className = "audio-progress"
         progress.setAttribute("aria-label", getText("audio_progress", "Timeline"))
 
-        const time = document.createElement("div")
-        time.className = "audio-time"
+        timeline.append(titleRow, progress)
 
-        const current = document.createElement("span")
-        current.className = "audio-current"
-        current.textContent = "0:00"
+        const deleteButton = document.createElement("button")
+        deleteButton.type = "button"
+        deleteButton.className = "audio-delete"
+        deleteButton.setAttribute("aria-label", getText("audio_delete", "Delete audio"))
+        const deleteIcon = document.createElement("i")
+        deleteIcon.className = "material-icons-round"
+        deleteIcon.setAttribute("aria-hidden", "true")
+        deleteIcon.textContent = "delete"
+        deleteButton.appendChild(deleteIcon)
 
-        const duration = document.createElement("span")
-        duration.className = "audio-duration"
-        duration.textContent = "0:00"
-
-        time.append(current, duration)
-        timeline.append(progress, time)
-
-        const volume = document.createElement("input")
-        volume.type = "range"
-        volume.min = "0"
-        volume.max = "100"
-        volume.step = "1"
-        volume.value = "100"
-        volume.className = "audio-volume"
-        volume.setAttribute("aria-label", getText("audio_volume", "Volume"))
-
-        const title = document.createElement("span")
-        title.className = "audio-title"
-        title.textContent = label || getText("audio_note", "Audio")
-
-        createdControls.append(playButton, timeline, volume, title)
-        block.prepend(createdControls)
+        wrapper.append(dragButton, playButton, timeline, deleteButton)
+        block.prepend(wrapper)
     }
 
     const initializeBlock = (block, label) => {
         if (!block || block.dataset.audioReady === "true") return
         const audio = getAudioElement(block)
         if (!audio) return
+        block.classList.add("media-draggable-item")
+        block.setAttribute("draggable", "true")
+        block.setAttribute("contenteditable", "false")
         ensureControls(block, label)
         audio.preload = "metadata"
         audio.addEventListener("loadedmetadata", () => updateUi(block, audio))
@@ -149,8 +171,9 @@ const EditorAudio = (() => {
 
     const createAudioBlockElement = (sourceUrl, label) => {
         const block = document.createElement("div")
-        block.className = "audio-block"
+        block.className = "audio-block media-draggable-item"
         block.setAttribute("contenteditable", "false")
+        block.setAttribute("draggable", "true")
         const audio = document.createElement("audio")
         if (sourceUrl) audio.src = sourceUrl
         audio.preload = "metadata"
@@ -167,38 +190,41 @@ const EditorAudio = (() => {
     }
 
     const handleClick = (event) => {
-        const target = event.target.closest(".audio-play")
-        if (!target) return
-        const block = getAudioBlock(target)
-        const audio = getAudioElement(block)
-        if (!audio) return
-        const isPlaying = !audio.paused && !audio.ended
-        if (isPlaying) {
-            audio.pause()
-        } else {
-            pauseOtherAudio(audio)
-            audio.play().catch(() => null)
+        const playButton = event.target.closest(".audio-play")
+        if (playButton) {
+            const block = getAudioBlock(playButton)
+            const audio = getAudioElement(block)
+            if (!audio) return
+            const isPlaying = !audio.paused && !audio.ended
+            if (isPlaying) {
+                audio.pause()
+            } else {
+                pauseOtherAudio(audio)
+                audio.play().catch(() => null)
+            }
+            updateUi(block, audio)
+            return
         }
-        updateUi(block, audio)
+
+        const deleteButton = event.target.closest(".audio-delete")
+        if (deleteButton) {
+            const block = getAudioBlock(deleteButton)
+            removeAudioBlock(block)
+        }
     }
 
     const handleInput = (event) => {
         const control = event.target
         if (!(control instanceof HTMLInputElement)) return
+        if (!control.classList.contains("audio-progress")) return
         const block = getAudioBlock(control)
         const audio = getAudioElement(block)
         if (!audio) return
-        if (control.classList.contains("audio-progress")) {
-            if (Number.isFinite(audio.duration) && audio.duration > 0) {
-                const percent = Math.min(100, Math.max(0, Number(control.value) || 0))
-                audio.currentTime = (audio.duration * percent) / 100
-            }
-        }
-        if (control.classList.contains("audio-volume")) {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
             const percent = Math.min(100, Math.max(0, Number(control.value) || 0))
-            audio.volume = percent / 100
+            audio.currentTime = (audio.duration * percent) / 100
+            updateUi(block, audio)
         }
-        updateUi(block, audio)
     }
 
     const upgradeLegacyBlocks = (container) => {

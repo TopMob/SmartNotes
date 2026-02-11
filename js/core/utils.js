@@ -55,13 +55,17 @@ export const Utils = {
             "audio-controls",
             "audio-play",
             "audio-play-icon",
+            "audio-drag-handle",
+            "audio-delete",
             "audio-timeline",
+            "audio-title-row",
             "audio-progress",
             "audio-time",
             "audio-current",
             "audio-duration",
             "audio-volume",
             "audio-title",
+            "media-draggable-item",
             "playing",
             "note-page"
         ])

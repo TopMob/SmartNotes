@@ -1,5 +1,6 @@
 const FAVORITES_STORAGE_KEY = "favorite-notes"
 const NOTES_FILTER_KEY = "notes-filter"
+const NOTES_CACHE_KEY = "notes-cache"
 
 const readFavoriteIds = () => {
     try {
@@ -42,10 +43,38 @@ const loadNotesFilter = () => {
     } catch {}
 }
 
+const readCachedNotes = (uid) => {
+    if (!uid) return []
+    try {
+        const allCaches = JSON.parse(localStorage.getItem(NOTES_CACHE_KEY))
+        const userCache = allCaches?.[uid]
+        if (Array.isArray(userCache?.notes)) {
+            return userCache.notes.map(note => NoteIO.normalizeNote(note))
+        }
+    } catch {}
+    return []
+}
+
+const writeCachedNotes = (uid, notes) => {
+    if (!uid || !Array.isArray(notes)) return
+    try {
+        const allCaches = JSON.parse(localStorage.getItem(NOTES_CACHE_KEY)) || {}
+        const sanitizedNotes = notes.slice(0, 250).map(note => NoteIO.normalizeNote(note))
+        allCaches[uid] = { updatedAt: Date.now(), notes: sanitizedNotes }
+        const entries = Object.entries(allCaches)
+            .sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0))
+            .slice(0, 5)
+        const next = Object.fromEntries(entries)
+        localStorage.setItem(NOTES_CACHE_KEY, JSON.stringify(next))
+    } catch {}
+}
+
 loadNotesFilter()
 
 window.NotesStorage = {
     applyStoredFavorites,
     syncFavoritesStorage,
-    loadNotesFilter
+    loadNotesFilter,
+    readCachedNotes,
+    writeCachedNotes
 }
