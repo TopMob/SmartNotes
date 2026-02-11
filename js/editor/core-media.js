@@ -64,13 +64,17 @@ export const createMediaHandlers = (context) => {
     }
 
     const handleMediaDragStart = (event) => {
-        if (event.button && event.button !== 0) return
+        if (typeof event.button === "number" && event.button > 0) return
         if (event.target.closest(".media-resize-handle")) return
         const wrapper = event.target.closest(".media-draggable-item")
         if (!wrapper || !elements.content.contains(wrapper)) return
         const isAudioBlock = wrapper.classList.contains("audio-block")
         const dragHandle = event.target.closest(".audio-drag-handle")
         if (isAudioBlock && !dragHandle) return
+        if (dragHandle) {
+            event.preventDefault()
+            event.stopPropagation()
+        }
         state.dragState = {
             wrapper,
             trailingBreak: wrapper.nextSibling && wrapper.nextSibling.nodeName === "BR" ? wrapper.nextSibling : null,
@@ -117,6 +121,11 @@ export const createMediaHandlers = (context) => {
         }
         state.dragState = null
         document.removeEventListener("pointermove", handleMediaDragMove)
+    }
+
+    const handleNativeDragStart = (event) => {
+        if (!event.target.closest(".media-draggable-item")) return
+        event.preventDefault()
     }
 
     const insertMedia = (src, type) => {
@@ -276,6 +285,7 @@ export const createMediaHandlers = (context) => {
         fileToDataUrl,
         handleResizeStart,
         handleMediaDragStart,
+        handleNativeDragStart,
         insertMedia,
         insertAudio,
         makeMediaDraggable,

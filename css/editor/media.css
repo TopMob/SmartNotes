@@ -99,6 +99,7 @@
 
 .audio-drag-handle {
     cursor: grab;
+    touch-action: none;
 }
 
 .audio-drag-handle:active {

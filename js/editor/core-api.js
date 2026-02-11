@@ -282,6 +282,7 @@ export const EditorAPI = (() => {
 
             elements.content.addEventListener("pointerdown", mediaHandlers.handleResizeStart, { signal })
             elements.content.addEventListener("pointerdown", mediaHandlers.handleMediaDragStart, { signal })
+            elements.content.addEventListener("dragstart", mediaHandlers.handleNativeDragStart, { signal })
         }
 
         document.addEventListener("selectionchange", inputHandlers.storeSelection, { signal })

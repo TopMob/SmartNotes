@@ -198,6 +198,11 @@ const EditorAudio = (() => {
         if (!block || block.dataset.audioReady === "true") return
         const audio = getAudioElement(block)
         if (!audio) return
+        const normalizedSource = resolveAudioSource(audio)
+        if (normalizedSource && !audio.getAttribute("src")) {
+            audio.setAttribute("src", normalizedSource)
+            audio.src = normalizedSource
+        }
         block.classList.add("media-draggable-item")
         block.setAttribute("draggable", "true")
         block.setAttribute("contenteditable", "false")
@@ -277,7 +282,7 @@ const EditorAudio = (() => {
         const legacyBlocks = Array.from(container.querySelectorAll(".audio-wrapper"))
         legacyBlocks.forEach(wrapper => {
             const audioElement = wrapper.querySelector("audio")
-            const sourceUrl = audioElement ? (audioElement.getAttribute("src") || audioElement.currentSrc || audioElement.src) : ""
+            const sourceUrl = resolveAudioSource(audioElement)
             if (!sourceUrl) return
             const label = wrapper.querySelector(".audio-label")?.textContent || ""
             const newBlock = createAudioBlockElement(sourceUrl, label)
