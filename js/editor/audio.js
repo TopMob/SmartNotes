@@ -4,6 +4,8 @@ const EditorAudio = (() => {
         activeAudio: null
     }
 
+    const persistedSources = new WeakSet()
+
     const getText = (key, fallback) => {
         if (typeof UI !== "undefined" && typeof UI.getText === "function") {
             return UI.getText(key, fallback)
@@ -23,9 +25,11 @@ const EditorAudio = (() => {
 
     const updatePlayState = (block, audio) => {
         if (!block || !audio) return
+        const button = block.querySelector(".audio-play")
         const icon = block.querySelector(".audio-play-icon")
         const isPlaying = !audio.paused && !audio.ended
-        if (icon) icon.textContent = isPlaying ? "pause" : "play_arrow"
+        if (icon) icon.textContent = isPlaying ? "❚❚" : "▶"
+        if (button) button.setAttribute("aria-label", getText(isPlaying ? "audio_pause" : "audio_play", isPlaying ? "Pause" : "Play"))
         block.classList.toggle("playing", isPlaying)
         if (isPlaying) state.activeAudio = audio
     }
@@ -80,7 +84,12 @@ const EditorAudio = (() => {
 
     const ensureControls = (block, label) => {
         const controls = block.querySelector(".audio-controls")
-        if (controls) return
+        const hasRequiredControls = controls
+            && controls.querySelector(".audio-play")
+            && controls.querySelector(".audio-progress")
+            && controls.querySelector(".audio-delete")
+        if (hasRequiredControls) return
+        if (controls) controls.remove()
 
         const wrapper = document.createElement("div")
         wrapper.className = "audio-controls"
@@ -89,20 +98,20 @@ const EditorAudio = (() => {
         dragButton.type = "button"
         dragButton.className = "audio-drag-handle"
         dragButton.setAttribute("aria-label", getText("audio_drag", "Move audio"))
-        const dragIcon = document.createElement("i")
-        dragIcon.className = "material-icons-round"
+        const dragIcon = document.createElement("span")
+        dragIcon.className = "audio-control-icon"
         dragIcon.setAttribute("aria-hidden", "true")
-        dragIcon.textContent = "drag_indicator"
+        dragIcon.textContent = "⋮⋮"
         dragButton.appendChild(dragIcon)
 
         const playButton = document.createElement("button")
         playButton.type = "button"
         playButton.className = "audio-play"
         playButton.setAttribute("aria-label", getText("audio_play", "Play"))
-        const playIcon = document.createElement("i")
-        playIcon.className = "material-icons-round audio-play-icon"
+        const playIcon = document.createElement("span")
+        playIcon.className = "audio-play-icon"
         playIcon.setAttribute("aria-hidden", "true")
-        playIcon.textContent = "play_arrow"
+        playIcon.textContent = "▶"
         playButton.appendChild(playIcon)
 
         const timeline = document.createElement("div")
@@ -140,14 +149,49 @@ const EditorAudio = (() => {
         deleteButton.type = "button"
         deleteButton.className = "audio-delete"
         deleteButton.setAttribute("aria-label", getText("audio_delete", "Delete audio"))
-        const deleteIcon = document.createElement("i")
-        deleteIcon.className = "material-icons-round"
+        const deleteIcon = document.createElement("span")
+        deleteIcon.className = "audio-control-icon"
         deleteIcon.setAttribute("aria-hidden", "true")
-        deleteIcon.textContent = "delete"
+        deleteIcon.textContent = "✕"
         deleteButton.appendChild(deleteIcon)
 
         wrapper.append(dragButton, playButton, timeline, deleteButton)
         block.prepend(wrapper)
+    }
+
+    const resolveAudioSource = (audio) => {
+        if (!audio) return ""
+        const sourceElement = audio.querySelector("source[src]")
+        if (sourceElement && sourceElement.getAttribute("src")) return sourceElement.getAttribute("src") || ""
+        const attributeSource = audio.getAttribute("src")
+        if (attributeSource) return attributeSource
+        if (audio.currentSrc) return audio.currentSrc
+        return audio.src || ""
+    }
+
+    const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ""))
+        reader.onerror = () => reject(new Error("Audio conversion failed"))
+        reader.readAsDataURL(blob)
+    })
+
+    const persistAudioSource = async (audio) => {
+        if (!audio || persistedSources.has(audio)) return
+        persistedSources.add(audio)
+        const source = resolveAudioSource(audio)
+        if (!source || !source.startsWith("blob:")) return
+        try {
+            const response = await fetch(source)
+            const blob = await response.blob()
+            const dataUrl = await blobToDataUrl(blob)
+            if (!dataUrl) return
+            audio.setAttribute("src", dataUrl)
+            audio.src = dataUrl
+            audio.load()
+        } catch {
+            persistedSources.delete(audio)
+        }
     }
 
     const initializeBlock = (block, label) => {
@@ -165,7 +209,9 @@ const EditorAudio = (() => {
         audio.addEventListener("play", () => updateUi(block, audio))
         audio.addEventListener("pause", () => updateUi(block, audio))
         audio.addEventListener("ended", () => updateUi(block, audio))
+        audio.addEventListener("loadeddata", () => persistAudioSource(audio), { once: true })
         block.dataset.audioReady = "true"
+        persistAudioSource(audio)
         updateUi(block, audio)
     }
 

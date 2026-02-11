@@ -51,11 +51,11 @@
     align-items: center;
     gap: 10px;
     width: min(720px, 100%);
-    border-radius: 18px;
-    padding: 10px 12px;
-    background: linear-gradient(160deg, rgba(24, 28, 33, 0.92), rgba(14, 16, 20, 0.96));
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+    border-radius: 16px;
+    padding: 10px;
+    background: linear-gradient(160deg, rgba(30, 40, 56, 0.94), rgba(18, 24, 36, 0.97));
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
     color: var(--text);
     margin: 0 auto;
 }
@@ -68,11 +68,11 @@
 .audio-play,
 .audio-delete,
 .audio-drag-handle {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.08);
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.09);
     color: var(--text);
     display: inline-flex;
     align-items: center;
@@ -84,11 +84,17 @@
 .audio-play:hover,
 .audio-delete:hover,
 .audio-drag-handle:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .audio-play-icon {
-    font-size: 20px;
+    font-size: 15px;
+    line-height: 1;
+}
+
+.audio-control-icon {
+    font-size: 15px;
+    line-height: 1;
 }
 
 .audio-drag-handle {
@@ -130,6 +136,7 @@
 .audio-progress {
     width: 100%;
     margin: 0;
+    accent-color: var(--primary);
 }
 
 .audio-time {
