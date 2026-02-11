@@ -61,6 +61,12 @@ Object.assign(UI, {
         }
         const foldersMarkup = trashedFolders.map(folder => `
             <div class="note-card trashed-folder-card">
+                <div class="trashed-folder-card-head">
+                    <span class="trashed-folder-badge">
+                        <i class="material-icons-round" aria-hidden="true">folder</i>
+                        <span>${this.getText("folders", "Folders")}</span>
+                    </span>
+                </div>
                 <h3>${Utils.escapeHtml(folder.name)}</h3>
                 <p>${this.getText("folder_trashed", "Folder in trash")}</p>
                 <div class="row-left">
@@ -74,7 +80,9 @@ Object.assign(UI, {
             return
         }
         NotesRenderer.render(trashedNotes)
-        this.els.grid.insertAdjacentHTML("afterbegin", foldersMarkup)
+        requestAnimationFrame(() => {
+            this.els.grid.insertAdjacentHTML("afterbegin", foldersMarkup)
+        })
     },
 
     renderFolderGrid() {

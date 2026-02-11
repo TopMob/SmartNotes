@@ -22,7 +22,7 @@ Object.assign(UI, {
 
     getReorderScope() {
         const { notes, view, activeFolderId } = StateStore.read()
-        if (view === "locked" || view === "future") return []
+        if (view === "locked" || view === "reminders") return []
         let list = notes.slice()
         if (view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
         if (view === "archive") list = list.filter(n => !!n.isArchived)

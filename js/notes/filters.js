@@ -165,7 +165,7 @@ function filterAndRender(query) {
         if (view === "locked") {
             UI.updateEmptyState("lock", UI.getText("lock_center_empty", "No protected notes"))
         } else if (view === "reminders") {
-            UI.updateEmptyState("schedule", UI.getText("future_empty", "No reminders"))
+            UI.updateEmptyState("schedule", UI.getText("reminder_empty", "No reminders"))
         } else if (view === "trash") {
             UI.updateEmptyState("delete", UI.getText("trash_empty", "Trash is empty"))
         } else {

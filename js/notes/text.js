@@ -3,6 +3,7 @@ import { getCountLabel } from "../editor/core-utils.js"
 const getCleanText = (html) => {
     const wrapper = document.createElement("div")
     wrapper.innerHTML = html || ""
+    wrapper.querySelectorAll(".audio-block, .audio-wrapper").forEach(element => element.remove())
     wrapper.querySelectorAll("br").forEach(element => element.replaceWith("\n"))
     const text = wrapper.textContent || ""
     return text.replace(/\n{3,}/g, "\n\n").trim()

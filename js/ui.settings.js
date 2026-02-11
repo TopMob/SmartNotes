@@ -204,6 +204,14 @@ Object.assign(UI, {
                         </div>
                     </div>
                     <div class="settings-section">
+                        <div class="settings-section-title">${dict.settings_transparency || "Transparency"}</div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_ui_opacity || "Interface opacity"}</span>
+                            <input type="range" min="40" max="100" step="1" class="input-area" data-appearance-opacity>
+                            <span class="folder-meta" data-appearance-opacity-value></span>
+                        </div>
+                    </div>
+                    <div class="settings-section">
                         <div class="settings-section-title">${dict.settings_backgrounds || "Backgrounds"}</div>
                         <div class="settings-background-grid">
                             <div class="field">
@@ -256,7 +264,8 @@ Object.assign(UI, {
                 brandName: saved.brandName || "SmartNotes",
                 basePreset: saved.basePreset || "oled",
                 mainBackgroundImage: saved.mainBackgroundImage || "",
-                sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
+                sidebarBackgroundImage: saved.sidebarBackgroundImage || "",
+                uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78
             })
             return
         }
@@ -268,7 +277,8 @@ Object.assign(UI, {
             brandName: saved.brandName || "SmartNotes",
             basePreset: saved.basePreset || "oled",
             mainBackgroundImage: saved.mainBackgroundImage || "",
-            sidebarBackgroundImage: saved.sidebarBackgroundImage || ""
+            sidebarBackgroundImage: saved.sidebarBackgroundImage || "",
+            uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78
         })
     },
 
@@ -282,7 +292,8 @@ Object.assign(UI, {
         const normalizedDraft = {
             ...draft,
             mainBackgroundImage: typeof draft.mainBackgroundImage === "string" ? draft.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof draft.sidebarBackgroundImage === "string" ? draft.sidebarBackgroundImage : ""
+            sidebarBackgroundImage: typeof draft.sidebarBackgroundImage === "string" ? draft.sidebarBackgroundImage : "",
+            uiOpacity: Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78)))
         }
         if (normalizedDraft.mainBackgroundImage !== draft.mainBackgroundImage || normalizedDraft.sidebarBackgroundImage !== draft.sidebarBackgroundImage) {
             draft = normalizedDraft
@@ -291,6 +302,7 @@ Object.assign(UI, {
         const activeKey = draft.preset && draft.preset !== "manual" ? draft.preset : "manual"
         ThemeManager.syncInputs(draft.p, draft.bg, draft.t)
         this.syncAppearanceBackgroundInputs(draft)
+        this.syncAppearanceOpacityControl(draft)
         const onSelect = (key) => {
             let nextDraft = null
             if (key === "manual") {
@@ -311,7 +323,8 @@ Object.assign(UI, {
                     brandName: "SmartNotes",
                     basePreset: key,
                     mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
-                    sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || "")
+                    sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || ""),
+                    uiOpacity: typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -330,7 +343,8 @@ Object.assign(UI, {
                 p: preset.p,
                 bg: preset.bg,
                 t: preset.t,
-                basePreset: result.key
+                basePreset: result.key,
+                uiOpacity: typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78
             })
         }
         ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
@@ -375,7 +389,8 @@ Object.assign(UI, {
                 bg: preset.bg,
                 t: preset.t,
                 mainBackgroundImage: defaults.mainBackgroundImage || "",
-                sidebarBackgroundImage: defaults.sidebarBackgroundImage || ""
+                sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
+                uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78
             }
         } else {
             draft = {
@@ -384,7 +399,8 @@ Object.assign(UI, {
                 bg: ThemeManager.themes.oled.bg,
                 t: ThemeManager.themes.oled.t,
                 mainBackgroundImage: "",
-                sidebarBackgroundImage: ""
+                sidebarBackgroundImage: "",
+                uiOpacity: 0.78
             }
         }
         StateStore.update("appearanceDraft", draft)
@@ -392,10 +408,18 @@ Object.assign(UI, {
         this.renderAppearanceDraft()
     },
 
-    saveAppearanceDraft() {
+    async saveAppearanceDraft() {
         const draft = StateStore.read().appearanceDraft
         if (!draft) return
         ThemeManager.applySettings(draft, true)
+        const user = StateStore.read().user
+        if (user) {
+            try {
+                await ThemeManager.saveAccountSettings(user, ThemeManager.getSavedSettings())
+            } catch {
+                this.showToast(this.getText("sync_error", "Sync error"))
+            }
+        }
         this.initAppearanceDraft()
         this.renderAppearanceDraft()
         this.closeModal("settings-modal")
@@ -483,6 +507,24 @@ Object.assign(UI, {
         StateStore.update("appearanceDraft", next)
         ThemeManager.applySettings(next, false)
         this.renderAppearanceDraft()
+    },
+
+    syncAppearanceOpacityControl(draft) {
+        const opacityInput = document.querySelector("[data-appearance-opacity]")
+        const opacityLabel = document.querySelector("[data-appearance-opacity-value]")
+        const uiOpacity = Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78)))
+        if (opacityInput) {
+            opacityInput.value = String(Math.round(uiOpacity * 100))
+            if (!opacityInput.dataset.bound) {
+                opacityInput.dataset.bound = "1"
+                opacityInput.addEventListener("input", event => {
+                    const nextOpacity = Math.min(1, Math.max(0.4, Number(event.target.value || 78) / 100))
+                    const currentDraft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+                    this.applyAppearanceDraft({ ...currentDraft, uiOpacity: nextOpacity })
+                })
+            }
+        }
+        if (opacityLabel) opacityLabel.textContent = `${Math.round(uiOpacity * 100)}%`
     },
 
     showToast(msg, options = {}) {

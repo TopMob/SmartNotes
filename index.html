@@ -157,7 +157,7 @@
 
                     <button type="button" class="nav-item" data-action="switch-view" data-view="reminders">
                         <i class="material-icons-round" aria-hidden="true">schedule</i>
-                        <span data-lang="future_notes">Напоминания</span>
+                        <span data-lang="reminder_notes">Напоминания</span>
                     </button>
 
 
@@ -210,6 +210,10 @@
                     <span data-lang="polls">Опросы</span>
                 </button>
 
+                <button type="button" class="footer-link" data-action="install-app" data-install-entry="footer">
+                    <i class="material-icons-round" aria-hidden="true">download</i>
+                    <span data-lang="install_app">Установить</span>
+                </button>
                 <button type="button" class="footer-link" data-action="open-settings">
                     <i class="material-icons-round" aria-hidden="true">settings</i>
                     <span data-lang="settings">Настройки</span>
@@ -334,10 +338,6 @@
                     </button>
 
                     <div class="divider-vertical" aria-hidden="true"></div>
-
-                    <button type="button" class="btn-icon" data-action="editor-delete" aria-label="Удалить заметку" data-lang-aria="delete_note">
-                        <i class="material-icons-round" aria-hidden="true">delete</i>
-                    </button>
 
                     <button type="button" class="btn-icon" data-action="editor-voice" aria-label="Голосовая запись">
                         <span class="custom-icon" aria-hidden="true">
@@ -693,6 +693,25 @@
 
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
+
+
+    <div id="install-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Установка" data-lang-aria="install_app">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2 data-lang="install_app">Установить</h2>
+                <button type="button" class="btn-icon" data-action="close-modal" data-modal="install-modal" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p data-lang="install_ios_steps">На iPhone откройте меню Поделиться и выберите «На экран Домой».</p>
+            </div>
+            <div class="modal-actions row-between">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="install-modal" data-lang="close">Закрыть</button>
+                <button type="button" class="btn-primary" data-action="install-app" data-lang="install_app">Установить</button>
+            </div>
+        </div>
+    </div>
 
     <script> if ("serviceWorker" in navigator) {navigator.serviceWorker.register("./sw.js")}</script>
 

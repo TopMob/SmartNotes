@@ -588,6 +588,33 @@ body.platform-android .top-bar {
     bottom: -6px;
 }
 
+
+.trashed-folder-card {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 14%, transparent), color-mix(in srgb, var(--surface) 92%, transparent));
+}
+
+.trashed-folder-card-head {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.trashed-folder-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid color-mix(in srgb, var(--primary) 48%, transparent);
+    background: color-mix(in srgb, var(--surface) 75%, var(--primary) 25%);
+}
+
+.trashed-folder-badge i {
+    font-size: 14px;
+}
+
 .sidebar-glass {
     background-color: color-mix(in srgb, var(--surface) 76%, transparent);
 }

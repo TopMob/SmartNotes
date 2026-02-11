@@ -19,9 +19,9 @@ const AppLifecycle = {
             const delay = reminderAt - Date.now()
             if (delay <= 0 || delay > 2147483647) return
             const timer = setTimeout(() => {
-                UI.showToast(`${UI.getText("future_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
+                UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
                 if (window.Notification && Notification.permission === "granted") {
-                    new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("future_note", "Reminder") })
+                    new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("reminder_note", "Reminder") })
                 }
             }, delay)
             this.reminderTimers.set(note.id, timer)
@@ -102,6 +102,14 @@ const AppLifecycle = {
         if (!db || !user) return
 
         await this.initializeOnce()
+        if (typeof ThemeManager !== "undefined") {
+            try {
+                const accountThemeSettings = await ThemeManager.loadAccountSettings(user)
+                if (accountThemeSettings) ThemeManager.applySettings(accountThemeSettings, true)
+            } catch {
+                UI.showToast(UI.getText("sync_error", "Sync error"))
+            }
+        }
         if (typeof CollaborationService !== "undefined") {
             CollaborationService.captureShareToken()
         }
@@ -188,6 +196,11 @@ const AppLifecycle = {
     },
     updateNotesState() {
         let notes = [...this.ownedNotes, ...this.sharedNotes.values()]
+        notes = notes.map(note => {
+            const normalizedNote = NoteIO.normalizeNote(note)
+            if (note && note.access) normalizedNote.access = note.access
+            return normalizedNote
+        })
         notes = NotesStorage.applyStoredFavorites(notes)
         StateStore.update("notes", notes)
         NotesStorage.syncFavoritesStorage(notes)

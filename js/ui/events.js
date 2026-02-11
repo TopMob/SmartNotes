@@ -321,6 +321,9 @@ Object.assign(UI, {
             case "open-settings":
                 this.openSettings()
                 break
+            case "install-app":
+                this.installApplication()
+                break
             case "settings-back":
                 this.backSettingsPage()
                 break
