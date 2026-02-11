@@ -249,8 +249,10 @@ const AppLifecycle = {
         }
         NotesStorage.syncFavoritesStorage(notes)
         this.scheduleReminders(notes)
-        if (StateStore.read().isEditing || StateStore.read().isTyping) return
-        this.syncOpenNote(notes)
+        const state = StateStore.read()
+        if (!state.isEditing && !state.isTyping) {
+            this.syncOpenNote(notes)
+        }
         filterAndRender(document.getElementById("search-input")?.value || "")
     },
     syncOpenNote(notes) {
