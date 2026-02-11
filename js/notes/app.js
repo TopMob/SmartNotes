@@ -12,25 +12,12 @@ const AppLifecycle = {
     reminderTimers: new Map(),
     normalizeDateValue(value) {
         if (!value) return 0
-        if (typeof value.toMillis === "function") {
-            const timestamp = value.toMillis()
-            return Number.isFinite(timestamp) ? timestamp : 0
-        }
         if (typeof value.toDate === "function") {
             const timestamp = value.toDate().getTime()
             return Number.isFinite(timestamp) ? timestamp : 0
         }
-        if (typeof value === "number") return Number.isFinite(value) ? value : 0
-        const parsed = Date.parse(String(value))
+        const parsed = Date.parse(value)
         return Number.isFinite(parsed) ? parsed : 0
-    },
-    normalizeOrderValue(value) {
-        if (typeof value === "number") return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY
-        if (typeof value === "string" && value.trim() !== "") {
-            const parsed = Number(value)
-            return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY
-        }
-        return Number.POSITIVE_INFINITY
     },
     sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
@@ -44,8 +31,8 @@ const AppLifecycle = {
     },
     sortOwnedNotes(notes) {
         return [...notes].sort((firstNote, secondNote) => {
-            const firstOrder = this.normalizeOrderValue(firstNote?.order)
-            const secondOrder = this.normalizeOrderValue(secondNote?.order)
+            const firstOrder = Number.isFinite(firstNote?.order) ? firstNote.order : Number.POSITIVE_INFINITY
+            const secondOrder = Number.isFinite(secondNote?.order) ? secondNote.order : Number.POSITIVE_INFINITY
             if (firstOrder !== secondOrder) return firstOrder - secondOrder
             const firstCreatedAt = this.normalizeDateValue(firstNote?.createdAt)
             const secondCreatedAt = this.normalizeDateValue(secondNote?.createdAt)
