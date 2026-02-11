@@ -10,55 +10,19 @@ function isIosDevice() {
     return /iphone|ipad|ipod/.test(userAgent)
 }
 
-function isDesktopDevice() {
+function hasBraveApi() {
     if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
-    const isMobileUserAgent = /android|iphone|ipad|ipod|mobile/.test(userAgent)
-    return !isMobileUserAgent
+    const braveApi = navigator.brave
+    return !!braveApi && typeof braveApi.isBrave === "function"
 }
-
-function withTimeout(promise, timeoutMilliseconds, fallbackValue) {
-    return new Promise((resolve) => {
-        let settled = false
-        const timeoutId = setTimeout(() => {
-            if (settled) return
-            settled = true
-            resolve(fallbackValue)
-        }, timeoutMilliseconds)
-
-        Promise.resolve(promise)
-            .then((value) => {
-                if (settled) return
-                settled = true
-                clearTimeout(timeoutId)
-                resolve(value)
-            })
-            .catch(() => {
-                if (settled) return
-                settled = true
-                clearTimeout(timeoutId)
-                resolve(fallbackValue)
-            })
-    })
-}
-
-let braveDetectionPromise = null
 
 export async function isBraveBrowser() {
-    if (braveDetectionPromise) return braveDetectionPromise
-
-    braveDetectionPromise = (async () => {
-        if (typeof navigator === "undefined") return false
-        const braveApi = navigator.brave
-        if (!braveApi) return false
-        if (typeof braveApi.isBrave === "function") {
-            const detectionResult = await withTimeout(braveApi.isBrave(), 700, false)
-            return !!detectionResult
-        }
+    if (!hasBraveApi()) return false
+    try {
+        return !!(await navigator.brave.isBrave())
+    } catch {
         return true
-    })()
-
-    return braveDetectionPromise
+    }
 }
 
 async function setNonePersistence(auth) {
@@ -70,19 +34,21 @@ async function setNonePersistence(auth) {
 export async function setupAuthPersistence(auth) {
     if (!auth || typeof firebase === "undefined") return
 
-    try {
-        const useNoneForIosSafari = isSafari() && isIosDevice()
-        const useNoneForBrave = await isBraveBrowser()
-        const useLocalForDesktop = !useNoneForIosSafari && !useNoneForBrave && isDesktopDevice()
-        const targetPersistence = useLocalForDesktop
-            ? firebase.auth.Auth.Persistence.LOCAL
-            : firebase.auth.Auth.Persistence.NONE
+    const iOSDevice = isIosDevice()
+    const braveBrowser = hasBraveApi()
 
-        try {
-            await auth.setPersistence(targetPersistence)
-        } catch {
-            await setNonePersistence(auth)
+    try {
+        if (iOSDevice) {
+            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+            return
         }
+
+        if (braveBrowser) {
+            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+            return
+        }
+
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     } catch {
         await setNonePersistence(auth)
     }
