@@ -10,6 +10,52 @@ const AppLifecycle = {
     pendingShareEntryId: null,
     sharedSyncEnabled: true,
     reminderTimers: new Map(),
+    normalizeDateValue(value) {
+        if (!value) return 0
+        if (typeof value.toMillis === "function") {
+            const timestamp = value.toMillis()
+            return Number.isFinite(timestamp) ? timestamp : 0
+        }
+        if (typeof value.toDate === "function") {
+            const timestamp = value.toDate().getTime()
+            return Number.isFinite(timestamp) ? timestamp : 0
+        }
+        if (typeof value === "number") return Number.isFinite(value) ? value : 0
+        const parsed = Date.parse(String(value))
+        return Number.isFinite(parsed) ? parsed : 0
+    },
+    normalizeOrderValue(value) {
+        if (typeof value === "number") return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY
+        if (typeof value === "string" && value.trim() !== "") {
+            const parsed = Number(value)
+            return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY
+        }
+        return Number.POSITIVE_INFINITY
+    },
+    sortFolders(folders) {
+        return [...folders].sort((firstFolder, secondFolder) => {
+            const firstCreatedAt = this.normalizeDateValue(firstFolder?.createdAt)
+            const secondCreatedAt = this.normalizeDateValue(secondFolder?.createdAt)
+            if (firstCreatedAt !== secondCreatedAt) return firstCreatedAt - secondCreatedAt
+            const firstTitle = String(firstFolder?.name || "")
+            const secondTitle = String(secondFolder?.name || "")
+            return firstTitle.localeCompare(secondTitle, "ru")
+        })
+    },
+    sortOwnedNotes(notes) {
+        return [...notes].sort((firstNote, secondNote) => {
+            const firstOrder = this.normalizeOrderValue(firstNote?.order)
+            const secondOrder = this.normalizeOrderValue(secondNote?.order)
+            if (firstOrder !== secondOrder) return firstOrder - secondOrder
+            const firstCreatedAt = this.normalizeDateValue(firstNote?.createdAt)
+            const secondCreatedAt = this.normalizeDateValue(secondNote?.createdAt)
+            if (firstCreatedAt !== secondCreatedAt) return firstCreatedAt - secondCreatedAt
+            const firstUpdatedAt = this.normalizeDateValue(firstNote?.updatedAt)
+            const secondUpdatedAt = this.normalizeDateValue(secondNote?.updatedAt)
+            if (firstUpdatedAt !== secondUpdatedAt) return secondUpdatedAt - firstUpdatedAt
+            return String(firstNote?.id || "").localeCompare(String(secondNote?.id || ""), "ru")
+        })
+    },
     scheduleReminders(notes) {
         this.reminderTimers.forEach(timer => clearTimeout(timer))
         this.reminderTimers.clear()
@@ -142,9 +188,8 @@ const AppLifecycle = {
         }
 
         const folderUnsub = userFoldersCollection
-            .orderBy("createdAt", "asc")
             .onSnapshot(snap => {
-                const folders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                const folders = this.sortFolders(snap.docs.map(d => ({ id: d.id, ...d.data() })))
                 StateStore.update("folders", folders)
                 UI.renderFolders()
                 if (StateStore.read().view === "folders") {
@@ -156,9 +201,8 @@ const AppLifecycle = {
             })
 
         const notesUnsub = userNotesCollection
-            .orderBy("order", "asc")
             .onSnapshot(snap => {
-                this.ownedNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                this.ownedNotes = this.sortOwnedNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
                 this.updateNotesState()
             }, error => {
                 UI.showToast(UI.getText("sync_error", "Sync error"))
@@ -218,8 +262,10 @@ const AppLifecycle = {
         }
         NotesStorage.syncFavoritesStorage(notes)
         this.scheduleReminders(notes)
-        if (StateStore.read().isEditing || StateStore.read().isTyping) return
-        this.syncOpenNote(notes)
+        const state = StateStore.read()
+        if (!state.isEditing && !state.isTyping) {
+            this.syncOpenNote(notes)
+        }
         filterAndRender(document.getElementById("search-input")?.value || "")
     },
     syncOpenNote(notes) {
