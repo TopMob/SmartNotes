@@ -49,7 +49,7 @@ const UI = {
 
     setLang(lang) {
         const applied = StateActions.setLanguage(lang)
-        localStorage.setItem("app-lang", applied)
+        SafeStorage.local.set("app-lang", applied)
         this.applyLangToDom()
         this.updateViewTitle()
         this.updatePrimaryActionLabel()

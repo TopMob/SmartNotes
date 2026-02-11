@@ -135,8 +135,13 @@ async function startCore() {
     core.Auth = authManager
     window.Auth = core.Auth
     resolveAuthReady(authManager)
-    authManager.init().catch(() => null)
+    authManager.init().catch(error => {
+        console.error("[Core] Auth manager init failed", error)
+    })
 }
 
 bootstrapCore({ ThemeManager, Auth: core.Auth })
-startCore().catch(() => null)
+startCore().catch(error => {
+    console.error("[Core] Startup failed", error)
+    showRuntimeErrorMessage("Не удалось запустить приложение. Перезагрузите страницу")
+})

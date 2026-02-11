@@ -68,7 +68,7 @@ const AppLifecycle = {
         this.initialized = true
         window.SmartNotesEditor?.init()
         UI.init()
-        UI.setLang(localStorage.getItem("app-lang") || "ru")
+        UI.setLang(SafeStorage.local.get("app-lang") || "ru")
     },
 
     clearSubscriptions() {
@@ -130,6 +130,49 @@ const AppLifecycle = {
         this.sharedSyncEnabled = true
         this.clearSubscriptions()
     },
+    applyFoldersSnapshot(snapshot) {
+        const folders = this.sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
+        StateStore.update("folders", folders)
+        UI.renderFolders()
+        if (StateStore.read().view === "folders") {
+            filterAndRender(document.getElementById("search-input")?.value || "")
+        }
+    },
+    applyNotesSnapshot(snapshot) {
+        this.ownedNotes = this.sortOwnedNotes(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
+        this.updateNotesState()
+    },
+    async fetchFoldersOnce(collectionReference) {
+        try {
+            const snapshot = await collectionReference.get()
+            this.applyFoldersSnapshot(snapshot)
+            return true
+        } catch (error) {
+            console.warn("Folders single fetch failed", error)
+            return false
+        }
+    },
+    async fetchNotesOnce(collectionReference) {
+        try {
+            const snapshot = await collectionReference.get()
+            this.applyNotesSnapshot(snapshot)
+            return true
+        } catch (error) {
+            console.warn("Notes single fetch failed", error)
+            return false
+        }
+    },
+    subscribeCollectionWithFallback(options) {
+        const { collectionReference, onSnapshotData, onSnapshotError, onFallbackError } = options
+        return collectionReference.onSnapshot(onSnapshotData, async error => {
+            const fallbackSucceeded = await onSnapshotError(error)
+            if (fallbackSucceeded) {
+                console.warn("Snapshot subscription recovered using single fetch fallback", error)
+                return
+            }
+            onFallbackError(error)
+        })
+    },
 
     async startUserSession(user) {
         if (!db || !user) return
@@ -174,27 +217,35 @@ const AppLifecycle = {
             return
         }
 
-        const folderUnsub = userFoldersCollection
-            .onSnapshot(snap => {
-                const folders = this.sortFolders(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-                StateStore.update("folders", folders)
-                UI.renderFolders()
-                if (StateStore.read().view === "folders") {
-                    filterAndRender(document.getElementById("search-input")?.value || "")
-                }
-            }, error => {
+        const folderUnsub = this.subscribeCollectionWithFallback({
+            collectionReference: userFoldersCollection,
+            onSnapshotData: snapshot => {
+                this.applyFoldersSnapshot(snapshot)
+            },
+            onSnapshotError: async error => {
+                console.warn("Folders snapshot error", error)
+                return this.fetchFoldersOnce(userFoldersCollection)
+            },
+            onFallbackError: error => {
                 UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Folders sync error", error)
-            })
+            }
+        })
 
-        const notesUnsub = userNotesCollection
-            .onSnapshot(snap => {
-                this.ownedNotes = this.sortOwnedNotes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-                this.updateNotesState()
-            }, error => {
+        const notesUnsub = this.subscribeCollectionWithFallback({
+            collectionReference: userNotesCollection,
+            onSnapshotData: snapshot => {
+                this.applyNotesSnapshot(snapshot)
+            },
+            onSnapshotError: async error => {
+                console.warn("Notes snapshot error", error)
+                return this.fetchNotesOnce(userNotesCollection)
+            },
+            onFallbackError: error => {
                 UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Notes sync error", error)
-            })
+            }
+        })
 
         this.unsubscribers = [folderUnsub, notesUnsub]
 
