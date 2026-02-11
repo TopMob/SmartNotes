@@ -7,6 +7,8 @@ const UI = {
     draggedFolderId: null,
     visibleNotes: [],
     settingsPage: null,
+    deferredInstallPromptEvent: null,
+    installCapabilityKnown: false,
 
     init() {
         this.els = {
@@ -37,6 +39,7 @@ const UI = {
         this.applyAppearanceSettings()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
+        this.initializeInstallFlow()
     },
 
     getText(key, fallback = "") {
@@ -50,6 +53,7 @@ const UI = {
         this.applyLangToDom()
         this.updateViewTitle()
         this.updatePrimaryActionLabel()
+        this.initializeInstallFlow()
         ThemeManager.renderPicker()
         this.syncSettingsUI()
         this.renderEditorSettings()

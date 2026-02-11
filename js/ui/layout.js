@@ -200,6 +200,69 @@ Object.assign(UI, {
         menu.classList.toggle("active", typeof force === "boolean" ? force : !menu.classList.contains("active"))
     },
 
+
+    isStandaloneAppMode() {
+        const displayModeStandalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches
+        return !!(displayModeStandalone || window.navigator.standalone)
+    },
+
+    isIosBrowserInstallAvailable() {
+        return document.body.classList.contains("platform-ios") && !this.isStandaloneAppMode()
+    },
+
+    updateInstallEntryVisibility() {
+        const installEntries = document.querySelectorAll('[data-install-entry]')
+        const canUseDeferredPrompt = !!this.deferredInstallPromptEvent
+        const canUseIosInstall = this.isIosBrowserInstallAvailable()
+        const shouldShow = !this.isStandaloneAppMode() && (canUseDeferredPrompt || canUseIosInstall)
+        installEntries.forEach(entry => {
+            entry.classList.toggle("hidden", !shouldShow)
+        })
+    },
+
+    initializeInstallFlow() {
+        if (this.installCapabilityKnown) {
+            this.updateInstallEntryVisibility()
+            return
+        }
+        this.installCapabilityKnown = true
+        window.addEventListener("beforeinstallprompt", event => {
+            event.preventDefault()
+            this.deferredInstallPromptEvent = event
+            this.updateInstallEntryVisibility()
+        })
+        window.addEventListener("appinstalled", () => {
+            this.deferredInstallPromptEvent = null
+            this.updateInstallEntryVisibility()
+            this.showToast(this.getText("install_success", "App installed"))
+        })
+        this.updateInstallEntryVisibility()
+    },
+
+    async installApplication() {
+        if (this.isStandaloneAppMode()) {
+            this.showToast(this.getText("install_already", "App is already installed"))
+            return
+        }
+        if (this.deferredInstallPromptEvent) {
+            const promptEvent = this.deferredInstallPromptEvent
+            this.deferredInstallPromptEvent = null
+            promptEvent.prompt()
+            try {
+                await promptEvent.userChoice
+            } catch {
+                this.showToast(this.getText("install_unavailable", "Installation is unavailable on this device"))
+            }
+            this.updateInstallEntryVisibility()
+            return
+        }
+        if (this.isIosBrowserInstallAvailable()) {
+            this.openModal("install-modal")
+            return
+        }
+        this.showToast(this.getText("install_unavailable", "Installation is unavailable on this device"))
+    },
+
     updateActiveFolderMenu() {
         const wrapper = this.els.activeFolderMenuWrapper
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")

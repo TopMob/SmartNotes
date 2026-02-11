@@ -371,3 +371,20 @@
 #note-title.title-has-value::placeholder {
     color: transparent;
 }
+
+
+body.platform-ios .editor-overlay.active {
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+}
+
+body.platform-ios .editor-container {
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+    border-top: 1px solid var(--border);
+}
+
+@supports (height: 100svh) {
+    body.platform-ios .editor-container {
+        max-height: calc(100svh - var(--safe-top) - var(--safe-bottom));
+    }
+}
