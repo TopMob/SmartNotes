@@ -10,6 +10,12 @@ const NoteIO = {
             pageDrawings.push(safe.drawing)
         }
         const now = Utils.serverTimestamp()
+        const normalizedCreatedAt = safe.createdAt || now
+        const normalizedUpdatedAt = safe.updatedAt || now
+        const createdAtTimestamp = typeof normalizedCreatedAt?.toMillis === "function"
+            ? normalizedCreatedAt.toMillis()
+            : Date.parse(normalizedCreatedAt || "")
+        const fallbackOrder = Number.isFinite(createdAtTimestamp) ? createdAtTimestamp : 0
         const ownerUid = safe.ownerUid
             ? String(safe.ownerUid)
             : (safe.ownerId ? String(safe.ownerId) : (StateStore.read().user?.uid || null))
@@ -57,9 +63,9 @@ const NoteIO = {
             reminderAt: safe.reminderAt || safe.futureAt || null,
             trashedAt: safe.trashedAt || null,
             contentType: safe.contentType ? String(safe.contentType) : "text",
-            order: typeof safe.order === "number" ? safe.order : Date.now(),
-            createdAt: safe.createdAt || now,
-            updatedAt: safe.updatedAt || now,
+            order: typeof safe.order === "number" ? safe.order : fallbackOrder,
+            createdAt: normalizedCreatedAt,
+            updatedAt: normalizedUpdatedAt,
             ownerUid
         }
     },
