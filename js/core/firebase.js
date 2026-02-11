@@ -10,6 +10,34 @@ export const firebaseConfig = {
 
 let firebaseSingleton = null
 
+function getUserAgentDataBrands() {
+    const userAgentData = navigator.userAgentData
+    if (!userAgentData || !Array.isArray(userAgentData.brands)) return ""
+    return userAgentData.brands.map(brandEntry => String(brandEntry.brand || "")).join(" ").toLowerCase()
+}
+
+function detectBraveBrowser() {
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    if (userAgent.includes("brave")) return true
+    const brands = getUserAgentDataBrands()
+    return brands.includes("brave")
+}
+
+function resolveFirestoreSettings() {
+    const baseSettings = {
+        ignoreUndefinedProperties: true,
+        experimentalAutoDetectLongPolling: true,
+        useFetchStreams: false
+    }
+
+    if (!detectBraveBrowser()) return baseSettings
+
+    return {
+        ...baseSettings,
+        experimentalForceLongPolling: true
+    }
+}
+
 export function initFirebase() {
     if (firebaseSingleton) return firebaseSingleton
 
@@ -21,7 +49,7 @@ export function initFirebase() {
     const auth = firebase.auth(app)
     const db = firebase.firestore(app)
 
-    db.settings({ ignoreUndefinedProperties: true })
+    db.settings(resolveFirestoreSettings())
     db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 
     firebaseSingleton = { app, auth, db }
