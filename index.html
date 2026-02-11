@@ -714,7 +714,7 @@
         </div>
     </div>
 
-    <script> if ("serviceWorker" in navigator) {navigator.serviceWorker.register("./sw.js")}</script>
+    <script>if ("serviceWorker" in navigator) {navigator.serviceWorker.register("./sw.js").catch(() => null)}</script>
 
     
 </body>

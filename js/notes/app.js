@@ -10,6 +10,8 @@ const AppLifecycle = {
     pendingShareEntryId: null,
     sharedSyncEnabled: true,
     reminderTimers: new Map(),
+    networkListenersBound: false,
+    networkRetryTimer: null,
     normalizeDateValue(value) {
         if (!value) return 0
         if (typeof value.toDate === "function") {
@@ -26,7 +28,8 @@ const AppLifecycle = {
             if (firstCreatedAt !== secondCreatedAt) return firstCreatedAt - secondCreatedAt
             const firstTitle = String(firstFolder?.name || "")
             const secondTitle = String(secondFolder?.name || "")
-            return firstTitle.localeCompare(secondTitle, "ru")
+            const languageCode = StateStore.read().config.lang || "ru"
+            return firstTitle.localeCompare(secondTitle, languageCode)
         })
     },
     sortOwnedNotes(notes) {
@@ -40,7 +43,8 @@ const AppLifecycle = {
             const firstUpdatedAt = this.normalizeDateValue(firstNote?.updatedAt)
             const secondUpdatedAt = this.normalizeDateValue(secondNote?.updatedAt)
             if (firstUpdatedAt !== secondUpdatedAt) return secondUpdatedAt - firstUpdatedAt
-            return String(firstNote?.id || "").localeCompare(String(secondNote?.id || ""), "ru")
+            const languageCode = StateStore.read().config.lang || "ru"
+            return String(firstNote?.id || "").localeCompare(String(secondNote?.id || ""), languageCode)
         })
     },
     scheduleReminders(notes) {
@@ -53,13 +57,15 @@ const AppLifecycle = {
             if (delay <= 0 || delay > 2147483647) return
             const timer = setTimeout(() => {
                 UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
-                if (window.Notification && Notification.permission === "granted") {
+                const notificationSupported = typeof window !== "undefined" && "Notification" in window
+                if (notificationSupported && Notification.permission === "granted") {
                     new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("reminder_note", "Reminder") })
                 }
             }, delay)
             this.reminderTimers.set(note.id, timer)
         })
-        if (window.Notification && Notification.permission === "default") Notification.requestPermission().catch(() => null)
+        const notificationSupported = typeof window !== "undefined" && "Notification" in window
+        if (notificationSupported && Notification.permission === "default") Notification.requestPermission().catch(() => null)
     },
 
 
@@ -69,6 +75,11 @@ const AppLifecycle = {
         window.SmartNotesEditor?.init()
         UI.init()
         UI.setLang(safeStorage.get("app-lang") || "ru")
+        if (!this.networkListenersBound && typeof window !== "undefined") {
+            this.networkListenersBound = true
+            window.addEventListener("offline", () => this.handleOfflineMode())
+            window.addEventListener("online", () => this.handleOnlineMode())
+        }
     },
 
     clearSubscriptions() {
@@ -164,17 +175,48 @@ const AppLifecycle = {
     },
     subscribeCollectionWithFallback(options) {
         const { collectionReference, onSnapshotData, onSnapshotError, onFallbackError } = options
-        return collectionReference.onSnapshot(onSnapshotData, async error => {
-            const fallbackSucceeded = await onSnapshotError(error)
-            if (fallbackSucceeded) {
-                console.warn("Snapshot subscription recovered using single fetch fallback", error)
-                return
-            }
-            onFallbackError(error)
-        })
+        let activeUnsubscribe = () => {}
+        let stopped = false
+        const resubscribe = () => {
+            if (stopped) return
+            activeUnsubscribe = collectionReference.onSnapshot(onSnapshotData, async error => {
+                const fallbackSucceeded = await onSnapshotError(error)
+                if (!fallbackSucceeded) {
+                    onFallbackError(error)
+                }
+                try {
+                    activeUnsubscribe()
+                } catch {}
+                if (stopped) return
+                setTimeout(() => {
+                    resubscribe()
+                }, 2000)
+            })
+        }
+        resubscribe()
+        return () => {
+            stopped = true
+            try {
+                activeUnsubscribe()
+            } catch {}
+        }
     },
 
-    async startUserSession(user) {
+    handleOfflineMode() {
+        UI.showToast(UI.getText("offline_mode", "Offline mode"))
+    },
+    handleOnlineMode() {
+        UI.showToast(UI.getText("syncing", "Syncing"))
+        const currentUser = StateStore.read().user
+        if (!currentUser) return
+        if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer)
+        this.networkRetryTimer = setTimeout(() => {
+            this.startUserSession(currentUser, { forceResubscribe: true }).catch(() => {
+                UI.showToast(UI.getText("sync_error", "Sync error"))
+            })
+        }, 300)
+    },
+    async startUserSession(user, options = {}) {
         if (!db || !user) return
 
         await this.initializeOnce()
@@ -182,7 +224,7 @@ const AppLifecycle = {
             CollaborationService.captureShareToken()
         }
 
-        if (this.activeUid === user.uid) return
+        if (this.activeUid === user.uid && !options.forceResubscribe) return
         this.stopUserSession()
         this.activeUid = user.uid
 

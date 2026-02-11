@@ -17,7 +17,7 @@ export function createAuthManager({ auth }) {
         },
         _toast(text) {
             if (typeof UI !== "undefined" && UI.showToast) UI.showToast(text)
-            else alert(text)
+            else console.error(text)
         },
         _provider() {
             const provider = new firebase.auth.GoogleAuthProvider()
@@ -159,6 +159,7 @@ export function createAuthManager({ auth }) {
             return state.localAuthManager
         },
         async loginWithEmail() {
+            await setupAuthPersistence(auth)
             await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {

@@ -1,19 +1,12 @@
 export function isSafari() {
     if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    const userAgent = typeof navigator === "undefined" ? "" : String(navigator.userAgent || "").toLowerCase()
     return /safari/.test(userAgent) && !/chrome|chromium|crios|fxios|edg|edgios|opr\//.test(userAgent)
-}
-
-function isIosDevice() {
-    if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
-    return /iphone|ipad|ipod/.test(userAgent)
 }
 
 function hasBraveApi() {
     if (typeof navigator === "undefined") return false
-    const braveApi = navigator.brave
-    return !!braveApi && typeof braveApi.isBrave === "function"
+    return !!navigator.brave && typeof navigator.brave.isBrave === "function"
 }
 
 export async function isBraveBrowser() {
@@ -25,31 +18,24 @@ export async function isBraveBrowser() {
     }
 }
 
-async function setNonePersistence(auth) {
-    try {
-        await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-    } catch {}
-}
-
 export async function setupAuthPersistence(auth) {
     if (!auth || typeof firebase === "undefined") return
-
-    const iOSDevice = isIosDevice()
-    const braveBrowser = hasBraveApi()
-
-    try {
-        if (iOSDevice) {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
-            return
+    if (setupAuthPersistence._promise) return setupAuthPersistence._promise
+    setupAuthPersistence._promise = (async () => {
+        const userAgent = typeof navigator === "undefined" ? "" : String(navigator.userAgent || "").toLowerCase()
+        const isIos = /iphone|ipad|ipod/.test(userAgent)
+        const isBrave = hasBraveApi()
+        try {
+            if (isIos || isBrave) {
+                await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+                return
+            }
+            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        } catch {
+            try {
+                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+            } catch {}
         }
-
-        if (braveBrowser) {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
-            return
-        }
-
-        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    } catch {
-        await setNonePersistence(auth)
-    }
+    })()
+    return setupAuthPersistence._promise
 }

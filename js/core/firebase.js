@@ -66,7 +66,14 @@ export function initFirebase() {
     const db = firebase.firestore(app)
 
     db.settings(resolveFirestoreSettings())
-    db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
+    try {
+        db.enablePersistence({ synchronizeTabs: true }).catch((error) => {
+            const code = String(error?.code || "")
+            if (code === "failed-precondition" || code === "unimplemented") return null
+            return null
+        })
+    } catch {}
+
 
     firebaseSingleton = { app, auth, db }
     return firebaseSingleton
