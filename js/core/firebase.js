@@ -17,6 +17,8 @@ function getUserAgentDataBrands() {
 }
 
 function detectBraveBrowser() {
+    if (typeof navigator === "undefined") return false
+    if (typeof navigator.brave !== "undefined") return true
     const userAgent = String(navigator.userAgent || "").toLowerCase()
     if (userAgent.includes("brave")) return true
     const brands = getUserAgentDataBrands()
@@ -26,15 +28,19 @@ function detectBraveBrowser() {
 function resolveFirestoreSettings() {
     const baseSettings = {
         ignoreUndefinedProperties: true,
-        experimentalAutoDetectLongPolling: true,
         useFetchStreams: false
     }
 
-    if (!detectBraveBrowser()) return baseSettings
+    if (detectBraveBrowser()) {
+        return {
+            ...baseSettings,
+            experimentalForceLongPolling: true
+        }
+    }
 
     return {
         ...baseSettings,
-        experimentalForceLongPolling: true
+        experimentalAutoDetectLongPolling: true
     }
 }
 
