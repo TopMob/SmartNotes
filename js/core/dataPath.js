@@ -18,11 +18,10 @@
         const userIdentifier = resolveUserIdentifier(user)
         const providerId = Array.isArray(user?.providerData) && user.providerData.length
             ? String(user.providerData[0]?.providerId || "")
-            : (user?.isAnonymous ? "anonymous" : "")
+            : ""
         return {
             uid: userIdentifier,
             email: user?.email ? String(user.email).toLowerCase() : null,
-            isAnonymous: !!user?.isAnonymous,
             providerId,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()

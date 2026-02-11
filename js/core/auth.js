@@ -120,9 +120,6 @@ export function createAuthManager({ auth }) {
             })
             return state.localAuthManager
         },
-        async loginGuest() {
-            await this._ensureLocalAuthManager().loginGuest()
-        },
         async loginWithEmail() {
             await this._ensureLocalAuthManager().loginWithEmail()
         },
