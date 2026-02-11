@@ -261,9 +261,6 @@ Object.assign(UI, {
             case "login":
                 Auth.login()
                 break
-            case "login-guest":
-                Auth.loginGuest()
-                break
             case "login-email":
                 Auth.loginWithEmail()
                 break

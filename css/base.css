@@ -37,6 +37,7 @@
     --z-voice: 5000;
     --z-toast: 10000;
 
+    --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 20px);
 
     --space-unit: 12px;
@@ -71,6 +72,17 @@ body {
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     font-size: calc(var(--font-base) * var(--type-scale));
+}
+
+
+body.platform-ios {
+    min-height: -webkit-fill-available;
+    height: -webkit-fill-available;
+}
+
+body.platform-android {
+    --safe-top: 0px;
+    --safe-bottom: 16px;
 }
 
 @media (prefers-reduced-motion: reduce) {

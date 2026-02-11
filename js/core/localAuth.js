@@ -242,17 +242,6 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         setMode("signin")
     }
 
-    const loginGuest = async () => {
-        if (!auth) return
-        setLoginBusy(true)
-        try {
-            await auth.signInAnonymously()
-        } catch (error) {
-            handleAuthError(error)
-        }
-        setLoginBusy(false)
-    }
-
     const loginWithEmail = async () => {
         bindUi()
         setMode("signin")
@@ -261,7 +250,6 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
 
     return {
         bindUi,
-        loginGuest,
         loginWithEmail
     }
 }
