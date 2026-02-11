@@ -83,13 +83,13 @@ async function scheduleReminder(noteId) {
     const value = input ? input.value : ""
     const date = new Date(value)
     if (!value || Number.isNaN(date.getTime())) {
-        UI.showToast(UI.getText("future_required", "Pick date and time"))
+        UI.showToast(UI.getText("reminder_required", "Pick date and time"))
         return
     }
     const ref = getNoteReference(note, user)
     if (!ref) return
     await ref.update({ reminderAt: date.toISOString(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    UI.showToast(UI.getText("future_saved", "Reminder saved"))
+    UI.showToast(UI.getText("reminder_saved", "Reminder saved"))
     UI.closeModal("note-actions-modal")
 }
 
@@ -100,7 +100,7 @@ async function clearReminder(noteId) {
     const ref = getNoteReference(note, user)
     if (!ref) return
     await ref.update({ reminderAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    UI.showToast(UI.getText("future_cleared", "Reminder cleared"))
+    UI.showToast(UI.getText("reminder_cleared", "Reminder cleared"))
     UI.closeModal("note-actions-modal")
 }
 

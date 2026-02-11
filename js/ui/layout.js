@@ -81,6 +81,7 @@ Object.assign(UI, {
         this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
             const trimmed = String(name || "").trim()
             if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (trimmed.length > 50) return this.showToast(this.getText("folder_name_too_long", "Folder name must be up to 50 characters"))
             if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
@@ -104,6 +105,7 @@ Object.assign(UI, {
         this.showPrompt(this.getText("rename_folder", "Rename folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
             const trimmed = String(name || "").trim()
             if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (trimmed.length > 50) return this.showToast(this.getText("folder_name_too_long", "Folder name must be up to 50 characters"))
             if (trimmed.toLowerCase() === String(folder.name || "").toLowerCase()) return
             if (StateStore.read().folders.some(f => f.id !== id && f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
@@ -132,7 +134,7 @@ Object.assign(UI, {
             notes: dict.view_notes || "Notes",
             favorites: dict.view_favorites || "Favorites",
             archive: dict.view_archive || "Archive",
-            reminders: dict.view_future || "Reminders",
+            reminders: dict.view_reminders || "Reminders",
             trash: dict.trash || "Trash",
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",

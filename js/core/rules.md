@@ -81,6 +81,10 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      match /preferences/{preferenceId} {
+        allow read, write: if isOwner(userId);
+      }
+
       match /sharedNotes/{entryId} {
         allow read, create, delete: if isOwner(userId);
         allow update: if false;

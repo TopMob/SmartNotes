@@ -19,9 +19,9 @@ const AppLifecycle = {
             const delay = reminderAt - Date.now()
             if (delay <= 0 || delay > 2147483647) return
             const timer = setTimeout(() => {
-                UI.showToast(`${UI.getText("future_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
+                UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
                 if (window.Notification && Notification.permission === "granted") {
-                    new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("future_note", "Reminder") })
+                    new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("reminder_note", "Reminder") })
                 }
             }, delay)
             this.reminderTimers.set(note.id, timer)

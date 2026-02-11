@@ -123,7 +123,7 @@ Object.assign(UI, {
         const reminderValue = reminderStamp ? new Date(reminderStamp.getTime() - reminderStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
         const reminderClearButton = reminderValue
             ? `<button type="button" class="btn-secondary" data-action="note-reminder-clear" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.future_clear || "Clear"}
+                    ${dict.reminder_clear || "Clear"}
                 </button>`
             : ""
         root.innerHTML = `
@@ -148,9 +148,9 @@ Object.assign(UI, {
                 </button>
             </div>
             <div class="lock-center-folder" style="margin-top:12px;">
-                <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.future_note || "Reminder"}">
+                <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.reminder_note || "Reminder"}">
                 <button type="button" class="btn-primary" data-action="note-reminder-set" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.future_note || "Reminder"}
+                    ${dict.reminder_note || "Reminder"}
                 </button>
                 ${reminderClearButton}
             </div>
