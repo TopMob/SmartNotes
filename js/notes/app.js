@@ -102,6 +102,14 @@ const AppLifecycle = {
         if (!db || !user) return
 
         await this.initializeOnce()
+        if (typeof ThemeManager !== "undefined") {
+            try {
+                const accountThemeSettings = await ThemeManager.loadAccountSettings(user)
+                if (accountThemeSettings) ThemeManager.applySettings(accountThemeSettings, true)
+            } catch {
+                UI.showToast(UI.getText("sync_error", "Sync error"))
+            }
+        }
         if (typeof CollaborationService !== "undefined") {
             CollaborationService.captureShareToken()
         }
@@ -188,6 +196,11 @@ const AppLifecycle = {
     },
     updateNotesState() {
         let notes = [...this.ownedNotes, ...this.sharedNotes.values()]
+        notes = notes.map(note => {
+            const normalizedNote = NoteIO.normalizeNote(note)
+            if (note && note.access) normalizedNote.access = note.access
+            return normalizedNote
+        })
         notes = NotesStorage.applyStoredFavorites(notes)
         StateStore.update("notes", notes)
         NotesStorage.syncFavoritesStorage(notes)

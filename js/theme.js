@@ -50,7 +50,7 @@ export const ThemeManager = {
         this.applySettings(this.getSavedSettings(), false)
     },
     getDefaultSettings() {
-        return { preset: "oled", mainBackgroundImage: "", sidebarBackgroundImage: "" }
+        return { preset: "oled", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78 }
     },
     getSavedSettings() {
         try {
@@ -123,6 +123,31 @@ export const ThemeManager = {
     saveSettings(settings) {
         localStorage.setItem(this.storageKey, JSON.stringify(settings))
     },
+    getThemeSettingsReference(user) {
+        const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
+        return rootReference ? rootReference.collection("preferences").doc("theme") : null
+    },
+    async loadAccountSettings(user) {
+        const reference = this.getThemeSettingsReference(user)
+        if (!reference) return null
+        const snapshot = await reference.get()
+        if (!snapshot.exists) return null
+        const data = snapshot.data() || {}
+        const settings = data.settings && typeof data.settings === "object" ? data.settings : null
+        const customPresets = Array.isArray(data.customPresets) ? data.customPresets : null
+        if (customPresets) this.saveCustomPresets(customPresets)
+        if (settings) this.saveSettings(settings)
+        return settings
+    },
+    async saveAccountSettings(user, settings) {
+        const reference = this.getThemeSettingsReference(user)
+        if (!reference) return
+        await reference.set({
+            settings,
+            customPresets: this.getCustomPresets(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+    },
     resolvePreset(key) {
         const customPreset = this.getCustomPresetByKey(key)
         if (customPreset) return createPreset(customPreset.bg, customPreset.t, customPreset.p)
@@ -131,11 +156,12 @@ export const ThemeManager = {
     applySettings(settings, persist) {
         const presetKey = settings?.preset || "oled"
         const base = this.resolvePreset(presetKey)
-        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t }
+        const normalizedOpacity = Math.min(1, Math.max(0.4, Number(settings?.uiOpacity ?? 0.78)))
+        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(settings?.mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(settings?.sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
         if (persist) {
-            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundImage: settings?.mainBackgroundImage || "", sidebarBackgroundImage: settings?.sidebarBackgroundImage || "" })
+            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundImage: settings?.mainBackgroundImage || "", sidebarBackgroundImage: settings?.sidebarBackgroundImage || "", uiOpacity: applied.uiOpacity })
         }
     },
     applyToRoot(theme) {
@@ -147,7 +173,8 @@ export const ThemeManager = {
         root.style.setProperty("--bg", theme.bg)
         root.style.setProperty("--surface", theme.surface)
         root.style.setProperty("--surface-light", theme.surface)
-        root.style.setProperty("--surface-transparent", theme.surfaceTransparent)
+        const surfaceTransparency = `color-mix(in srgb, ${theme.bg} ${Math.round((theme.uiOpacity || 0.78) * 100)}%, transparent)`
+        root.style.setProperty("--surface-transparent", surfaceTransparency)
         root.style.setProperty("--text", theme.t)
         root.style.setProperty("--text-dim", this.fadeColor(theme.t, 0.72))
         root.style.setProperty("--border", theme.border)
