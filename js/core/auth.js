@@ -1,4 +1,4 @@
-import { isSafari } from "./authSafariFix.js"
+import { isSafari, setupAuthPersistence } from "./authSafariFix.js"
 import { createLocalAuthManager } from "./localAuth.js"
 
 export function createAuthManager({ auth }) {
@@ -96,6 +96,8 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(true)
 
+            await setupAuthPersistence(auth)
+
             try {
                 await this._signInWithPopupPreferred()
             } catch (error) {
@@ -158,6 +160,7 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             try {
                 await auth.signOut()
+                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(() => {})
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
@@ -246,6 +249,8 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
+
+            await setupAuthPersistence(auth)
 
             try {
                 await auth.getRedirectResult()

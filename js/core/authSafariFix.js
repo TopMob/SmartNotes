@@ -1,27 +1,59 @@
 export function isSafari() {
     if (typeof navigator === "undefined") return false
-    const ua = (navigator.userAgent || "").toLowerCase()
-    return /safari/.test(ua) && !/chrome|chromium|crios|fxios|edg|edgios|opr\//.test(ua)
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    return /safari/.test(userAgent) && !/chrome|chromium|crios|fxios|edg|edgios|opr\//.test(userAgent)
+}
+
+function isIosDevice() {
+    if (typeof navigator === "undefined") return false
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    return /iphone|ipad|ipod/.test(userAgent)
+}
+
+function isDesktopDevice() {
+    if (typeof navigator === "undefined") return false
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    const isMobileUa = /android|iphone|ipad|ipod|mobile/.test(userAgent)
+    return !isMobileUa
+}
+
+async function isBraveBrowser() {
+    if (typeof navigator === "undefined") return false
+    const braveApi = navigator.brave
+    if (!braveApi) return false
+    if (typeof braveApi.isBrave === "function") {
+        try {
+            return !!(await braveApi.isBrave())
+        } catch {
+            return true
+        }
+    }
+    return true
+}
+
+async function setNonePersistence(auth) {
+    try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+    } catch {}
 }
 
 export async function setupAuthPersistence(auth) {
     if (!auth || typeof firebase === "undefined") return
-    if (setupAuthPersistence._promise) return setupAuthPersistence._promise
-    setupAuthPersistence._promise = (async () => {
-        if (isSafari()) {
-            try {
-                await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
-                return
-            } catch {
-                try {
-                    await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-                } catch {}
-                return
-            }
-        }
+
+    try {
+        const shouldUseNoneForSafariIos = isSafari() && isIosDevice()
+        const shouldUseNoneForBrave = await isBraveBrowser()
+        const shouldUseLocalDesktop = !shouldUseNoneForSafariIos && !shouldUseNoneForBrave && isDesktopDevice()
+        const targetPersistence = shouldUseLocalDesktop
+            ? firebase.auth.Auth.Persistence.LOCAL
+            : firebase.auth.Auth.Persistence.NONE
+
         try {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        } catch {}
-    })()
-    return setupAuthPersistence._promise
+            await auth.setPersistence(targetPersistence)
+        } catch {
+            await setNonePersistence(auth)
+        }
+    } catch {
+        await setNonePersistence(auth)
+    }
 }
