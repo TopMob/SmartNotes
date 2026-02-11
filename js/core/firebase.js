@@ -50,9 +50,7 @@ export function initFirebase() {
     const db = firebase.firestore(app)
 
     db.settings(resolveFirestoreSettings())
-    db.enablePersistence({ synchronizeTabs: true }).catch(error => {
-        console.warn("[Firebase] Persistence is unavailable, continuing without offline cache", error)
-    })
+    db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
 
     firebaseSingleton = { app, auth, db }
     return firebaseSingleton

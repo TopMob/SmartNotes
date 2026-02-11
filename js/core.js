@@ -44,21 +44,12 @@ const firebaseRuntimeSources = [
     ]
 ]
 
-function showRuntimeErrorMessage(text) {
-    if (typeof UI !== "undefined" && typeof UI.showToast === "function") {
-        UI.showToast(text)
-        return
-    }
-    alert(text)
-}
-
 function waitForFirebaseAvailability(timeoutMilliseconds) {
     return new Promise(resolve => {
         if (typeof firebase !== "undefined") {
             resolve(true)
             return
         }
-
         const startedAt = Date.now()
         const poll = () => {
             if (typeof firebase !== "undefined") {
@@ -71,7 +62,6 @@ function waitForFirebaseAvailability(timeoutMilliseconds) {
             }
             setTimeout(poll, 50)
         }
-
         poll()
     })
 }
@@ -110,41 +100,27 @@ function loadExternalScript(url, timeoutMilliseconds) {
 async function ensureFirebaseRuntime() {
     if (typeof firebase !== "undefined") return true
 
-    const initialWaitSucceeded = await waitForFirebaseAvailability(5000)
+    const initialWaitSucceeded = await waitForFirebaseAvailability(2500)
     if (initialWaitSucceeded) return true
 
-    console.warn("[Core] Firebase SDK was not detected after initial wait, trying fallback sources")
-
     for (const sourceSet of firebaseRuntimeSources) {
-        let sourceSetLoaded = true
-        for (const sourceUrl of sourceSet) {
-            try {
-                await loadExternalScript(sourceUrl, 9000)
-            } catch (error) {
-                sourceSetLoaded = false
-                console.warn(`[Core] Firebase script load failed: ${sourceUrl}`, error)
-                break
+        try {
+            for (const sourceUrl of sourceSet) {
+                await loadExternalScript(sourceUrl, 4000)
             }
+        } catch {
+            continue
         }
 
-        if (!sourceSetLoaded) continue
-
-        const sourceWaitSucceeded = await waitForFirebaseAvailability(3500)
+        const sourceWaitSucceeded = await waitForFirebaseAvailability(2000)
         if (sourceWaitSucceeded) return true
-        console.warn("[Core] Firebase scripts loaded but global runtime still unavailable, trying next source set")
     }
 
     return false
 }
 
 async function startCore() {
-    const firebaseRuntimeReady = await ensureFirebaseRuntime()
-
-    if (!firebaseRuntimeReady) {
-        console.error("[Core] Firebase SDK is unavailable after all fallback attempts")
-        showRuntimeErrorMessage("Не удалось подключить Firebase. Проверьте блокировки браузера и обновите страницу")
-        return
-    }
+    await ensureFirebaseRuntime()
 
     if (!core.auth || !core.db) {
         const { auth, db } = initFirebase()
@@ -152,12 +128,6 @@ async function startCore() {
         core.db = db
         window.auth = core.auth
         window.db = core.db
-    }
-
-    if (!core.auth || !core.db) {
-        console.error("[Core] Firebase runtime exists but auth or db initialization failed")
-        showRuntimeErrorMessage("Firebase недоступен в этом браузере. Отключите блокировки и попробуйте снова")
-        return
     }
 
     await setupAuthPersistence(core.auth)
