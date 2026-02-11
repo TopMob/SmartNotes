@@ -68,7 +68,7 @@ const AppLifecycle = {
         this.initialized = true
         window.SmartNotesEditor?.init()
         UI.init()
-        UI.setLang(SafeStorage.local.get("app-lang") || "ru")
+        UI.setLang(safeStorage.get("app-lang") || "ru")
     },
 
     clearSubscriptions() {
