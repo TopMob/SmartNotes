@@ -41,7 +41,7 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "source", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
         const allowedClasses = new Set([
             "media-wrapper",
             "media-resize-handle",
@@ -55,13 +55,18 @@ export const Utils = {
             "audio-controls",
             "audio-play",
             "audio-play-icon",
+            "audio-control-icon",
+            "audio-drag-handle",
+            "audio-delete",
             "audio-timeline",
+            "audio-title-row",
             "audio-progress",
             "audio-time",
             "audio-current",
             "audio-duration",
             "audio-volume",
             "audio-title",
+            "media-draggable-item",
             "playing",
             "note-page"
         ])
@@ -69,6 +74,7 @@ export const Utils = {
             a: new Set(["href", "target", "rel", "data-note-id"]),
             img: new Set(["src", "alt"]),
             audio: new Set(["src", "controls", "preload"]),
+            source: new Set(["src", "type"]),
             button: new Set(["type", "aria-label"]),
             input: new Set(["type", "checked", "aria-label"]),
             td: new Set(["colspan", "rowspan"]),
@@ -137,6 +143,18 @@ export const Utils = {
                     }
                 }
                 if (tag === "audio") {
+                    const src = child.getAttribute("src")
+                    const s = String(src || "")
+                    if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:audio")) || s.startsWith("http:")) {
+                        child.removeAttribute("src")
+                    }
+                }
+                if (tag === "source") {
+                    const sourceParent = child.parentElement?.tagName?.toLowerCase()
+                    if (sourceParent !== "audio") {
+                        child.remove()
+                        return
+                    }
                     const src = child.getAttribute("src")
                     const s = String(src || "")
                     if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:audio")) || s.startsWith("http:")) {

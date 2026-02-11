@@ -102,14 +102,6 @@ const AppLifecycle = {
         if (!db || !user) return
 
         await this.initializeOnce()
-        if (typeof ThemeManager !== "undefined") {
-            try {
-                const accountThemeSettings = await ThemeManager.loadAccountSettings(user)
-                if (accountThemeSettings) ThemeManager.applySettings(accountThemeSettings, true)
-            } catch {
-                UI.showToast(UI.getText("sync_error", "Sync error"))
-            }
-        }
         if (typeof CollaborationService !== "undefined") {
             CollaborationService.captureShareToken()
         }
@@ -117,6 +109,24 @@ const AppLifecycle = {
         if (this.activeUid === user.uid) return
         this.stopUserSession()
         this.activeUid = user.uid
+
+        const cachedNotes = NotesStorage.readCachedNotes(user.uid)
+        if (cachedNotes.length) {
+            this.ownedNotes = cachedNotes
+            this.updateNotesState({ fromCache: true })
+        }
+
+        if (typeof ThemeManager !== "undefined") {
+            ThemeManager.loadAccountSettings(user)
+                .then(accountThemeSettings => {
+                    if (!accountThemeSettings) return
+                    if (!this.activeUid || this.activeUid !== user.uid) return
+                    ThemeManager.applySettings(accountThemeSettings, true)
+                })
+                .catch(() => {
+                    if (this.activeUid === user.uid) UI.showToast(UI.getText("sync_error", "Sync error"))
+                })
+        }
 
         const userRootReference = await DataPath.ensureUserDocument(user)
         if (!userRootReference) {
@@ -157,6 +167,9 @@ const AppLifecycle = {
 
         this.unsubscribers = [folderUnsub, notesUnsub]
 
+        const loader = document.getElementById("app-loader")
+        if (loader) loader.classList.add("hidden")
+
         if (typeof CollaborationService !== "undefined" && this.sharedSyncEnabled) {
             this.sharedUnsub = DataPath.getUserSharedCollection(user, CollaborationService.sharedNotesCollection)
                 .onSnapshot(snap => {
@@ -186,15 +199,12 @@ const AppLifecycle = {
             }
         }
 
-        const loader = document.getElementById("app-loader")
-        if (loader) loader.classList.add("hidden")
-
         const search = document.getElementById("search-input")
         if (search) search.value = ""
 
         switchView("notes")
     },
-    updateNotesState() {
+    updateNotesState(options = {}) {
         let notes = [...this.ownedNotes, ...this.sharedNotes.values()]
         notes = notes.map(note => {
             const normalizedNote = NoteIO.normalizeNote(note)
@@ -203,6 +213,9 @@ const AppLifecycle = {
         })
         notes = NotesStorage.applyStoredFavorites(notes)
         StateStore.update("notes", notes)
+        if (this.activeUid && !options.fromCache) {
+            NotesStorage.writeCachedNotes(this.activeUid, notes)
+        }
         NotesStorage.syncFavoritesStorage(notes)
         this.scheduleReminders(notes)
         if (StateStore.read().isEditing || StateStore.read().isTyping) return

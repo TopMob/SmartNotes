@@ -64,10 +64,17 @@ export const createMediaHandlers = (context) => {
     }
 
     const handleMediaDragStart = (event) => {
-        if (event.button && event.button !== 0) return
+        if (typeof event.button === "number" && event.button > 0) return
         if (event.target.closest(".media-resize-handle")) return
-        const wrapper = event.target.closest(".media-wrapper")
+        const wrapper = event.target.closest(".media-draggable-item")
         if (!wrapper || !elements.content.contains(wrapper)) return
+        const isAudioBlock = wrapper.classList.contains("audio-block")
+        const dragHandle = event.target.closest(".audio-drag-handle")
+        if (isAudioBlock && !dragHandle) return
+        if (dragHandle) {
+            event.preventDefault()
+            event.stopPropagation()
+        }
         state.dragState = {
             wrapper,
             trailingBreak: wrapper.nextSibling && wrapper.nextSibling.nodeName === "BR" ? wrapper.nextSibling : null,
@@ -116,11 +123,16 @@ export const createMediaHandlers = (context) => {
         document.removeEventListener("pointermove", handleMediaDragMove)
     }
 
+    const handleNativeDragStart = (event) => {
+        if (!event.target.closest(".media-draggable-item")) return
+        event.preventDefault()
+    }
+
     const insertMedia = (src, type) => {
         if (type !== "image") return
         const id = Utils.generateId()
         const html = `
-        <div class="media-wrapper" id="${id}" contenteditable="false" draggable="true">
+        <div class="media-wrapper media-draggable-item" id="${id}" contenteditable="false" draggable="true">
             <img src="${Utils.escapeHtml(src)}" alt="">
             <span class="media-resize-handle" aria-hidden="true"></span>
         </div><br>
@@ -138,7 +150,8 @@ export const createMediaHandlers = (context) => {
     }
 
     const makeMediaDraggable = () => {
-        elements.content.querySelectorAll(".media-wrapper").forEach(w => {
+        elements.content.querySelectorAll(".media-wrapper, .audio-block").forEach(w => {
+            w.classList.add("media-draggable-item")
             w.setAttribute("draggable", "true")
             w.contentEditable = "false"
         })
@@ -246,8 +259,13 @@ export const createMediaHandlers = (context) => {
     }
 
     const deleteSelectedMedia = () => {
-        state.selectedMediaElement?.remove()
+        const selectedElement = state.selectedMediaElement
+        if (!selectedElement) return
+        const siblingBreak = selectedElement.nextSibling
+        selectedElement.remove()
+        if (siblingBreak && siblingBreak.nodeName === "BR") siblingBreak.remove()
         deselectMedia()
+        queueSnapshot()
     }
 
     const getDropRange = (x, y) => {
@@ -267,6 +285,7 @@ export const createMediaHandlers = (context) => {
         fileToDataUrl,
         handleResizeStart,
         handleMediaDragStart,
+        handleNativeDragStart,
         insertMedia,
         insertAudio,
         makeMediaDraggable,
