@@ -307,16 +307,16 @@ const CollaborationService = {
     captureShareToken() {
         const token = this.getShareTokenFromUrl()
         if (!token) return ""
-        sessionStorage.setItem(this.pendingTokenKey, token)
+        SafeStorage.session.set(this.pendingTokenKey, token)
         const url = new URL(window.location.href)
         url.searchParams.delete("share")
         window.history.replaceState({}, document.title, url.toString())
         return token
     },
     async acceptPendingShare(user) {
-        const token = sessionStorage.getItem(this.pendingTokenKey)
+        const token = SafeStorage.session.get(this.pendingTokenKey)
         if (!token) return null
-        sessionStorage.removeItem(this.pendingTokenKey)
+        SafeStorage.session.remove(this.pendingTokenKey)
         return this.acceptShareToken(token, user)
     },
     async createShareLink(note, permission) {

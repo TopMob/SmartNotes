@@ -7,9 +7,9 @@ import { createAuthManager } from "./core/auth.js"
 import { bootstrapCore } from "./core/bootstrap.js"
 
 const core = window.__smartnotesCore || (() => {
-    const ctx = { auth: null, db: null, Auth: null }
-    window.__smartnotesCore = ctx
-    return ctx
+    const context = { auth: null, db: null, Auth: null }
+    window.__smartnotesCore = context
+    return context
 })()
 
 let resolveAuthReady = null
@@ -31,15 +31,121 @@ window.db = core.db
 window.Auth = core.Auth
 window.LANG = LANG
 
-async function startCore() {
-    await new Promise(resolve => {
-        if (typeof firebase !== "undefined") return resolve()
-        const tick = () => {
-            if (typeof firebase !== "undefined") return resolve()
-            setTimeout(tick, 50)
+const firebaseRuntimeSources = [
+    [
+        "https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js",
+        "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js",
+        "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"
+    ],
+    [
+        "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-app-compat.js",
+        "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-auth-compat.js",
+        "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-firestore-compat.js"
+    ]
+]
+
+function showRuntimeErrorMessage(text) {
+    if (typeof UI !== "undefined" && typeof UI.showToast === "function") {
+        UI.showToast(text)
+        return
+    }
+    alert(text)
+}
+
+function waitForFirebaseAvailability(timeoutMilliseconds) {
+    return new Promise(resolve => {
+        if (typeof firebase !== "undefined") {
+            resolve(true)
+            return
         }
-        tick()
+
+        const startedAt = Date.now()
+        const poll = () => {
+            if (typeof firebase !== "undefined") {
+                resolve(true)
+                return
+            }
+            if (Date.now() - startedAt >= timeoutMilliseconds) {
+                resolve(false)
+                return
+            }
+            setTimeout(poll, 50)
+        }
+
+        poll()
     })
+}
+
+function loadExternalScript(url, timeoutMilliseconds) {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${url}"]`)) {
+            resolve()
+            return
+        }
+
+        const scriptElement = document.createElement("script")
+        scriptElement.src = url
+        scriptElement.async = true
+
+        const timeoutId = setTimeout(() => {
+            scriptElement.remove()
+            reject(new Error(`Script load timeout: ${url}`))
+        }, timeoutMilliseconds)
+
+        scriptElement.addEventListener("load", () => {
+            clearTimeout(timeoutId)
+            resolve()
+        }, { once: true })
+
+        scriptElement.addEventListener("error", () => {
+            clearTimeout(timeoutId)
+            scriptElement.remove()
+            reject(new Error(`Script load failed: ${url}`))
+        }, { once: true })
+
+        document.head.appendChild(scriptElement)
+    })
+}
+
+async function ensureFirebaseRuntime() {
+    if (typeof firebase !== "undefined") return true
+
+    const initialWaitSucceeded = await waitForFirebaseAvailability(5000)
+    if (initialWaitSucceeded) return true
+
+    console.warn("[Core] Firebase SDK was not detected after initial wait, trying fallback sources")
+
+    for (const sourceSet of firebaseRuntimeSources) {
+        let sourceSetLoaded = true
+        for (const sourceUrl of sourceSet) {
+            try {
+                await loadExternalScript(sourceUrl, 9000)
+            } catch (error) {
+                sourceSetLoaded = false
+                console.warn(`[Core] Firebase script load failed: ${sourceUrl}`, error)
+                break
+            }
+        }
+
+        if (!sourceSetLoaded) continue
+
+        const sourceWaitSucceeded = await waitForFirebaseAvailability(3500)
+        if (sourceWaitSucceeded) return true
+        console.warn("[Core] Firebase scripts loaded but global runtime still unavailable, trying next source set")
+    }
+
+    return false
+}
+
+async function startCore() {
+    const firebaseRuntimeReady = await ensureFirebaseRuntime()
+
+    if (!firebaseRuntimeReady) {
+        console.error("[Core] Firebase SDK is unavailable after all fallback attempts")
+        showRuntimeErrorMessage("Не удалось подключить Firebase. Проверьте блокировки браузера и обновите страницу")
+        return
+    }
+
     if (!core.auth || !core.db) {
         const { auth, db } = initFirebase()
         core.auth = auth
@@ -47,13 +153,25 @@ async function startCore() {
         window.auth = core.auth
         window.db = core.db
     }
+
+    if (!core.auth || !core.db) {
+        console.error("[Core] Firebase runtime exists but auth or db initialization failed")
+        showRuntimeErrorMessage("Firebase недоступен в этом браузере. Отключите блокировки и попробуйте снова")
+        return
+    }
+
     await setupAuthPersistence(core.auth)
     const authManager = createAuthManager({ auth: core.auth })
     core.Auth = authManager
     window.Auth = core.Auth
     resolveAuthReady(authManager)
-    authManager.init().catch(() => null)
+    authManager.init().catch(error => {
+        console.error("[Core] Auth manager init failed", error)
+    })
 }
 
 bootstrapCore({ ThemeManager, Auth: core.Auth })
-startCore().catch(() => null)
+startCore().catch(error => {
+    console.error("[Core] Startup failed", error)
+    showRuntimeErrorMessage("Не удалось запустить приложение. Перезагрузите страницу")
+})

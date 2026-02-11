@@ -63,6 +63,29 @@ export function createAuthManager({ auth }) {
         async _signInWithRedirect() {
             await auth.signInWithRedirect(this._provider())
         },
+        async _signInWithPopupPreferred() {
+            if (isSafari()) {
+                await auth.signInWithPopup(this._provider())
+                return
+            }
+
+            if (this._isIOS()) {
+                await this._signInWithRedirect()
+                return
+            }
+
+            await auth.signInWithPopup(this._provider())
+        },
+        async _setNoStoragePersistence() {
+            if (!auth || typeof firebase === "undefined") return false
+            try {
+                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+                return true
+            } catch (error) {
+                console.warn("[Auth] Failed to switch to NONE persistence", error)
+                return false
+            }
+        },
         async login() {
             if (!auth || typeof firebase === "undefined") {
                 console.error("[Auth] Firebase auth is unavailable: SDK not initialized")
@@ -74,18 +97,25 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(true)
 
             try {
-                if (isSafari()) {
-                    await auth.signInWithPopup(this._provider())
-                    return
+                await this._signInWithPopupPreferred()
+            } catch (error) {
+                const errorCode = error?.code || ""
+                const isStorageBlockedError = errorCode === "auth/web-storage-unsupported" || errorCode === "auth/operation-not-supported-in-this-environment"
+
+                if (isStorageBlockedError) {
+                    const persistenceSwitched = await this._setNoStoragePersistence()
+                    if (persistenceSwitched) {
+                        try {
+                            await this._signInWithPopupPreferred()
+                            return
+                        } catch (retryError) {
+                            this._setLoginBusy(false)
+                            this.handleAuthError(retryError)
+                            return
+                        }
+                    }
                 }
 
-                if (this._isIOS()) {
-                    await this._signInWithRedirect()
-                    return
-                }
-
-                await auth.signInWithPopup(this._provider())
-            } catch (err) {
                 const popupFallbackCodes = new Set([
                     "auth/popup-blocked",
                     "auth/popup-closed-by-user",
@@ -93,18 +123,18 @@ export function createAuthManager({ auth }) {
                     "auth/operation-not-supported-in-this-environment",
                     "auth/web-storage-unsupported"
                 ])
-                if (popupFallbackCodes.has(err?.code)) {
+                if (popupFallbackCodes.has(errorCode)) {
                     try {
                         await this._signInWithRedirect()
                         return
-                    } catch (redirectErr) {
+                    } catch (redirectError) {
                         this._setLoginBusy(false)
-                        this.handleAuthError(redirectErr)
+                        this.handleAuthError(redirectError)
                         return
                     }
                 }
                 this._setLoginBusy(false)
-                this.handleAuthError(err)
+                this.handleAuthError(error)
                 return
             }
 

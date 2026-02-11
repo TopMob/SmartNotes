@@ -118,7 +118,7 @@ Object.assign(UI, {
     },
 
     applyAppearanceSettings() {
-        const saved = JSON.parse(localStorage.getItem("app-preferences")) || {}
+        const saved = SafeStorage.local.getJson("app-preferences", {}) || {}
         StateActions.updateConfig({
             folderViewMode: saved.folderViewMode || StateStore.read().config.folderViewMode,
             reduceMotion: !!saved.reduceMotion

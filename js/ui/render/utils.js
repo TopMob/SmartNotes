@@ -4,7 +4,7 @@ Object.assign(UI, {
             folderViewMode: StateStore.read().config.folderViewMode,
             reduceMotion: StateStore.read().config.reduceMotion
         }
-        localStorage.setItem("app-preferences", JSON.stringify(prefs))
+        SafeStorage.local.setJson("app-preferences", prefs)
     },
 
     closeAllModals() {

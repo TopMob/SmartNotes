@@ -54,14 +54,14 @@ export const ThemeManager = {
     },
     getSavedSettings() {
         try {
-            const parsed = JSON.parse(localStorage.getItem(this.storageKey) || "")
+            const parsed = SafeStorage.local.getJson(this.storageKey, null)
             if (parsed && typeof parsed === "object") return parsed
         } catch {}
         return this.getDefaultSettings()
     },
     getCustomPresets() {
         try {
-            const parsed = JSON.parse(localStorage.getItem(this.customPresetStorageKey) || "[]")
+            const parsed = SafeStorage.local.getJson(this.customPresetStorageKey, [])
             if (!Array.isArray(parsed)) return []
             return parsed
                 .filter(item => item && typeof item === "object")
@@ -79,7 +79,7 @@ export const ThemeManager = {
         }
     },
     saveCustomPresets(presets) {
-        localStorage.setItem(this.customPresetStorageKey, JSON.stringify(presets.slice(0, this.maxCustomPresets)))
+        SafeStorage.local.setJson(this.customPresetStorageKey, presets.slice(0, this.maxCustomPresets))
     },
     addCustomPreset(colors) {
         const presets = this.getCustomPresets()
@@ -121,7 +121,7 @@ export const ThemeManager = {
         return this.getCustomPresets().find(item => item.key === id) || null
     },
     saveSettings(settings) {
-        localStorage.setItem(this.storageKey, JSON.stringify(settings))
+        SafeStorage.local.setJson(this.storageKey, settings)
     },
     getThemeSettingsReference(user) {
         const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null

@@ -171,7 +171,7 @@ Object.assign(UI, {
         const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
         const updated = { ...current, ...next }
         StateActions.updateConfig({ notesFilter: updated })
-        localStorage.setItem("notes-filter", JSON.stringify(updated))
+        SafeStorage.local.setJson("notes-filter", updated)
         filterAndRender(document.getElementById("search-input")?.value || "")
         this.renderFilterMenu()
     },

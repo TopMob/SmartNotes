@@ -31,7 +31,7 @@ export const EditorAPI = (() => {
     const loadToolSettings = () => {
         const defaults = getToolList().reduce((acc, t) => ({ ...acc, [t.id]: true }), {})
         let stored
-        try { stored = JSON.parse(localStorage.getItem("editor-tools")) } catch {}
+        stored = SafeStorage.local.getJson("editor-tools", null)
         const next = { ...defaults, ...(stored || {}) }
         StateStore.updateConfig({ editorTools: next })
     }
@@ -559,7 +559,7 @@ const addPage = () => {
         const current = getEnabledTools()
         current[id] = !!enabled
         StateStore.updateConfig({ editorTools: { ...current } })
-        localStorage.setItem("editor-tools", JSON.stringify(current))
+        SafeStorage.local.setJson("editor-tools", current)
         buildToolbar()
     }
 

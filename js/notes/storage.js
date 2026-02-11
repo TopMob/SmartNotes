@@ -4,14 +4,14 @@ const NOTES_CACHE_KEY = "notes-cache"
 
 const readFavoriteIds = () => {
     try {
-        const stored = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY))
+        const stored = SafeStorage.local.getJson(FAVORITES_STORAGE_KEY, null)
         if (Array.isArray(stored)) return new Set(stored)
     } catch {}
     return new Set()
 }
 
 const writeFavoriteIds = (ids) => {
-    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...ids]))
+    SafeStorage.local.setJson(FAVORITES_STORAGE_KEY, [...ids])
 }
 
 const syncFavoritesStorage = (notes) => {
@@ -35,7 +35,7 @@ const applyStoredFavorites = (notes) => {
 
 const loadNotesFilter = () => {
     try {
-        const stored = JSON.parse(localStorage.getItem(NOTES_FILTER_KEY))
+        const stored = SafeStorage.local.getJson(NOTES_FILTER_KEY, null)
         if (stored && typeof stored === "object") {
             const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
             StateActions.updateConfig({ notesFilter: { ...current, ...stored } })
@@ -46,7 +46,7 @@ const loadNotesFilter = () => {
 const readCachedNotes = (uid) => {
     if (!uid) return []
     try {
-        const allCaches = JSON.parse(localStorage.getItem(NOTES_CACHE_KEY))
+        const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY, null)
         const userCache = allCaches?.[uid]
         if (Array.isArray(userCache?.notes)) {
             return userCache.notes.map(note => NoteIO.normalizeNote(note))
@@ -58,14 +58,14 @@ const readCachedNotes = (uid) => {
 const writeCachedNotes = (uid, notes) => {
     if (!uid || !Array.isArray(notes)) return
     try {
-        const allCaches = JSON.parse(localStorage.getItem(NOTES_CACHE_KEY)) || {}
+        const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY, null) || {}
         const sanitizedNotes = notes.slice(0, 250).map(note => NoteIO.normalizeNote(note))
         allCaches[uid] = { updatedAt: Date.now(), notes: sanitizedNotes }
         const entries = Object.entries(allCaches)
             .sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0))
             .slice(0, 5)
         const next = Object.fromEntries(entries)
-        localStorage.setItem(NOTES_CACHE_KEY, JSON.stringify(next))
+        SafeStorage.local.setJson(NOTES_CACHE_KEY, next)
     } catch {}
 }
 
