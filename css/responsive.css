@@ -4,6 +4,16 @@
         height: 60px;
     }
 
+    body.platform-ios .top-bar {
+        padding: var(--safe-top) 16px 0 16px;
+        height: calc(60px + var(--safe-top));
+    }
+
+    body.platform-android .top-bar {
+        padding: 0 14px;
+        height: 60px;
+    }
+
     .search-container {
         position: absolute;
         top: 65px;
@@ -15,8 +25,23 @@
         margin: 0;
     }
 
+    body.platform-ios .search-container {
+        top: calc(65px + var(--safe-top));
+        left: 16px;
+        right: 16px;
+    }
+
     .content-scrollable {
         padding-top: 60px;
+    }
+
+    body.platform-ios .content-scrollable {
+        padding-top: calc(60px + var(--safe-top));
+        padding-bottom: calc(16px + var(--safe-bottom));
+    }
+
+    body.platform-android .content-scrollable {
+        padding-bottom: 16px;
     }
 
     #note-title {
@@ -44,9 +69,26 @@
         right: 20px;
     }
 
+    body.platform-ios .btn-fab {
+        bottom: calc(24px + var(--safe-bottom));
+    }
+
+    body.platform-android .btn-fab {
+        bottom: 20px;
+    }
+
     .sidebar-glass {
         width: 85%;
         max-width: 320px;
+    }
+
+    body.platform-ios .sidebar-glass {
+        padding-top: var(--safe-top);
+        height: 100svh;
+    }
+
+    body.platform-android .sidebar-glass {
+        height: 100dvh;
     }
 
     .editor-container {

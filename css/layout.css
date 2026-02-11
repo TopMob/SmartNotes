@@ -31,6 +31,15 @@
     flex-direction: column;
 }
 
+body.platform-ios .sidebar-glass {
+    padding-top: var(--safe-top);
+    height: 100svh;
+}
+
+body.platform-android .sidebar-glass {
+    height: 100dvh;
+}
+
 .sidebar-glass.active {
     transform: translateX(0);
 }
@@ -163,6 +172,15 @@
     position: sticky;
     top: 0;
     z-index: var(--z-header);
+}
+
+body.platform-ios .top-bar {
+    padding-top: var(--safe-top);
+    height: calc(64px + var(--safe-top));
+}
+
+body.platform-android .top-bar {
+    height: 64px;
 }
 
 .header-left {
