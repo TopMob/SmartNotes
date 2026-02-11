@@ -79,11 +79,12 @@ export async function setupAuthPersistence(auth) {
             : firebase.auth.Auth.Persistence.NONE
 
         try {
-            await auth.setPersistence(targetPersistence)
+            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
         } catch {
-            await setNonePersistence(auth)
+            try {
+                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+            } catch {}
         }
-    } catch {
-        await setNonePersistence(auth)
-    }
+    })()
+    return setupAuthPersistence._promise
 }
