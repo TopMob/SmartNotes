@@ -2,31 +2,47 @@ const FAVORITES_STORAGE_KEY = "favorite-notes"
 const NOTES_FILTER_KEY = "notes-filter"
 const NOTES_CACHE_KEY = "notes-cache"
 
+const shrinkNoteForCache = (note) => {
+    const normalizedNote = NoteIO.normalizeNote(note || {})
+    return {
+        id: String(normalizedNote.id || ""),
+        title: String(normalizedNote.title || ""),
+        folderId: normalizedNote.folderId ? String(normalizedNote.folderId) : null,
+        order: Number.isFinite(normalizedNote.order) ? normalizedNote.order : null,
+        createdAt: normalizedNote.createdAt || null,
+        updatedAt: normalizedNote.updatedAt || null,
+        isFavorite: !!normalizedNote.isFavorite,
+        isPinned: !!normalizedNote.isPinned,
+        isArchived: !!normalizedNote.isArchived,
+        trashedAt: normalizedNote.trashedAt || null,
+        reminderAt: normalizedNote.reminderAt || null,
+        lockHidden: !!(normalizedNote.lock && normalizedNote.lock.hidden)
+    }
+}
+
 const readFavoriteIds = () => {
-    try {
-        const stored = SafeStorage.local.getJson(FAVORITES_STORAGE_KEY, null)
-        if (Array.isArray(stored)) return new Set(stored)
-    } catch {}
+    const storedFavorites = safeStorage.getJson(FAVORITES_STORAGE_KEY)
+    if (Array.isArray(storedFavorites)) return new Set(storedFavorites)
     return new Set()
 }
 
 const writeFavoriteIds = (ids) => {
-    SafeStorage.local.setJson(FAVORITES_STORAGE_KEY, [...ids])
+    safeStorage.setJson(FAVORITES_STORAGE_KEY, [...ids])
 }
 
 const syncFavoritesStorage = (notes) => {
-    const ids = new Set()
-    notes.forEach(note => {
-        if (note.isFavorite) ids.add(note.id)
+    const favoriteIds = new Set()
+    notes.forEach((note) => {
+        if (note.isFavorite) favoriteIds.add(note.id)
     })
-    writeFavoriteIds(ids)
+    writeFavoriteIds(favoriteIds)
 }
 
 const applyStoredFavorites = (notes) => {
-    const stored = readFavoriteIds()
-    if (!stored.size) return notes
-    return notes.map(note => {
-        if (typeof note.isFavorite !== "boolean" && stored.has(note.id)) {
+    const storedFavorites = readFavoriteIds()
+    if (!storedFavorites.size) return notes
+    return notes.map((note) => {
+        if (typeof note.isFavorite !== "boolean" && storedFavorites.has(note.id)) {
             return { ...note, isFavorite: true }
         }
         return note
@@ -34,39 +50,40 @@ const applyStoredFavorites = (notes) => {
 }
 
 const loadNotesFilter = () => {
-    try {
-        const stored = SafeStorage.local.getJson(NOTES_FILTER_KEY, null)
-        if (stored && typeof stored === "object") {
-            const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
-            StateActions.updateConfig({ notesFilter: { ...current, ...stored } })
-        }
-    } catch {}
+    const storedFilter = safeStorage.getJson(NOTES_FILTER_KEY)
+    if (storedFilter && typeof storedFilter === "object") {
+        const currentFilter = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
+        StateActions.updateConfig({ notesFilter: { ...currentFilter, ...storedFilter } })
+    }
 }
 
 const readCachedNotes = (uid) => {
     if (!uid) return []
-    try {
-        const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY, null)
-        const userCache = allCaches?.[uid]
-        if (Array.isArray(userCache?.notes)) {
-            return userCache.notes.map(note => NoteIO.normalizeNote(note))
-        }
-    } catch {}
-    return []
+    const allCaches = safeStorage.getJson(NOTES_CACHE_KEY) || {}
+    const userCache = allCaches[uid]
+    if (!Array.isArray(userCache?.notes)) return []
+    return userCache.notes.map((note) => NoteIO.normalizeNote(note))
 }
 
 const writeCachedNotes = (uid, notes) => {
     if (!uid || !Array.isArray(notes)) return
-    try {
-        const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY, null) || {}
-        const sanitizedNotes = notes.slice(0, 250).map(note => NoteIO.normalizeNote(note))
+    const tryWrite = (limit) => {
+        const allCaches = safeStorage.getJson(NOTES_CACHE_KEY) || {}
+        const sanitizedNotes = notes.slice(0, limit).map(shrinkNoteForCache)
         allCaches[uid] = { updatedAt: Date.now(), notes: sanitizedNotes }
+
         const entries = Object.entries(allCaches)
-            .sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0))
-            .slice(0, 5)
-        const next = Object.fromEntries(entries)
-        SafeStorage.local.setJson(NOTES_CACHE_KEY, next)
-    } catch {}
+            .sort((firstEntry, secondEntry) => (secondEntry[1]?.updatedAt || 0) - (firstEntry[1]?.updatedAt || 0))
+            .slice(0, 3)
+
+        const nextCache = Object.fromEntries(entries)
+        return safeStorage.setJson(NOTES_CACHE_KEY, nextCache)
+    }
+
+    if (tryWrite(120)) return
+    if (tryWrite(40)) return
+
+    safeStorage.remove(NOTES_CACHE_KEY)
 }
 
 loadNotesFilter()
