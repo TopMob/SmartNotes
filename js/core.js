@@ -119,6 +119,18 @@ async function ensureFirebaseRuntime() {
     return false
 }
 
+function showRuntimeErrorMessage(messageText) {
+    const message = String(messageText || "")
+    if (!message) return
+    if (typeof UI !== "undefined" && typeof UI.showToast === "function") {
+        UI.showToast(message)
+        return
+    }
+    if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(message)
+    }
+}
+
 async function startCore() {
     await ensureFirebaseRuntime()
 
