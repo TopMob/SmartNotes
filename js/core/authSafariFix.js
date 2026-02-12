@@ -4,29 +4,14 @@ export function isSafari() {
     return /safari/.test(userAgent) && !/chrome|chromium|crios|fxios|edg|edgios|opr\//.test(userAgent)
 }
 
-function hasBraveApi() {
-    if (typeof navigator === "undefined") return false
-    return !!navigator.brave && typeof navigator.brave.isBrave === "function"
-}
-
-export async function isBraveBrowser() {
-    if (!hasBraveApi()) return false
-    try {
-        return !!(await navigator.brave.isBrave())
-    } catch {
-        return true
-    }
-}
-
 export async function setupAuthPersistence(auth) {
     if (!auth || typeof firebase === "undefined") return
     if (setupAuthPersistence._promise) return setupAuthPersistence._promise
     setupAuthPersistence._promise = (async () => {
         const userAgent = typeof navigator === "undefined" ? "" : String(navigator.userAgent || "").toLowerCase()
         const isIos = /iphone|ipad|ipod/.test(userAgent)
-        const isBrave = hasBraveApi()
         try {
-            if (isIos || isBrave) {
+            if (isIos) {
                 await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
                 return
             }
