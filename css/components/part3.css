@@ -396,3 +396,20 @@ select.input-area optgroup {
 .settings-appearance-page .settings-color-grid .color-picker {
     justify-content: center;
 }
+
+.prompt-character-counter {
+    display: inline-flex;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.prompt-character-counter.is-limit-exceeded {
+    color: #ef4444;
+}
+
+.theme-custom-limit-label {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+}

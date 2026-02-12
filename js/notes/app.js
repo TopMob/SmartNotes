@@ -13,24 +13,10 @@ const AppLifecycle = {
     networkListenersBound: false,
     networkRetryTimer: null,
     normalizeDateValue(value) {
-        if (value === null || value === undefined || value === "") return 0
-        if (typeof value.toDate === "function") {
-            const timestamp = value.toDate().getTime()
-            return Number.isFinite(timestamp) ? timestamp : 0
+        if (window.NoteHelpers && typeof window.NoteHelpers.normalizeDateValue === "function") {
+            return window.NoteHelpers.normalizeDateValue(value)
         }
-        if (value && typeof value === "object" && Number.isFinite(value.seconds)) {
-            const timestamp = value.seconds * 1000
-            return Number.isFinite(timestamp) ? timestamp : 0
-        }
-        if (typeof value === "number") {
-            return Number.isFinite(value) ? value : 0
-        }
-        if (value instanceof Date) {
-            const timestamp = value.getTime()
-            return Number.isFinite(timestamp) ? timestamp : 0
-        }
-        const parsed = Date.parse(String(value))
-        return Number.isFinite(parsed) ? parsed : 0
+        return 0
     },
     sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
@@ -44,6 +30,7 @@ const AppLifecycle = {
         })
     },
     sortOwnedNotes(notes) {
+        const shouldIgnoreUpdatedAt = !!StateStore.read().isEditing || !!StateStore.read().editorDirty
         return [...notes].sort((firstNote, secondNote) => {
             const firstOrder = Number.isFinite(firstNote?.order) ? firstNote.order : Number.POSITIVE_INFINITY
             const secondOrder = Number.isFinite(secondNote?.order) ? secondNote.order : Number.POSITIVE_INFINITY
@@ -51,9 +38,11 @@ const AppLifecycle = {
             const firstCreatedAt = this.normalizeDateValue(firstNote?.createdAt)
             const secondCreatedAt = this.normalizeDateValue(secondNote?.createdAt)
             if (firstCreatedAt !== secondCreatedAt) return firstCreatedAt - secondCreatedAt
-            const firstUpdatedAt = this.normalizeDateValue(firstNote?.updatedAt)
-            const secondUpdatedAt = this.normalizeDateValue(secondNote?.updatedAt)
-            if (firstUpdatedAt !== secondUpdatedAt) return secondUpdatedAt - firstUpdatedAt
+            if (!shouldIgnoreUpdatedAt) {
+                const firstUpdatedAt = this.normalizeDateValue(firstNote?.updatedAt)
+                const secondUpdatedAt = this.normalizeDateValue(secondNote?.updatedAt)
+                if (firstUpdatedAt !== secondUpdatedAt) return secondUpdatedAt - firstUpdatedAt
+            }
             const languageCode = StateStore.read().config.lang || "ru"
             return String(firstNote?.id || "").localeCompare(String(secondNote?.id || ""), languageCode)
         })

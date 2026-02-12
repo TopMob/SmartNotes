@@ -5,6 +5,9 @@ import { initFirebase } from "./core/firebase.js"
 import { setupAuthPersistence } from "./core/authSafariFix.js"
 import { createAuthManager } from "./core/auth.js"
 import { bootstrapCore } from "./core/bootstrap.js"
+import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
+import { validateFolderName, canAddFolder, canAddCustomTheme, canAssignToFolder } from "./core/validators.js"
+import { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload } from "./core/noteHelpers.js"
 
 const core = window.__smartnotesCore || (() => {
     const context = { auth: null, db: null, Auth: null }
@@ -30,6 +33,9 @@ window.auth = core.auth
 window.db = core.db
 window.Auth = core.Auth
 window.LANG = LANG
+window.AppMessages = { APP_MESSAGES, getAppMessage }
+window.Validators = { validateFolderName, canAddFolder, canAddCustomTheme, canAssignToFolder }
+window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
 
 const firebaseRuntimeSources = [
     {

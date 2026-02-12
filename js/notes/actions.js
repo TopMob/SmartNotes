@@ -18,13 +18,23 @@ async function deleteFolder(folderId) {
         })
         batch.update(folderRef, { trashedAt: movedAt, isHidden: false })
         await batch.commit()
+        const updatedFolders = StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: new Date().toISOString(), isHidden: false } : folder)
+        const updatedNotes = StateStore.read().notes.map(item => item.folderId === folderId ? { ...item, folderId: null, trashedAt: new Date().toISOString() } : item)
+        StateStore.update("folders", updatedFolders)
+        StateActions.setNotes(updatedNotes)
         if (StateStore.read().activeFolderId === folderId) switchView("notes")
         UI.showToast(UI.getText("folder_deleted", "Folder moved to trash"))
+        refreshCurrentList()
     })
 }
 
 
 const getNoteById = (noteId) => StateStore.read().notes.find(n => n.id === noteId)
+
+const refreshCurrentList = () => {
+    const currentSearchValue = document.getElementById("search-input")?.value || ""
+    filterAndRender(currentSearchValue)
+}
 
 const ensureManageAccess = (note) => {
     if (!note) return false
@@ -57,11 +67,15 @@ async function deleteNoteById(noteId) {
         if (!ref) return
         if (note.trashedAt) {
             await ref.delete()
+            StateActions.setNotes(StateStore.read().notes.filter(item => item.id !== noteId))
             UI.showToast(UI.getText("note_deleted_permanent", "Deleted permanently"))
+            refreshCurrentList()
             return
         }
-        await ref.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() }))
+        StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, trashedAt: new Date().toISOString() } : item))
         UI.showToast(UI.getText("note_deleted", "Moved to trash"))
+        refreshCurrentList()
     })
 }
 
@@ -71,8 +85,10 @@ async function restoreNoteById(noteId) {
     if (!db || !user || !note || !ensureManageAccess(note)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    UI.showToast(UI.getText("restored", "Restored"))
+    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ trashedAt: null }))
+    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, trashedAt: null } : item))
+    UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
+    refreshCurrentList()
 }
 
 async function scheduleReminder(noteId) {
@@ -161,9 +177,16 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
     const user = StateStore.read().user
     const note = getNoteById(noteId)
     if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
+    const targetFolder = StateStore.read().folders.find(folder => folder.id === folderId) || null
+    if (folderId && !window.Validators.canAssignToFolder(targetFolder)) {
+        UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.moveToTrashedFolderDenied))
+        return
+    }
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ folderId: folderId || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ folderId: folderId || null }))
+    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, folderId: folderId || null } : item))
+    refreshCurrentList()
 }
 
 
@@ -171,14 +194,18 @@ async function restoreFolderById(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
     await DataPath.getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    UI.showToast(UI.getText("restored", "Restored"))
+    StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null } : folder))
+    UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
+    refreshCurrentList()
 }
 
 async function deleteFolderPermanently(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
     await DataPath.getUserFoldersCollection(user).doc(folderId).delete()
+    StateStore.update("folders", StateStore.read().folders.filter(folder => folder.id !== folderId))
     UI.showToast(UI.getText("folder_deleted_permanent", "Folder deleted permanently"))
+    refreshCurrentList()
 }
 window.deleteFolder = deleteFolder
 window.openNoteActions = openNoteActions

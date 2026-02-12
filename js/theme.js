@@ -130,23 +130,34 @@ export const ThemeManager = {
     async loadAccountSettings(user) {
         const reference = this.getThemeSettingsReference(user)
         if (!reference) return null
-        const snapshot = await reference.get()
-        if (!snapshot.exists) return null
-        const data = snapshot.data() || {}
-        const settings = data.settings && typeof data.settings === "object" ? data.settings : null
-        const customPresets = Array.isArray(data.customPresets) ? data.customPresets : null
-        if (customPresets) this.saveCustomPresets(customPresets)
-        if (settings) this.saveSettings(settings)
-        return settings
+        try {
+            const snapshot = await reference.get()
+            if (!snapshot.exists) return null
+            const data = snapshot.data() || {}
+            const settings = data.settings && typeof data.settings === "object" ? data.settings : null
+            const customPresets = Array.isArray(data.customPresets) ? data.customPresets : null
+            if (customPresets) this.saveCustomPresets(customPresets)
+            if (settings) this.saveSettings(settings)
+            return settings
+        } catch (error) {
+            UI?.showToast?.(`Theme sync load failed${error?.code ? `: ${error.code}` : ""}`)
+            return this.getSavedSettings()
+        }
     },
     async saveAccountSettings(user, settings) {
         const reference = this.getThemeSettingsReference(user)
+        this.saveSettings(settings)
         if (!reference) return
-        await reference.set({
-            settings,
-            customPresets: this.getCustomPresets(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
+        try {
+            await reference.set({
+                settings,
+                customPresets: this.getCustomPresets(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true })
+        } catch (error) {
+            SafeStorage.local.setJson("theme-pending-sync", { settings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
+            UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
+        }
     },
     resolvePreset(key) {
         const customPreset = this.getCustomPresetByKey(key)
@@ -205,6 +216,7 @@ export const ThemeManager = {
         const root = document.getElementById("theme-picker-root")
         if (!root) return
         const customPresetKeys = this.getCustomPresets().map(item => `custom:${item.key}`)
+        const customThemesLeft = Math.max(0, this.maxCustomPresets - customPresetKeys.length)
         const groups = [
             { title: "Тёмные темы", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal"] },
             { title: "Светлые темы", items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
@@ -242,9 +254,15 @@ export const ThemeManager = {
                 addButton.type = "button"
                 addButton.className = "theme-custom-add"
                 addButton.textContent = "+"
-                addButton.disabled = customPresetKeys.length >= this.maxCustomPresets
+                const canCreateCustomTheme = window.Validators ? window.Validators.canAddCustomTheme(customPresetKeys.length) : customPresetKeys.length < this.maxCustomPresets
+                addButton.disabled = !canCreateCustomTheme
                 addButton.addEventListener("click", () => onCreateCustomPreset?.())
                 presetsGrid.appendChild(addButton)
+
+                const leftLabel = document.createElement("div")
+                leftLabel.className = "theme-custom-limit-label"
+                leftLabel.textContent = `${customThemesLeft} of ${this.maxCustomPresets} custom themes left`
+                sectionElement.appendChild(leftLabel)
             }
 
             sectionElement.appendChild(presetsGrid)

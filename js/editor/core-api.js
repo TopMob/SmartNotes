@@ -132,19 +132,7 @@ export const EditorAPI = (() => {
         const access = typeof CollaborationService === "undefined"
             ? null
             : CollaborationService.getAccess(note)
-
-        const targetId = access?.noteId || note.id
-        const ownerUid = access?.ownerUid || user.uid
-        const existingRoles = access?.roles && typeof access.roles === "object" ? access.roles : {}
-        const payload = NoteIO.normalizeNote({ ...note, id: targetId, ownerUid })
-        payload.ownerUid = ownerUid
-        payload.access = {
-            ownerUid,
-            roles: {
-                ...existingRoles,
-                [ownerUid]: "owner"
-            }
-        }
+        const payload = window.NoteHelpers.buildNotePayload({ note, user, access })
 
         const ref = typeof CollaborationService === "undefined"
             ? DataPath.getUserNotesCollection(user).doc(payload.id)
@@ -160,8 +148,12 @@ export const EditorAPI = (() => {
                 UI.showToast(UI.getText("saved", "Saved"))
                 close()
             }
-        } catch {
-            UI.showToast("Save failed")
+        } catch (error) {
+            const errorCode = error?.code ? ` (${error.code})` : ""
+            UI.showToast(`Save failed${errorCode}`)
+            if (error?.code === "unavailable" || !navigator.onLine) {
+                SafeStorage.local.setJson("pending-note-save", { payload: { ...payload, updatedAt: Date.now() }, savedAt: Date.now() })
+            }
         }
     }
 
@@ -330,11 +322,15 @@ export const EditorAPI = (() => {
         const imgUpload = document.getElementById("img-upload")
         if (imgUpload) {
             imgUpload.onchange = async (event) => {
-                const f = event.target.files?.[0]
-                if (f) {
-                    const url = await fileToDataUrl(f)
-                    mediaHandlers.insertMedia(url, "image")
+                const file = event.target.files?.[0]
+                if (!file) return
+                try {
+                    const imageUrl = await fileToDataUrl(file)
+                    mediaHandlers.insertMedia(imageUrl, "image")
                     imgUpload.value = ""
+                } catch (error) {
+                    const errorCode = error?.code || error?.message || "unknown"
+                    UI.showToast(`Image save failed (${errorCode})`)
                 }
             }
         }

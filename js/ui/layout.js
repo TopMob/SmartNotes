@@ -76,25 +76,35 @@ Object.assign(UI, {
         window.SmartNotesEditor?.open()
     },
 
+    updateFolderLimitControls() {
+        const createFolderButton = document.querySelector('[data-action="create-folder"]')
+        if (!createFolderButton) return
+        const canCreateFolder = window.Validators.canAddFolder(StateStore.read().folders.length)
+        createFolderButton.disabled = !canCreateFolder
+        createFolderButton.classList.toggle("is-disabled", !canCreateFolder)
+    },
+
     createFolder() {
-        if (StateStore.read().folders.length >= 10) return this.showToast(this.getText("folder_limit", "Folder limit reached"))
+        if (!window.Validators.canAddFolder(StateStore.read().folders.length)) {
+            return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderLimitReached))
+        }
         this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
-            const trimmed = String(name || "").trim()
-            if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
-            if (trimmed.length > 50) return this.showToast(this.getText("folder_name_too_long", "Folder name must be up to 50 characters"))
-            if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+            const validatedName = window.Validators.validateFolderName(name)
+            if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
+            if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === validatedName.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
             await DataPath.getUserFoldersCollection(StateStore.read().user).add({
-                name: trimmed,
+                name: validatedName,
                 isHidden: false,
                 trashedAt: null,
                 folderOrder: Date.now(),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 ownerUid: StateStore.read().user.uid
             })
-        })
+        }, "", { maxLength: 50, showCounter: true })
     },
 
     renameFolder(folderId) {
@@ -103,18 +113,18 @@ Object.assign(UI, {
         const folder = StateStore.read().folders.find(f => f.id === id)
         if (!folder) return
         this.showPrompt(this.getText("rename_folder", "Rename folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
-            const trimmed = String(name || "").trim()
-            if (!trimmed) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
-            if (trimmed.length > 50) return this.showToast(this.getText("folder_name_too_long", "Folder name must be up to 50 characters"))
-            if (trimmed.toLowerCase() === String(folder.name || "").toLowerCase()) return
-            if (StateStore.read().folders.some(f => f.id !== id && f.name && f.name.toLowerCase() === trimmed.toLowerCase())) {
+            const validatedName = window.Validators.validateFolderName(name)
+            if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
+            if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
+            if (validatedName.toLowerCase() === String(folder.name || "").toLowerCase()) return
+            if (StateStore.read().folders.some(f => f.id !== id && f.name && f.name.toLowerCase() === validatedName.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
             await DataPath.getUserFoldersCollection(StateStore.read().user).doc(id).update({
-                name: trimmed
+                name: validatedName
             })
-        }, String(folder.name || ""))
+        }, String(folder.name || ""), { maxLength: 50, showCounter: true })
     },
 
     applyAppearanceSettings() {
@@ -150,6 +160,7 @@ Object.assign(UI, {
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
+        this.updateFolderLimitControls()
     },
 
     updatePrimaryActionLabel() {
@@ -157,6 +168,7 @@ Object.assign(UI, {
         const label = StateStore.read().view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
         this.updateActiveFolderMenu()
+        this.updateFolderLimitControls()
     },
 
 

@@ -5,8 +5,17 @@ export const createMediaHandlers = (context) => {
 
     const fileToDataUrl = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result || ""))
-        reader.onerror = () => reject(new Error("File read failed"))
+        reader.onload = () => {
+            const imageDataUrl = String(reader.result || "")
+            if (!navigator.onLine) {
+                const pendingImages = SafeStorage.local.getJson("pending-images", [])
+                const nextPendingImages = Array.isArray(pendingImages) ? pendingImages : []
+                nextPendingImages.push({ id: Utils.generateId(), dataUrl: imageDataUrl, createdAt: Date.now() })
+                SafeStorage.local.setJson("pending-images", nextPendingImages.slice(-20))
+            }
+            resolve(imageDataUrl)
+        }
+        reader.onerror = () => reject(new Error("file-read-failed"))
         reader.readAsDataURL(file)
     })
 

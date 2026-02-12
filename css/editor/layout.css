@@ -247,6 +247,8 @@
 .note-content.drawing-active {
     cursor: crosshair;
     user-select: none;
+    overscroll-behavior: contain;
+    touch-action: none;
 }
 
 .tool-wrapper {
