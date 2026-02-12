@@ -65,7 +65,12 @@ const AppLifecycle = {
             this.reminderTimers.set(note.id, timer)
         })
         const notificationSupported = typeof window !== "undefined" && "Notification" in window
-        if (notificationSupported && Notification.permission === "default") Notification.requestPermission().catch(() => null)
+        if (notificationSupported && Notification.permission === "default") {
+            try {
+                const permissionRequest = Notification.requestPermission()
+                if (permissionRequest && typeof permissionRequest.then === "function") permissionRequest.catch(() => null)
+            } catch {}
+        }
     },
 
 

@@ -110,6 +110,7 @@
     background: var(--surface-transparent);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
+    -webkit-backdrop-filter: blur(var(--blur-strength));
     backdrop-filter: blur(var(--blur-strength));
 }
 

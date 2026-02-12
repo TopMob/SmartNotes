@@ -67,10 +67,20 @@ async function setNonePersistence(auth) {
     } catch {}
 }
 
+async function setTargetPersistence(auth, targetPersistence) {
+    try {
+        await auth.setPersistence(targetPersistence)
+        return true
+    } catch {
+        return false
+    }
+}
+
 export async function setupAuthPersistence(auth) {
     if (!auth || typeof firebase === "undefined") return
+    if (setupAuthPersistence.promise) return setupAuthPersistence.promise
 
-    try {
+    setupAuthPersistence.promise = (async () => {
         const useNoneForIosSafari = isSafari() && isIosDevice()
         const useNoneForBrave = await isBraveBrowser()
         const useLocalForDesktop = !useNoneForIosSafari && !useNoneForBrave && isDesktopDevice()
@@ -78,13 +88,14 @@ export async function setupAuthPersistence(auth) {
             ? firebase.auth.Auth.Persistence.LOCAL
             : firebase.auth.Auth.Persistence.NONE
 
-        try {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        } catch {
-            try {
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-            } catch {}
-        }
+        const persistenceApplied = await setTargetPersistence(auth, targetPersistence)
+        if (persistenceApplied) return
+        await setNonePersistence(auth)
     })()
-    return setupAuthPersistence._promise
+
+    try {
+        await setupAuthPersistence.promise
+    } finally {
+        setupAuthPersistence.promise = null
+    }
 }
