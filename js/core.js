@@ -138,7 +138,9 @@ function showRuntimeErrorMessage(messageText) {
         UI.showToast(message)
         return
     }
-    console.error(message)
+    if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(message)
+    }
 }
 
 async function startCore() {

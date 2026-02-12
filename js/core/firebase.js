@@ -34,14 +34,10 @@ function isMobileDevice() {
 function resolveFirestoreSettings() {
     const baseSettings = {
         ignoreUndefinedProperties: true,
-        useFetchStreams: false,
-        merge: true
+        useFetchStreams: false
     }
 
-    const braveBrowser = detectBraveBrowser()
-    const mobileDevice = isMobileDevice()
-
-    if (braveBrowser && !mobileDevice) {
+    if (detectBraveBrowser()) {
         return {
             ...baseSettings,
             experimentalForceLongPolling: true

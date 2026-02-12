@@ -1,4 +1,4 @@
-import { isSafari, setupAuthPersistence } from "./authSafariFix.js"
+import { isBraveBrowser, isSafari, setupAuthPersistence } from "./authSafariFix.js"
 import { createLocalAuthManager } from "./localAuth.js"
 
 export function createAuthManager({ auth }) {
@@ -70,6 +70,12 @@ export function createAuthManager({ auth }) {
             }
 
             if (this._isIOS()) {
+                await this._signInWithRedirect()
+                return
+            }
+
+            const braveBrowser = await isBraveBrowser()
+            if (braveBrowser) {
                 await this._signInWithRedirect()
                 return
             }

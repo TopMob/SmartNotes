@@ -75,11 +75,6 @@ const AppLifecycle = {
         window.SmartNotesEditor?.init()
         UI.init()
         UI.setLang(safeStorage.get("app-lang") || "ru")
-        if (!this.networkListenersBound && typeof window !== "undefined") {
-            this.networkListenersBound = true
-            window.addEventListener("offline", () => this.handleOfflineMode())
-            window.addEventListener("online", () => this.handleOnlineMode())
-        }
     },
 
     clearSubscriptions() {
