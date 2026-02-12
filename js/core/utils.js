@@ -9,12 +9,32 @@ export const Utils = {
             timeout = setTimeout(() => func.apply(this, args), wait)
         }
     },
-    formatDate: (timestamp) => {
-        if (!timestamp) return ""
-        const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp)
+    formatDate: (value) => {
+        if (value === null || value === undefined || value === "") return ""
+        let date = null
+        if (value instanceof Date) {
+            date = new Date(value.getTime())
+        } else if (value && typeof value.toDate === "function") {
+            date = value.toDate()
+        } else if (value && typeof value === "object" && Number.isFinite(value.seconds)) {
+            date = new Date(value.seconds * 1000)
+        } else if (typeof value === "string") {
+            const parsedTimestamp = Date.parse(value)
+            date = new Date(parsedTimestamp)
+        } else if (typeof value === "number") {
+            date = new Date(value)
+        } else {
+            date = new Date(value)
+        }
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ""
         const lang = (typeof StateStore !== "undefined" && StateStore.read().config && StateStore.read().config.lang) || "ru"
         try {
-            return new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date)
+            return new Intl.DateTimeFormat(lang, {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit"
+            }).format(date)
         } catch {
             return date.toLocaleDateString()
         }

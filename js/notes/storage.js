@@ -21,13 +21,13 @@ const shrinkNoteForCache = (note) => {
 }
 
 const readFavoriteIds = () => {
-    const storedFavorites = safeStorage.getJson(FAVORITES_STORAGE_KEY)
+    const storedFavorites = SafeStorage.local.getJson(FAVORITES_STORAGE_KEY)
     if (Array.isArray(storedFavorites)) return new Set(storedFavorites)
     return new Set()
 }
 
 const writeFavoriteIds = (ids) => {
-    safeStorage.setJson(FAVORITES_STORAGE_KEY, [...ids])
+    SafeStorage.local.setJson(FAVORITES_STORAGE_KEY, [...ids])
 }
 
 const syncFavoritesStorage = (notes) => {
@@ -50,7 +50,7 @@ const applyStoredFavorites = (notes) => {
 }
 
 const loadNotesFilter = () => {
-    const storedFilter = safeStorage.getJson(NOTES_FILTER_KEY)
+    const storedFilter = SafeStorage.local.getJson(NOTES_FILTER_KEY)
     if (storedFilter && typeof storedFilter === "object") {
         const currentFilter = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
         StateActions.updateConfig({ notesFilter: { ...currentFilter, ...storedFilter } })
@@ -59,7 +59,7 @@ const loadNotesFilter = () => {
 
 const readCachedNotes = (uid) => {
     if (!uid) return []
-    const allCaches = safeStorage.getJson(NOTES_CACHE_KEY) || {}
+    const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY) || {}
     const userCache = allCaches[uid]
     if (!Array.isArray(userCache?.notes)) return []
     return userCache.notes.map((note) => NoteIO.normalizeNote(note))
@@ -68,7 +68,7 @@ const readCachedNotes = (uid) => {
 const writeCachedNotes = (uid, notes) => {
     if (!uid || !Array.isArray(notes)) return
     const tryWrite = (limit) => {
-        const allCaches = safeStorage.getJson(NOTES_CACHE_KEY) || {}
+        const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY) || {}
         const sanitizedNotes = notes.slice(0, limit).map(shrinkNoteForCache)
         allCaches[uid] = { updatedAt: Date.now(), notes: sanitizedNotes }
 
@@ -77,13 +77,13 @@ const writeCachedNotes = (uid, notes) => {
             .slice(0, 3)
 
         const nextCache = Object.fromEntries(entries)
-        return safeStorage.setJson(NOTES_CACHE_KEY, nextCache)
+        return SafeStorage.local.setJson(NOTES_CACHE_KEY, nextCache)
     }
 
     if (tryWrite(120)) return
     if (tryWrite(40)) return
 
-    safeStorage.remove(NOTES_CACHE_KEY)
+    SafeStorage.local.remove(NOTES_CACHE_KEY)
 }
 
 loadNotesFilter()

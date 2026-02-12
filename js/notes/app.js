@@ -13,12 +13,23 @@ const AppLifecycle = {
     networkListenersBound: false,
     networkRetryTimer: null,
     normalizeDateValue(value) {
-        if (!value) return 0
+        if (value === null || value === undefined || value === "") return 0
         if (typeof value.toDate === "function") {
             const timestamp = value.toDate().getTime()
             return Number.isFinite(timestamp) ? timestamp : 0
         }
-        const parsed = Date.parse(value)
+        if (value && typeof value === "object" && Number.isFinite(value.seconds)) {
+            const timestamp = value.seconds * 1000
+            return Number.isFinite(timestamp) ? timestamp : 0
+        }
+        if (typeof value === "number") {
+            return Number.isFinite(value) ? value : 0
+        }
+        if (value instanceof Date) {
+            const timestamp = value.getTime()
+            return Number.isFinite(timestamp) ? timestamp : 0
+        }
+        const parsed = Date.parse(String(value))
         return Number.isFinite(parsed) ? parsed : 0
     },
     sortFolders(folders) {
@@ -74,7 +85,7 @@ const AppLifecycle = {
         this.initialized = true
         window.SmartNotesEditor?.init()
         UI.init()
-        UI.setLang(safeStorage.get("app-lang") || "ru")
+        UI.setLang(SafeStorage.local.get("app-lang") || "ru")
     },
 
     clearSubscriptions() {
