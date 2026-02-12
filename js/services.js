@@ -1,4 +1,51 @@
 const NoteIO = {
+    toTimestampMillis(dateValue) {
+        if (dateValue === null || dateValue === undefined || dateValue === "") return 0
+        if (typeof dateValue?.toMillis === "function") {
+            const millis = dateValue.toMillis()
+            return Number.isFinite(millis) ? millis : 0
+        }
+        if (typeof dateValue?.toDate === "function") {
+            const millis = dateValue.toDate().getTime()
+            return Number.isFinite(millis) ? millis : 0
+        }
+        if (dateValue && typeof dateValue === "object" && Number.isFinite(dateValue.seconds)) {
+            const millis = dateValue.seconds * 1000
+            return Number.isFinite(millis) ? millis : 0
+        }
+        if (dateValue instanceof Date) {
+            const millis = dateValue.getTime()
+            return Number.isFinite(millis) ? millis : 0
+        }
+        if (typeof dateValue === "number") {
+            return Number.isFinite(dateValue) ? dateValue : 0
+        }
+        const millis = Date.parse(String(dateValue))
+        return Number.isFinite(millis) ? millis : 0
+    },
+
+    normalizeDateInput(dateValue) {
+        if (dateValue === null || dateValue === undefined || dateValue === "") return null
+        if (typeof dateValue?.toDate === "function") return dateValue
+        if (dateValue && typeof dateValue === "object" && Number.isFinite(dateValue.seconds)) {
+            return new Date(dateValue.seconds * 1000)
+        }
+        if (dateValue instanceof Date) {
+            return Number.isFinite(dateValue.getTime()) ? new Date(dateValue.getTime()) : null
+        }
+        if (typeof dateValue === "number") {
+            if (!Number.isFinite(dateValue)) return null
+            const date = new Date(dateValue)
+            return Number.isFinite(date.getTime()) ? date : null
+        }
+        if (typeof dateValue === "string") {
+            const parsedMillis = Date.parse(dateValue)
+            if (!Number.isFinite(parsedMillis)) return null
+            return new Date(parsedMillis)
+        }
+        return null
+    },
+
     normalizeNote(raw) {
         const safe = raw && typeof raw === "object" ? raw : {}
         const tags = Array.isArray(safe.tags) 
@@ -9,13 +56,10 @@ const NoteIO = {
         if (!pageDrawings.length && typeof safe.drawing === "string" && safe.drawing) {
             pageDrawings.push(safe.drawing)
         }
-        const now = Utils.serverTimestamp()
-        const normalizedCreatedAt = safe.createdAt || now
-        const normalizedUpdatedAt = safe.updatedAt || now
-        const createdAtTimestamp = typeof normalizedCreatedAt?.toMillis === "function"
-            ? normalizedCreatedAt.toMillis()
-            : Date.parse(normalizedCreatedAt || "")
-        const fallbackOrder = Number.isFinite(createdAtTimestamp) ? createdAtTimestamp : 0
+        const normalizedCreatedAt = this.normalizeDateInput(safe.createdAt) || Utils.serverTimestamp()
+        const normalizedUpdatedAt = this.normalizeDateInput(safe.updatedAt) || normalizedCreatedAt
+        const createdAtMillis = this.toTimestampMillis(normalizedCreatedAt)
+        const fallbackOrder = Number.isFinite(createdAtMillis) ? createdAtMillis : 0
         const ownerUid = safe.ownerUid
             ? String(safe.ownerUid)
             : (safe.ownerId ? String(safe.ownerId) : (StateStore.read().user?.uid || null))

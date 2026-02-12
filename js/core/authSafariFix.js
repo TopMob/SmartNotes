@@ -1,90 +1,87 @@
+function readUserAgent() {
+    if (typeof navigator === "undefined") return ""
+    return String(navigator.userAgent || "")
+}
+
 export function isSafari() {
-    if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
-    return /safari/.test(userAgent) && !/chrome|chromium|crios|fxios|edg|edgios|opr\//.test(userAgent)
+    const userAgent = readUserAgent()
+    if (!userAgent) return false
+    const hasSafari = /Safari/i.test(userAgent)
+    const hasExcludedBrowser = /Chrome|Chromium|CriOS|FxiOS|Edg|EdgiOS|OPR|Opera|SamsungBrowser/i.test(userAgent)
+    return hasSafari && !hasExcludedBrowser
 }
 
 function isIosDevice() {
-    if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
-    return /iphone|ipad|ipod/.test(userAgent)
+    const userAgent = readUserAgent()
+    if (!userAgent) return false
+    const directIosDevice = /iPhone|iPad|iPod/i.test(userAgent)
+    const ipadOsDesktopMode = /Macintosh/i.test(userAgent) && typeof navigator !== "undefined" && navigator.maxTouchPoints > 1
+    return directIosDevice || ipadOsDesktopMode
 }
 
 function isDesktopDevice() {
-    if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
-    const isMobileUserAgent = /android|iphone|ipad|ipod|mobile/.test(userAgent)
-    return !isMobileUserAgent
+    const userAgent = readUserAgent()
+    if (!userAgent) return false
+    return !/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)
 }
 
-function withTimeout(promise, timeoutMilliseconds, fallbackValue) {
+function runWithTimeout(asyncAction, timeoutMilliseconds) {
     return new Promise((resolve) => {
-        let settled = false
-        const timeoutId = setTimeout(() => {
-            if (settled) return
-            settled = true
-            resolve(fallbackValue)
+        let completed = false
+        const timerId = setTimeout(() => {
+            if (completed) return
+            completed = true
+            resolve(false)
         }, timeoutMilliseconds)
 
-        Promise.resolve(promise)
-            .then((value) => {
-                if (settled) return
-                settled = true
-                clearTimeout(timeoutId)
-                resolve(value)
+        Promise.resolve(asyncAction)
+            .then((result) => {
+                if (completed) return
+                completed = true
+                clearTimeout(timerId)
+                resolve(!!result)
             })
             .catch(() => {
-                if (settled) return
-                settled = true
-                clearTimeout(timeoutId)
-                resolve(fallbackValue)
+                if (completed) return
+                completed = true
+                clearTimeout(timerId)
+                resolve(false)
             })
     })
 }
 
-let braveDetectionPromise = null
+let braveBrowserPromise = null
 
 export async function isBraveBrowser() {
-    if (braveDetectionPromise) return braveDetectionPromise
-
-    braveDetectionPromise = (async () => {
+    if (braveBrowserPromise) return braveBrowserPromise
+    braveBrowserPromise = (async () => {
         if (typeof navigator === "undefined") return false
-        const braveApi = navigator.brave
-        if (!braveApi) return false
-        if (typeof braveApi.isBrave === "function") {
-            const detectionResult = await withTimeout(braveApi.isBrave(), 700, false)
-            return !!detectionResult
+        const braveObject = navigator.brave
+        if (!braveObject) return false
+        if (typeof braveObject.isBrave === "function") {
+            return runWithTimeout(braveObject.isBrave(), 800)
         }
         return true
     })()
-
-    return braveDetectionPromise
-}
-
-async function setNonePersistence(auth) {
-    try {
-        await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-    } catch {}
+    return braveBrowserPromise
 }
 
 export async function setupAuthPersistence(auth) {
-    if (!auth || typeof firebase === "undefined") return
+    if (!auth || typeof firebase === "undefined" || !firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return
+    const braveBrowser = await isBraveBrowser()
+    const iosSafari = isSafari() && isIosDevice()
+    const desktopBrowser = isDesktopDevice()
+    const shouldUseNone = iosSafari || braveBrowser
+    const shouldUseLocal = desktopBrowser && !braveBrowser
+    const targetPersistence = shouldUseLocal && !shouldUseNone
+        ? firebase.auth.Auth.Persistence.LOCAL
+        : firebase.auth.Auth.Persistence.NONE
 
     try {
-        const useNoneForIosSafari = isSafari() && isIosDevice()
-        const useNoneForBrave = await isBraveBrowser()
-        const useLocalForDesktop = !useNoneForIosSafari && !useNoneForBrave && isDesktopDevice()
-        const targetPersistence = useLocalForDesktop
-            ? firebase.auth.Auth.Persistence.LOCAL
-            : firebase.auth.Auth.Persistence.NONE
-
+        await auth.setPersistence(targetPersistence)
+    } catch {
         try {
-            await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        } catch {
-            try {
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-            } catch {}
-        }
-    })()
-    return setupAuthPersistence._promise
+            await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+        } catch {}
+    }
 }

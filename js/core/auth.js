@@ -74,12 +74,6 @@ export function createAuthManager({ auth }) {
                 return
             }
 
-            const braveBrowser = await isBraveBrowser()
-            if (braveBrowser) {
-                await this._signInWithRedirect()
-                return
-            }
-
             await auth.signInWithPopup(this._provider())
         },
         async _setNoStoragePersistence() {
@@ -107,42 +101,43 @@ export function createAuthManager({ auth }) {
             try {
                 await this._signInWithPopupPreferred()
             } catch (error) {
-                const errorCode = error?.code || ""
+                const errorCode = String(error?.code || "")
                 const errorMessage = String(error?.message || "").toLowerCase()
-                const isStorageBlockedError = errorCode === "auth/web-storage-unsupported" || errorCode === "auth/operation-not-supported-in-this-environment"
+                const storageErrorCodes = new Set([
+                    "auth/web-storage-unsupported",
+                    "auth/operation-not-supported-in-this-environment"
+                ])
 
-                if (isStorageBlockedError) {
-                    const persistenceSwitched = await this._setNoStoragePersistence()
-                    if (persistenceSwitched) {
-                        try {
-                            await this._signInWithPopupPreferred()
-                            return
-                        } catch (retryError) {
-                            this._setLoginBusy(false)
-                            this.handleAuthError(retryError)
-                            return
+                if (storageErrorCodes.has(errorCode)) {
+                    await this._setNoStoragePersistence()
+                    try {
+                        await this._signInWithPopupPreferred()
+                        this._setLoginBusy(false)
+                        return
+                    } catch (retryError) {
+                        const retryCode = String(retryError?.code || "")
+                        if (!storageErrorCodes.has(retryCode)) {
+                            try {
+                                await this._signInWithRedirect()
+                                this._setLoginBusy(false)
+                                return
+                            } catch (redirectError) {
+                                this._setLoginBusy(false)
+                                this.handleAuthError(redirectError)
+                                return
+                            }
                         }
+                        this._setLoginBusy(false)
+                        this.handleAuthError(retryError)
+                        return
                     }
                 }
 
-                const popupFallbackCodes = new Set([
-                    "auth/popup-blocked",
-                    "auth/popup-closed-by-user",
-                    "auth/cancelled-popup-request",
-                    "auth/operation-not-supported-in-this-environment",
-                    "auth/web-storage-unsupported"
-                ])
-                const isCrossOriginPolicyPopupIssue = errorMessage.includes("cross-origin-opener-policy")
-                const shouldUseRedirectFallback = popupFallbackCodes.has(errorCode) || isCrossOriginPolicyPopupIssue
-
-                if (shouldUseRedirectFallback && auth.currentUser) {
-                    this._setLoginBusy(false)
-                    return
-                }
-
-                if (shouldUseRedirectFallback) {
+                const isPopupError = errorCode.includes("popup") || errorMessage.includes("popup")
+                if (isPopupError || await isBraveBrowser()) {
                     try {
                         await this._signInWithRedirect()
+                        this._setLoginBusy(false)
                         return
                     } catch (redirectError) {
                         this._setLoginBusy(false)
@@ -150,9 +145,16 @@ export function createAuthManager({ auth }) {
                         return
                     }
                 }
-                this._setLoginBusy(false)
-                this.handleAuthError(error)
-                return
+
+                try {
+                    await this._signInWithRedirect()
+                    this._setLoginBusy(false)
+                    return
+                } catch (redirectError) {
+                    this._setLoginBusy(false)
+                    this.handleAuthError(redirectError)
+                    return
+                }
             }
 
             this._setLoginBusy(false)
