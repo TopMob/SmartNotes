@@ -17,10 +17,18 @@ function getUserAgentDataBrands() {
 }
 
 function detectBraveBrowser() {
+    if (typeof navigator === "undefined") return false
+    if (typeof navigator.brave !== "undefined") return true
     const userAgent = String(navigator.userAgent || "").toLowerCase()
     if (userAgent.includes("brave")) return true
     const brands = getUserAgentDataBrands()
     return brands.includes("brave")
+}
+
+function isMobileDevice() {
+    if (typeof navigator === "undefined") return false
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    return /android|iphone|ipad|ipod|mobile/.test(userAgent)
 }
 
 function resolveFirestoreSettings() {
@@ -54,7 +62,14 @@ export function initFirebase() {
     const db = firebase.firestore(app)
 
     db.settings(resolveFirestoreSettings())
-    db.enablePersistence({ synchronizeTabs: true }).catch(() => null)
+    try {
+        db.enablePersistence({ synchronizeTabs: true }).catch((error) => {
+            const code = String(error?.code || "")
+            if (code === "failed-precondition" || code === "unimplemented") return null
+            return null
+        })
+    } catch {}
+
 
     firebaseSingleton = { app, auth, db }
     return firebaseSingleton

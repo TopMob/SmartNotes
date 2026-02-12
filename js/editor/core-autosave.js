@@ -34,13 +34,29 @@ export const createAutosaveHandlers = (context) => {
         const currentNote = StateStore.read().currentNote
         if (!currentNote) return
         const nextDrawing = typeof drawingData === "string" ? drawingData : ""
-        const drawings = normalizePageDrawings(currentNote, getPages().length)
+        let drawings = []
+        try {
+            drawings = normalizePageDrawings(currentNote, getPages().length)
+        } catch (error) {
+            console.warn("drawing normalize failed", error)
+            return
+        }
         if (drawings[state.pageIndex] === nextDrawing) return
         drawings[state.pageIndex] = nextDrawing
         const nextNote = updateNotePageDrawings(currentNote, drawings, true)
         StateStore.update("currentNote", nextNote)
         StateStore.update("editorDirty", true)
         queueSnapshot()
+    }
+
+    const isSnapshotEmpty = (snapshot) => {
+        const titleText = String(snapshot?.title || "").trim()
+        const contentText = String(snapshot?.content || "").replace(/<br\s*\/?>(\s*)/gi, "").trim()
+        const tagsCount = Array.isArray(snapshot?.tags) ? snapshot.tags.length : 0
+        const drawingsCount = Array.isArray(snapshot?.pageDrawings)
+            ? snapshot.pageDrawings.filter(item => String(item || "").trim().length > 0).length
+            : 0
+        return !titleText && !contentText && tagsCount === 0 && drawingsCount === 0
     }
 
     const snapshotsEqual = (a, b) =>
@@ -72,6 +88,7 @@ export const createAutosaveHandlers = (context) => {
         const prev = state.history[state.history.length - 1]
         const current = captureSnapshot()
 
+        if (isSnapshotEmpty(current)) return
         if (prev && snapshotsEqual(prev, current)) return
 
         state.history.push(current)
@@ -86,6 +103,7 @@ export const createAutosaveHandlers = (context) => {
         const currentNote = StateStore.read().currentNote
         if (!currentNote || !StateStore.read().editorDirty) return
         const snap = captureSnapshot()
+        if (isSnapshotEmpty(snap)) return
         if (state.autoSaveSnapshot && snapshotsEqual(state.autoSaveSnapshot, snap)) return
         await save({ silent: true, autoSave: true })
         state.autoSaveSnapshot = captureSnapshot()

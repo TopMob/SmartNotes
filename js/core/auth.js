@@ -17,7 +17,7 @@ export function createAuthManager({ auth }) {
         },
         _toast(text) {
             if (typeof UI !== "undefined" && UI.showToast) UI.showToast(text)
-            else alert(text)
+            else console.error(text)
         },
         _provider() {
             const provider = new firebase.auth.GoogleAuthProvider()
@@ -108,6 +108,7 @@ export function createAuthManager({ auth }) {
                 await this._signInWithPopupPreferred()
             } catch (error) {
                 const errorCode = error?.code || ""
+                const errorMessage = String(error?.message || "").toLowerCase()
                 const isStorageBlockedError = errorCode === "auth/web-storage-unsupported" || errorCode === "auth/operation-not-supported-in-this-environment"
 
                 if (isStorageBlockedError) {
@@ -131,7 +132,15 @@ export function createAuthManager({ auth }) {
                     "auth/operation-not-supported-in-this-environment",
                     "auth/web-storage-unsupported"
                 ])
-                if (popupFallbackCodes.has(errorCode)) {
+                const isCrossOriginPolicyPopupIssue = errorMessage.includes("cross-origin-opener-policy")
+                const shouldUseRedirectFallback = popupFallbackCodes.has(errorCode) || isCrossOriginPolicyPopupIssue
+
+                if (shouldUseRedirectFallback && auth.currentUser) {
+                    this._setLoginBusy(false)
+                    return
+                }
+
+                if (shouldUseRedirectFallback) {
                     try {
                         await this._signInWithRedirect()
                         return
@@ -159,6 +168,7 @@ export function createAuthManager({ auth }) {
             return state.localAuthManager
         },
         async loginWithEmail() {
+            await setupAuthPersistence(auth)
             await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {

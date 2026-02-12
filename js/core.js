@@ -32,17 +32,25 @@ window.Auth = core.Auth
 window.LANG = LANG
 
 const firebaseRuntimeSources = [
-    [
-        "https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js",
-        "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js",
-        "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"
-    ],
-    [
-        "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-app-compat.js",
-        "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-auth-compat.js",
-        "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-firestore-compat.js"
-    ]
+    {
+        name: "gstatic",
+        urls: [
+            "https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js",
+            "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js",
+            "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"
+        ]
+    },
+    {
+        name: "jsdelivr",
+        urls: [
+            "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-app-compat.js",
+            "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-auth-compat.js",
+            "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-firestore-compat.js"
+        ]
+    }
 ]
+
+const firebaseRuntimeWarnedSources = new Set()
 
 function waitForFirebaseAvailability(timeoutMilliseconds) {
     return new Promise(resolve => {
@@ -100,19 +108,23 @@ function loadExternalScript(url, timeoutMilliseconds) {
 async function ensureFirebaseRuntime() {
     if (typeof firebase !== "undefined") return true
 
-    const initialWaitSucceeded = await waitForFirebaseAvailability(2500)
+    const initialWaitSucceeded = await waitForFirebaseAvailability(4000)
     if (initialWaitSucceeded) return true
 
     for (const sourceSet of firebaseRuntimeSources) {
         try {
-            for (const sourceUrl of sourceSet) {
-                await loadExternalScript(sourceUrl, 4000)
+            for (const sourceUrl of sourceSet.urls) {
+                await loadExternalScript(sourceUrl, 7000)
             }
-        } catch {
+        } catch (error) {
+            if (!firebaseRuntimeWarnedSources.has(sourceSet.name)) {
+                firebaseRuntimeWarnedSources.add(sourceSet.name)
+                console.warn(`[Core] Firebase CDN failed: ${sourceSet.name}`, error)
+            }
             continue
         }
 
-        const sourceWaitSucceeded = await waitForFirebaseAvailability(2000)
+        const sourceWaitSucceeded = await waitForFirebaseAvailability(3500)
         if (sourceWaitSucceeded) return true
     }
 
@@ -132,7 +144,11 @@ function showRuntimeErrorMessage(messageText) {
 }
 
 async function startCore() {
-    await ensureFirebaseRuntime()
+    const firebaseRuntimeReady = await ensureFirebaseRuntime()
+    if (!firebaseRuntimeReady) {
+        showRuntimeErrorMessage("Не удалось загрузить Firebase")
+        throw new Error("Firebase runtime unavailable")
+    }
 
     if (!core.auth || !core.db) {
         const { auth, db } = initFirebase()
