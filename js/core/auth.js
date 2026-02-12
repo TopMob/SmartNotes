@@ -102,6 +102,7 @@ export function createAuthManager({ auth }) {
                 await this._signInWithPopupPreferred()
             } catch (error) {
                 const errorCode = error?.code || ""
+                const errorMessage = String(error?.message || "").toLowerCase()
                 const isStorageBlockedError = errorCode === "auth/web-storage-unsupported" || errorCode === "auth/operation-not-supported-in-this-environment"
 
                 if (isStorageBlockedError) {
@@ -125,7 +126,15 @@ export function createAuthManager({ auth }) {
                     "auth/operation-not-supported-in-this-environment",
                     "auth/web-storage-unsupported"
                 ])
-                if (popupFallbackCodes.has(errorCode)) {
+                const isCrossOriginPolicyPopupIssue = errorMessage.includes("cross-origin-opener-policy")
+                const shouldUseRedirectFallback = popupFallbackCodes.has(errorCode) || isCrossOriginPolicyPopupIssue
+
+                if (shouldUseRedirectFallback && auth.currentUser) {
+                    this._setLoginBusy(false)
+                    return
+                }
+
+                if (shouldUseRedirectFallback) {
                     try {
                         await this._signInWithRedirect()
                         return
