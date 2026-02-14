@@ -1,3 +1,21 @@
+const buildPageDrawingsRevision = (pageDrawings) => {
+    const drawings = Array.isArray(pageDrawings) ? pageDrawings : []
+    let hash = 2166136261
+    hash ^= drawings.length
+    hash = Math.imul(hash, 16777619)
+    for (let index = 0; index < drawings.length; index++) {
+        const drawing = typeof drawings[index] === "string" ? drawings[index] : ""
+        let drawingHash = 2166136261
+        for (let charIndex = 0; charIndex < drawing.length; charIndex++) {
+            drawingHash ^= drawing.charCodeAt(charIndex)
+            drawingHash = Math.imul(drawingHash, 16777619)
+        }
+        hash ^= drawingHash >>> 0
+        hash = Math.imul(hash, 16777619)
+    }
+    return `pdr:${drawings.length}:${hash >>> 0}`
+}
+
 const NoteIO = {
     toTimestampMillis(dateValue) {
         if (dateValue === null || dateValue === undefined || dateValue === "") return 0
@@ -96,6 +114,9 @@ const NoteIO = {
             title: safe.title ? String(safe.title).trim() : "",
             content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
             pageDrawings,
+            pageDrawingsRevision: typeof safe.pageDrawingsRevision === "string" && safe.pageDrawingsRevision
+                ? safe.pageDrawingsRevision
+                : buildPageDrawingsRevision(pageDrawings),
             tags,
             folderId: safe.folderId ? String(safe.folderId) : null,
             folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,

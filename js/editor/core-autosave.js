@@ -1,5 +1,5 @@
 import { CONFIG } from "./core-state.js"
-import { normalizePageDrawings } from "./core-drawing.js"
+import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 
 export const createAutosaveHandlers = (context) => {
     const {
@@ -21,12 +21,19 @@ export const createAutosaveHandlers = (context) => {
             console.warn("drawing normalize failed", error)
         }
         const activeDrawing = typeof EditorDrawing === "undefined" ? null : EditorDrawing.getDrawingSnapshot?.()
-        if (typeof activeDrawing === "string") drawings[state.pageIndex] = activeDrawing
+        let pageDrawingsRevision = currentNote?.pageDrawingsRevision || ""
+        if (typeof activeDrawing === "string") {
+            const previousDrawing = drawings[state.pageIndex] || ""
+            drawings[state.pageIndex] = activeDrawing
+            if (previousDrawing !== activeDrawing) pageDrawingsRevision = ""
+        }
+        if (!pageDrawingsRevision) pageDrawingsRevision = buildPageDrawingsRevision(drawings)
         return {
             title: elements.title.value || "",
             content: elements.content.innerHTML || "",
             tags: [...(currentNote?.tags || [])],
-            pageDrawings: drawings
+            pageDrawings: drawings,
+            pageDrawingsRevision
         }
     }
 
@@ -59,11 +66,25 @@ export const createAutosaveHandlers = (context) => {
         return !titleText && !contentText && tagsCount === 0 && drawingsCount === 0
     }
 
-    const snapshotsEqual = (a, b) =>
-        a.title === b.title &&
-        a.content === b.content &&
-        JSON.stringify(a.tags) === JSON.stringify(b.tags) &&
-        JSON.stringify(a.pageDrawings) === JSON.stringify(b.pageDrawings)
+    const areStringArraysEqual = (firstArray, secondArray) => {
+        const left = Array.isArray(firstArray) ? firstArray : []
+        const right = Array.isArray(secondArray) ? secondArray : []
+        if (left.length !== right.length) return false
+        for (let index = 0; index < left.length; index++) {
+            if (left[index] !== right[index]) return false
+        }
+        return true
+    }
+
+    const snapshotsEqual = (firstSnapshot, secondSnapshot) => {
+        if (firstSnapshot.title !== secondSnapshot.title) return false
+        if (firstSnapshot.content !== secondSnapshot.content) return false
+        if (!areStringArraysEqual(firstSnapshot.tags, secondSnapshot.tags)) return false
+        const firstRevision = firstSnapshot.pageDrawingsRevision || ""
+        const secondRevision = secondSnapshot.pageDrawingsRevision || ""
+        if (firstRevision && secondRevision) return firstRevision === secondRevision
+        return areStringArraysEqual(firstSnapshot.pageDrawings, secondSnapshot.pageDrawings)
+    }
 
     const resetTypingState = Utils.debounce(() => {
         StateStore.update("isTyping", false)
@@ -76,7 +97,8 @@ export const createAutosaveHandlers = (context) => {
             ...note,
             title: snapshot.title,
             content: snapshot.content,
-            pageDrawings: snapshot.pageDrawings
+            pageDrawings: snapshot.pageDrawings,
+            pageDrawingsRevision: snapshot.pageDrawingsRevision || buildPageDrawingsRevision(snapshot.pageDrawings)
         })
     }
 
@@ -114,7 +136,8 @@ export const createAutosaveHandlers = (context) => {
                 ...refreshedNote,
                 title: savedSnapshot.title,
                 content: savedSnapshot.content,
-                pageDrawings: savedSnapshot.pageDrawings
+                pageDrawings: savedSnapshot.pageDrawings,
+                pageDrawingsRevision: savedSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(savedSnapshot.pageDrawings)
             })
         }
     }, 1600)

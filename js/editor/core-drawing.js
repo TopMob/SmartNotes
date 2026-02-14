@@ -9,3 +9,26 @@ export const normalizePageDrawings = (note, totalPages) => {
     if (drawings.length > count) drawings.length = count
     return drawings
 }
+
+const hashDrawingText = (drawingText) => {
+    const value = typeof drawingText === "string" ? drawingText : ""
+    let hash = 2166136261
+    for (let index = 0; index < value.length; index++) {
+        hash ^= value.charCodeAt(index)
+        hash = Math.imul(hash, 16777619)
+    }
+    return hash >>> 0
+}
+
+export const buildPageDrawingsRevision = (pageDrawings) => {
+    const drawings = Array.isArray(pageDrawings) ? pageDrawings : []
+    let hash = 2166136261
+    hash ^= drawings.length
+    hash = Math.imul(hash, 16777619)
+    for (let index = 0; index < drawings.length; index++) {
+        const drawingHash = hashDrawingText(drawings[index])
+        hash ^= drawingHash
+        hash = Math.imul(hash, 16777619)
+    }
+    return `pdr:${drawings.length}:${hash >>> 0}`
+}

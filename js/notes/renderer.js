@@ -1,6 +1,16 @@
 const NotesRenderer = (() => {
     const cardCache = new Map()
 
+    const areTagListsEqual = (firstTags, secondTags) => {
+        const left = Array.isArray(firstTags) ? firstTags : []
+        const right = Array.isArray(secondTags) ? secondTags : []
+        if (left.length !== right.length) return false
+        for (let index = 0; index < left.length; index++) {
+            if (left[index] !== right[index]) return false
+        }
+        return true
+    }
+
     const el = (tag, cls = [], text = null) => {
         const node = document.createElement(tag)
         if (cls.length) node.classList.add(...cls)
@@ -115,9 +125,7 @@ const NotesRenderer = (() => {
             refs.dateSpan.textContent = Utils.formatDate(note.updatedAt || note.createdAt || Date.now())
         }
 
-        const tagsStr = JSON.stringify(note.tags)
-        const prevTags = JSON.stringify(data.tags)
-        if (tagsStr !== prevTags || isLockedView) {
+        if (!areTagListsEqual(note.tags, data.tags) || isLockedView) {
             const tags = Array.isArray(note.tags) ? note.tags.slice(0, 3) : []
             refs.tagsSpan.textContent = (isLockedView && isLockedNote) ? "" : (tags.length ? tags.map(t => `#${t}`).join(" ") : "")
         }
