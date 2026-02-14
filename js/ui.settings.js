@@ -583,21 +583,45 @@ Object.assign(UI, {
         }
     },
 
-    showPrompt(title, placeholder, cb, value = "") {
+    showPrompt(title, placeholder, cb, value = "", options = {}) {
         const modal = this.els.promptModal
         const input = document.getElementById("prompt-input")
         const ok = document.getElementById("prompt-ok")
         const cancel = document.getElementById("prompt-cancel")
         const titleEl = document.getElementById("prompt-title")
+        const maxLength = Number(options.maxLength || 0)
+        const shouldShowCounter = !!options.showCounter && maxLength > 0
 
         if (titleEl) titleEl.textContent = title
         input.value = value
         input.placeholder = placeholder
 
+        let counterElement = modal.querySelector(".prompt-character-counter")
+        if (!counterElement && shouldShowCounter) {
+            counterElement = document.createElement("span")
+            counterElement.className = "prompt-character-counter"
+            input.parentNode?.appendChild(counterElement)
+        }
+        if (counterElement && !shouldShowCounter) {
+            counterElement.remove()
+            counterElement = null
+        }
+
+        const updatePromptState = () => {
+            const currentLength = String(input.value || "").trim().length
+            const isExceeded = shouldShowCounter && currentLength > maxLength
+            if (counterElement) {
+                counterElement.textContent = `${currentLength}/${maxLength}`
+                counterElement.classList.toggle("is-limit-exceeded", isExceeded)
+            }
+            if (okClone) okClone.disabled = isExceeded
+        }
+
         const finish = (val) => {
             if (val) cb(val)
             modal.classList.remove("active")
             input.onkeydown = null
+            input.oninput = null
         }
 
         const okClone = ok.cloneNode(true)
@@ -608,6 +632,8 @@ Object.assign(UI, {
 
         okClone.onclick = () => finish(String(input.value || "").trim())
         cancelClone.onclick = () => modal.classList.remove("active")
+        input.oninput = updatePromptState
+        updatePromptState()
 
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)

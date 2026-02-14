@@ -26,6 +26,7 @@ Object.assign(UI, {
             </button>
         `).join("")
         this.renderFilterMenu()
+        this.updateFolderLimitControls()
     },
 
 
@@ -96,5 +97,6 @@ Object.assign(UI, {
             const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
             return `<div class="folder-card" data-action="open-folder" data-folder-id="${folder.id}"><div class="folder-title">${Utils.escapeHtml(folder.name)}</div><div class="folder-meta">${count} ${label}</div></div>`
         }).join("")
+        this.updateFolderLimitControls()
     }
 })

@@ -106,8 +106,18 @@ export const createAutosaveHandlers = (context) => {
         if (isSnapshotEmpty(snap)) return
         if (state.autoSaveSnapshot && snapshotsEqual(state.autoSaveSnapshot, snap)) return
         await save({ silent: true, autoSave: true })
-        state.autoSaveSnapshot = captureSnapshot()
-    }, 1200)
+        const savedSnapshot = captureSnapshot()
+        state.autoSaveSnapshot = savedSnapshot
+        const currentNote = StateStore.read().currentNote
+        if (currentNote) {
+            StateStore.update("currentNote", {
+                ...currentNote,
+                title: savedSnapshot.title,
+                content: savedSnapshot.content,
+                pageDrawings: savedSnapshot.pageDrawings
+            })
+        }
+    }, 1600)
 
     const scheduleSnapshotFrame = () => {
         if (state.isRenderingState) return

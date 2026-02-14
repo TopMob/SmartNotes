@@ -33,7 +33,7 @@ const EditorDrawing = (() => {
         if (typeof nextOnDrawingChange === "function") onDrawingChange = nextOnDrawingChange
         drawingState.container = elements.contentWrapper || null
         drawingState.content = elements.content || null
-        drawingState.scrollContainer = elements.content || null
+        drawingState.scrollContainer = document.querySelector(".editor-scroll-area .note-content") || elements.scrollArea || elements.content || null
         drawingState.pageElement = elements.content?.querySelector(".note-page.is-active") || null
     }
 
@@ -345,6 +345,10 @@ const EditorDrawing = (() => {
         if (drawingState.canvas) {
             drawingState.canvas.style.pointerEvents = drawingState.active ? "auto" : "none"
         }
+        if (drawingState.scrollContainer) {
+            drawingState.scrollContainer.style.overflow = drawingState.active ? "hidden" : ""
+            drawingState.scrollContainer.style.touchAction = drawingState.active ? "none" : ""
+        }
         drawingState.isDrawing = false
         drawingState.pointerId = null
         updateEditableState()
@@ -356,6 +360,10 @@ const EditorDrawing = (() => {
         drawingState.isDrawing = false
         drawingState.pointerId = null
         if (drawingState.canvas) drawingState.canvas.style.pointerEvents = "none"
+        if (drawingState.scrollContainer) {
+            drawingState.scrollContainer.style.overflow = ""
+            drawingState.scrollContainer.style.touchAction = ""
+        }
         detachObservers()
         if (drawingState.scrollFrame) cancelAnimationFrame(drawingState.scrollFrame)
         drawingState.scrollFrame = null
