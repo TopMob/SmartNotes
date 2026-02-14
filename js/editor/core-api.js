@@ -6,6 +6,7 @@ import { createMathHandlers } from "./core-math.js"
 import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"
 import { normalizePageDrawings } from "./core-drawing.js"
+import { createEditorCommands } from "./editor-commands.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -42,6 +43,7 @@ export const EditorAPI = (() => {
     let fileToDataUrl = async () => ""
     let confirmEquationAtCaret = () => false
     let openFromList = () => {}
+    let applyTextAlignment = () => false
     let captureSnapshot = () => ({
         title: "",
         content: "",
@@ -65,7 +67,8 @@ export const EditorAPI = (() => {
         state,
         getPages,
         queueSnapshot: (...args) => queueSnapshot(...args),
-        insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection
+        insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
+        alignText: (side) => applyTextAlignment(side)
     })
 
     fileToDataUrl = mediaHandlers.fileToDataUrl
@@ -84,9 +87,21 @@ export const EditorAPI = (() => {
 
     confirmEquationAtCaret = mathHandlers.confirmEquationAtCaret
 
+    const editorCommands = createEditorCommands({
+        getRoot: () => elements.content,
+        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+        storeSelection: inputHandlers.storeSelection,
+        queueSnapshot: (...args) => queueSnapshot(...args),
+        fallback: {
+            enableFallback: StateStore.read().config?.editorExecCommandFallback !== false
+        }
+    })
+
+    applyTextAlignment = editorCommands.alignText
+
     const linkHandlers = createLinkHandlers({
         getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        wrapSelectionWithNode: inputHandlers.wrapSelectionWithNode,
+        getEditorCommands: () => editorCommands,
         openFromList: (...args) => openFromList(...args)
     })
 
@@ -518,12 +533,12 @@ const addPage = () => {
     }
 
     const getToolList = () => [
-        { id: "bold", i: "format_bold", label: "tool_bold", cmd: () => document.execCommand("bold") },
-        { id: "italic", i: "format_italic", label: "tool_italic", cmd: () => document.execCommand("italic") },
-        { id: "underline", i: "format_underlined", label: "tool_underline", cmd: () => document.execCommand("underline") },
-        { id: "strike", i: "strikethrough_s", label: "tool_strike", cmd: () => inputHandlers.toggleStrikeThrough() },
-        { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => document.execCommand("insertUnorderedList") },
-        { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => document.execCommand("insertOrderedList") },
+        { id: "bold", i: "format_bold", label: "tool_bold", cmd: () => editorCommands.toggleBold() },
+        { id: "italic", i: "format_italic", label: "tool_italic", cmd: () => editorCommands.toggleItalic() },
+        { id: "underline", i: "format_underlined", label: "tool_underline", cmd: () => editorCommands.toggleUnderline() },
+        { id: "strike", i: "strikethrough_s", label: "tool_strike", cmd: () => editorCommands.toggleStrike() },
+        { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => editorCommands.toggleBulletedList() },
+        { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => editorCommands.toggleNumberedList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => inputHandlers.insertHorizontalRule() },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
             inputHandlers.storeSelection()
@@ -546,7 +561,7 @@ const addPage = () => {
             if (typeof EditorDrawing !== "undefined") EditorDrawing.toggleDrawingMode()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => mediaHandlers.toggleAlignMenu(btn) },
-        { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => document.execCommand("removeFormat") }
+        { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => editorCommands.clearFormatting() }
     ]
 
     const getEnabledTools = () => StateStore.read().config.editorTools || {}

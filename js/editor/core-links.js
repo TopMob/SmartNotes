@@ -1,5 +1,5 @@
 export const createLinkHandlers = (context) => {
-    const { getActiveRangeInContent, wrapSelectionWithNode, openFromList } = context
+    const { getActiveRangeInContent, openFromList, getEditorCommands } = context
 
     const normalizeUrl = (value) => {
         const url = String(value || "").trim()
@@ -18,9 +18,7 @@ export const createLinkHandlers = (context) => {
             UI.showToast(UI.getText("link_selection_required", "Select text to link"))
             return
         }
-        const link = document.createElement("a")
-        link.href = url
-        wrapSelectionWithNode(link)
+        getEditorCommands()?.insertLink(url)
     }
 
     const applyNoteLink = (value) => {
@@ -36,9 +34,7 @@ export const createLinkHandlers = (context) => {
             UI.showToast(UI.getText("note_link_not_found", "Note not found"))
             return
         }
-        const link = document.createElement("a")
-        link.dataset.noteId = noteId
-        wrapSelectionWithNode(link)
+        getEditorCommands()?.insertLink(`note:${noteId}`, { noteId })
     }
 
     const openNoteById = (noteId) => {

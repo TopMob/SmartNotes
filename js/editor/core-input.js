@@ -234,41 +234,9 @@ export const createInputHandlers = (context) => {
 
     const insertNodeAtSelection = (node) => insertFragmentAtSelection(node)
 
-    const normalizeStrikeTags = () => {
-        if (!elements.content) return
-        elements.content.querySelectorAll("strike").forEach(strike => {
-            const replacement = document.createElement("s")
-            while (strike.firstChild) replacement.appendChild(strike.firstChild)
-            strike.replaceWith(replacement)
-        })
-    }
-
-    const toggleStrikeThrough = () => {
-        document.execCommand("strikeThrough")
-        normalizeStrikeTags()
-    }
-
     const insertHorizontalRule = () => {
         const hr = document.createElement("hr")
         insertNodeAtSelection(hr)
-    }
-
-    const wrapSelectionWithNode = (node) => {
-        const range = getActiveRangeInContent()
-        if (!range || range.collapsed) return null
-        const content = range.extractContents()
-        node.appendChild(content)
-        range.insertNode(node)
-        const nextRange = document.createRange()
-        nextRange.selectNodeContents(node)
-        nextRange.collapse(false)
-        const sel = window.getSelection()
-        if (sel) {
-            sel.removeAllRanges()
-            sel.addRange(nextRange)
-        }
-        storeSelection()
-        return node
     }
 
     const extractHashtags = (value) => {
@@ -383,9 +351,7 @@ export const createInputHandlers = (context) => {
         createRangeFromOffsets,
         insertHtmlAtSelection,
         insertNodeAtSelection,
-        toggleStrikeThrough,
         insertHorizontalRule,
-        wrapSelectionWithNode,
         collectSuggestedTags,
         syncAutoTitle,
         addTag,
