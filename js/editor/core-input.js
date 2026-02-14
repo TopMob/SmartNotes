@@ -7,6 +7,88 @@ export const createInputHandlers = (context) => {
         insertMedia
     } = context
 
+    const removableWrapperTags = new Set(["div", "section", "article", "main"])
+
+    const stripOfficeNamespaces = (value) => String(value || "")
+        .replace(/<\/?(?:o|v|w|m):[^>]*>/gi, "")
+        .replace(/\s+xmlns(?::\w+)?="[^"]*"/gi, "")
+
+    const normalizePastedHtml = (html) => {
+        const container = document.createElement("div")
+        container.innerHTML = stripOfficeNamespaces(html)
+
+        Array.from(container.querySelectorAll("meta,link,style,script,title,xml")).forEach(node => node.remove())
+
+        Array.from(container.querySelectorAll("span")).forEach(span => {
+            const text = span.textContent || ""
+            if (span.attributes.length === 0 && !text.includes("\u00a0")) {
+                while (span.firstChild) span.parentNode?.insertBefore(span.firstChild, span)
+                span.remove()
+            }
+        })
+
+        Array.from(container.querySelectorAll("p,div")).forEach(block => {
+            const hasMedia = !!block.querySelector("img,audio,video,table,hr,br")
+            const text = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+            if (!hasMedia && !text) block.remove()
+        })
+
+        const wrappers = ["html", "body"]
+        wrappers.forEach(selector => {
+            const wrapper = container.querySelector(selector)
+            if (!wrapper) return
+            const fragment = document.createDocumentFragment()
+            while (wrapper.firstChild) fragment.appendChild(wrapper.firstChild)
+            wrapper.replaceWith(fragment)
+        })
+
+        const unwrapSingleWrapper = () => {
+            if (container.childNodes.length !== 1) return
+            const onlyChild = container.firstChild
+            if (!onlyChild || onlyChild.nodeType !== Node.ELEMENT_NODE) return
+            const tagName = onlyChild.tagName.toLowerCase()
+            if (!removableWrapperTags.has(tagName)) return
+            if (onlyChild.attributes.length > 0) return
+            const fragment = document.createDocumentFragment()
+            while (onlyChild.firstChild) fragment.appendChild(onlyChild.firstChild)
+            onlyChild.replaceWith(fragment)
+        }
+
+        unwrapSingleWrapper()
+        return container.innerHTML
+    }
+
+    const createFragmentFromHtml = (html) => {
+        const template = document.createElement("template")
+        template.innerHTML = html
+        return template.content.cloneNode(true)
+    }
+
+    const insertFragmentAtSelection = (contentNode) => {
+        if (!elements.content || !contentNode) return false
+        const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+            ? contentNode.lastChild
+            : contentNode
+        if (!nodeToAnchor) return false
+        const range = restoreSelection()
+        if (!range) {
+            elements.content.appendChild(contentNode)
+            storeSelection()
+            return true
+        }
+        range.deleteContents()
+        range.insertNode(contentNode)
+        range.setStartAfter(nodeToAnchor)
+        range.collapse(true)
+        const selection = window.getSelection()
+        if (selection) {
+            selection.removeAllRanges()
+            selection.addRange(range)
+        }
+        storeSelection()
+        return true
+    }
+
     const handlePaste = async (event) => {
         const items = Array.from(event.clipboardData?.items || [])
         const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
@@ -20,22 +102,14 @@ export const createInputHandlers = (context) => {
         }
 
         event.preventDefault()
-        const text = event.clipboardData.getData("text/plain")
-        const html = event.clipboardData.getData("text/html")
-
-        let safeContent = text
-        if (html) {
-            const div = document.createElement("div")
-            div.innerHTML = html
-            div.querySelectorAll("*").forEach(el => {
-                el.removeAttribute("style")
-                el.removeAttribute("class")
-                if (el.tagName === "IMG") el.remove()
-            })
-            safeContent = div.innerHTML
-        }
-
-        document.execCommand("insertHTML", false, safeContent || text)
+        const html = event.clipboardData?.getData("text/html") || ""
+        const plainText = event.clipboardData?.getData("text/plain") || ""
+        const normalizedHtml = html ? normalizePastedHtml(html) : ""
+        const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
+        const hasInsertedContent = sanitizedHtml
+            ? insertFragmentAtSelection(createFragmentFromHtml(sanitizedHtml))
+            : (plainText ? insertFragmentAtSelection(document.createTextNode(plainText)) : false)
+        if (hasInsertedContent) queueSnapshot()
     }
 
     const handleEquationConfirmKeyDown = (event) => {
@@ -156,46 +230,9 @@ export const createInputHandlers = (context) => {
         return range
     }
 
-    const insertHtmlAtSelection = (html) => {
-        if (!elements.content) return
-        const range = restoreSelection()
-        const container = document.createElement("div")
-        container.innerHTML = html
-        const fragment = document.createDocumentFragment()
-        while (container.firstChild) fragment.appendChild(container.firstChild)
-        if (range) {
-            range.deleteContents()
-            range.insertNode(fragment)
-            range.collapse(false)
-            const sel = window.getSelection()
-            if (sel) {
-                sel.removeAllRanges()
-                sel.addRange(range)
-            }
-        } else {
-            elements.content.appendChild(fragment)
-        }
-        storeSelection()
-    }
+    const insertHtmlAtSelection = (html) => insertFragmentAtSelection(createFragmentFromHtml(html))
 
-    const insertNodeAtSelection = (node) => {
-        if (!elements.content) return
-        const range = restoreSelection()
-        if (range) {
-            range.deleteContents()
-            range.insertNode(node)
-            range.setStartAfter(node)
-            range.collapse(true)
-            const sel = window.getSelection()
-            if (sel) {
-                sel.removeAllRanges()
-                sel.addRange(range)
-            }
-        } else {
-            elements.content.appendChild(node)
-        }
-        storeSelection()
-    }
+    const insertNodeAtSelection = (node) => insertFragmentAtSelection(node)
 
     const normalizeStrikeTags = () => {
         if (!elements.content) return
