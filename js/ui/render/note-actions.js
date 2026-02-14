@@ -5,7 +5,7 @@ const buildExportFileName = (note, extension) => {
 
 const buildNoteTextExport = (note) => {
     const contentWrapper = document.createElement("div")
-    contentWrapper.innerHTML = note.content || ""
+    contentWrapper.innerHTML = Utils.sanitizeHtml(note.content || "")
     contentWrapper.querySelectorAll("img, figure, picture, svg, canvas").forEach(element => element.remove())
     const contentText = Utils.stripHtml(contentWrapper.innerHTML).replace(/\r\n/g, "\n").trim()
     const titleText = (note.title || NoteText.buildAutoTitle(note)).trim()
@@ -15,26 +15,41 @@ const buildNoteTextExport = (note) => {
     return parts.join("\n\n")
 }
 
+const buildSafeExportPagesHtml = (note) => {
+    const safeContentHtml = Utils.sanitizeHtml(note.content || "")
+    const contentWrapper = document.createElement("div")
+    contentWrapper.innerHTML = safeContentHtml
+    const pages = Array.from(contentWrapper.querySelectorAll(".note-page"))
+    const pageDrawings = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
+    const sourcePages = pages.length ? pages : [contentWrapper]
+    const exportRoot = document.createElement("div")
+    sourcePages.forEach((page, index) => {
+        const pageElement = document.createElement("div")
+        pageElement.className = "note-page"
+        const pageHtml = page.innerHTML || ""
+        pageElement.innerHTML = Utils.sanitizeHtml(pageHtml)
+        const drawingSource = pageDrawings[index]
+        if (typeof drawingSource === "string" && drawingSource.trim()) {
+            const drawingElement = document.createElement("img")
+            drawingElement.className = "note-drawing"
+            drawingElement.alt = ""
+            drawingElement.src = drawingSource
+            pageElement.appendChild(drawingElement)
+        }
+        exportRoot.appendChild(pageElement)
+    })
+    return Utils.sanitizeHtml(exportRoot.innerHTML)
+}
+
 const buildPrintableNoteHtml = (note, dict) => {
     const titleText = (note.title || NoteText.buildAutoTitle(note)).trim()
     const formattedDate = Utils.formatDate(note.updatedAt || note.createdAt || Date.now())
-    const safeTitle = Utils.escapeHtml(titleText || dict.untitled_note || "Untitled")
-    const safeDate = Utils.escapeHtml(formattedDate)
-    const contentWrapper = document.createElement("div")
-    contentWrapper.innerHTML = note.content || ""
-    const pages = Array.from(contentWrapper.querySelectorAll(".note-page"))
-    const pageDrawings = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
-    const pageHtml = (pages.length ? pages : [contentWrapper]).map((page, index) => {
-        const drawing = pageDrawings[index] || ""
-        const drawingHtml = drawing ? `<img class="note-drawing" src="${drawing}" alt="">` : ""
-        return `<section class="note-page">${page.innerHTML || ""}${drawingHtml}</section>`
-    }).join("")
-    return `<!doctype html>
-<html lang="${StateStore.read().config.lang || "ru"}">
-<head>
-    <meta charset="utf-8">
-    <title>${safeTitle}</title>
-    <style>
+    return {
+        language: StateStore.read().config.lang || "ru",
+        printableTitle: titleText || dict.untitled_note || "Untitled",
+        printableDate: formattedDate,
+        printableContentHtml: buildSafeExportPagesHtml(note),
+        printableStyles: `
         :root { color-scheme: light dark; }
         body { margin: 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1f1f1f; background: #ffffff; }
         h1 { font-size: 24px; margin: 0 0 6px; }
@@ -50,19 +65,11 @@ const buildPrintableNoteHtml = (note, dict) => {
             body { margin: 20mm; }
             .note-page { break-inside: avoid; }
         }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>${safeTitle}</h1>
-        <div class="note-date">${safeDate}</div>
-    </header>
-    <main class="note-content">${pageHtml}</main>
-</body>
-</html>`
+    `
+    }
 }
 
-const openPrintWindow = (html, title, dict) => {
+const openPrintWindow = (printableDocument, dict) => {
     const frame = document.createElement("iframe")
     frame.style.position = "fixed"
     frame.style.right = "0"
@@ -81,16 +88,34 @@ const openPrintWindow = (html, title, dict) => {
             UI.showToast(dict.popup_blocked || "Allow popups to print")
             return
         }
-        doc.open()
-        doc.write(html)
-        doc.close()
+        doc.documentElement.lang = printableDocument.language
+        doc.head.replaceChildren()
+        const metaCharset = doc.createElement("meta")
+        metaCharset.setAttribute("charset", "utf-8")
+        const documentTitle = doc.createElement("title")
+        documentTitle.textContent = printableDocument.printableTitle
+        const stylesElement = doc.createElement("style")
+        stylesElement.textContent = printableDocument.printableStyles
+        doc.head.append(metaCharset, documentTitle, stylesElement)
+        doc.body.replaceChildren()
+        const headerElement = doc.createElement("header")
+        const titleElement = doc.createElement("h1")
+        titleElement.textContent = printableDocument.printableTitle
+        const dateElement = doc.createElement("div")
+        dateElement.className = "note-date"
+        dateElement.textContent = printableDocument.printableDate
+        headerElement.append(titleElement, dateElement)
+        const contentElement = doc.createElement("main")
+        contentElement.className = "note-content"
+        contentElement.innerHTML = printableDocument.printableContentHtml
+        doc.body.append(headerElement, contentElement)
         requestAnimationFrame(() => {
             if (!frame.contentWindow) {
                 UI.showToast(dict.popup_blocked || "Allow popups to print")
                 frame.remove()
                 return
             }
-            frame.contentDocument.title = title
+            frame.contentDocument.title = printableDocument.printableTitle
             frame.contentWindow.focus()
             frame.contentWindow.print()
             setTimeout(() => frame.remove(), 1200)
@@ -235,9 +260,8 @@ Object.assign(UI, {
             return
         }
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
-        const titleText = (note.title || NoteText.buildAutoTitle(note)).trim()
-        const html = buildPrintableNoteHtml(note, dict)
-        openPrintWindow(html, titleText || dict.untitled_note || "Untitled", dict)
+        const printableDocument = buildPrintableNoteHtml(note, dict)
+        openPrintWindow(printableDocument, dict)
         this.closeModal("note-actions-modal")
     },
 
