@@ -88,7 +88,8 @@ export const Utils = {
             "audio-title",
             "media-draggable-item",
             "playing",
-            "note-page"
+            "note-page",
+            "note-drawing"
         ])
         const allowAttrs = {
             a: new Set(["href", "target", "rel", "data-note-id"]),
