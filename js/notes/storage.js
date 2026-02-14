@@ -80,8 +80,8 @@ const writeCachedNotes = (uid, notes) => {
         return SafeStorage.local.setJson(NOTES_CACHE_KEY, nextCache)
     }
 
-    if (tryWrite(120)) return
-    if (tryWrite(40)) return
+    if (tryWrite(120).success) return
+    if (tryWrite(40).success) return
 
     SafeStorage.local.remove(NOTES_CACHE_KEY)
 }

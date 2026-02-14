@@ -170,19 +170,21 @@ export const EditorAPI = (() => {
 
         if (!ref) return
 
+        SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
+            SaveStateService?.markSaved?.()
             if (!options.silent) {
                 UI.showToast(UI.getText("saved", "Saved"))
                 close()
             }
         } catch (error) {
-            const errorCode = error?.code ? ` (${error.code})` : ""
-            UI.showToast(`Save failed${errorCode}`)
+            SaveStateService?.handleRemoteSaveError?.(error)
             if (error?.code === "unavailable" || !navigator.onLine) {
-                SafeStorage.local.setJson("pending-note-save", { payload: { ...payload, updatedAt: Date.now() }, savedAt: Date.now() })
+                const pendingSaveResult = await SafeStorage.local.setJsonAsync("pending-note-save", { payload: { ...payload, updatedAt: Date.now() }, savedAt: Date.now() }, { useIndexedDb: true, priority: "high", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
+                SaveStateService?.handleStorageWriteResult?.(pendingSaveResult)
             }
         }
     }
