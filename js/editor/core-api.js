@@ -5,7 +5,7 @@ import { createLinkHandlers } from "./core-links.js"
 import { createMathHandlers } from "./core-math.js"
 import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"
-import { normalizePageDrawings } from "./core-drawing.js"
+import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
 
 export const EditorAPI = (() => {
@@ -18,8 +18,21 @@ export const EditorAPI = (() => {
     const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
         const normalized = Array.isArray(drawings) ? drawings.map(value => typeof value === "string" ? value : "") : []
         const current = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
-        if (JSON.stringify(current) === JSON.stringify(normalized)) return note
-        const nextNote = { ...note, pageDrawings: normalized }
+        if (current.length === normalized.length) {
+            let drawingsChanged = false
+            for (let index = 0; index < current.length; index++) {
+                if (current[index] !== normalized[index]) {
+                    drawingsChanged = true
+                    break
+                }
+            }
+            if (!drawingsChanged) return note
+        }
+        const nextNote = {
+            ...note,
+            pageDrawings: normalized,
+            pageDrawingsRevision: buildPageDrawingsRevision(normalized)
+        }
         if (updateTimestamp) nextNote.updatedAt = Utils.serverTimestamp()
         return nextNote
     }
@@ -48,7 +61,8 @@ export const EditorAPI = (() => {
         title: "",
         content: "",
         tags: [],
-        pageDrawings: []
+        pageDrawings: [],
+        pageDrawingsRevision: ""
     })
 
     const inputHandlers = createInputHandlers({
@@ -121,7 +135,8 @@ export const EditorAPI = (() => {
             title: snapshot.title,
             content: snapshot.content,
             tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : [],
-            pageDrawings: Array.isArray(snapshot.pageDrawings) ? [...snapshot.pageDrawings] : []
+            pageDrawings: Array.isArray(snapshot.pageDrawings) ? [...snapshot.pageDrawings] : [],
+            pageDrawingsRevision: snapshot.pageDrawingsRevision || buildPageDrawingsRevision(snapshot.pageDrawings)
         }
 
         const isAutoSave = !!options.autoSave
@@ -193,7 +208,8 @@ export const EditorAPI = (() => {
             title: snap.title,
             content: snap.content,
             tags: snap.tags,
-            pageDrawings: snap.pageDrawings
+            pageDrawings: snap.pageDrawings,
+            pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
         })
         renderState()
     }
