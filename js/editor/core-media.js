@@ -5,13 +5,14 @@ export const createMediaHandlers = (context) => {
 
     const fileToDataUrl = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => {
+        reader.onload = async () => {
             const imageDataUrl = String(reader.result || "")
             if (!navigator.onLine) {
-                const pendingImages = SafeStorage.local.getJson("pending-images", [])
+                const pendingImages = await SafeStorage.local.getJsonAsync("pending-images", [], { allowIndexedDbFallback: true })
                 const nextPendingImages = Array.isArray(pendingImages) ? pendingImages : []
                 nextPendingImages.push({ id: Utils.generateId(), dataUrl: imageDataUrl, createdAt: Date.now() })
-                SafeStorage.local.setJson("pending-images", nextPendingImages.slice(-20))
+                const pendingImagesResult = await SafeStorage.local.setJsonAsync("pending-images", nextPendingImages.slice(-20), { useIndexedDb: true, priority: "normal", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
+                SaveStateService?.handleStorageWriteResult?.(pendingImagesResult)
             }
             resolve(imageDataUrl)
         }

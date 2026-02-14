@@ -15,7 +15,8 @@ const StateStore = (() => {
         isEditing: false,
         isTyping: false,
         orderHistory: [],
-        appearanceDraft: null
+        appearanceDraft: null,
+        saveStatus: { status: "idle", message: "", updatedAt: 0 }
     }
 
     let state = { ...initialState, config: { ...initialState.config } }
@@ -49,6 +50,7 @@ const StateStore = (() => {
         isTyping: false,
         orderHistory: [],
         appearanceDraft: null,
+        saveStatus: { ...initialState.saveStatus },
         config: { ...initialState.config }
     }))
 
@@ -58,6 +60,6 @@ const StateStore = (() => {
         update,
         updateConfig,
         resetSession,
-        initialState: () => ({ ...initialState, config: { ...initialState.config } })
+        initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus } })
     }
 })()

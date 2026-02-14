@@ -161,6 +161,49 @@ const NoteIO = {
     }
 }
 
+
+const SaveStateService = {
+    updateUiStatus(status, message = "") {
+        const normalizedStatus = typeof status === "string" && status ? status : "idle"
+        const normalizedMessage = typeof message === "string" ? message : ""
+        StateStore.update("saveStatus", { status: normalizedStatus, message: normalizedMessage, updatedAt: Date.now() })
+        if (typeof document !== "undefined" && document.documentElement) {
+            document.documentElement.dataset.saveStatus = normalizedStatus
+        }
+    },
+
+    markSaving() {
+        this.updateUiStatus("saving", UI.getText("saving", "Saving..."))
+    },
+
+    markSaved() {
+        this.updateUiStatus("saved", UI.getText("saved", "Saved"))
+    },
+
+    handleStorageWriteResult(result, options = {}) {
+        const normalizedResult = result && typeof result === "object" ? result : { success: false, errorType: "unknown" }
+        if (normalizedResult.success) {
+            if (options.markSaved) this.markSaved()
+            return normalizedResult
+        }
+        const errorType = String(normalizedResult.errorType || "unknown")
+        let message = UI.getText("save_failed", "Save failed")
+        if (errorType === "quota_exceeded") message = UI.getText("save_failed_quota", "Storage is full. Some old cache was removed")
+        if (errorType === "storage_unavailable") message = UI.getText("save_failed_storage_unavailable", "Storage is unavailable in this browser mode")
+        if (errorType === "indexeddb_write_failed") message = UI.getText("save_failed_fallback", "Unable to save to fallback storage")
+        this.updateUiStatus("error", message)
+        UI.showToast(message)
+        return normalizedResult
+    },
+
+    handleRemoteSaveError(error) {
+        const errorCode = error?.code ? ` (${error.code})` : ""
+        const message = `${UI.getText("save_failed", "Save failed")}${errorCode}`
+        this.updateUiStatus("error", message)
+        UI.showToast(message)
+    }
+}
+
 const SmartSearch = {
     stop: new Set(["the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it","и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"]),
     synonyms: new Map([
@@ -456,3 +499,4 @@ const CollaborationService = {
 }
 
 window.CollaborationService = CollaborationService
+window.SaveStateService = SaveStateService
