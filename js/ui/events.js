@@ -87,8 +87,9 @@ Object.assign(UI, {
         }
 
         if (this.els.filterSort) {
-            this.els.filterSort.addEventListener("change", (e) => {
-                this.updateFilterConfig({ sort: e.target.value })
+            this.els.filterSort.addEventListener("change", event => {
+                const safeSortValue = window.DomSecurity.sanitizeInputValue(event.target.value, "updated")
+                this.updateFilterConfig({ sort: safeSortValue })
             })
         }
 
@@ -162,7 +163,8 @@ Object.assign(UI, {
     readFolderFilterSelection() {
         const selected = []
         this.els.filterFolders?.querySelectorAll("input[type='checkbox']").forEach(input => {
-            if (input.checked) selected.push(input.value)
+            const safeInputValue = window.DomSecurity.sanitizeIdentifier(input.value)
+            if (input.checked && safeInputValue) selected.push(safeInputValue)
         })
         return selected
     },
@@ -180,28 +182,58 @@ Object.assign(UI, {
         if (!this.els.filterFolders || !this.els.filterSort) return
         const { folders, config, view } = StateStore.read()
         const current = config.notesFilter || { sort: "manual", folders: [] }
-        const visibleFolderIds = new Set(folders.filter(folder => !folder.isHidden && !folder.trashedAt).map(folder => folder.id))
-        const sanitizedFolders = Array.isArray(current.folders) ? current.folders.filter(folderId => folderId === "none" || visibleFolderIds.has(folderId)) : []
+        const visibleFolders = folders.filter(folder => !folder.isHidden && !folder.trashedAt)
+        const visibleFolderIds = new Set(
+            visibleFolders
+                .map(folder => window.DomSecurity.sanitizeIdentifier(folder.id))
+                .filter(Boolean)
+        )
+        const sanitizedFolders = Array.isArray(current.folders)
+            ? current.folders.filter(folderId => folderId === "none" || visibleFolderIds.has(window.DomSecurity.sanitizeIdentifier(folderId)))
+            : []
         if (sanitizedFolders.length !== (current.folders || []).length) {
             this.updateFilterConfig({ folders: sanitizedFolders })
             return
         }
         const folderFiltersBlocked = view === "archive" || view === "trash"
-        this.els.filterSort.value = current.sort || "updated"
-        const items = []
-        items.push({ id: "none", name: this.getText("folder_none", "No folder") })
-        folders.filter(folder => !folder.isHidden && !folder.trashedAt).forEach(folder => items.push({ id: folder.id, name: folder.name }))
-        this.els.filterFolders.innerHTML = items.map(item => {
-            const checked = !folderFiltersBlocked && sanitizedFolders.includes(item.id) ? "checked" : ""
-            const disabled = folderFiltersBlocked ? "disabled" : ""
-            return `
-                <label class="filter-option filter-toggle-option">
-                    <input type="checkbox" value="${item.id}" ${checked} ${disabled}>
-                    <span>${Utils.escapeHtml(item.name || "")}</span>
-                    <span class="filter-toggle-track" aria-hidden="true"><span class="filter-toggle-thumb"></span></span>
-                </label>
-            `
-        }).join("")
+        const safeSortValue = window.DomSecurity.sanitizeInputValue(current.sort, "updated")
+        this.els.filterSort.value = safeSortValue
+
+        const folderFilterFragment = document.createDocumentFragment()
+        const items = [{ id: "none", name: this.getText("folder_none", "No folder") }]
+        visibleFolders.forEach(folder => {
+            const safeFolderId = window.DomSecurity.sanitizeIdentifier(folder.id)
+            if (!safeFolderId) return
+            items.push({ id: safeFolderId, name: folder.name })
+        })
+
+        items.forEach(item => {
+            const filterOption = document.createElement("label")
+            filterOption.className = "filter-option filter-toggle-option"
+
+            const optionInput = document.createElement("input")
+            optionInput.type = "checkbox"
+            optionInput.value = item.id === "none" ? "none" : window.DomSecurity.sanitizeIdentifier(item.id)
+            if (!optionInput.value) return
+            optionInput.checked = !folderFiltersBlocked && sanitizedFolders.includes(item.id)
+            optionInput.disabled = folderFiltersBlocked
+
+            const optionName = document.createElement("span")
+            window.DomSecurity.setText(optionName, window.DomSecurity.sanitizeInputValue(item.name || ""))
+
+            const track = document.createElement("span")
+            track.className = "filter-toggle-track"
+            track.setAttribute("aria-hidden", "true")
+
+            const thumb = document.createElement("span")
+            thumb.className = "filter-toggle-thumb"
+            track.append(thumb)
+
+            filterOption.append(optionInput, optionName, track)
+            folderFilterFragment.append(filterOption)
+        })
+
+        this.els.filterFolders.replaceChildren(folderFilterFragment)
     },
 
     toggleFilterMenu(force) {

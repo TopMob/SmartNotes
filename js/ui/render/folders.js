@@ -2,8 +2,32 @@ Object.assign(UI, {
     updateEmptyState(icon, text) {
         const iconElement = this.els.empty.querySelector("i")
         const textElement = this.els.empty.querySelector("p")
-        if (iconElement) iconElement.textContent = icon
-        if (textElement) textElement.textContent = text
+        if (iconElement) window.DomSecurity.setText(iconElement, icon)
+        if (textElement) window.DomSecurity.setText(textElement, text)
+    },
+
+    createFolderNavigationButton(folder, isActive) {
+        const safeFolderId = window.DomSecurity.sanitizeIdentifier(folder?.id)
+        if (!safeFolderId) return null
+        const folderButton = document.createElement("button")
+        folderButton.type = "button"
+        folderButton.className = "nav-item"
+        if (isActive) folderButton.classList.add("active")
+        folderButton.dataset.action = "open-folder"
+        folderButton.dataset.folderId = safeFolderId
+        folderButton.draggable = true
+        folderButton.dataset.folderDraggable = "true"
+
+        const iconElement = document.createElement("i")
+        iconElement.className = "material-icons-round"
+        iconElement.setAttribute("aria-hidden", "true")
+        window.DomSecurity.setText(iconElement, "folder")
+
+        const nameElement = document.createElement("span")
+        window.DomSecurity.setText(nameElement, window.DomSecurity.sanitizeInputValue(folder?.name))
+
+        folderButton.append(iconElement, nameElement)
+        return folderButton
     },
 
     renderFolders() {
@@ -14,21 +38,60 @@ Object.assign(UI, {
         if (title) title.classList.toggle("hidden", hideList)
         root.classList.toggle("hidden", hideList)
         if (hideList) {
-            root.innerHTML = ""
+            root.replaceChildren()
             return
         }
         const { folders, activeFolderId } = StateStore.read()
-        const visibleFolders = folders.filter(folder => !folder.isHidden && !folder.trashedAt).sort((a, b) => (a.folderOrder || 0) - (b.folderOrder || 0))
-        root.innerHTML = visibleFolders.map(folder => `
-            <button type="button" class="nav-item ${activeFolderId === folder.id ? "active" : ""}" data-action="open-folder" data-folder-id="${folder.id}" draggable="true" data-folder-draggable="true">
-                <i class="material-icons-round" aria-hidden="true">folder</i>
-                <span>${Utils.escapeHtml(folder.name)}</span>
-            </button>
-        `).join("")
+        const visibleFolders = folders
+            .filter(folder => !folder.isHidden && !folder.trashedAt)
+            .sort((firstFolder, secondFolder) => (firstFolder.folderOrder || 0) - (secondFolder.folderOrder || 0))
+
+        const fragment = document.createDocumentFragment()
+        visibleFolders.forEach(folder => {
+            const folderButton = this.createFolderNavigationButton(folder, activeFolderId === folder.id)
+            if (folderButton) fragment.append(folderButton)
+        })
+        root.replaceChildren(fragment)
         this.renderFilterMenu()
         this.updateFolderLimitControls()
     },
 
+    createHiddenFolderCard(folder) {
+        const safeFolderId = window.DomSecurity.sanitizeIdentifier(folder?.id)
+        if (!safeFolderId) return null
+
+        const folderCard = document.createElement("div")
+        folderCard.className = "folder-card"
+
+        const titleElement = document.createElement("div")
+        titleElement.className = "folder-title"
+        window.DomSecurity.setText(titleElement, window.DomSecurity.sanitizeInputValue(folder?.name))
+
+        const metaElement = document.createElement("div")
+        metaElement.className = "folder-meta"
+        window.DomSecurity.setText(metaElement, "Скрытая папка")
+
+        const actionsRow = document.createElement("div")
+        actionsRow.className = "row-left"
+
+        const openButton = document.createElement("button")
+        openButton.type = "button"
+        openButton.className = "btn-secondary"
+        openButton.dataset.action = "open-folder"
+        openButton.dataset.folderId = safeFolderId
+        window.DomSecurity.setText(openButton, "Открыть")
+
+        const unhideButton = document.createElement("button")
+        unhideButton.type = "button"
+        unhideButton.className = "btn-secondary"
+        unhideButton.dataset.action = "folder-unhide"
+        unhideButton.dataset.folderId = safeFolderId
+        window.DomSecurity.setText(unhideButton, this.getText("show_folder", "Show folder"))
+
+        actionsRow.append(openButton, unhideButton)
+        folderCard.append(titleElement, metaElement, actionsRow)
+        return folderCard
+    },
 
     renderHiddenFolders() {
         this.updateEmptyState("visibility_off", "Скрытых папок нет")
@@ -36,18 +99,66 @@ Object.assign(UI, {
         const hiddenFolders = folders.filter(folder => !!folder.isHidden && !folder.trashedAt)
         this.els.empty.classList.toggle("hidden", hiddenFolders.length > 0)
         this.els.grid.classList.add("folder-grid")
-        this.els.grid.innerHTML = hiddenFolders.map(folder => `
-            <div class="folder-card">
-                <div class="folder-title">${Utils.escapeHtml(folder.name)}</div>
-                <div class="folder-meta">Скрытая папка</div>
-                <div class="row-left">
-                    <button type="button" class="btn-secondary" data-action="open-folder" data-folder-id="${folder.id}">Открыть</button>
-                    <button type="button" class="btn-secondary" data-action="folder-unhide" data-folder-id="${folder.id}">${this.getText("show_folder", "Show folder")}</button>
-                </div>
-            </div>
-        `).join("")
+
+        const fragment = document.createDocumentFragment()
+        hiddenFolders.forEach(folder => {
+            const folderCard = this.createHiddenFolderCard(folder)
+            if (folderCard) fragment.append(folderCard)
+        })
+        this.els.grid.replaceChildren(fragment)
     },
 
+    createTrashedFolderCard(folder) {
+        const safeFolderId = window.DomSecurity.sanitizeIdentifier(folder?.id)
+        if (!safeFolderId) return null
+
+        const noteCard = document.createElement("div")
+        noteCard.className = "note-card trashed-folder-card"
+
+        const cardHead = document.createElement("div")
+        cardHead.className = "trashed-folder-card-head"
+
+        const badge = document.createElement("span")
+        badge.className = "trashed-folder-badge"
+
+        const badgeIcon = document.createElement("i")
+        badgeIcon.className = "material-icons-round"
+        badgeIcon.setAttribute("aria-hidden", "true")
+        window.DomSecurity.setText(badgeIcon, "folder")
+
+        const badgeText = document.createElement("span")
+        window.DomSecurity.setText(badgeText, this.getText("folders", "Folders"))
+
+        badge.append(badgeIcon, badgeText)
+        cardHead.append(badge)
+
+        const title = document.createElement("h3")
+        window.DomSecurity.setText(title, window.DomSecurity.sanitizeInputValue(folder?.name))
+
+        const subtitle = document.createElement("p")
+        window.DomSecurity.setText(subtitle, this.getText("folder_trashed", "Folder in trash"))
+
+        const actionsRow = document.createElement("div")
+        actionsRow.className = "row-left"
+
+        const restoreButton = document.createElement("button")
+        restoreButton.type = "button"
+        restoreButton.className = "btn-secondary"
+        restoreButton.dataset.action = "folder-restore"
+        restoreButton.dataset.folderId = safeFolderId
+        window.DomSecurity.setText(restoreButton, this.getText("restore_note", "Restore"))
+
+        const permanentDeleteButton = document.createElement("button")
+        permanentDeleteButton.type = "button"
+        permanentDeleteButton.className = "btn-danger"
+        permanentDeleteButton.dataset.action = "folder-delete-permanent"
+        permanentDeleteButton.dataset.folderId = safeFolderId
+        window.DomSecurity.setText(permanentDeleteButton, this.getText("delete_permanently", "Delete permanently"))
+
+        actionsRow.append(restoreButton, permanentDeleteButton)
+        noteCard.append(cardHead, title, subtitle, actionsRow)
+        return noteCard
+    },
 
     renderTrash(trashedNotes) {
         const { folders } = StateStore.read()
@@ -60,30 +171,45 @@ Object.assign(UI, {
             NotesRenderer.render(trashedNotes)
             return
         }
-        const foldersMarkup = trashedFolders.map(folder => `
-            <div class="note-card trashed-folder-card">
-                <div class="trashed-folder-card-head">
-                    <span class="trashed-folder-badge">
-                        <i class="material-icons-round" aria-hidden="true">folder</i>
-                        <span>${this.getText("folders", "Folders")}</span>
-                    </span>
-                </div>
-                <h3>${Utils.escapeHtml(folder.name)}</h3>
-                <p>${this.getText("folder_trashed", "Folder in trash")}</p>
-                <div class="row-left">
-                    <button type="button" class="btn-secondary" data-action="folder-restore" data-folder-id="${folder.id}">${this.getText("restore_note", "Restore")}</button>
-                    <button type="button" class="btn-danger" data-action="folder-delete-permanent" data-folder-id="${folder.id}">${this.getText("delete_permanently", "Delete permanently")}</button>
-                </div>
-            </div>
-        `).join("")
+
+        const foldersFragment = document.createDocumentFragment()
+        trashedFolders.forEach(folder => {
+            const folderCard = this.createTrashedFolderCard(folder)
+            if (folderCard) foldersFragment.append(folderCard)
+        })
+
         if (!hasNotes) {
-            this.els.grid.innerHTML = foldersMarkup
+            this.els.grid.replaceChildren(foldersFragment)
             return
         }
+
         NotesRenderer.render(trashedNotes)
         requestAnimationFrame(() => {
-            this.els.grid.insertAdjacentHTML("afterbegin", foldersMarkup)
+            this.els.grid.prepend(foldersFragment)
         })
+    },
+
+    createFolderOverviewCard(folder, notes) {
+        const safeFolderId = window.DomSecurity.sanitizeIdentifier(folder?.id)
+        if (!safeFolderId) return null
+        const folderCard = document.createElement("div")
+        folderCard.className = "folder-card"
+        folderCard.dataset.action = "open-folder"
+        folderCard.dataset.folderId = safeFolderId
+
+        const titleElement = document.createElement("div")
+        titleElement.className = "folder-title"
+        window.DomSecurity.setText(titleElement, window.DomSecurity.sanitizeInputValue(folder?.name))
+
+        const noteCount = notes.filter(note => note.folderId === folder.id && !note.isArchived && !note.trashedAt).length
+        const label = noteCount === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
+
+        const metaElement = document.createElement("div")
+        metaElement.className = "folder-meta"
+        window.DomSecurity.setText(metaElement, `${noteCount} ${label}`)
+
+        folderCard.append(titleElement, metaElement)
+        return folderCard
     },
 
     renderFolderGrid() {
@@ -92,11 +218,14 @@ Object.assign(UI, {
         const visibleFolders = folders.filter(folder => !folder.trashedAt && !folder.isHidden)
         this.els.empty.classList.toggle("hidden", visibleFolders.length > 0)
         this.els.grid.classList.add("folder-grid")
-        this.els.grid.innerHTML = visibleFolders.map(folder => {
-            const count = notes.filter(note => note.folderId === folder.id && !note.isArchived && !note.trashedAt).length
-            const label = count === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
-            return `<div class="folder-card" data-action="open-folder" data-folder-id="${folder.id}"><div class="folder-title">${Utils.escapeHtml(folder.name)}</div><div class="folder-meta">${count} ${label}</div></div>`
-        }).join("")
+
+        const fragment = document.createDocumentFragment()
+        visibleFolders.forEach(folder => {
+            const folderCard = this.createFolderOverviewCard(folder, notes)
+            if (folderCard) fragment.append(folderCard)
+        })
+
+        this.els.grid.replaceChildren(fragment)
         this.updateFolderLimitControls()
     }
 })
