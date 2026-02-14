@@ -108,10 +108,10 @@ export const createAutosaveHandlers = (context) => {
         await save({ silent: true, autoSave: true })
         const savedSnapshot = captureSnapshot()
         state.autoSaveSnapshot = savedSnapshot
-        const currentNote = StateStore.read().currentNote
-        if (currentNote) {
+        const refreshedNote = StateStore.read().currentNote
+        if (refreshedNote) {
             StateStore.update("currentNote", {
-                ...currentNote,
+                ...refreshedNote,
                 title: savedSnapshot.title,
                 content: savedSnapshot.content,
                 pageDrawings: savedSnapshot.pageDrawings

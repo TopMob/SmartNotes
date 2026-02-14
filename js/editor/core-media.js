@@ -1,7 +1,7 @@
 import { CONFIG } from "./core-state.js"
 
 export const createMediaHandlers = (context) => {
-    const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection } = context
+    const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText } = context
 
     const fileToDataUrl = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -237,8 +237,7 @@ export const createMediaHandlers = (context) => {
             state.selectedMediaElement.classList.remove("align-left", "align-right")
             if (side !== "center") state.selectedMediaElement.classList.add(`align-${side}`)
         } else {
-            const cmd = side === "center" ? "justifyCenter" : (side === "right" ? "justifyRight" : "justifyLeft")
-            document.execCommand(cmd)
+            alignText(side)
         }
         closeAlignMenu()
     }
