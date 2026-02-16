@@ -77,7 +77,9 @@ service cloud.firestore {
           && request.resource.data.settings.bg is string
           && request.resource.data.settings.t is string
           && request.resource.data.settings.mainBackgroundImage is string
+          && request.resource.data.settings.mainBackgroundImage.size() <= 2048
           && request.resource.data.settings.sidebarBackgroundImage is string
+          && request.resource.data.settings.sidebarBackgroundImage.size() <= 2048
           && request.resource.data.settings.uiOpacity is number
           && request.resource.data.settings.cardsOpacity is number
           && (!('customPresets' in request.resource.data) || request.resource.data.customPresets is list);
