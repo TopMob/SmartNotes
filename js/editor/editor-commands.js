@@ -289,7 +289,7 @@ export const createEditorCommands = (context) => {
         return list
     }
 
-    const toggleList = (listTagName, fallbackCommand) => {
+    const toggleList = (listTagName) => {
         const range = getValidRange()
         if (!range) return false
 
@@ -337,8 +337,9 @@ export const createEditorCommands = (context) => {
     const clearFormatting = () => {
         const range = getValidRange()
         if (execCommandAdapter.isAvailable) {
-            const changed = execCommandAdapter.runCommand("removeFormat")
-            if (changed) {
+            const unlinked = execCommandAdapter.runCommand("unlink")
+            const removed = execCommandAdapter.runCommand("removeFormat")
+            if (unlinked || removed) {
                 finalizeChange()
                 return true
             }
@@ -404,8 +405,8 @@ export const createEditorCommands = (context) => {
         toggleItalic: () => toggleInlineFormat(INLINE_FORMATS.italic),
         toggleUnderline: () => toggleInlineFormat(INLINE_FORMATS.underline),
         toggleStrike: () => toggleInlineFormat(INLINE_FORMATS.strike),
-        toggleBulletedList: () => toggleList("ul", "insertUnorderedList"),
-        toggleNumberedList: () => toggleList("ol", "insertOrderedList"),
+        toggleBulletedList: () => toggleList("ul"),
+        toggleNumberedList: () => toggleList("ol"),
         clearFormatting,
         insertLink,
         alignText

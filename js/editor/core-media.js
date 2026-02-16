@@ -57,6 +57,10 @@ export const createMediaHandlers = (context) => {
     })
 
     const handleResizeStart = (event) => {
+        if (state.drawingState?.active) {
+            event.preventDefault()
+            return
+        }
         const handle = event.target.closest(".media-resize-handle")
         if (!handle) return
 
@@ -189,6 +193,7 @@ export const createMediaHandlers = (context) => {
         elements.content.querySelectorAll(".media-wrapper").forEach(w => {
             w.classList.add("media-draggable-item")
             w.setAttribute("draggable", state.drawingState?.active ? "false" : "true")
+            w.style.pointerEvents = state.drawingState?.active ? "none" : ""
             w.contentEditable = "false"
         })
     }
@@ -226,6 +231,7 @@ export const createMediaHandlers = (context) => {
     }
 
     const selectMedia = (el) => {
+        if (state.drawingState?.active) return
         deselectMedia()
         state.selectedMediaElement = el
         state.selectedMediaElement.classList.add("selected")
