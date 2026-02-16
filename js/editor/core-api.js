@@ -170,7 +170,9 @@ export const EditorAPI = (() => {
         }
 
         if (!noteHasEditableContent(note)) {
-            UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
+            if (!isAutoSave) {
+                UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
+            }
             return
         }
 

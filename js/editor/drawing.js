@@ -171,6 +171,11 @@ const EditorDrawing = (() => {
                 drawingState.canvas.style.pointerEvents = "auto"
             }
         }
+        requestAnimationFrame(() => {
+            if (drawingState.canvas && drawingState.active) {
+                drawingState.canvas.style.pointerEvents = "auto"
+            }
+        })
         window.addEventListener("pointerup", restorePointerEvents)
         window.addEventListener("pointercancel", restorePointerEvents)
     }
@@ -332,6 +337,7 @@ const EditorDrawing = (() => {
         drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
         applyCanvasScale(drawingState.scale)
+        lastDrawingSnapshot = ""
     }
 
     const getDrawingData = () => {
@@ -456,6 +462,7 @@ const EditorDrawing = (() => {
         drawingState.isDrawing = false
         drawingState.pointerId = null
         const snapshot = getDrawingData()
+        lastDrawingSnapshot = snapshot
         pushDrawingHistory(snapshot)
         onDrawingChange(snapshot)
     }

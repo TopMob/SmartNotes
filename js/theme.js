@@ -22,6 +22,14 @@ const baseTheme = {
 
 const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: bg, surfaceTransparent: `color-mix(in srgb, ${bg} 86%, transparent)`, border: `color-mix(in srgb, ${p} 38%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
 
+const normalizeSyncImageValue = (value, maxLength = 280000) => {
+    if (typeof value !== "string") return ""
+    const source = value.trim()
+    if (!source) return ""
+    if (!source.startsWith("data:image/")) return source
+    return source.length > maxLength ? "" : source
+}
+
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
     const parsedValue = Number(value)
     if (!Number.isFinite(parsedValue)) return fallback
@@ -177,8 +185,8 @@ export const ThemeManager = {
                 p: this.normalizeHex(settings?.p),
                 bg: this.normalizeHex(settings?.bg),
                 t: this.normalizeHex(settings?.t),
-                mainBackgroundImage: typeof settings?.mainBackgroundImage === "string" ? settings.mainBackgroundImage : "",
-                sidebarBackgroundImage: typeof settings?.sidebarBackgroundImage === "string" ? settings.sidebarBackgroundImage : "",
+                mainBackgroundImage: normalizeSyncImageValue(settings?.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeSyncImageValue(settings?.sidebarBackgroundImage),
                 uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
                 cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
             }
@@ -192,7 +200,7 @@ export const ThemeManager = {
                 await reference.set(payload, { merge: true })
             } catch (error) {
                 if (String(error?.code || "") !== "invalid-argument") throw error
-                await reference.set({ settings: normalizedSettings, updatedAt: Date.now() }, { merge: true })
+                await reference.set({ settings: normalizedSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
