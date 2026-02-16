@@ -1,14 +1,27 @@
 const STRIP_TAGS = new Set(["strong", "b", "em", "i", "u", "s", "strike", "a", "span", "font"])
 
+const INLINE_FORMATS = {
+    bold: { wrapperTagName: "strong", toggleTagNames: ["strong", "b"] },
+    italic: { wrapperTagName: "em", toggleTagNames: ["em", "i"] },
+    underline: { wrapperTagName: "u", toggleTagNames: ["u"] },
+    strike: { wrapperTagName: "s", toggleTagNames: ["s", "strike"] }
+}
+
 const isElementNode = (node) => node?.nodeType === Node.ELEMENT_NODE
 
 const normalizeTagName = (value) => String(value || "").toLowerCase()
 
-const getClosestByTag = (node, tagName, root) => {
+const normalizeTagNameList = (tagNames) => {
+    if (!Array.isArray(tagNames)) return []
+    return [...new Set(tagNames.map(item => normalizeTagName(item)).filter(Boolean))]
+}
+
+const getClosestByTagNames = (node, tagNames, root) => {
+    const expectedTags = new Set(normalizeTagNameList(tagNames))
+    if (!expectedTags.size) return null
     let current = node
-    const expectedTag = normalizeTagName(tagName)
     while (current && current !== root) {
-        if (isElementNode(current) && normalizeTagName(current.tagName) === expectedTag) return current
+        if (isElementNode(current) && expectedTags.has(normalizeTagName(current.tagName))) return current
         current = current.parentNode
     }
     return null
@@ -35,28 +48,41 @@ const unwrapNode = (node) => {
     node.remove()
 }
 
+const isEditableTextBlock = (element, root) => {
+    if (!element || !root || element === root) return false
+    if (!root.contains(element)) return false
+    if (!isElementNode(element)) return false
+    if (element.classList.contains("note-page")) return false
+    if (element.closest("[contenteditable='false']")) return false
+    const name = normalizeTagName(element.tagName)
+    if (!["div", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"].includes(name)) return false
+    return true
+}
+
+const getClosestEditableBlock = (node, root) => {
+    const element = isElementNode(node) ? node : node?.parentElement
+    if (!element) return null
+    const block = element.closest("div,p,li,h1,h2,h3,h4,h5,h6,blockquote")
+    return isEditableTextBlock(block, root) ? block : null
+}
+
 const collectBlocksInRange = (range, root) => {
     if (!range || !root) return []
     const blockSet = new Set()
-    const blockSelectors = "div,p,li,h1,h2,h3,h4,h5,h6,blockquote"
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT)
     let currentNode = walker.nextNode()
     while (currentNode) {
         const intersects = typeof range.intersectsNode === "function"
             ? range.intersectsNode(currentNode)
             : range.compareBoundaryPoints(Range.END_TO_START, currentNode) === -1
-        if (intersects && currentNode.matches(blockSelectors)) blockSet.add(currentNode)
+        if (intersects && isEditableTextBlock(currentNode, root)) blockSet.add(currentNode)
         currentNode = walker.nextNode()
     }
-    const startBlock = isElementNode(range.startContainer)
-        ? range.startContainer.closest(blockSelectors)
-        : range.startContainer.parentElement?.closest(blockSelectors)
-    const endBlock = isElementNode(range.endContainer)
-        ? range.endContainer.closest(blockSelectors)
-        : range.endContainer.parentElement?.closest(blockSelectors)
-    if (startBlock && root.contains(startBlock)) blockSet.add(startBlock)
-    if (endBlock && root.contains(endBlock)) blockSet.add(endBlock)
-    return [...blockSet].filter(item => item && item !== root)
+    const startBlock = getClosestEditableBlock(range.startContainer, root)
+    const endBlock = getClosestEditableBlock(range.endContainer, root)
+    if (startBlock) blockSet.add(startBlock)
+    if (endBlock) blockSet.add(endBlock)
+    return [...blockSet]
 }
 
 const surroundRangeWithTag = (range, tagName) => {
@@ -91,19 +117,19 @@ const getTextNodesInRange = (range, root) => {
     return textNodes
 }
 
-const isRangeFullyWrappedWithTag = (range, tagName, root) => {
+const isRangeFullyWrappedWithTagNames = (range, tagNames, root) => {
     const textNodes = getTextNodesInRange(range, root)
     if (!textNodes.length) return false
-    return textNodes.every(node => !!getClosestByTag(node, tagName, root))
+    return textNodes.every(node => !!getClosestByTagNames(node, tagNames, root))
 }
 
-const removeTagFromFragment = (fragment, tagName) => {
-    const targetTagName = normalizeTagName(tagName)
+const removeTagsFromFragment = (fragment, tagNames) => {
+    const targetTagNames = new Set(normalizeTagNameList(tagNames))
     const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_ELEMENT)
     const unwrapTargets = []
     let currentNode = walker.nextNode()
     while (currentNode) {
-        if (normalizeTagName(currentNode.tagName) === targetTagName) unwrapTargets.push(currentNode)
+        if (targetTagNames.has(normalizeTagName(currentNode.tagName))) unwrapTargets.push(currentNode)
         currentNode = walker.nextNode()
     }
     unwrapTargets.forEach(unwrapNode)
@@ -192,7 +218,7 @@ export const createEditorCommands = (context) => {
         resolveRoot()?.focus()
     }
 
-    const toggleInlineFormat = (tagName, fallbackCommand) => {
+    const toggleInlineFormat = (formatDefinition, fallbackCommand) => {
         const range = getValidRange()
         if (!range || range.collapsed) {
             if (execCommandAdapter.isAvailable && fallbackCommand) {
@@ -205,21 +231,26 @@ export const createEditorCommands = (context) => {
         const root = resolveRoot()
         if (!root) return false
 
+        const toggleTagNames = normalizeTagNameList(formatDefinition?.toggleTagNames)
+        const wrapperTagName = normalizeTagName(formatDefinition?.wrapperTagName)
+        if (!toggleTagNames.length || !wrapperTagName) return false
+
         const startElement = getNearestElement(range.startContainer)
         const endElement = getNearestElement(range.endContainer)
-        const startTag = getClosestByTag(startElement, tagName, root)
-        const endTag = getClosestByTag(endElement, tagName, root)
-        const commonTag = startTag && startTag === endTag && rangeFullyInsideNode(range, startTag) ? startTag : null
+        const startTag = getClosestByTagNames(startElement, toggleTagNames, root)
+        const endTag = getClosestByTagNames(endElement, toggleTagNames, root)
+        const singleWrappedContainer = startTag && startTag === endTag && rangeFullyInsideNode(range, startTag)
+        const fullWrappedRange = isRangeFullyWrappedWithTagNames(range, toggleTagNames, root)
 
-        if (commonTag || isRangeFullyWrappedWithTag(range, tagName, root)) {
+        if (singleWrappedContainer || fullWrappedRange) {
             const fragment = range.extractContents()
-            removeTagFromFragment(fragment, tagName)
+            removeTagsFromFragment(fragment, toggleTagNames)
             insertFragmentAndReselect(range, fragment)
             finalizeChange()
             return true
         }
 
-        surroundRangeWithTag(range, tagName)
+        surroundRangeWithTag(range, wrapperTagName)
         finalizeChange()
         return true
     }
@@ -229,7 +260,9 @@ export const createEditorCommands = (context) => {
         const node = isElementNode(range.startContainer) ? range.startContainer : range.startContainer.parentElement
         const root = resolveRoot()
         const list = node?.closest("ul,ol")
-        return list && root && root.contains(list) ? list : null
+        if (!list || !root || !root.contains(list)) return null
+        if (list.closest("[contenteditable='false']")) return null
+        return list
     }
 
     const toggleList = (listTagName, fallbackCommand) => {
@@ -250,7 +283,8 @@ export const createEditorCommands = (context) => {
             return true
         }
 
-        const blocks = collectBlocksInRange(range, resolveRoot())
+        const root = resolveRoot()
+        const blocks = collectBlocksInRange(range, root)
         if (!blocks.length) {
             if (execCommandAdapter.isAvailable && fallbackCommand) {
                 const changed = execCommandAdapter.runCommand(fallbackCommand)
@@ -338,10 +372,10 @@ export const createEditorCommands = (context) => {
     }
 
     return {
-        toggleBold: () => toggleInlineFormat("strong", "bold"),
-        toggleItalic: () => toggleInlineFormat("em", "italic"),
-        toggleUnderline: () => toggleInlineFormat("u", "underline"),
-        toggleStrike: () => toggleInlineFormat("s", "strikeThrough"),
+        toggleBold: () => toggleInlineFormat(INLINE_FORMATS.bold, "bold"),
+        toggleItalic: () => toggleInlineFormat(INLINE_FORMATS.italic, "italic"),
+        toggleUnderline: () => toggleInlineFormat(INLINE_FORMATS.underline, "underline"),
+        toggleStrike: () => toggleInlineFormat(INLINE_FORMATS.strike, "strikeThrough"),
         toggleBulletedList: () => toggleList("ul", "insertUnorderedList"),
         toggleNumberedList: () => toggleList("ol", "insertOrderedList"),
         clearFormatting,
