@@ -210,48 +210,16 @@ const DrawingSurfaceEngine = (() => {
             const sourceHeight = state.canvasElement.height
             if (!sourceWidth || !sourceHeight) return ""
             const imageData = state.canvasContext.getImageData(0, 0, sourceWidth, sourceHeight).data
-            let minX = sourceWidth
-            let minY = sourceHeight
-            let maxX = -1
-            let maxY = -1
-            for (let pixelIndex = 3, pointIndex = 0; pixelIndex < imageData.length; pixelIndex += 4, pointIndex += 1) {
-                if (imageData[pixelIndex] === 0) continue
-                const x = pointIndex % sourceWidth
-                const y = Math.floor(pointIndex / sourceWidth)
-                if (x < minX) minX = x
-                if (y < minY) minY = y
-                if (x > maxX) maxX = x
-                if (y > maxY) maxY = y
+            let hasVisiblePixels = false
+            for (let pixelIndex = 3; pixelIndex < imageData.length; pixelIndex += 4) {
+                if (imageData[pixelIndex] !== 0) {
+                    hasVisiblePixels = true
+                    break
+                }
             }
-            if (maxX < minX || maxY < minY) return ""
-            const padding = Math.ceil(Math.max(4, state.currentSize * 2))
-            const cropX = Math.max(0, minX - padding)
-            const cropY = Math.max(0, minY - padding)
-            const cropWidth = Math.min(sourceWidth - cropX, maxX - minX + 1 + padding * 2)
-            const cropHeight = Math.min(sourceHeight - cropY, maxY - minY + 1 + padding * 2)
-            const exportCanvas = document.createElement("canvas")
-            exportCanvas.width = Math.max(1, cropWidth)
-            exportCanvas.height = Math.max(1, cropHeight)
-            const exportContext = exportCanvas.getContext("2d")
-            if (!exportContext) return ""
-            exportContext.drawImage(state.canvasElement, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
-            let snapshot = exportCanvas.toDataURL("image/webp", 0.82)
-            if (!snapshot.startsWith("data:image/webp")) snapshot = exportCanvas.toDataURL("image/png")
-            while (snapshot.length > 190000 && exportCanvas.width > 280 && exportCanvas.height > 280) {
-                const compressedCanvas = document.createElement("canvas")
-                compressedCanvas.width = Math.max(1, Math.floor(exportCanvas.width * 0.88))
-                compressedCanvas.height = Math.max(1, Math.floor(exportCanvas.height * 0.88))
-                const compressedContext = compressedCanvas.getContext("2d")
-                if (!compressedContext) break
-                compressedContext.drawImage(exportCanvas, 0, 0, exportCanvas.width, exportCanvas.height, 0, 0, compressedCanvas.width, compressedCanvas.height)
-                snapshot = compressedCanvas.toDataURL("image/webp", 0.82)
-                if (!snapshot.startsWith("data:image/webp")) snapshot = compressedCanvas.toDataURL("image/png")
-                exportCanvas.width = compressedCanvas.width
-                exportCanvas.height = compressedCanvas.height
-                const resizedContext = exportCanvas.getContext("2d")
-                if (!resizedContext) break
-                resizedContext.drawImage(compressedCanvas, 0, 0)
-            }
+            if (!hasVisiblePixels) return ""
+            let snapshot = state.canvasElement.toDataURL("image/webp", 0.82)
+            if (!snapshot.startsWith("data:image/webp")) snapshot = state.canvasElement.toDataURL("image/png")
             return snapshot
         }
 
@@ -282,7 +250,9 @@ const DrawingSurfaceEngine = (() => {
                     }
                     state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
                     state.canvasContext.clearRect(0, 0, state.canvasElement.width, state.canvasElement.height)
-                    state.canvasContext.drawImage(imageElement, 0, 0, state.canvasElement.width, state.canvasElement.height)
+                    const targetWidth = Math.min(imageElement.naturalWidth || imageElement.width, state.canvasElement.width)
+                    const targetHeight = Math.min(imageElement.naturalHeight || imageElement.height, state.canvasElement.height)
+                    state.canvasContext.drawImage(imageElement, 0, 0, targetWidth, targetHeight)
                     applyContextScale()
                     resolve(state.currentSnapshot)
                 }
