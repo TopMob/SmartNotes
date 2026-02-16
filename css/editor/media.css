@@ -320,4 +320,5 @@
 
 .note-content-wrapper {
     position: relative;
+    overflow: hidden;
 }

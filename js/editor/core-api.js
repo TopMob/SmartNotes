@@ -412,6 +412,10 @@ export const EditorAPI = (() => {
         `).join("")
 
         root.querySelectorAll(".tool-btn").forEach(btn => {
+            btn.addEventListener("pointerdown", (event) => {
+                event.preventDefault()
+                inputHandlers.storeSelection()
+            })
             btn.addEventListener("mousedown", (event) => {
                 event.preventDefault()
                 inputHandlers.storeSelection()
@@ -422,7 +426,6 @@ export const EditorAPI = (() => {
                 const tool = tools[idx]
                 if (tool) {
                     tool.cmd(btn)
-                    elements.content?.focus()
                 }
             })
         })

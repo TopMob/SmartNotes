@@ -22,6 +22,12 @@ const baseTheme = {
 
 const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: bg, surfaceTransparent: `color-mix(in srgb, ${bg} 86%, transparent)`, border: `color-mix(in srgb, ${p} 38%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
 
+const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
+    const parsedValue = Number(value)
+    if (!Number.isFinite(parsedValue)) return fallback
+    return Math.min(maximum, Math.max(minimum, parsedValue))
+}
+
 export const ThemeManager = {
     themes: {
         oled: createPreset("#000000", "#FFFFFF", "#2563EB"),
@@ -157,8 +163,8 @@ export const ThemeManager = {
                 t: this.normalizeHex(settings?.t),
                 mainBackgroundImage: typeof settings?.mainBackgroundImage === "string" ? settings.mainBackgroundImage : "",
                 sidebarBackgroundImage: typeof settings?.sidebarBackgroundImage === "string" ? settings.sidebarBackgroundImage : "",
-                uiOpacity: Math.min(1, Math.max(0.4, Number(settings?.uiOpacity ?? 0.78))),
-                cardsOpacity: Math.min(1, Math.max(0.5, Number(settings?.cardsOpacity ?? 0.9)))
+                uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
+                cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
             }
             await reference.set({
                 settings: normalizedSettings,
@@ -178,8 +184,8 @@ export const ThemeManager = {
     applySettings(settings, persist) {
         const presetKey = settings?.preset || "oled"
         const base = this.resolvePreset(presetKey)
-        const normalizedOpacity = Math.min(1, Math.max(0.4, Number(settings?.uiOpacity ?? 0.78)))
-        const normalizedCardsOpacity = Math.min(1, Math.max(0.5, Number(settings?.cardsOpacity ?? 0.9)))
+        const normalizedOpacity = normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78)
+        const normalizedCardsOpacity = normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
         const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity, cardsOpacity: normalizedCardsOpacity }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(settings?.mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(settings?.sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey

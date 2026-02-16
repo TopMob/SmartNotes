@@ -32,9 +32,9 @@ const EditorDrawing = (() => {
         if (typeof nextBuildToolbar === "function") buildToolbar = nextBuildToolbar
         if (typeof nextUpdateEditableState === "function") updateEditableState = nextUpdateEditableState
         if (typeof nextOnDrawingChange === "function") onDrawingChange = nextOnDrawingChange
-        drawingState.container = elements.contentWrapper || null
         drawingState.content = elements.content || null
-        drawingState.scrollContainer = document.querySelector(".editor-scroll-area .note-content") || elements.scrollArea || elements.content || null
+        drawingState.container = elements.content || null
+        drawingState.scrollContainer = elements.content || null
         drawingState.pageElement = elements.content?.querySelector(".note-page.is-active") || null
     }
 
@@ -169,8 +169,6 @@ const EditorDrawing = (() => {
             window.removeEventListener("pointercancel", restorePointerEvents)
             if (drawingState.canvas && drawingState.active) {
                 drawingState.canvas.style.pointerEvents = "auto"
-        ensurePointerPreview()
-        updatePointerPreviewSize()
             }
         }
         window.addEventListener("pointerup", restorePointerEvents)
@@ -195,8 +193,8 @@ const EditorDrawing = (() => {
 
     const syncCanvasPosition = () => {
         if (!drawingState.canvas || !drawingState.pageElement || !drawingState.scrollContainer) return
-        const top = drawingState.scrollContainer.offsetTop + drawingState.pageElement.offsetTop - drawingState.scrollContainer.scrollTop
-        const left = drawingState.scrollContainer.offsetLeft + drawingState.pageElement.offsetLeft - drawingState.scrollContainer.scrollLeft
+        const top = drawingState.pageElement.offsetTop - drawingState.scrollContainer.scrollTop
+        const left = drawingState.pageElement.offsetLeft - drawingState.scrollContainer.scrollLeft
         drawingState.canvas.style.top = `${top}px`
         drawingState.canvas.style.left = `${left}px`
     }
@@ -384,6 +382,12 @@ const EditorDrawing = (() => {
         ensureCanvas()
         if (drawingState.canvas) {
             drawingState.canvas.style.pointerEvents = drawingState.active ? "auto" : "none"
+        }
+        if (drawingState.active) {
+            ensurePointerPreview()
+            updatePointerPreviewSize()
+        } else {
+            hidePointerPreview()
         }
         if (drawingState.scrollContainer) {
             drawingState.scrollContainer.style.overflow = drawingState.active ? "hidden" : ""
