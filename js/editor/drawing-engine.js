@@ -1,46 +1,48 @@
 const DrawingSurfaceEngine = (() => {
-    const createState = () => ({
-        canvasElement: null,
-        canvasContext: null,
-        hostElement: null,
+    const supportedTools = new Set(["pen", "marker", "eraser"])
+
+    const createEngineState = () => ({
+        containerElement: null,
         pageElement: null,
         scrollElement: null,
-        isActive: false,
-        isPointerDown: false,
-        pointerIdentifier: null,
+        canvasElement: null,
+        canvasContext: null,
         pointerPreviewElement: null,
+        pointerMovePreviewHandler: null,
+        enabled: false,
+        currentTool: "pen",
+        currentColor: "#111111",
+        currentSize: 3,
+        activePointerIdentifier: null,
+        isPointerDown: false,
         pixelRatio: 1,
-        activeTool: "pen",
-        activeColor: "#111111",
-        activeSize: 3,
+        currentSnapshot: "",
         historyStack: [""],
         redoStack: [],
-        currentSnapshot: "",
         layoutFrame: 0,
         scrollFrame: 0,
-        resizeObserver: null,
-        mutationObserver: null,
         loadToken: 0,
         onSnapshotChange: () => {},
-        canvasEventsBound: false,
-        handleScroll: null
+        resizeObserver: null,
+        mutationObserver: null,
+        scrollSyncHandler: null
     })
 
-    const buildStrokeStyle = (tool, color, size) => {
+    const createStrokeStyle = (tool, color, size) => {
         if (tool === "eraser") {
             return {
                 compositeOperation: "destination-out",
                 color: "#000000",
                 alpha: 1,
-                width: Math.max(12, size * 2.2)
+                width: Math.max(12, size * 2)
             }
         }
         if (tool === "marker") {
             return {
                 compositeOperation: "source-over",
                 color,
-                alpha: 0.35,
-                width: Math.max(6, size * 2.1)
+                alpha: 0.4,
+                width: Math.max(6, size * 2)
             }
         }
         return {
@@ -51,455 +53,432 @@ const DrawingSurfaceEngine = (() => {
         }
     }
 
-    const getCanvasPoint = (state, pointerEvent) => {
-        if (!state.canvasElement) return null
-        const canvasRect = state.canvasElement.getBoundingClientRect()
-        if (!canvasRect.width || !canvasRect.height) return null
-        const localX = Utils.clamp(pointerEvent.clientX - canvasRect.left, 0, canvasRect.width)
-        const localY = Utils.clamp(pointerEvent.clientY - canvasRect.top, 0, canvasRect.height)
-        return { x: localX, y: localY }
-    }
-
-    const ensureCanvas = (state) => {
-        if (state.canvasElement || !state.hostElement) return state.canvasElement
-        const canvasElement = document.createElement("canvas")
-        canvasElement.className = "note-drawing-canvas"
-        canvasElement.setAttribute("aria-hidden", "true")
-        canvasElement.tabIndex = -1
-        canvasElement.style.pointerEvents = "none"
-        state.hostElement.appendChild(canvasElement)
-        state.canvasElement = canvasElement
-        state.canvasContext = canvasElement.getContext("2d")
-        return canvasElement
-    }
-
-    const ensurePointerPreview = (state) => {
-        if (state.pointerPreviewElement) return
-        const pointerPreviewElement = document.createElement("div")
-        pointerPreviewElement.className = "drawing-pointer-preview"
-        pointerPreviewElement.setAttribute("aria-hidden", "true")
-        document.body.appendChild(pointerPreviewElement)
-        state.pointerPreviewElement = pointerPreviewElement
-    }
-
-    const applyContextScale = (state) => {
-        if (!state.canvasContext) return
-        state.canvasContext.setTransform(state.pixelRatio, 0, 0, state.pixelRatio, 0, 0)
-    }
-
-    const syncCanvasPosition = (state) => {
-        if (!state.canvasElement || !state.pageElement) return
-        state.canvasElement.style.top = `${state.pageElement.offsetTop}px`
-        state.canvasElement.style.left = `${state.pageElement.offsetLeft}px`
-    }
-
-    const syncCanvasLayout = (state) => {
-        if (!state.canvasElement || !state.canvasContext || !state.pageElement) return
-        const cssWidth = Math.max(1, Math.floor(state.pageElement.clientWidth))
-        const cssHeight = Math.max(1, Math.floor(state.pageElement.scrollHeight))
-        const nextPixelRatio = window.devicePixelRatio || 1
-        const pixelWidth = Math.max(1, Math.floor(cssWidth * nextPixelRatio))
-        const pixelHeight = Math.max(1, Math.floor(cssHeight * nextPixelRatio))
-        const canvasChanged = state.canvasElement.width !== pixelWidth || state.canvasElement.height !== pixelHeight || state.pixelRatio !== nextPixelRatio
-
-        if (canvasChanged) {
-            const backupCanvas = document.createElement("canvas")
-            backupCanvas.width = state.canvasElement.width
-            backupCanvas.height = state.canvasElement.height
-            const backupContext = backupCanvas.getContext("2d")
-            if (backupContext && backupCanvas.width > 0 && backupCanvas.height > 0) {
-                backupContext.drawImage(state.canvasElement, 0, 0)
-            }
-            state.canvasElement.width = pixelWidth
-            state.canvasElement.height = pixelHeight
-            state.pixelRatio = nextPixelRatio
-            state.canvasElement.style.width = `${cssWidth}px`
-            state.canvasElement.style.height = `${cssHeight}px`
-            applyContextScale(state)
-            if (backupCanvas.width > 0 && backupCanvas.height > 0) {
-                state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
-                state.canvasContext.drawImage(backupCanvas, 0, 0, backupCanvas.width, backupCanvas.height, 0, 0, pixelWidth, pixelHeight)
-                applyContextScale(state)
-            }
-        } else {
-            state.canvasElement.style.width = `${cssWidth}px`
-            state.canvasElement.style.height = `${cssHeight}px`
-        }
-        syncCanvasPosition(state)
-    }
-
-    const scheduleLayoutSync = (state) => {
-        if (state.layoutFrame) return
-        state.layoutFrame = requestAnimationFrame(() => {
-            state.layoutFrame = 0
-            syncCanvasLayout(state)
-        })
-    }
-
-    const scheduleScrollSync = (state) => {
-        if (state.scrollFrame) return
-        state.scrollFrame = requestAnimationFrame(() => {
-            state.scrollFrame = 0
-            syncCanvasPosition(state)
-        })
-    }
-
-    const clearCanvas = (state) => {
-        if (!state.canvasElement || !state.canvasContext) return
-        state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
-        state.canvasContext.clearRect(0, 0, state.canvasElement.width, state.canvasElement.height)
-        applyContextScale(state)
-    }
-
-    const drawSnapshotToCanvas = (state, snapshot) => {
-        const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
-        state.currentSnapshot = normalizedSnapshot
-        state.loadToken += 1
-        const currentLoadToken = state.loadToken
-        if (!normalizedSnapshot) {
-            clearCanvas(state)
-            return Promise.resolve("")
-        }
-        return new Promise((resolve) => {
-            const imageElement = new Image()
-            imageElement.onload = () => {
-                if (state.loadToken !== currentLoadToken || !state.canvasElement || !state.canvasContext) {
-                    resolve(state.currentSnapshot)
-                    return
-                }
-                state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
-                state.canvasContext.clearRect(0, 0, state.canvasElement.width, state.canvasElement.height)
-                state.canvasContext.drawImage(imageElement, 0, 0, state.canvasElement.width, state.canvasElement.height)
-                applyContextScale(state)
-                resolve(state.currentSnapshot)
-            }
-            imageElement.onerror = () => {
-                if (state.loadToken === currentLoadToken) {
-                    state.currentSnapshot = ""
-                    clearCanvas(state)
-                }
-                resolve(state.currentSnapshot)
-            }
-            imageElement.src = normalizedSnapshot
-        })
-    }
-
-    const updatePointerPreview = (state, pointerEvent) => {
-        if (!state.pointerPreviewElement || !state.canvasElement || !state.isActive) return
-        const point = getCanvasPoint(state, pointerEvent)
-        if (!point) return
-        const canvasRect = state.canvasElement.getBoundingClientRect()
-        state.pointerPreviewElement.style.transform = `translate(${canvasRect.left + point.x}px, ${canvasRect.top + point.y}px) translate(-50%, -50%)`
-        state.pointerPreviewElement.style.opacity = "1"
-    }
-
-    const hidePointerPreview = (state) => {
-        if (!state.pointerPreviewElement) return
-        state.pointerPreviewElement.style.opacity = "0"
-    }
-
-    const updatePointerPreviewStyle = (state) => {
-        if (!state.pointerPreviewElement) return
-        const strokeStyle = buildStrokeStyle(state.activeTool, state.activeColor, state.activeSize)
-        state.pointerPreviewElement.style.width = `${strokeStyle.width}px`
-        state.pointerPreviewElement.style.height = `${strokeStyle.width}px`
-        if (state.activeTool === "eraser") {
-            state.pointerPreviewElement.style.borderColor = "rgba(248, 113, 113, 0.9)"
-            state.pointerPreviewElement.style.background = "rgba(248, 113, 113, 0.22)"
-            return
-        }
-        if (state.activeTool === "marker") {
-            state.pointerPreviewElement.style.borderColor = "rgba(37, 99, 235, 0.9)"
-            state.pointerPreviewElement.style.background = "rgba(37, 99, 235, 0.18)"
-            return
-        }
-        state.pointerPreviewElement.style.borderColor = "rgba(59, 130, 246, 0.9)"
-        state.pointerPreviewElement.style.background = "rgba(59, 130, 246, 0.16)"
-    }
-
-    const buildExportSnapshot = (state) => {
-        if (!state.canvasElement || !state.canvasContext) return ""
-        const sourceWidth = state.canvasElement.width
-        const sourceHeight = state.canvasElement.height
-        if (!sourceWidth || !sourceHeight) return ""
-        const pixelData = state.canvasContext.getImageData(0, 0, sourceWidth, sourceHeight).data
-        let minX = sourceWidth
-        let minY = sourceHeight
-        let maxX = -1
-        let maxY = -1
-
-        for (let pixelIndex = 3, pointIndex = 0; pixelIndex < pixelData.length; pixelIndex += 4, pointIndex += 1) {
-            if (pixelData[pixelIndex] === 0) continue
-            const x = pointIndex % sourceWidth
-            const y = Math.floor(pointIndex / sourceWidth)
-            if (x < minX) minX = x
-            if (y < minY) minY = y
-            if (x > maxX) maxX = x
-            if (y > maxY) maxY = y
-        }
-
-        if (maxX < minX || maxY < minY) return ""
-
-        const padding = Math.ceil(Math.max(4, state.activeSize * 2))
-        const cropX = Math.max(0, minX - padding)
-        const cropY = Math.max(0, minY - padding)
-        const cropWidth = Math.min(sourceWidth - cropX, maxX - minX + 1 + padding * 2)
-        const cropHeight = Math.min(sourceHeight - cropY, maxY - minY + 1 + padding * 2)
-
-        const exportCanvas = document.createElement("canvas")
-        exportCanvas.width = Math.max(1, cropWidth)
-        exportCanvas.height = Math.max(1, cropHeight)
-        const exportContext = exportCanvas.getContext("2d")
-        if (!exportContext) return ""
-
-        exportContext.drawImage(state.canvasElement, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
-        let snapshot = exportCanvas.toDataURL("image/webp", 0.8)
-        if (!snapshot.startsWith("data:image/webp")) snapshot = exportCanvas.toDataURL("image/png")
-
-        const maxLength = 200000
-        let resizedCanvas = exportCanvas
-        while (snapshot.length > maxLength && resizedCanvas.width > 300 && resizedCanvas.height > 300) {
-            const nextCanvas = document.createElement("canvas")
-            nextCanvas.width = Math.max(1, Math.floor(resizedCanvas.width * 0.88))
-            nextCanvas.height = Math.max(1, Math.floor(resizedCanvas.height * 0.88))
-            const nextContext = nextCanvas.getContext("2d")
-            if (!nextContext) break
-            nextContext.drawImage(resizedCanvas, 0, 0, resizedCanvas.width, resizedCanvas.height, 0, 0, nextCanvas.width, nextCanvas.height)
-            resizedCanvas = nextCanvas
-            snapshot = resizedCanvas.toDataURL("image/webp", 0.8)
-            if (!snapshot.startsWith("data:image/webp")) snapshot = resizedCanvas.toDataURL("image/png")
-        }
-        return snapshot
-    }
-
-    const pushHistorySnapshot = (state, snapshot) => {
-        const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
-        const previousSnapshot = state.historyStack[state.historyStack.length - 1] || ""
-        if (previousSnapshot === normalizedSnapshot) return
-        state.historyStack.push(normalizedSnapshot)
-        if (state.historyStack.length > 120) state.historyStack.shift()
-        state.redoStack = []
-    }
-
-    const attachObservers = (state) => {
-        if (!state.pageElement) return
-        if (state.resizeObserver) state.resizeObserver.disconnect()
-        if (state.mutationObserver) state.mutationObserver.disconnect()
-        state.scrollElement?.removeEventListener("scroll", state.handleScroll)
-
-        if (typeof ResizeObserver !== "undefined") {
-            state.resizeObserver = new ResizeObserver(() => scheduleLayoutSync(state))
-            state.resizeObserver.observe(state.pageElement)
-        }
-
-        state.mutationObserver = new MutationObserver(() => scheduleLayoutSync(state))
-        state.mutationObserver.observe(state.pageElement, { childList: true, subtree: true, characterData: true })
-
-        if (!state.handleScroll) {
-            state.handleScroll = () => scheduleScrollSync(state)
-        }
-        state.scrollElement?.addEventListener("scroll", state.handleScroll, { passive: true })
-    }
-
-    const detachObservers = (state) => {
-        if (state.resizeObserver) state.resizeObserver.disconnect()
-        if (state.mutationObserver) state.mutationObserver.disconnect()
-        state.resizeObserver = null
-        state.mutationObserver = null
-        if (state.handleScroll) state.scrollElement?.removeEventListener("scroll", state.handleScroll)
-    }
-
     const createEngine = () => {
-        const state = createState()
+        const state = createEngineState()
 
-        const applyInteractionState = () => {
-            if (state.canvasElement) {
-                state.canvasElement.style.pointerEvents = state.isActive ? "auto" : "none"
+        const ensureCanvasElement = () => {
+            if (!state.containerElement) return
+            if (!state.canvasElement) {
+                const canvasElement = document.createElement("canvas")
+                canvasElement.className = "note-drawing-canvas"
+                canvasElement.setAttribute("aria-hidden", "true")
+                canvasElement.tabIndex = -1
+                canvasElement.style.pointerEvents = "none"
+                state.canvasElement = canvasElement
+                state.canvasContext = canvasElement.getContext("2d")
+                bindCanvasEvents()
             }
-            if (!state.scrollElement) return
-            state.scrollElement.style.overflow = state.isActive ? "hidden" : ""
-            state.scrollElement.style.touchAction = state.isActive ? "none" : ""
+            if (state.canvasElement.parentElement !== state.containerElement) {
+                state.containerElement.appendChild(state.canvasElement)
+            }
+        }
+
+        const ensurePointerPreviewElement = () => {
+            if (state.pointerPreviewElement) return
+            const pointerPreviewElement = document.createElement("div")
+            pointerPreviewElement.className = "drawing-pointer-preview"
+            pointerPreviewElement.setAttribute("aria-hidden", "true")
+            document.body.appendChild(pointerPreviewElement)
+            state.pointerPreviewElement = pointerPreviewElement
+        }
+
+        const applyContextScale = () => {
+            if (!state.canvasContext) return
+            state.canvasContext.setTransform(state.pixelRatio, 0, 0, state.pixelRatio, 0, 0)
+        }
+
+        const clearCanvas = () => {
+            if (!state.canvasElement || !state.canvasContext) return
+            state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
+            state.canvasContext.clearRect(0, 0, state.canvasElement.width, state.canvasElement.height)
+            applyContextScale()
+        }
+
+        const getCanvasPoint = (pointerEvent) => {
+            if (!state.canvasElement) return null
+            const canvasRectangle = state.canvasElement.getBoundingClientRect()
+            if (!canvasRectangle.width || !canvasRectangle.height) return null
+            const x = Utils.clamp(pointerEvent.clientX - canvasRectangle.left, 0, canvasRectangle.width)
+            const y = Utils.clamp(pointerEvent.clientY - canvasRectangle.top, 0, canvasRectangle.height)
+            return { x, y }
+        }
+
+        const updatePointerPreviewStyle = () => {
+            if (!state.pointerPreviewElement) return
+            const strokeStyle = createStrokeStyle(state.currentTool, state.currentColor, state.currentSize)
+            state.pointerPreviewElement.style.width = `${strokeStyle.width}px`
+            state.pointerPreviewElement.style.height = `${strokeStyle.width}px`
+            if (state.currentTool === "eraser") {
+                state.pointerPreviewElement.style.borderColor = "rgba(248, 113, 113, 0.9)"
+                state.pointerPreviewElement.style.background = "rgba(248, 113, 113, 0.2)"
+                return
+            }
+            if (state.currentTool === "marker") {
+                state.pointerPreviewElement.style.borderColor = "rgba(37, 99, 235, 0.9)"
+                state.pointerPreviewElement.style.background = "rgba(37, 99, 235, 0.18)"
+                return
+            }
+            state.pointerPreviewElement.style.borderColor = "rgba(59, 130, 246, 0.9)"
+            state.pointerPreviewElement.style.background = "rgba(59, 130, 246, 0.16)"
+        }
+
+        const movePointerPreview = (pointerEvent) => {
+            if (!state.enabled || !state.pointerPreviewElement || !state.canvasElement) return
+            const canvasPoint = getCanvasPoint(pointerEvent)
+            if (!canvasPoint) return
+            const canvasRectangle = state.canvasElement.getBoundingClientRect()
+            state.pointerPreviewElement.style.transform = `translate(${canvasRectangle.left + canvasPoint.x}px, ${canvasRectangle.top + canvasPoint.y}px) translate(-50%, -50%)`
+            state.pointerPreviewElement.style.opacity = "1"
+        }
+
+        const hidePointerPreview = () => {
+            if (!state.pointerPreviewElement) return
+            state.pointerPreviewElement.style.opacity = "0"
         }
 
         const applyStrokeStyle = () => {
             if (!state.canvasContext) return
-            const strokeStyle = buildStrokeStyle(state.activeTool, state.activeColor, state.activeSize)
+            const strokeStyle = createStrokeStyle(state.currentTool, state.currentColor, state.currentSize)
             state.canvasContext.globalCompositeOperation = strokeStyle.compositeOperation
             state.canvasContext.strokeStyle = strokeStyle.color
             state.canvasContext.globalAlpha = strokeStyle.alpha
             state.canvasContext.lineWidth = strokeStyle.width
             state.canvasContext.lineCap = "round"
             state.canvasContext.lineJoin = "round"
-            updatePointerPreviewStyle(state)
+            updatePointerPreviewStyle()
+        }
+
+        const syncCanvasPosition = () => {
+            if (!state.canvasElement || !state.pageElement) return
+            state.canvasElement.style.top = `${state.pageElement.offsetTop}px`
+            state.canvasElement.style.left = `${state.pageElement.offsetLeft}px`
+        }
+
+        const syncCanvasLayout = () => {
+            if (!state.canvasElement || !state.canvasContext || !state.pageElement) return
+            const cssWidth = Math.max(1, Math.floor(state.pageElement.clientWidth))
+            const cssHeight = Math.max(1, Math.floor(state.pageElement.scrollHeight))
+            const nextPixelRatio = window.devicePixelRatio || 1
+            const pixelWidth = Math.max(1, Math.floor(cssWidth * nextPixelRatio))
+            const pixelHeight = Math.max(1, Math.floor(cssHeight * nextPixelRatio))
+            const hasSizeChange = state.canvasElement.width !== pixelWidth || state.canvasElement.height !== pixelHeight || state.pixelRatio !== nextPixelRatio
+            if (hasSizeChange) {
+                const previousCanvas = document.createElement("canvas")
+                previousCanvas.width = state.canvasElement.width
+                previousCanvas.height = state.canvasElement.height
+                const previousContext = previousCanvas.getContext("2d")
+                if (previousContext && previousCanvas.width && previousCanvas.height) {
+                    previousContext.drawImage(state.canvasElement, 0, 0)
+                }
+                state.canvasElement.width = pixelWidth
+                state.canvasElement.height = pixelHeight
+                state.pixelRatio = nextPixelRatio
+                state.canvasElement.style.width = `${cssWidth}px`
+                state.canvasElement.style.height = `${cssHeight}px`
+                applyContextScale()
+                if (previousCanvas.width && previousCanvas.height) {
+                    state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
+                    state.canvasContext.drawImage(previousCanvas, 0, 0, previousCanvas.width, previousCanvas.height, 0, 0, pixelWidth, pixelHeight)
+                    applyContextScale()
+                }
+            } else {
+                state.canvasElement.style.width = `${cssWidth}px`
+                state.canvasElement.style.height = `${cssHeight}px`
+            }
+            syncCanvasPosition()
+        }
+
+        const scheduleLayoutSync = () => {
+            if (state.layoutFrame) return
+            state.layoutFrame = requestAnimationFrame(() => {
+                state.layoutFrame = 0
+                syncCanvasLayout()
+            })
+        }
+
+        const scheduleScrollSync = () => {
+            if (state.scrollFrame) return
+            state.scrollFrame = requestAnimationFrame(() => {
+                state.scrollFrame = 0
+                syncCanvasPosition()
+            })
+        }
+
+        const buildSnapshotFromCanvas = () => {
+            if (!state.canvasElement || !state.canvasContext) return ""
+            const sourceWidth = state.canvasElement.width
+            const sourceHeight = state.canvasElement.height
+            if (!sourceWidth || !sourceHeight) return ""
+            const imageData = state.canvasContext.getImageData(0, 0, sourceWidth, sourceHeight).data
+            let minX = sourceWidth
+            let minY = sourceHeight
+            let maxX = -1
+            let maxY = -1
+            for (let pixelIndex = 3, pointIndex = 0; pixelIndex < imageData.length; pixelIndex += 4, pointIndex += 1) {
+                if (imageData[pixelIndex] === 0) continue
+                const x = pointIndex % sourceWidth
+                const y = Math.floor(pointIndex / sourceWidth)
+                if (x < minX) minX = x
+                if (y < minY) minY = y
+                if (x > maxX) maxX = x
+                if (y > maxY) maxY = y
+            }
+            if (maxX < minX || maxY < minY) return ""
+            const padding = Math.ceil(Math.max(4, state.currentSize * 2))
+            const cropX = Math.max(0, minX - padding)
+            const cropY = Math.max(0, minY - padding)
+            const cropWidth = Math.min(sourceWidth - cropX, maxX - minX + 1 + padding * 2)
+            const cropHeight = Math.min(sourceHeight - cropY, maxY - minY + 1 + padding * 2)
+            const exportCanvas = document.createElement("canvas")
+            exportCanvas.width = Math.max(1, cropWidth)
+            exportCanvas.height = Math.max(1, cropHeight)
+            const exportContext = exportCanvas.getContext("2d")
+            if (!exportContext) return ""
+            exportContext.drawImage(state.canvasElement, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+            let snapshot = exportCanvas.toDataURL("image/webp", 0.82)
+            if (!snapshot.startsWith("data:image/webp")) snapshot = exportCanvas.toDataURL("image/png")
+            while (snapshot.length > 190000 && exportCanvas.width > 280 && exportCanvas.height > 280) {
+                const compressedCanvas = document.createElement("canvas")
+                compressedCanvas.width = Math.max(1, Math.floor(exportCanvas.width * 0.88))
+                compressedCanvas.height = Math.max(1, Math.floor(exportCanvas.height * 0.88))
+                const compressedContext = compressedCanvas.getContext("2d")
+                if (!compressedContext) break
+                compressedContext.drawImage(exportCanvas, 0, 0, exportCanvas.width, exportCanvas.height, 0, 0, compressedCanvas.width, compressedCanvas.height)
+                snapshot = compressedCanvas.toDataURL("image/webp", 0.82)
+                if (!snapshot.startsWith("data:image/webp")) snapshot = compressedCanvas.toDataURL("image/png")
+                exportCanvas.width = compressedCanvas.width
+                exportCanvas.height = compressedCanvas.height
+                const resizedContext = exportCanvas.getContext("2d")
+                if (!resizedContext) break
+                resizedContext.drawImage(compressedCanvas, 0, 0)
+            }
+            return snapshot
+        }
+
+        const pushHistorySnapshot = (snapshot) => {
+            const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
+            const currentHistorySnapshot = state.historyStack[state.historyStack.length - 1] || ""
+            if (currentHistorySnapshot === normalizedSnapshot) return
+            state.historyStack.push(normalizedSnapshot)
+            if (state.historyStack.length > 120) state.historyStack.shift()
+            state.redoStack = []
+        }
+
+        const drawSnapshotOnCanvas = (snapshot) => {
+            const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
+            state.currentSnapshot = normalizedSnapshot
+            state.loadToken += 1
+            const drawToken = state.loadToken
+            if (!normalizedSnapshot) {
+                clearCanvas()
+                return Promise.resolve("")
+            }
+            return new Promise((resolve) => {
+                const imageElement = new Image()
+                imageElement.onload = () => {
+                    if (drawToken !== state.loadToken || !state.canvasElement || !state.canvasContext) {
+                        resolve(state.currentSnapshot)
+                        return
+                    }
+                    state.canvasContext.setTransform(1, 0, 0, 1, 0, 0)
+                    state.canvasContext.clearRect(0, 0, state.canvasElement.width, state.canvasElement.height)
+                    state.canvasContext.drawImage(imageElement, 0, 0, state.canvasElement.width, state.canvasElement.height)
+                    applyContextScale()
+                    resolve(state.currentSnapshot)
+                }
+                imageElement.onerror = () => {
+                    if (drawToken === state.loadToken) {
+                        state.currentSnapshot = ""
+                        clearCanvas()
+                    }
+                    resolve(state.currentSnapshot)
+                }
+                imageElement.src = normalizedSnapshot
+            })
+        }
+
+        const setInteractionState = () => {
+            if (state.canvasElement) {
+                state.canvasElement.style.pointerEvents = state.enabled ? "auto" : "none"
+            }
+            if (state.scrollElement) {
+                state.scrollElement.style.overflow = state.enabled ? "hidden" : ""
+                state.scrollElement.style.touchAction = state.enabled ? "none" : ""
+            }
         }
 
         const startStroke = (pointerEvent) => {
-            if (!state.isActive || !state.canvasContext) return
+            if (!state.enabled || !state.canvasContext || !state.canvasElement) return
             pointerEvent.preventDefault()
-            state.canvasElement?.setPointerCapture?.(pointerEvent.pointerId)
-            const point = getCanvasPoint(state, pointerEvent)
+            state.canvasElement.setPointerCapture?.(pointerEvent.pointerId)
+            const point = getCanvasPoint(pointerEvent)
             if (!point) return
+            state.activePointerIdentifier = pointerEvent.pointerId
             state.isPointerDown = true
-            state.pointerIdentifier = pointerEvent.pointerId
             applyStrokeStyle()
             state.canvasContext.beginPath()
             state.canvasContext.moveTo(point.x, point.y)
-            updatePointerPreview(state, pointerEvent)
+            movePointerPreview(pointerEvent)
         }
 
         const continueStroke = (pointerEvent) => {
-            if (!state.isPointerDown || !state.canvasContext) return
-            if (state.pointerIdentifier !== pointerEvent.pointerId) return
+            if (!state.enabled || !state.canvasContext || !state.isPointerDown) return
+            if (state.activePointerIdentifier !== pointerEvent.pointerId) return
             pointerEvent.preventDefault()
-            const events = typeof pointerEvent.getCoalescedEvents === "function" ? pointerEvent.getCoalescedEvents() : [pointerEvent]
-            events.forEach((eventItem) => {
-                const point = getCanvasPoint(state, eventItem)
+            const pointerEvents = typeof pointerEvent.getCoalescedEvents === "function" ? pointerEvent.getCoalescedEvents() : [pointerEvent]
+            pointerEvents.forEach((eventItem) => {
+                const point = getCanvasPoint(eventItem)
                 if (!point) return
                 state.canvasContext.lineTo(point.x, point.y)
             })
             state.canvasContext.stroke()
-            updatePointerPreview(state, pointerEvent)
+            movePointerPreview(pointerEvent)
         }
 
         const finishStroke = (pointerEvent) => {
             if (!state.isPointerDown || !state.canvasContext) return
-            if (pointerEvent && state.pointerIdentifier !== pointerEvent.pointerId) return
+            if (pointerEvent && state.activePointerIdentifier !== pointerEvent.pointerId) return
             pointerEvent?.preventDefault()
             state.isPointerDown = false
-            state.pointerIdentifier = null
-            const snapshot = buildExportSnapshot(state)
+            state.activePointerIdentifier = null
+            const snapshot = buildSnapshotFromCanvas()
             state.currentSnapshot = snapshot
-            pushHistorySnapshot(state, snapshot)
+            pushHistorySnapshot(snapshot)
             state.onSnapshotChange(snapshot)
         }
 
-        const setHost = (hostElement, pageElement, scrollElement) => {
-            state.hostElement = hostElement || null
-            state.pageElement = pageElement || null
-            state.scrollElement = scrollElement || hostElement || null
-            ensureCanvas(state)
-            bindCanvasEvents()
-            ensurePointerPreview(state)
-            attachObservers(state)
-            scheduleLayoutSync(state)
-            applyInteractionState()
-            applyStrokeStyle()
-        }
-
         const bindCanvasEvents = () => {
-            ensureCanvas(state)
-            if (!state.canvasElement || state.canvasEventsBound) return
-            state.canvasElement.addEventListener("pointerdown", startStroke)
-            state.canvasElement.addEventListener("pointermove", continueStroke)
-            state.canvasElement.addEventListener("pointermove", (pointerEvent) => updatePointerPreview(state, pointerEvent))
-            state.canvasElement.addEventListener("pointerup", finishStroke)
-            state.canvasElement.addEventListener("pointercancel", finishStroke)
-            state.canvasElement.addEventListener("pointerleave", () => hidePointerPreview(state))
-            state.canvasEventsBound = true
-        }
-
-        const setSnapshot = async (snapshot, options = {}) => {
-            const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
-            scheduleLayoutSync(state)
-            await new Promise(resolve => requestAnimationFrame(resolve))
-            await drawSnapshotToCanvas(state, normalizedSnapshot)
-            if (options.resetHistory) {
-                state.historyStack = [normalizedSnapshot]
-                state.redoStack = []
+            if (!state.canvasElement) return
+            state.canvasElement.onpointerdown = startStroke
+            state.canvasElement.onpointermove = continueStroke
+            state.canvasElement.onpointerup = finishStroke
+            state.canvasElement.onpointercancel = finishStroke
+            state.canvasElement.onpointerleave = () => hidePointerPreview()
+            if (!state.pointerMovePreviewHandler) {
+                state.pointerMovePreviewHandler = (pointerEvent) => movePointerPreview(pointerEvent)
             }
-            state.currentSnapshot = normalizedSnapshot
+            state.canvasElement.removeEventListener("pointermove", state.pointerMovePreviewHandler)
+            state.canvasElement.addEventListener("pointermove", state.pointerMovePreviewHandler)
         }
 
-        const undoStroke = async () => {
-            if (state.historyStack.length <= 1) return state.currentSnapshot
-            const removedSnapshot = state.historyStack.pop()
-            state.redoStack.push(removedSnapshot || "")
-            const previousSnapshot = state.historyStack[state.historyStack.length - 1] || ""
-            await drawSnapshotToCanvas(state, previousSnapshot)
-            state.currentSnapshot = previousSnapshot
-            state.onSnapshotChange(previousSnapshot)
-            return previousSnapshot
-        }
-
-        const redoStroke = async () => {
-            if (!state.redoStack.length) return state.currentSnapshot
-            const nextSnapshot = state.redoStack.pop() || ""
-            state.historyStack.push(nextSnapshot)
-            await drawSnapshotToCanvas(state, nextSnapshot)
-            state.currentSnapshot = nextSnapshot
-            state.onSnapshotChange(nextSnapshot)
-            return nextSnapshot
-        }
-
-        const destroy = () => {
-            state.isActive = false
-            state.isPointerDown = false
-            state.pointerIdentifier = null
-            applyInteractionState()
-            hidePointerPreview(state)
-            detachObservers(state)
-            if (state.layoutFrame) cancelAnimationFrame(state.layoutFrame)
-            if (state.scrollFrame) cancelAnimationFrame(state.scrollFrame)
-            state.layoutFrame = 0
-            state.scrollFrame = 0
-            if (state.pointerPreviewElement) {
-                state.pointerPreviewElement.remove()
-                state.pointerPreviewElement = null
+        const reconnectObservers = (previousScrollElement) => {
+            if (state.resizeObserver) state.resizeObserver.disconnect()
+            if (state.mutationObserver) state.mutationObserver.disconnect()
+            if (state.scrollSyncHandler && previousScrollElement) previousScrollElement.removeEventListener("scroll", state.scrollSyncHandler)
+            state.resizeObserver = null
+            state.mutationObserver = null
+            if (!state.pageElement) return
+            if (typeof ResizeObserver !== "undefined") {
+                state.resizeObserver = new ResizeObserver(() => scheduleLayoutSync())
+                state.resizeObserver.observe(state.pageElement)
             }
-            state.historyStack = [""]
-            state.redoStack = []
-            state.currentSnapshot = ""
-            clearCanvas(state)
+            state.mutationObserver = new MutationObserver(() => scheduleLayoutSync())
+            state.mutationObserver.observe(state.pageElement, { childList: true, subtree: true, characterData: true })
+            state.scrollSyncHandler = () => scheduleScrollSync()
+            state.scrollElement?.addEventListener("scroll", state.scrollSyncHandler, { passive: true })
         }
 
         return {
-            getState() {
-                return state
+            setHostElements(containerElement, pageElement, scrollElement) {
+                const previousScrollElement = state.scrollElement
+                state.containerElement = containerElement || null
+                state.pageElement = pageElement || null
+                state.scrollElement = scrollElement || containerElement || null
+                ensureCanvasElement()
+                ensurePointerPreviewElement()
+                reconnectObservers(previousScrollElement)
+                scheduleLayoutSync()
+                setInteractionState()
+                applyStrokeStyle()
             },
-            setHost,
+            setEnabled(enabled) {
+                state.enabled = !!enabled
+                if (!state.enabled) {
+                    state.isPointerDown = false
+                    state.activePointerIdentifier = null
+                    hidePointerPreview()
+                }
+                setInteractionState()
+            },
             setTool(tool) {
-                state.activeTool = tool
+                if (!supportedTools.has(tool)) return
+                state.currentTool = tool
                 applyStrokeStyle()
             },
             setColor(color) {
-                state.activeColor = color
+                if (!color) return
+                state.currentColor = color
                 applyStrokeStyle()
             },
             setSize(size) {
-                state.activeSize = size
+                const normalizedSize = Number.isFinite(size) ? Utils.clamp(size, 1, 28) : 3
+                state.currentSize = normalizedSize
                 applyStrokeStyle()
             },
-            setActive(active) {
-                state.isActive = !!active
-                if (!state.isActive) {
-                    state.isPointerDown = false
-                    state.pointerIdentifier = null
-                    hidePointerPreview(state)
+            async setSnapshot(snapshot, options = {}) {
+                scheduleLayoutSync()
+                await new Promise(resolve => requestAnimationFrame(resolve))
+                const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
+                await drawSnapshotOnCanvas(normalizedSnapshot)
+                if (options.resetHistory) {
+                    state.historyStack = [normalizedSnapshot]
+                    state.redoStack = []
                 }
-                applyInteractionState()
+                state.currentSnapshot = normalizedSnapshot
+                hidePointerPreview()
             },
-            setSnapshot,
             getSnapshot() {
                 return state.currentSnapshot
             },
             buildSnapshot() {
-                return buildExportSnapshot(state)
+                return buildSnapshotFromCanvas()
             },
-            undoStroke,
-            redoStroke,
+            async undo() {
+                if (state.historyStack.length <= 1) return state.currentSnapshot
+                const removedSnapshot = state.historyStack.pop()
+                state.redoStack.push(removedSnapshot || "")
+                const previousSnapshot = state.historyStack[state.historyStack.length - 1] || ""
+                await drawSnapshotOnCanvas(previousSnapshot)
+                state.currentSnapshot = previousSnapshot
+                state.onSnapshotChange(previousSnapshot)
+                return previousSnapshot
+            },
+            async redo() {
+                if (!state.redoStack.length) return state.currentSnapshot
+                const nextSnapshot = state.redoStack.pop() || ""
+                state.historyStack.push(nextSnapshot)
+                await drawSnapshotOnCanvas(nextSnapshot)
+                state.currentSnapshot = nextSnapshot
+                state.onSnapshotChange(nextSnapshot)
+                return nextSnapshot
+            },
             refreshLayout() {
-                scheduleLayoutSync(state)
+                scheduleLayoutSync()
             },
             setSnapshotChangeHandler(handler) {
                 state.onSnapshotChange = typeof handler === "function" ? handler : () => {}
             },
-            updatePointerPreviewStyle() {
-                updatePointerPreviewStyle(state)
-            },
             hidePointerPreview() {
-                hidePointerPreview(state)
+                hidePointerPreview()
             },
-            destroy
+            getState() {
+                return {
+                    canvasElement: state.canvasElement,
+                    canvasContext: state.canvasContext,
+                    pointerPreviewElement: state.pointerPreviewElement,
+                    isPointerDown: state.isPointerDown,
+                    activePointerIdentifier: state.activePointerIdentifier
+                }
+            },
+            async reset() {
+                state.enabled = false
+                setInteractionState()
+                state.historyStack = [""]
+                state.redoStack = []
+                state.currentSnapshot = ""
+                await drawSnapshotOnCanvas("")
+                hidePointerPreview()
+            }
         }
     }
 

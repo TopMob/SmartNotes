@@ -151,6 +151,7 @@ export const EditorAPI = (() => {
         }
 
         const isAutoSave = !!options.autoSave
+        if (isAutoSave && state.manualSaveInProgress) return
         if (!isAutoSave) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 note.title = NoteText.buildAutoTitle({ content: note.content || "" })
@@ -188,6 +189,7 @@ export const EditorAPI = (() => {
 
         if (!ref) return
 
+        if (!isAutoSave) state.manualSaveInProgress = true
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
@@ -199,12 +201,14 @@ export const EditorAPI = (() => {
                 close()
             }
         } catch (error) {
-            const shouldShowErrorToast = !options.silent && !options.autoSave
+            const shouldShowErrorToast = !isAutoSave && !options.silent
             SaveStateService?.handleRemoteSaveError?.(error, { showToast: shouldShowErrorToast })
             if (error?.code === "unavailable" || !navigator.onLine) {
                 const pendingSaveResult = await SafeStorage.local.setJsonAsync("pending-note-save", { payload: { ...payload, updatedAt: Date.now() }, savedAt: Date.now() }, { useIndexedDb: true, priority: "high", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
                 SaveStateService?.handleStorageWriteResult?.(pendingSaveResult, { showToast: shouldShowErrorToast })
             }
+        } finally {
+            if (!isAutoSave) state.manualSaveInProgress = false
         }
     }
 
