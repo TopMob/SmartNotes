@@ -37,6 +37,52 @@ const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
     return source.length > maxLength ? "" : source
 }
 
+const isDataImageValue = (value) => typeof value === "string" && value.trim().startsWith("data:image/")
+
+const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
+    const safeLocalSettings = localSettings && typeof localSettings === "object" ? localSettings : {}
+    const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
+    const mergedSettings = { ...safeCloudSettings }
+    const localMainBackgroundImage = normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage)
+    const localSidebarBackgroundImage = normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage)
+    if (!normalizeLocalImageValue(safeCloudSettings.mainBackgroundImage) && isDataImageValue(localMainBackgroundImage)) {
+        mergedSettings.mainBackgroundImage = localMainBackgroundImage
+    }
+    if (!normalizeLocalImageValue(safeCloudSettings.sidebarBackgroundImage) && isDataImageValue(localSidebarBackgroundImage)) {
+        mergedSettings.sidebarBackgroundImage = localSidebarBackgroundImage
+    }
+    return mergedSettings
+}
+
+const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
+    const localPresetList = Array.isArray(localPresets) ? localPresets : []
+    const cloudPresetList = Array.isArray(cloudPresets) ? cloudPresets : []
+    const localPresetsByKey = new Map(localPresetList
+        .filter(item => item && typeof item === "object")
+        .map(item => [String(item.key || ""), item]))
+    return cloudPresetList
+        .filter(item => item && typeof item === "object")
+        .map(item => {
+            const presetKey = String(item.key || "")
+            const localPreset = localPresetsByKey.get(presetKey)
+            const cloudMainBackgroundImage = normalizeLocalImageValue(item.mainBackgroundImage)
+            const cloudSidebarBackgroundImage = normalizeLocalImageValue(item.sidebarBackgroundImage)
+            const mergedPreset = {
+                ...item,
+                key: presetKey,
+                mainBackgroundImage: cloudMainBackgroundImage,
+                sidebarBackgroundImage: cloudSidebarBackgroundImage
+            }
+            if (!cloudMainBackgroundImage && isDataImageValue(localPreset?.mainBackgroundImage)) {
+                mergedPreset.mainBackgroundImage = normalizeLocalImageValue(localPreset.mainBackgroundImage)
+            }
+            if (!cloudSidebarBackgroundImage && isDataImageValue(localPreset?.sidebarBackgroundImage)) {
+                mergedPreset.sidebarBackgroundImage = normalizeLocalImageValue(localPreset.sidebarBackgroundImage)
+            }
+            return mergedPreset
+        })
+}
+
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
     const parsedValue = Number(value)
     if (!Number.isFinite(parsedValue)) return fallback
@@ -182,8 +228,17 @@ export const ThemeManager = {
             const data = snapshot.data() || {}
             const settings = data.settings && typeof data.settings === "object" ? data.settings : null
             const customPresets = Array.isArray(data.customPresets) ? data.customPresets : null
-            if (customPresets) this.saveCustomPresets(customPresets)
-            if (settings) this.saveSettings(settings)
+            const localSettings = this.getSavedSettings()
+            const localPresets = this.getCustomPresets()
+            if (customPresets) {
+                const mergedCustomPresets = mergeCloudPresetsWithLocalPresets(localPresets, customPresets)
+                this.saveCustomPresets(mergedCustomPresets)
+            }
+            if (settings) {
+                const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, settings)
+                this.saveSettings(mergedSettings)
+                return mergedSettings
+            }
             return settings
         } catch (error) {
             UI?.showToast?.(`Theme sync load failed${error?.code ? `: ${error.code}` : ""}`)

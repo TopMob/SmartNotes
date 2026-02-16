@@ -151,6 +151,7 @@ export const EditorAPI = (() => {
         }
 
         const isAutoSave = !!options.autoSave
+        if (isAutoSave && state.manualSaveInProgress) return
         if (!isAutoSave) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 note.title = NoteText.buildAutoTitle({ content: note.content || "" })
@@ -188,6 +189,7 @@ export const EditorAPI = (() => {
 
         if (!ref) return
 
+        if (!isAutoSave) state.manualSaveInProgress = true
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
@@ -199,11 +201,14 @@ export const EditorAPI = (() => {
                 close()
             }
         } catch (error) {
-            SaveStateService?.handleRemoteSaveError?.(error)
+            const shouldShowErrorToast = !isAutoSave && !options.silent
+            SaveStateService?.handleRemoteSaveError?.(error, { showToast: shouldShowErrorToast })
             if (error?.code === "unavailable" || !navigator.onLine) {
                 const pendingSaveResult = await SafeStorage.local.setJsonAsync("pending-note-save", { payload: { ...payload, updatedAt: Date.now() }, savedAt: Date.now() }, { useIndexedDb: true, priority: "high", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
-                SaveStateService?.handleStorageWriteResult?.(pendingSaveResult)
+                SaveStateService?.handleStorageWriteResult?.(pendingSaveResult, { showToast: shouldShowErrorToast })
             }
+        } finally {
+            if (!isAutoSave) state.manualSaveInProgress = false
         }
     }
 
@@ -731,6 +736,22 @@ const addPage = () => {
 
     const toggleToolbar = () => elements.toolbar?.classList.toggle("is-hidden")
 
+    const undo = () => {
+        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
+            EditorDrawing.undo?.()
+            return
+        }
+        historyHandlers.undo()
+    }
+
+    const redo = () => {
+        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
+            EditorDrawing.redo?.()
+            return
+        }
+        historyHandlers.redo()
+    }
+
     const deleteCurrent = () => {
         const note = StateStore.read().currentNote
         if (!note) return
@@ -757,8 +778,8 @@ const addPage = () => {
         refreshFromRemote,
         close,
         save,
-        undo: historyHandlers.undo,
-        redo: historyHandlers.redo,
+        undo,
+        redo,
         deleteCurrent,
         toggleToolbar,
         getToolList,
