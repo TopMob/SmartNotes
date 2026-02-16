@@ -193,8 +193,8 @@ const EditorDrawing = (() => {
 
     const syncCanvasPosition = () => {
         if (!drawingState.canvas || !drawingState.pageElement || !drawingState.scrollContainer) return
-        const top = drawingState.pageElement.offsetTop - drawingState.scrollContainer.scrollTop
-        const left = drawingState.pageElement.offsetLeft - drawingState.scrollContainer.scrollLeft
+        const top = drawingState.pageElement.offsetTop
+        const left = drawingState.pageElement.offsetLeft
         drawingState.canvas.style.top = `${top}px`
         drawingState.canvas.style.left = `${left}px`
     }

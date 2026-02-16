@@ -422,6 +422,7 @@ export const EditorAPI = (() => {
             })
             btn.addEventListener("click", (event) => {
                 event.preventDefault()
+                inputHandlers.restoreSelection()
                 const idx = parseInt(btn.dataset.toolIdx, 10)
                 const tool = tools[idx]
                 if (tool) {

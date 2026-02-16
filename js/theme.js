@@ -28,6 +28,22 @@ const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
     return Math.min(maximum, Math.max(minimum, parsedValue))
 }
 
+
+const buildFirestoreSafeCustomPresets = (presets) => {
+    if (!Array.isArray(presets)) return []
+    return presets
+        .filter(item => item && typeof item === "object")
+        .map(item => ({
+            key: String(item.key || ""),
+            p: ThemeManager.normalizeHex(item.p),
+            bg: ThemeManager.normalizeHex(item.bg),
+            t: ThemeManager.normalizeHex(item.t),
+            mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
+            sidebarBackgroundImage: typeof item.sidebarBackgroundImage === "string" ? item.sidebarBackgroundImage : ""
+        }))
+        .slice(0, ThemeManager.maxCustomPresets)
+}
+
 export const ThemeManager = {
     themes: {
         oled: createPreset("#000000", "#FFFFFF", "#2563EB"),
@@ -166,11 +182,18 @@ export const ThemeManager = {
                 uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
                 cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
             }
-            await reference.set({
+            const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
+            const payload = {
                 settings: normalizedSettings,
-                customPresets: this.getCustomPresets(),
+                customPresets: safeCustomPresets,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true })
+            }
+            try {
+                await reference.set(payload, { merge: true })
+            } catch (error) {
+                if (String(error?.code || "") !== "invalid-argument") throw error
+                await reference.set({ settings: normalizedSettings, updatedAt: Date.now() }, { merge: true })
+            }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
             UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
