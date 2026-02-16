@@ -348,8 +348,13 @@ const EditorDrawing = (() => {
         if (!exportContext) return ""
         exportContext.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
 
-        let dataUrl = exportCanvas.toDataURL("image/png")
-        const maxLength = 220000
+        const createCompressedDataUrl = (canvas) => {
+            const webpDataUrl = canvas.toDataURL("image/webp", 0.82)
+            if (webpDataUrl.startsWith("data:image/webp")) return webpDataUrl
+            return canvas.toDataURL("image/png")
+        }
+        let dataUrl = createCompressedDataUrl(exportCanvas)
+        const maxLength = 180000
         let currentCanvas = exportCanvas
         while (dataUrl.length > maxLength && currentCanvas.width > 320 && currentCanvas.height > 320) {
             const scaledCanvas = document.createElement("canvas")
@@ -359,7 +364,7 @@ const EditorDrawing = (() => {
             if (!scaledContext) break
             scaledContext.drawImage(currentCanvas, 0, 0, currentCanvas.width, currentCanvas.height, 0, 0, scaledCanvas.width, scaledCanvas.height)
             currentCanvas = scaledCanvas
-            dataUrl = currentCanvas.toDataURL("image/png")
+            dataUrl = createCompressedDataUrl(currentCanvas)
         }
         return dataUrl
     }
