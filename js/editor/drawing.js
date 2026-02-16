@@ -125,7 +125,6 @@ const EditorDrawing = (() => {
         drawingState.canvas = canvas
         drawingState.ctx = canvas.getContext("2d")
         attachObservers()
-        bindControlsPointerGuard()
         scheduleLayoutSync()
         return canvas
     }
@@ -153,26 +152,6 @@ const EditorDrawing = (() => {
         if (drawingState.mutationObserver) drawingState.mutationObserver.disconnect()
         drawingState.mutationObserver = null
         drawingState.scrollContainer?.removeEventListener("scroll", scheduleScrollSync)
-    }
-
-    const bindControlsPointerGuard = () => {
-        if (!elements.drawingControls || elements.drawingControls.dataset.pointerGuard === "true") return
-        elements.drawingControls.dataset.pointerGuard = "true"
-        elements.drawingControls.addEventListener("pointerdown", () => disableCanvasPointerEventsUntilRelease())
-    }
-
-    const disableCanvasPointerEventsUntilRelease = () => {
-        if (!drawingState.canvas || !drawingState.active) return
-        drawingState.canvas.style.pointerEvents = "none"
-        const restorePointerEvents = () => {
-            window.removeEventListener("pointerup", restorePointerEvents)
-            window.removeEventListener("pointercancel", restorePointerEvents)
-            if (drawingState.canvas && drawingState.active) {
-                drawingState.canvas.style.pointerEvents = "auto"
-            }
-        }
-        window.addEventListener("pointerup", restorePointerEvents)
-        window.addEventListener("pointercancel", restorePointerEvents)
     }
 
     const scheduleScrollSync = () => {
@@ -332,11 +311,57 @@ const EditorDrawing = (() => {
         drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
         applyCanvasScale(drawingState.scale)
+        lastDrawingSnapshot = ""
     }
 
     const getDrawingData = () => {
-        if (!drawingState.canvas) return ""
-        return drawingState.canvas.toDataURL("image/png")
+        if (!drawingState.canvas || !drawingState.ctx) return ""
+        const sourceCanvas = drawingState.canvas
+        const width = sourceCanvas.width
+        const height = sourceCanvas.height
+        if (!width || !height) return ""
+        const imageData = drawingState.ctx.getImageData(0, 0, width, height).data
+        let minX = width
+        let minY = height
+        let maxX = -1
+        let maxY = -1
+        for (let pixelIndex = 3, pointIndex = 0; pixelIndex < imageData.length; pixelIndex += 4, pointIndex++) {
+            if (imageData[pixelIndex] === 0) continue
+            const x = pointIndex % width
+            const y = Math.floor(pointIndex / width)
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+        }
+        if (maxX < minX || maxY < minY) return ""
+        const padding = Math.ceil(Math.max(2, drawingState.size))
+        const cropX = Math.max(0, minX - padding)
+        const cropY = Math.max(0, minY - padding)
+        const cropWidth = Math.min(width - cropX, (maxX - minX + 1) + padding * 2)
+        const cropHeight = Math.min(height - cropY, (maxY - minY + 1) + padding * 2)
+
+        const exportCanvas = document.createElement("canvas")
+        exportCanvas.width = Math.max(1, cropWidth)
+        exportCanvas.height = Math.max(1, cropHeight)
+        const exportContext = exportCanvas.getContext("2d")
+        if (!exportContext) return ""
+        exportContext.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+
+        let dataUrl = exportCanvas.toDataURL("image/png")
+        const maxLength = 220000
+        let currentCanvas = exportCanvas
+        while (dataUrl.length > maxLength && currentCanvas.width > 320 && currentCanvas.height > 320) {
+            const scaledCanvas = document.createElement("canvas")
+            scaledCanvas.width = Math.max(1, Math.floor(currentCanvas.width * 0.85))
+            scaledCanvas.height = Math.max(1, Math.floor(currentCanvas.height * 0.85))
+            const scaledContext = scaledCanvas.getContext("2d")
+            if (!scaledContext) break
+            scaledContext.drawImage(currentCanvas, 0, 0, currentCanvas.width, currentCanvas.height, 0, 0, scaledCanvas.width, scaledCanvas.height)
+            currentCanvas = scaledCanvas
+            dataUrl = currentCanvas.toDataURL("image/png")
+        }
+        return dataUrl
     }
 
     const getDrawingSnapshot = () => lastDrawingSnapshot
@@ -395,6 +420,13 @@ const EditorDrawing = (() => {
         }
         drawingState.isDrawing = false
         drawingState.pointerId = null
+        if (!drawingState.active) {
+            const snapshot = getDrawingData()
+            if (snapshot !== lastDrawingSnapshot) {
+                lastDrawingSnapshot = snapshot
+                onDrawingChange(snapshot)
+            }
+        }
         updateEditableState()
         buildToolbar()
     }
@@ -456,6 +488,7 @@ const EditorDrawing = (() => {
         drawingState.isDrawing = false
         drawingState.pointerId = null
         const snapshot = getDrawingData()
+        lastDrawingSnapshot = snapshot
         pushDrawingHistory(snapshot)
         onDrawingChange(snapshot)
     }

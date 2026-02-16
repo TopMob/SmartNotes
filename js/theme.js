@@ -22,6 +22,21 @@ const baseTheme = {
 
 const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: bg, surfaceTransparent: `color-mix(in srgb, ${bg} 86%, transparent)`, border: `color-mix(in srgb, ${p} 38%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
 
+const normalizeLocalImageValue = (value, maxLength = 600000) => {
+    if (typeof value !== "string") return ""
+    const source = value.trim()
+    if (!source) return ""
+    return source.length > maxLength ? "" : source
+}
+
+const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
+    if (typeof value !== "string") return ""
+    const source = value.trim()
+    if (!source) return ""
+    if (source.startsWith("data:image/")) return ""
+    return source.length > maxLength ? "" : source
+}
+
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
     const parsedValue = Number(value)
     if (!Number.isFinite(parsedValue)) return fallback
@@ -38,8 +53,8 @@ const buildFirestoreSafeCustomPresets = (presets) => {
             p: ThemeManager.normalizeHex(item.p),
             bg: ThemeManager.normalizeHex(item.bg),
             t: ThemeManager.normalizeHex(item.t),
-            mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof item.sidebarBackgroundImage === "string" ? item.sidebarBackgroundImage : ""
+            mainBackgroundImage: normalizeCloudSyncImageValue(item.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeCloudSyncImageValue(item.sidebarBackgroundImage)
         }))
         .slice(0, ThemeManager.maxCustomPresets)
 }
@@ -101,7 +116,15 @@ export const ThemeManager = {
         }
     },
     saveCustomPresets(presets) {
-        SafeStorage.local.setJson(this.customPresetStorageKey, presets.slice(0, this.maxCustomPresets))
+        const safePresets = Array.isArray(presets) ? presets.slice(0, this.maxCustomPresets).map(item => ({
+            key: String(item?.key || ""),
+            p: this.normalizeHex(item?.p),
+            bg: this.normalizeHex(item?.bg),
+            t: this.normalizeHex(item?.t),
+            mainBackgroundImage: normalizeLocalImageValue(item?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(item?.sidebarBackgroundImage)
+        })) : []
+        SafeStorage.local.setJson(this.customPresetStorageKey, safePresets)
     },
     addCustomPreset(colors) {
         const presets = this.getCustomPresets()
@@ -113,8 +136,8 @@ export const ThemeManager = {
             p: this.normalizeHex(colors?.p),
             bg: this.normalizeHex(colors?.bg),
             t: this.normalizeHex(colors?.t),
-            mainBackgroundImage: typeof colors?.mainBackgroundImage === "string" ? colors.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof colors?.sidebarBackgroundImage === "string" ? colors.sidebarBackgroundImage : ""
+            mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(colors?.sidebarBackgroundImage)
         }
         this.saveCustomPresets([...presets, nextPreset])
         return { ok: true, key: `custom:${nextPreset.key}` }
@@ -130,8 +153,8 @@ export const ThemeManager = {
                 p: this.normalizeHex(updates?.p ?? item.p),
                 bg: this.normalizeHex(updates?.bg ?? item.bg),
                 t: this.normalizeHex(updates?.t ?? item.t),
-                mainBackgroundImage: typeof updates?.mainBackgroundImage === "string" ? updates.mainBackgroundImage : item.mainBackgroundImage,
-                sidebarBackgroundImage: typeof updates?.sidebarBackgroundImage === "string" ? updates.sidebarBackgroundImage : item.sidebarBackgroundImage
+                mainBackgroundImage: normalizeLocalImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeLocalImageValue(updates?.sidebarBackgroundImage ?? item.sidebarBackgroundImage)
             }
         })
         this.saveCustomPresets(nextPresets)
@@ -169,22 +192,27 @@ export const ThemeManager = {
     },
     async saveAccountSettings(user, settings) {
         const reference = this.getThemeSettingsReference(user)
-        this.saveSettings(settings)
+        const normalizedSettings = {
+            preset: settings?.preset || "oled",
+            p: this.normalizeHex(settings?.p),
+            bg: this.normalizeHex(settings?.bg),
+            t: this.normalizeHex(settings?.t),
+            mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage),
+            uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
+            cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
+        }
+        this.saveSettings(normalizedSettings)
         if (!reference) return
         try {
-            const normalizedSettings = {
-                preset: settings?.preset || "oled",
-                p: this.normalizeHex(settings?.p),
-                bg: this.normalizeHex(settings?.bg),
-                t: this.normalizeHex(settings?.t),
-                mainBackgroundImage: typeof settings?.mainBackgroundImage === "string" ? settings.mainBackgroundImage : "",
-                sidebarBackgroundImage: typeof settings?.sidebarBackgroundImage === "string" ? settings.sidebarBackgroundImage : "",
-                uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
-                cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
-            }
             const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
+            const cloudSettings = {
+                ...normalizedSettings,
+                mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.sidebarBackgroundImage)
+            }
             const payload = {
-                settings: normalizedSettings,
+                settings: cloudSettings,
                 customPresets: safeCustomPresets,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             }
@@ -192,10 +220,10 @@ export const ThemeManager = {
                 await reference.set(payload, { merge: true })
             } catch (error) {
                 if (String(error?.code || "") !== "invalid-argument") throw error
-                await reference.set({ settings: normalizedSettings, updatedAt: Date.now() }, { merge: true })
+                await reference.set({ settings: cloudSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             }
         } catch (error) {
-            SafeStorage.local.setJson("theme-pending-sync", { settings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
+            SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
             UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
         }
     },

@@ -3,24 +3,64 @@ import { CONFIG } from "./core-state.js"
 export const createMediaHandlers = (context) => {
     const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText } = context
 
+    const optimizeImageDataUrl = (dataUrl, options = {}) => new Promise((resolve) => {
+        const source = String(dataUrl || "")
+        if (!source.startsWith("data:image/")) {
+            resolve(source)
+            return
+        }
+        const maxDimension = Number.isFinite(options.maxDimension) ? options.maxDimension : 1600
+        const quality = Number.isFinite(options.quality) ? options.quality : 0.82
+        const image = new Image()
+        image.onload = () => {
+            const width = image.naturalWidth || image.width
+            const height = image.naturalHeight || image.height
+            if (!width || !height) {
+                resolve(source)
+                return
+            }
+            const scale = Math.min(1, maxDimension / Math.max(width, height))
+            const targetWidth = Math.max(1, Math.round(width * scale))
+            const targetHeight = Math.max(1, Math.round(height * scale))
+            const canvas = document.createElement("canvas")
+            canvas.width = targetWidth
+            canvas.height = targetHeight
+            const context = canvas.getContext("2d")
+            if (!context) {
+                resolve(source)
+                return
+            }
+            context.drawImage(image, 0, 0, targetWidth, targetHeight)
+            const optimized = canvas.toDataURL("image/jpeg", quality)
+            resolve(optimized.length < source.length ? optimized : source)
+        }
+        image.onerror = () => resolve(source)
+        image.src = source
+    })
+
     const fileToDataUrl = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = async () => {
             const imageDataUrl = String(reader.result || "")
+            const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
             if (!navigator.onLine) {
                 const pendingImages = await SafeStorage.local.getJsonAsync("pending-images", [], { allowIndexedDbFallback: true })
                 const nextPendingImages = Array.isArray(pendingImages) ? pendingImages : []
-                nextPendingImages.push({ id: Utils.generateId(), dataUrl: imageDataUrl, createdAt: Date.now() })
+                nextPendingImages.push({ id: Utils.generateId(), dataUrl: optimizedImageDataUrl, createdAt: Date.now() })
                 const pendingImagesResult = await SafeStorage.local.setJsonAsync("pending-images", nextPendingImages.slice(-20), { useIndexedDb: true, priority: "normal", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
                 SaveStateService?.handleStorageWriteResult?.(pendingImagesResult)
             }
-            resolve(imageDataUrl)
+            resolve(optimizedImageDataUrl)
         }
         reader.onerror = () => reject(new Error("file-read-failed"))
         reader.readAsDataURL(file)
     })
 
     const handleResizeStart = (event) => {
+        if (state.drawingState?.active) {
+            event.preventDefault()
+            return
+        }
         const handle = event.target.closest(".media-resize-handle")
         if (!handle) return
 
@@ -74,6 +114,10 @@ export const createMediaHandlers = (context) => {
     }
 
     const handleMediaDragStart = (event) => {
+        if (state.drawingState?.active) {
+            event.preventDefault()
+            return
+        }
         if (typeof event.button === "number" && event.button > 0) return
         if (event.target.closest(".media-resize-handle")) return
         const wrapper = event.target.closest(".media-draggable-item")
@@ -148,7 +192,8 @@ export const createMediaHandlers = (context) => {
     const makeMediaDraggable = () => {
         elements.content.querySelectorAll(".media-wrapper").forEach(w => {
             w.classList.add("media-draggable-item")
-            w.setAttribute("draggable", "true")
+            w.setAttribute("draggable", state.drawingState?.active ? "false" : "true")
+            w.style.pointerEvents = state.drawingState?.active ? "none" : ""
             w.contentEditable = "false"
         })
     }
@@ -186,6 +231,7 @@ export const createMediaHandlers = (context) => {
     }
 
     const selectMedia = (el) => {
+        if (state.drawingState?.active) return
         deselectMedia()
         state.selectedMediaElement = el
         state.selectedMediaElement.classList.add("selected")

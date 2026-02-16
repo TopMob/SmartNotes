@@ -119,6 +119,17 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+    const noteHasEditableContent = (note) => {
+        const titleText = String(note?.title || "").trim()
+        const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
+        const hasMedia = /<(img|audio|video|table|hr)\b/i.test(String(note?.content || ""))
+        const tagsCount = Array.isArray(note?.tags) ? note.tags.length : 0
+        const drawingCount = Array.isArray(note?.pageDrawings)
+            ? note.pageDrawings.filter(item => String(item || "").trim().length > 0).length
+            : 0
+        return !!titleText || !!plainTextContent || hasMedia || tagsCount > 0 || drawingCount > 0
+    }
+
     const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
@@ -156,6 +167,13 @@ export const EditorAPI = (() => {
                 const suggested = SmartSearch.suggestFolderId(note, StateStore.read().folders)
                 if (suggested) note.folderId = suggested
             }
+        }
+
+        if (!noteHasEditableContent(note)) {
+            if (!isAutoSave) {
+                UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
+            }
+            return
         }
 
         StateStore.update("currentNote", note)
@@ -298,6 +316,11 @@ export const EditorAPI = (() => {
                 }
                 const wrapper = event.target.closest(".media-wrapper")
                 if (wrapper) {
+                    if (state.drawingState?.active) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        return
+                    }
                     mediaHandlers.selectMedia(wrapper)
                     event.stopPropagation()
                     return
@@ -395,6 +418,7 @@ export const EditorAPI = (() => {
         if (elements.content) {
             elements.content.classList.toggle("drawing-active", !!state.drawingState?.active)
         }
+        mediaHandlers.makeMediaDraggable()
     }
 
     const buildToolbar = () => {
