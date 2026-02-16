@@ -1,10 +1,10 @@
 const STRIP_TAGS = new Set(["strong", "b", "em", "i", "u", "s", "strike", "a", "span", "font"])
 
 const INLINE_FORMATS = {
-    bold: { wrapperTagName: "strong", toggleTagNames: ["strong", "b"] },
-    italic: { wrapperTagName: "em", toggleTagNames: ["em", "i"] },
-    underline: { wrapperTagName: "u", toggleTagNames: ["u"] },
-    strike: { wrapperTagName: "s", toggleTagNames: ["s", "strike"] }
+    bold: { wrapperTagName: "strong", toggleTagNames: ["strong", "b"], fallbackCommand: "bold" },
+    italic: { wrapperTagName: "em", toggleTagNames: ["em", "i"], fallbackCommand: "italic" },
+    underline: { wrapperTagName: "u", toggleTagNames: ["u"], fallbackCommand: "underline" },
+    strike: { wrapperTagName: "s", toggleTagNames: ["s", "strike"], fallbackCommand: "strikeThrough" }
 }
 
 const isElementNode = (node) => node?.nodeType === Node.ELEMENT_NODE
@@ -218,15 +218,19 @@ export const createEditorCommands = (context) => {
         resolveRoot()?.focus()
     }
 
-    const toggleInlineFormat = (formatDefinition, fallbackCommand) => {
+    const toggleInlineFormat = (formatDefinition) => {
         const range = getValidRange()
-        if (!range || range.collapsed) {
-            if (execCommandAdapter.isAvailable && fallbackCommand) {
-                const changed = execCommandAdapter.runCommand(fallbackCommand)
-                if (changed) finalizeChange()
+        const fallbackCommand = formatDefinition?.fallbackCommand
+
+        if (execCommandAdapter.isAvailable && fallbackCommand) {
+            const changed = execCommandAdapter.runCommand(fallbackCommand)
+            if (changed) {
+                finalizeChange()
+                return true
             }
-            return false
         }
+
+        if (!range || range.collapsed) return false
 
         const root = resolveRoot()
         if (!root) return false
@@ -255,6 +259,15 @@ export const createEditorCommands = (context) => {
         return true
     }
 
+    const convertListType = (existingList, nextListTagName) => {
+        const replacementList = document.createElement(nextListTagName)
+        while (existingList.firstChild) {
+            replacementList.appendChild(existingList.firstChild)
+        }
+        existingList.replaceWith(replacementList)
+        return replacementList
+    }
+
     const getListAncestor = (range) => {
         if (!range) return null
         const node = isElementNode(range.startContainer) ? range.startContainer : range.startContainer.parentElement
@@ -270,29 +283,36 @@ export const createEditorCommands = (context) => {
         if (!range) return false
 
         const existingList = getListAncestor(range)
-        if (existingList && normalizeTagName(existingList.tagName) === listTagName) {
-            const fragment = document.createDocumentFragment()
-            Array.from(existingList.children).forEach((item) => {
-                if (normalizeTagName(item.tagName) !== "li") return
-                const paragraph = document.createElement("p")
-                while (item.firstChild) paragraph.appendChild(item.firstChild)
-                fragment.appendChild(paragraph)
-            })
-            existingList.replaceWith(fragment)
+        if (existingList) {
+            const existingListTagName = normalizeTagName(existingList.tagName)
+            if (existingListTagName === listTagName) {
+                const fragment = document.createDocumentFragment()
+                Array.from(existingList.children).forEach((item) => {
+                    if (normalizeTagName(item.tagName) !== "li") return
+                    const paragraph = document.createElement("p")
+                    while (item.firstChild) paragraph.appendChild(item.firstChild)
+                    fragment.appendChild(paragraph)
+                })
+                existingList.replaceWith(fragment)
+                finalizeChange()
+                return true
+            }
+            convertListType(existingList, listTagName)
             finalizeChange()
             return true
         }
 
+        if (execCommandAdapter.isAvailable && fallbackCommand) {
+            const changed = execCommandAdapter.runCommand(fallbackCommand)
+            if (changed) {
+                finalizeChange()
+                return true
+            }
+        }
+
         const root = resolveRoot()
         const blocks = collectBlocksInRange(range, root)
-        if (!blocks.length) {
-            if (execCommandAdapter.isAvailable && fallbackCommand) {
-                const changed = execCommandAdapter.runCommand(fallbackCommand)
-                if (changed) finalizeChange()
-                return changed
-            }
-            return false
-        }
+        if (!blocks.length) return false
 
         const list = document.createElement(listTagName)
         blocks.forEach((block) => {
@@ -372,10 +392,10 @@ export const createEditorCommands = (context) => {
     }
 
     return {
-        toggleBold: () => toggleInlineFormat(INLINE_FORMATS.bold, "bold"),
-        toggleItalic: () => toggleInlineFormat(INLINE_FORMATS.italic, "italic"),
-        toggleUnderline: () => toggleInlineFormat(INLINE_FORMATS.underline, "underline"),
-        toggleStrike: () => toggleInlineFormat(INLINE_FORMATS.strike, "strikeThrough"),
+        toggleBold: () => toggleInlineFormat(INLINE_FORMATS.bold),
+        toggleItalic: () => toggleInlineFormat(INLINE_FORMATS.italic),
+        toggleUnderline: () => toggleInlineFormat(INLINE_FORMATS.underline),
+        toggleStrike: () => toggleInlineFormat(INLINE_FORMATS.strike),
         toggleBulletedList: () => toggleList("ul", "insertUnorderedList"),
         toggleNumberedList: () => toggleList("ol", "insertOrderedList"),
         clearFormatting,
