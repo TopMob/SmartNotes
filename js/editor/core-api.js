@@ -395,6 +395,7 @@ export const EditorAPI = (() => {
         if (elements.content) {
             elements.content.classList.toggle("drawing-active", !!state.drawingState?.active)
         }
+        mediaHandlers.makeMediaDraggable()
     }
 
     const buildToolbar = () => {

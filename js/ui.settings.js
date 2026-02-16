@@ -467,6 +467,39 @@ Object.assign(UI, {
     },
     bindAppearanceBackgroundControls(root) {
         if (!root) return
+        const optimizeImageDataUrlForAppearance = (dataUrl) => new Promise((resolve) => {
+            const source = String(dataUrl || "")
+            if (!source.startsWith("data:image/")) {
+                resolve(source)
+                return
+            }
+            const image = new Image()
+            image.onload = () => {
+                const width = image.naturalWidth || image.width
+                const height = image.naturalHeight || image.height
+                if (!width || !height) {
+                    resolve(source)
+                    return
+                }
+                const maxDimension = 1920
+                const scale = Math.min(1, maxDimension / Math.max(width, height))
+                const targetWidth = Math.max(1, Math.round(width * scale))
+                const targetHeight = Math.max(1, Math.round(height * scale))
+                const canvas = document.createElement("canvas")
+                canvas.width = targetWidth
+                canvas.height = targetHeight
+                const context = canvas.getContext("2d")
+                if (!context) {
+                    resolve(source)
+                    return
+                }
+                context.drawImage(image, 0, 0, targetWidth, targetHeight)
+                const optimized = canvas.toDataURL("image/jpeg", 0.8)
+                resolve(optimized.length < source.length ? optimized : source)
+            }
+            image.onerror = () => resolve(source)
+            image.src = source
+        })
         const bindTextInput = (input, key) => {
             if (!input) return
             input.addEventListener("change", (event) => {
@@ -480,9 +513,10 @@ Object.assign(UI, {
                 const file = event.target.files && event.target.files[0]
                 if (!file) return
                 const reader = new FileReader()
-                reader.onload = () => {
+                reader.onload = async () => {
                     const result = typeof reader.result === "string" ? reader.result : ""
-                    this.updateAppearanceBackground(key, result)
+                    const optimized = await optimizeImageDataUrlForAppearance(result)
+                    this.updateAppearanceBackground(key, optimized)
                     event.target.value = ""
                 }
                 reader.readAsDataURL(file)

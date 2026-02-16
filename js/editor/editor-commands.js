@@ -268,6 +268,17 @@ export const createEditorCommands = (context) => {
         return replacementList
     }
 
+    const placeCaretAtEndOfNode = (node) => {
+        if (!node) return
+        const selection = window.getSelection()
+        if (!selection) return
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        range.collapse(false)
+        selection.removeAllRanges()
+        selection.addRange(range)
+    }
+
     const getListAncestor = (range) => {
         if (!range) return null
         const node = isElementNode(range.startContainer) ? range.startContainer : range.startContainer.parentElement
@@ -287,27 +298,23 @@ export const createEditorCommands = (context) => {
             const existingListTagName = normalizeTagName(existingList.tagName)
             if (existingListTagName === listTagName) {
                 const fragment = document.createDocumentFragment()
+                const paragraphs = []
                 Array.from(existingList.children).forEach((item) => {
                     if (normalizeTagName(item.tagName) !== "li") return
                     const paragraph = document.createElement("p")
                     while (item.firstChild) paragraph.appendChild(item.firstChild)
+                    paragraphs.push(paragraph)
                     fragment.appendChild(paragraph)
                 })
                 existingList.replaceWith(fragment)
+                placeCaretAtEndOfNode(paragraphs[paragraphs.length - 1] || paragraphs[0] || resolveRoot())
                 finalizeChange()
                 return true
             }
-            convertListType(existingList, listTagName)
+            const convertedList = convertListType(existingList, listTagName)
+            placeCaretAtEndOfNode(convertedList.lastElementChild || convertedList)
             finalizeChange()
             return true
-        }
-
-        if (execCommandAdapter.isAvailable && fallbackCommand) {
-            const changed = execCommandAdapter.runCommand(fallbackCommand)
-            if (changed) {
-                finalizeChange()
-                return true
-            }
         }
 
         const root = resolveRoot()
@@ -322,20 +329,21 @@ export const createEditorCommands = (context) => {
         })
         blocks[0].replaceWith(list)
         blocks.slice(1).forEach(block => block.remove())
+        placeCaretAtEndOfNode(list.lastElementChild || list)
         finalizeChange()
         return true
     }
 
     const clearFormatting = () => {
         const range = getValidRange()
-        if (!range || range.collapsed) {
-            if (execCommandAdapter.isAvailable) {
-                const changed = execCommandAdapter.runCommand("removeFormat")
-                if (changed) finalizeChange()
-                return changed
+        if (execCommandAdapter.isAvailable) {
+            const changed = execCommandAdapter.runCommand("removeFormat")
+            if (changed) {
+                finalizeChange()
+                return true
             }
-            return false
         }
+        if (!range || range.collapsed) return false
 
         const fragment = range.extractContents()
         removeInlineTagsFromFragment(fragment)
