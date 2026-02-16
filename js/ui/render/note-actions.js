@@ -156,6 +156,9 @@ Object.assign(UI, {
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
                     ${archiveLabel}
                 </button>
+                <button type="button" class="btn-secondary" data-action="note-lock-toggle" data-note-id="${encodeURIComponent(note.id)}">
+                    ${note.lock?.hash ? (dict.unlock_note || "Unlock") : (dict.lock_note || "Lock")}
+                </button>
                 <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.copy_text || "Copy text"}
                 </button>
@@ -193,6 +196,48 @@ Object.assign(UI, {
         `
     },
 
+
+    async toggleSelectedLock(noteId) {
+        if (!noteId) return
+        const note = StateStore.read().notes.find(item => item.id === noteId)
+        if (!note) return
+        if (note.lock?.hash) {
+            const verified = await new Promise(resolve => {
+                this.showPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"), async (value) => {
+                    resolve(await LockService.verify(note, value))
+                })
+            })
+            if (!verified) {
+                this.showToast(this.getText("lock_invalid_password", "Invalid password"))
+                return
+            }
+            const user = StateStore.read().user
+            if (!user || !db) return
+            const ref = DataPath.getUserNotesCollection(user).doc(note.id)
+            const payload = { lock: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+            if (firebase?.firestore?.FieldValue?.delete) payload.lock = firebase.firestore.FieldValue.delete()
+            await ref.update(payload)
+            StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: null } : item))
+            this.showToast(this.getText("unlock_success", "Note unlocked"))
+            this.closeModal("note-actions-modal")
+            return
+        }
+        this.showPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"), async (value) => {
+            const password = String(value || "").trim()
+            if (!password) {
+                this.showToast(this.getText("lock_password_empty", "Password is empty"))
+                return
+            }
+            const user = StateStore.read().user
+            if (!user || !db) return
+            const lockedNote = await LockService.setLock(note, password)
+            const ref = DataPath.getUserNotesCollection(user).doc(note.id)
+            await ref.update({ lock: lockedNote.lock || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+            StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: lockedNote.lock } : item))
+            this.showToast(this.getText("lock_hidden", "Note hidden"))
+            this.closeModal("note-actions-modal")
+        })
+    },
     async toggleSelectedPin(noteId) {
         if (!noteId) return
         await togglePin(noteId)

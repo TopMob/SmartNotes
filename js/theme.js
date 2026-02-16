@@ -22,6 +22,43 @@ const baseTheme = {
 
 const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: bg, surfaceTransparent: `color-mix(in srgb, ${bg} 86%, transparent)`, border: `color-mix(in srgb, ${p} 38%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
 
+const normalizeLocalImageValue = (value, maxLength = 600000) => {
+    if (typeof value !== "string") return ""
+    const source = value.trim()
+    if (!source) return ""
+    return source.length > maxLength ? "" : source
+}
+
+const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
+    if (typeof value !== "string") return ""
+    const source = value.trim()
+    if (!source) return ""
+    if (source.startsWith("data:image/")) return ""
+    return source.length > maxLength ? "" : source
+}
+
+const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
+    const parsedValue = Number(value)
+    if (!Number.isFinite(parsedValue)) return fallback
+    return Math.min(maximum, Math.max(minimum, parsedValue))
+}
+
+
+const buildFirestoreSafeCustomPresets = (presets) => {
+    if (!Array.isArray(presets)) return []
+    return presets
+        .filter(item => item && typeof item === "object")
+        .map(item => ({
+            key: String(item.key || ""),
+            p: ThemeManager.normalizeHex(item.p),
+            bg: ThemeManager.normalizeHex(item.bg),
+            t: ThemeManager.normalizeHex(item.t),
+            mainBackgroundImage: normalizeCloudSyncImageValue(item.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeCloudSyncImageValue(item.sidebarBackgroundImage)
+        }))
+        .slice(0, ThemeManager.maxCustomPresets)
+}
+
 export const ThemeManager = {
     themes: {
         oled: createPreset("#000000", "#FFFFFF", "#2563EB"),
@@ -50,7 +87,7 @@ export const ThemeManager = {
         this.applySettings(this.getSavedSettings(), false)
     },
     getDefaultSettings() {
-        return { preset: "oled", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78 }
+        return { preset: "oled", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78, cardsOpacity: 0.9 }
     },
     getSavedSettings() {
         try {
@@ -79,7 +116,15 @@ export const ThemeManager = {
         }
     },
     saveCustomPresets(presets) {
-        SafeStorage.local.setJson(this.customPresetStorageKey, presets.slice(0, this.maxCustomPresets))
+        const safePresets = Array.isArray(presets) ? presets.slice(0, this.maxCustomPresets).map(item => ({
+            key: String(item?.key || ""),
+            p: this.normalizeHex(item?.p),
+            bg: this.normalizeHex(item?.bg),
+            t: this.normalizeHex(item?.t),
+            mainBackgroundImage: normalizeLocalImageValue(item?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(item?.sidebarBackgroundImage)
+        })) : []
+        SafeStorage.local.setJson(this.customPresetStorageKey, safePresets)
     },
     addCustomPreset(colors) {
         const presets = this.getCustomPresets()
@@ -91,8 +136,8 @@ export const ThemeManager = {
             p: this.normalizeHex(colors?.p),
             bg: this.normalizeHex(colors?.bg),
             t: this.normalizeHex(colors?.t),
-            mainBackgroundImage: typeof colors?.mainBackgroundImage === "string" ? colors.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof colors?.sidebarBackgroundImage === "string" ? colors.sidebarBackgroundImage : ""
+            mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(colors?.sidebarBackgroundImage)
         }
         this.saveCustomPresets([...presets, nextPreset])
         return { ok: true, key: `custom:${nextPreset.key}` }
@@ -108,8 +153,8 @@ export const ThemeManager = {
                 p: this.normalizeHex(updates?.p ?? item.p),
                 bg: this.normalizeHex(updates?.bg ?? item.bg),
                 t: this.normalizeHex(updates?.t ?? item.t),
-                mainBackgroundImage: typeof updates?.mainBackgroundImage === "string" ? updates.mainBackgroundImage : item.mainBackgroundImage,
-                sidebarBackgroundImage: typeof updates?.sidebarBackgroundImage === "string" ? updates.sidebarBackgroundImage : item.sidebarBackgroundImage
+                mainBackgroundImage: normalizeLocalImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeLocalImageValue(updates?.sidebarBackgroundImage ?? item.sidebarBackgroundImage)
             }
         })
         this.saveCustomPresets(nextPresets)
@@ -124,6 +169,7 @@ export const ThemeManager = {
         SafeStorage.local.setJson(this.storageKey, settings)
     },
     getThemeSettingsReference(user) {
+        if (!user || !user.uid) return null
         const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
         return rootReference ? rootReference.collection("preferences").doc("theme") : null
     },
@@ -146,16 +192,38 @@ export const ThemeManager = {
     },
     async saveAccountSettings(user, settings) {
         const reference = this.getThemeSettingsReference(user)
-        this.saveSettings(settings)
+        const normalizedSettings = {
+            preset: settings?.preset || "oled",
+            p: this.normalizeHex(settings?.p),
+            bg: this.normalizeHex(settings?.bg),
+            t: this.normalizeHex(settings?.t),
+            mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage),
+            uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
+            cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
+        }
+        this.saveSettings(normalizedSettings)
         if (!reference) return
         try {
-            await reference.set({
-                settings,
-                customPresets: this.getCustomPresets(),
+            const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
+            const cloudSettings = {
+                ...normalizedSettings,
+                mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.sidebarBackgroundImage)
+            }
+            const payload = {
+                settings: cloudSettings,
+                customPresets: safeCustomPresets,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true })
+            }
+            try {
+                await reference.set(payload, { merge: true })
+            } catch (error) {
+                if (String(error?.code || "") !== "invalid-argument") throw error
+                await reference.set({ settings: cloudSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            }
         } catch (error) {
-            SafeStorage.local.setJson("theme-pending-sync", { settings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
+            SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
             UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
         }
     },
@@ -167,12 +235,13 @@ export const ThemeManager = {
     applySettings(settings, persist) {
         const presetKey = settings?.preset || "oled"
         const base = this.resolvePreset(presetKey)
-        const normalizedOpacity = Math.min(1, Math.max(0.4, Number(settings?.uiOpacity ?? 0.78)))
-        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity }
+        const normalizedOpacity = normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78)
+        const normalizedCardsOpacity = normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
+        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity, cardsOpacity: normalizedCardsOpacity }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(settings?.mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(settings?.sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
         if (persist) {
-            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundImage: settings?.mainBackgroundImage || "", sidebarBackgroundImage: settings?.sidebarBackgroundImage || "", uiOpacity: applied.uiOpacity })
+            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundImage: settings?.mainBackgroundImage || "", sidebarBackgroundImage: settings?.sidebarBackgroundImage || "", uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity })
         }
     },
     applyToRoot(theme) {
@@ -186,6 +255,7 @@ export const ThemeManager = {
         root.style.setProperty("--surface-light", theme.surface)
         const surfaceTransparency = `color-mix(in srgb, ${theme.bg} ${Math.round((theme.uiOpacity || 0.78) * 100)}%, transparent)`
         root.style.setProperty("--surface-transparent", surfaceTransparency)
+        root.style.setProperty("--cards-opacity", String(theme.cardsOpacity || 0.9))
         root.style.setProperty("--text", theme.t)
         root.style.setProperty("--text-dim", this.fadeColor(theme.t, 0.72))
         root.style.setProperty("--border", theme.border)

@@ -64,16 +64,10 @@ export function createAuthManager({ auth }) {
             await auth.signInWithRedirect(this._provider())
         },
         async _signInWithPopupPreferred() {
-            if (isSafari()) {
-                await auth.signInWithPopup(this._provider())
-                return
-            }
-
-            if (this._isIOS()) {
+            if (this._isIOS() || isSafari()) {
                 await this._signInWithRedirect()
                 return
             }
-
             await auth.signInWithPopup(this._provider())
         },
         async _setNoStoragePersistence() {

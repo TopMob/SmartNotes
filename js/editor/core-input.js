@@ -345,6 +345,7 @@ export const createInputHandlers = (context) => {
         handleEquationConfirmKeyDown,
         focusEditable,
         storeSelection,
+        restoreSelection,
         getActiveRangeInContent,
         getBlockFromRange,
         getCaretOffsetInBlock,

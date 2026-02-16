@@ -5,6 +5,7 @@
     --surface: #0f0f11;
     --surface-light: #18181b;
     --surface-transparent: rgba(15, 15, 17, 0.65);
+    --cards-opacity: 0.9;
     --text: #ffffff;
     --text-dim: rgba(255, 255, 255, 0.72);
     --border: rgba(255, 255, 255, 0.08);

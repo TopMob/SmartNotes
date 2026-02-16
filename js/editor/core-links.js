@@ -21,22 +21,6 @@ export const createLinkHandlers = (context) => {
         getEditorCommands()?.insertLink(url)
     }
 
-    const applyNoteLink = (value) => {
-        const noteId = String(value || "").trim()
-        if (!noteId) return
-        const range = getActiveRangeInContent()
-        if (!range || range.collapsed) {
-            UI.showToast(UI.getText("note_link_selection_required", "Select text to link"))
-            return
-        }
-        const note = StateStore.read().notes.find(item => item.id === noteId)
-        if (!note) {
-            UI.showToast(UI.getText("note_link_not_found", "Note not found"))
-            return
-        }
-        getEditorCommands()?.insertLink(`note:${noteId}`, { noteId })
-    }
-
     const openNoteById = (noteId) => {
         const note = StateStore.read().notes.find(item => item.id === noteId)
         if (!note) {
@@ -48,7 +32,6 @@ export const createLinkHandlers = (context) => {
 
     return {
         applyLink,
-        applyNoteLink,
         openNoteById
     }
 }

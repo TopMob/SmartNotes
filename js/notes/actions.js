@@ -68,12 +68,14 @@ async function deleteNoteById(noteId) {
         if (note.trashedAt) {
             await ref.delete()
             StateActions.setNotes(StateStore.read().notes.filter(item => item.id !== noteId))
+            if (StateStore.read().currentNote?.id === noteId) window.SmartNotesEditor?.close?.()
             UI.showToast(UI.getText("note_deleted_permanent", "Deleted permanently"))
             refreshCurrentList()
             return
         }
         await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() }))
         StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, trashedAt: new Date().toISOString() } : item))
+        if (StateStore.read().currentNote?.id === noteId) window.SmartNotesEditor?.close?.()
         UI.showToast(UI.getText("note_deleted", "Moved to trash"))
         refreshCurrentList()
     })

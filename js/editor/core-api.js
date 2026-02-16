@@ -119,6 +119,17 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+    const noteHasEditableContent = (note) => {
+        const titleText = String(note?.title || "").trim()
+        const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
+        const hasMedia = /<(img|audio|video|table|hr)\b/i.test(String(note?.content || ""))
+        const tagsCount = Array.isArray(note?.tags) ? note.tags.length : 0
+        const drawingCount = Array.isArray(note?.pageDrawings)
+            ? note.pageDrawings.filter(item => String(item || "").trim().length > 0).length
+            : 0
+        return !!titleText || !!plainTextContent || hasMedia || tagsCount > 0 || drawingCount > 0
+    }
+
     const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
@@ -156,6 +167,13 @@ export const EditorAPI = (() => {
                 const suggested = SmartSearch.suggestFolderId(note, StateStore.read().folders)
                 if (suggested) note.folderId = suggested
             }
+        }
+
+        if (!noteHasEditableContent(note)) {
+            if (!isAutoSave) {
+                UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
+            }
+            return
         }
 
         StateStore.update("currentNote", note)
@@ -298,6 +316,11 @@ export const EditorAPI = (() => {
                 }
                 const wrapper = event.target.closest(".media-wrapper")
                 if (wrapper) {
+                    if (state.drawingState?.active) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        return
+                    }
                     mediaHandlers.selectMedia(wrapper)
                     event.stopPropagation()
                     return
@@ -348,10 +371,6 @@ export const EditorAPI = (() => {
             }, { signal })
         }
 
-        if (typeof EditorAudio !== "undefined") {
-            EditorAudio.bind({ container: elements.content, signal })
-        }
-
         const imgUpload = document.getElementById("img-upload")
         if (imgUpload) {
             imgUpload.onchange = async (event) => {
@@ -368,12 +387,6 @@ export const EditorAPI = (() => {
             }
         }
 
-        const lockApply = document.getElementById("lock-apply")
-        if (lockApply) {
-            const newBtn = lockApply.cloneNode(true)
-            lockApply.parentNode.replaceChild(newBtn, lockApply)
-            newBtn.addEventListener("click", handleLockApply)
-        }
     }
 
     const canEditNote = (note) => {
@@ -405,21 +418,7 @@ export const EditorAPI = (() => {
         if (elements.content) {
             elements.content.classList.toggle("drawing-active", !!state.drawingState?.active)
         }
-    }
-
-    const handleLockApply = async () => {
-        const pass = document.getElementById("lock-password")?.value || ""
-        const currentNote = StateStore.read().currentNote
-        if (!currentNote) return
-        if (!pass.trim()) return UI.showToast(UI.getText("lock_password_empty", "Password is empty"))
-
-        const nextNote = { ...currentNote }
-        await LockService.setLock(nextNote, pass.trim())
-        StateStore.update("currentNote", nextNote)
-        syncLockButton(nextNote)
-        UI.closeModal("lock-modal")
-        await save({ silent: true })
-        UI.showToast(UI.getText("lock_hidden", "Note hidden"))
+        mediaHandlers.makeMediaDraggable()
     }
 
     const buildToolbar = () => {
@@ -437,13 +436,21 @@ export const EditorAPI = (() => {
         `).join("")
 
         root.querySelectorAll(".tool-btn").forEach(btn => {
+            btn.addEventListener("pointerdown", (event) => {
+                event.preventDefault()
+                inputHandlers.storeSelection()
+            })
+            btn.addEventListener("mousedown", (event) => {
+                event.preventDefault()
+                inputHandlers.storeSelection()
+            })
             btn.addEventListener("click", (event) => {
                 event.preventDefault()
+                inputHandlers.restoreSelection()
                 const idx = parseInt(btn.dataset.toolIdx, 10)
                 const tool = tools[idx]
                 if (tool) {
                     tool.cmd(btn)
-                    elements.content?.focus()
                 }
             })
         })
@@ -564,12 +571,6 @@ const addPage = () => {
                 linkHandlers.applyLink(value)
             })
         }},
-        { id: "note_link", i: "bookmarks", label: "tool_note_link", cmd: () => {
-            inputHandlers.storeSelection()
-            UI.showPrompt(UI.getText("note_link_title", "Link to note"), UI.getText("note_link_placeholder", "Note id"), (value) => {
-                linkHandlers.applyNoteLink(value)
-            })
-        }},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
             inputHandlers.storeSelection()
             document.getElementById("img-upload")?.click()
@@ -590,67 +591,6 @@ const addPage = () => {
         StateStore.updateConfig({ editorTools: { ...current } })
         SafeStorage.local.setJson("editor-tools", current)
         buildToolbar()
-    }
-
-    const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result || ""))
-        reader.onerror = () => reject(new Error("Blob read failed"))
-        reader.readAsDataURL(blob)
-    })
-
-    const setRecordingState = (active) => {
-        StateStore.update("recording", !!active)
-        const indicator = document.getElementById("voice-indicator")
-        if (indicator) indicator.classList.toggle("active", !!active)
-        const voiceBtn = document.querySelector('[data-action="editor-voice"]')
-        voiceBtn?.classList.toggle("is-recording", !!active)
-    }
-
-    const stopRecording = () => {
-        const recorder = StateStore.read().mediaRecorder
-        if (recorder && recorder.state !== "inactive") recorder.stop()
-        else setRecordingState(false)
-        if (state.recordingStream) {
-            state.recordingStream.getTracks().forEach(track => track.stop())
-            state.recordingStream = null
-        }
-    }
-
-    const startRecording = async () => {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
-            UI.showToast(UI.getText("mic_unsupported", "Microphone not supported"))
-            return
-        }
-        inputHandlers.storeSelection()
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            state.recordingStream = stream
-            const recorder = new MediaRecorder(stream)
-            const chunks = []
-            recorder.ondataavailable = (event) => {
-                if (event.data && event.data.size) chunks.push(event.data)
-            }
-            recorder.onstop = async () => {
-                setRecordingState(false)
-                const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" })
-                const dataUrl = await blobToDataUrl(blob)
-                mediaHandlers.insertAudio(dataUrl)
-                StateStore.update("mediaRecorder", null)
-            }
-            StateStore.update("mediaRecorder", recorder)
-            recorder.start()
-            setRecordingState(true)
-        } catch {
-            UI.showToast(UI.getText("mic_denied", "Microphone access denied"))
-            setRecordingState(false)
-        }
-    }
-
-    const toggleRecording = () => {
-        const recording = StateStore.read().recording
-        if (recording) stopRecording()
-        else startRecording()
     }
 
     const storeActivePageDrawing = (options = {}) => {
@@ -778,8 +718,6 @@ const addPage = () => {
             inputHandlers.renderTags()
             mediaHandlers.makeMediaDraggable()
             mediaHandlers.syncMediaSizes()
-            if (typeof EditorAudio !== "undefined") EditorAudio.sync(elements.content)
-            syncLockButton(note)
             syncDrawingForActivePage()
             syncAccessState(note)
             if (state.observer && elements.content) {
@@ -789,43 +727,6 @@ const addPage = () => {
         } finally {
             state.isRenderingState = false
         }
-    }
-
-    const syncLockButton = (note) => {
-        const btn = document.getElementById("editor-lock-toggle")
-        if (!btn || !note) return
-        const isLocked = !!note.lock?.hash
-        const label = isLocked ? UI.getText("unlock_note", "Unlock") : UI.getText("lock_note", "Lock")
-        const icon = btn.querySelector("i")
-        btn.setAttribute("aria-label", label)
-        if (icon) icon.textContent = isLocked ? "lock_open" : "lock"
-    }
-
-    const toggleLock = async () => {
-        const note = StateStore.read().currentNote
-        if (!note) return
-        if (!canManageNote(note)) {
-            UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
-            return
-        }
-        if (note.lock?.hash) {
-            const verified = await new Promise(resolve => {
-                UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
-                    resolve(await LockService.verify(note, val))
-                })
-            })
-            if (!verified) {
-                UI.showToast(UI.getText("lock_invalid_password", "Invalid password"))
-                return
-            }
-            const nextNote = { ...note, lock: null }
-            StateStore.update("currentNote", nextNote)
-            syncLockButton(nextNote)
-            await save({ silent: true })
-            UI.showToast(UI.getText("unlock_success", "Note unlocked"))
-            return
-        }
-        UI.openModal("lock-modal")
     }
 
     const toggleToolbar = () => elements.toolbar?.classList.toggle("is-hidden")
@@ -860,7 +761,6 @@ const addPage = () => {
         redo: historyHandlers.redo,
         deleteCurrent,
         toggleToolbar,
-        toggleLock,
         getToolList,
         getEnabledTools,
         setToolEnabled,
@@ -868,7 +768,6 @@ const addPage = () => {
         alignMediaOrText: mediaHandlers.alignMediaOrText,
         deleteSelectedMedia: mediaHandlers.deleteSelectedMedia,
         confirmEquation: mathHandlers.confirmEquation,
-        toggleRecording,
         addPage,
         nextPage,
         prevPage,

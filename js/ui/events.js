@@ -383,9 +383,6 @@ Object.assign(UI, {
             case "editor-delete":
                 window.SmartNotesEditor?.deleteCurrent()
                 break
-            case "editor-lock":
-                window.SmartNotesEditor?.toggleLock()
-                break
             case "editor-save":
                 window.SmartNotesEditor?.save()
                 break
@@ -398,9 +395,6 @@ Object.assign(UI, {
             case "editor-add-page":
                 window.SmartNotesEditor?.addPage()
                 break
-            case "editor-voice":
-                window.SmartNotesEditor?.toggleRecording()
-                break
             case "editor-calc":
                 window.SmartNotesEditor?.confirmEquation()
                 break
@@ -409,6 +403,15 @@ Object.assign(UI, {
                 break
             case "toggle-toolbar":
                 window.SmartNotesEditor?.toggleToolbar()
+                break
+            case "editor-note-actions": {
+                const noteId = StateStore.read().currentNote?.id
+                if (noteId) openNoteActions(noteId)
+                break
+            }
+            case "open-feedback-modal":
+                this.closeModal("feedback-menu-modal")
+                this.openModal(el.dataset.modal)
                 break
             case "note-pin":
                 togglePin(decodeURIComponent(el.dataset.noteId || ""))
@@ -424,6 +427,9 @@ Object.assign(UI, {
                 break
             case "note-archive":
                 this.toggleSelectedArchive(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-lock-toggle":
+                this.toggleSelectedLock(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-delete":
                 deleteNoteById(decodeURIComponent(el.dataset.noteId || ""))

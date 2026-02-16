@@ -16,7 +16,8 @@ const EditorDrawing = (() => {
         resizeObserver: null,
         mutationObserver: null,
         scrollFrame: null,
-        layoutFrame: null
+        layoutFrame: null,
+        pointerPreview: null
     }
     const drawingHistory = []
     let lastDrawingSnapshot = ""
@@ -31,9 +32,9 @@ const EditorDrawing = (() => {
         if (typeof nextBuildToolbar === "function") buildToolbar = nextBuildToolbar
         if (typeof nextUpdateEditableState === "function") updateEditableState = nextUpdateEditableState
         if (typeof nextOnDrawingChange === "function") onDrawingChange = nextOnDrawingChange
-        drawingState.container = elements.contentWrapper || null
         drawingState.content = elements.content || null
-        drawingState.scrollContainer = document.querySelector(".editor-scroll-area .note-content") || elements.scrollArea || elements.content || null
+        drawingState.container = elements.content || null
+        drawingState.scrollContainer = elements.content || null
         drawingState.pageElement = elements.content?.querySelector(".note-page.is-active") || null
     }
 
@@ -48,7 +49,8 @@ const EditorDrawing = (() => {
             elements.drawingSize.value = String(drawingState.size)
             elements.drawingSize.addEventListener("input", (event) => {
                 const next = Number(event.target.value)
-                drawingState.size = Number.isFinite(next) ? Utils.clamp(next, 1, 24) : 3
+                drawingState.size = Number.isFinite(next) ? Utils.clamp(next, 1, 28) : 3
+                updatePointerPreviewSize()
             })
         }
         if (elements.drawingControls) {
@@ -71,7 +73,7 @@ const EditorDrawing = (() => {
         window.addEventListener("resize", () => scheduleLayoutSync())
     }
 
-    const isSupportedTool = (tool) => ["pen", "marker", "eraser"].includes(tool)
+    const isSupportedTool = (tool) => ["pen", "eraser"].includes(tool)
 
     const updateDrawingToolButtons = () => {
         const toolButtons = elements.drawingControls?.querySelectorAll("[data-drawing-tool]") || []
@@ -93,6 +95,7 @@ const EditorDrawing = (() => {
         if (!isSupportedTool(tool)) return
         drawingState.tool = tool
         applyToolStyle()
+        updatePointerPreviewSize()
         updateDrawingToolButtons()
     }
 
@@ -114,13 +117,14 @@ const EditorDrawing = (() => {
         canvas.style.pointerEvents = "none"
         canvas.addEventListener("pointerdown", startDrawing)
         canvas.addEventListener("pointermove", drawLine)
+        canvas.addEventListener("pointermove", movePointerPreview)
         canvas.addEventListener("pointerup", endDrawing)
         canvas.addEventListener("pointercancel", endDrawing)
+        canvas.addEventListener("pointerleave", hidePointerPreview)
         drawingState.container.appendChild(canvas)
         drawingState.canvas = canvas
         drawingState.ctx = canvas.getContext("2d")
         attachObservers()
-        bindControlsPointerGuard()
         scheduleLayoutSync()
         return canvas
     }
@@ -150,26 +154,6 @@ const EditorDrawing = (() => {
         drawingState.scrollContainer?.removeEventListener("scroll", scheduleScrollSync)
     }
 
-    const bindControlsPointerGuard = () => {
-        if (!elements.drawingControls || elements.drawingControls.dataset.pointerGuard === "true") return
-        elements.drawingControls.dataset.pointerGuard = "true"
-        elements.drawingControls.addEventListener("pointerdown", () => disableCanvasPointerEventsUntilRelease())
-    }
-
-    const disableCanvasPointerEventsUntilRelease = () => {
-        if (!drawingState.canvas || !drawingState.active) return
-        drawingState.canvas.style.pointerEvents = "none"
-        const restorePointerEvents = () => {
-            window.removeEventListener("pointerup", restorePointerEvents)
-            window.removeEventListener("pointercancel", restorePointerEvents)
-            if (drawingState.canvas && drawingState.active) {
-                drawingState.canvas.style.pointerEvents = "auto"
-            }
-        }
-        window.addEventListener("pointerup", restorePointerEvents)
-        window.addEventListener("pointercancel", restorePointerEvents)
-    }
-
     const scheduleScrollSync = () => {
         if (drawingState.scrollFrame) return
         drawingState.scrollFrame = requestAnimationFrame(() => {
@@ -188,8 +172,8 @@ const EditorDrawing = (() => {
 
     const syncCanvasPosition = () => {
         if (!drawingState.canvas || !drawingState.pageElement || !drawingState.scrollContainer) return
-        const top = drawingState.scrollContainer.offsetTop + drawingState.pageElement.offsetTop - drawingState.scrollContainer.scrollTop
-        const left = drawingState.scrollContainer.offsetLeft + drawingState.pageElement.offsetLeft - drawingState.scrollContainer.scrollLeft
+        const top = drawingState.pageElement.offsetTop
+        const left = drawingState.pageElement.offsetLeft
         drawingState.canvas.style.top = `${top}px`
         drawingState.canvas.style.left = `${left}px`
     }
@@ -257,13 +241,11 @@ const EditorDrawing = (() => {
         return { x, y }
     }
 
+    const resolveCurrentToolSize = () => drawingState.tool === "eraser" ? Math.max(10, drawingState.size * 2) : drawingState.size
+
     const applyToolStyle = () => {
         if (!drawingState.ctx) return
-        if (drawingState.tool === "marker") {
-            drawingState.ctx.globalCompositeOperation = "source-over"
-            drawingState.ctx.globalAlpha = 0.6
-            drawingState.ctx.strokeStyle = drawingState.color
-        } else if (drawingState.tool === "eraser") {
+        if (drawingState.tool === "eraser") {
             drawingState.ctx.globalCompositeOperation = "destination-out"
             drawingState.ctx.globalAlpha = 1
             drawingState.ctx.strokeStyle = "#000000"
@@ -272,9 +254,44 @@ const EditorDrawing = (() => {
             drawingState.ctx.globalAlpha = 1
             drawingState.ctx.strokeStyle = drawingState.color
         }
-        drawingState.ctx.lineWidth = drawingState.size
+        drawingState.ctx.lineWidth = resolveCurrentToolSize()
         drawingState.ctx.lineCap = "round"
         drawingState.ctx.lineJoin = "round"
+    }
+
+
+    const updatePointerPreviewSize = () => {
+        const preview = drawingState.pointerPreview
+        if (!preview) return
+        const size = resolveCurrentToolSize()
+        preview.style.width = `${size}px`
+        preview.style.height = `${size}px`
+        preview.style.borderColor = drawingState.tool === "eraser" ? "rgba(248, 113, 113, 0.9)" : "rgba(59, 130, 246, 0.9)"
+        preview.style.background = drawingState.tool === "eraser" ? "rgba(248, 113, 113, 0.2)" : "rgba(59, 130, 246, 0.18)"
+    }
+
+    const movePointerPreview = (event) => {
+        if (!drawingState.active || !drawingState.pointerPreview) return
+        const point = getCanvasPoint(event)
+        if (!point || !drawingState.canvas) return
+        const rect = drawingState.canvas.getBoundingClientRect()
+        drawingState.pointerPreview.style.transform = `translate(${rect.left + point.x}px, ${rect.top + point.y}px) translate(-50%, -50%)`
+        drawingState.pointerPreview.style.opacity = "1"
+    }
+
+    const hidePointerPreview = () => {
+        if (!drawingState.pointerPreview) return
+        drawingState.pointerPreview.style.opacity = "0"
+    }
+
+    const ensurePointerPreview = () => {
+        if (drawingState.pointerPreview) return
+        const preview = document.createElement("div")
+        preview.className = "drawing-pointer-preview"
+        preview.setAttribute("aria-hidden", "true")
+        document.body.appendChild(preview)
+        drawingState.pointerPreview = preview
+        updatePointerPreviewSize()
     }
 
     const refreshDrawingSurface = () => {
@@ -294,11 +311,57 @@ const EditorDrawing = (() => {
         drawingState.ctx.setTransform(1, 0, 0, 1, 0, 0)
         drawingState.ctx.clearRect(0, 0, drawingState.canvas.width, drawingState.canvas.height)
         applyCanvasScale(drawingState.scale)
+        lastDrawingSnapshot = ""
     }
 
     const getDrawingData = () => {
-        if (!drawingState.canvas) return ""
-        return drawingState.canvas.toDataURL("image/png")
+        if (!drawingState.canvas || !drawingState.ctx) return ""
+        const sourceCanvas = drawingState.canvas
+        const width = sourceCanvas.width
+        const height = sourceCanvas.height
+        if (!width || !height) return ""
+        const imageData = drawingState.ctx.getImageData(0, 0, width, height).data
+        let minX = width
+        let minY = height
+        let maxX = -1
+        let maxY = -1
+        for (let pixelIndex = 3, pointIndex = 0; pixelIndex < imageData.length; pixelIndex += 4, pointIndex++) {
+            if (imageData[pixelIndex] === 0) continue
+            const x = pointIndex % width
+            const y = Math.floor(pointIndex / width)
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+        }
+        if (maxX < minX || maxY < minY) return ""
+        const padding = Math.ceil(Math.max(2, drawingState.size))
+        const cropX = Math.max(0, minX - padding)
+        const cropY = Math.max(0, minY - padding)
+        const cropWidth = Math.min(width - cropX, (maxX - minX + 1) + padding * 2)
+        const cropHeight = Math.min(height - cropY, (maxY - minY + 1) + padding * 2)
+
+        const exportCanvas = document.createElement("canvas")
+        exportCanvas.width = Math.max(1, cropWidth)
+        exportCanvas.height = Math.max(1, cropHeight)
+        const exportContext = exportCanvas.getContext("2d")
+        if (!exportContext) return ""
+        exportContext.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+
+        let dataUrl = exportCanvas.toDataURL("image/png")
+        const maxLength = 220000
+        let currentCanvas = exportCanvas
+        while (dataUrl.length > maxLength && currentCanvas.width > 320 && currentCanvas.height > 320) {
+            const scaledCanvas = document.createElement("canvas")
+            scaledCanvas.width = Math.max(1, Math.floor(currentCanvas.width * 0.85))
+            scaledCanvas.height = Math.max(1, Math.floor(currentCanvas.height * 0.85))
+            const scaledContext = scaledCanvas.getContext("2d")
+            if (!scaledContext) break
+            scaledContext.drawImage(currentCanvas, 0, 0, currentCanvas.width, currentCanvas.height, 0, 0, scaledCanvas.width, scaledCanvas.height)
+            currentCanvas = scaledCanvas
+            dataUrl = currentCanvas.toDataURL("image/png")
+        }
+        return dataUrl
     }
 
     const getDrawingSnapshot = () => lastDrawingSnapshot
@@ -345,12 +408,25 @@ const EditorDrawing = (() => {
         if (drawingState.canvas) {
             drawingState.canvas.style.pointerEvents = drawingState.active ? "auto" : "none"
         }
+        if (drawingState.active) {
+            ensurePointerPreview()
+            updatePointerPreviewSize()
+        } else {
+            hidePointerPreview()
+        }
         if (drawingState.scrollContainer) {
             drawingState.scrollContainer.style.overflow = drawingState.active ? "hidden" : ""
             drawingState.scrollContainer.style.touchAction = drawingState.active ? "none" : ""
         }
         drawingState.isDrawing = false
         drawingState.pointerId = null
+        if (!drawingState.active) {
+            const snapshot = getDrawingData()
+            if (snapshot !== lastDrawingSnapshot) {
+                lastDrawingSnapshot = snapshot
+                onDrawingChange(snapshot)
+            }
+        }
         updateEditableState()
         buildToolbar()
     }
@@ -367,8 +443,13 @@ const EditorDrawing = (() => {
         detachObservers()
         if (drawingState.scrollFrame) cancelAnimationFrame(drawingState.scrollFrame)
         drawingState.scrollFrame = null
+        hidePointerPreview()
         if (drawingState.layoutFrame) cancelAnimationFrame(drawingState.layoutFrame)
         drawingState.layoutFrame = null
+        if (drawingState.pointerPreview) {
+            drawingState.pointerPreview.remove()
+            drawingState.pointerPreview = null
+        }
         replaceDrawingHistory("")
     }
 
@@ -383,6 +464,7 @@ const EditorDrawing = (() => {
         applyToolStyle()
         drawingState.ctx.beginPath()
         drawingState.ctx.moveTo(point.x, point.y)
+        movePointerPreview(event)
     }
 
     const drawLine = (event) => {
@@ -396,6 +478,7 @@ const EditorDrawing = (() => {
             drawingState.ctx.lineTo(point.x, point.y)
         })
         drawingState.ctx.stroke()
+        movePointerPreview(event)
     }
 
     const endDrawing = (event) => {
@@ -405,6 +488,7 @@ const EditorDrawing = (() => {
         drawingState.isDrawing = false
         drawingState.pointerId = null
         const snapshot = getDrawingData()
+        lastDrawingSnapshot = snapshot
         pushDrawingHistory(snapshot)
         onDrawingChange(snapshot)
     }

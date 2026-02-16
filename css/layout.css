@@ -637,19 +637,23 @@ body.platform-android .top-bar {
 }
 
 .footer-link,
-.note-card,
 .filter-section,
 .dropdown-menu,
 .search-container {
     background: color-mix(in srgb, var(--surface) 88%, transparent);
 }
 
+.note-card,
+.folder-card {
+    background: color-mix(in srgb, var(--surface) calc(var(--cards-opacity, 0.9) * 100%), transparent);
+}
+
 .note-card.pinned {
-    background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 22%, transparent), color-mix(in srgb, var(--surface) 92%, transparent));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 22%, transparent), color-mix(in srgb, var(--surface) calc(var(--cards-opacity, 0.9) * 100%), transparent));
 }
 
 .note-card.favorite {
-    background: linear-gradient(160deg, color-mix(in srgb, #facc15 22%, transparent), color-mix(in srgb, var(--surface) 92%, transparent));
+    background: linear-gradient(160deg, color-mix(in srgb, #facc15 22%, transparent), color-mix(in srgb, var(--surface) calc(var(--cards-opacity, 0.9) * 100%), transparent));
 }
 
 .search-container {
