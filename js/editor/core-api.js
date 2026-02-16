@@ -199,10 +199,11 @@ export const EditorAPI = (() => {
                 close()
             }
         } catch (error) {
-            SaveStateService?.handleRemoteSaveError?.(error)
+            const shouldShowErrorToast = !options.silent && !options.autoSave
+            SaveStateService?.handleRemoteSaveError?.(error, { showToast: shouldShowErrorToast })
             if (error?.code === "unavailable" || !navigator.onLine) {
                 const pendingSaveResult = await SafeStorage.local.setJsonAsync("pending-note-save", { payload: { ...payload, updatedAt: Date.now() }, savedAt: Date.now() }, { useIndexedDb: true, priority: "high", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
-                SaveStateService?.handleStorageWriteResult?.(pendingSaveResult)
+                SaveStateService?.handleStorageWriteResult?.(pendingSaveResult, { showToast: shouldShowErrorToast })
             }
         }
     }
@@ -731,6 +732,22 @@ const addPage = () => {
 
     const toggleToolbar = () => elements.toolbar?.classList.toggle("is-hidden")
 
+    const undo = () => {
+        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
+            EditorDrawing.undo?.()
+            return
+        }
+        historyHandlers.undo()
+    }
+
+    const redo = () => {
+        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
+            EditorDrawing.redo?.()
+            return
+        }
+        historyHandlers.redo()
+    }
+
     const deleteCurrent = () => {
         const note = StateStore.read().currentNote
         if (!note) return
@@ -757,8 +774,8 @@ const addPage = () => {
         refreshFromRemote,
         close,
         save,
-        undo: historyHandlers.undo,
-        redo: historyHandlers.redo,
+        undo,
+        redo,
         deleteCurrent,
         toggleToolbar,
         getToolList,

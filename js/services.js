@@ -192,15 +192,15 @@ const SaveStateService = {
         if (errorType === "storage_unavailable") message = UI.getText("save_failed_storage_unavailable", "Storage is unavailable in this browser mode")
         if (errorType === "indexeddb_write_failed") message = UI.getText("save_failed_fallback", "Unable to save to fallback storage")
         this.updateUiStatus("error", message)
-        UI.showToast(message)
+        if (options.showToast !== false) UI.showToast(message)
         return normalizedResult
     },
 
-    handleRemoteSaveError(error) {
+    handleRemoteSaveError(error, options = {}) {
         const errorCode = error?.code ? ` (${error.code})` : ""
         const message = `${UI.getText("save_failed", "Save failed")}${errorCode}`
         this.updateUiStatus("error", message)
-        UI.showToast(message)
+        if (options.showToast !== false) UI.showToast(message)
     }
 }
 
