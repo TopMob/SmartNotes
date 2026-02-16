@@ -50,7 +50,7 @@ export const ThemeManager = {
         this.applySettings(this.getSavedSettings(), false)
     },
     getDefaultSettings() {
-        return { preset: "oled", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78 }
+        return { preset: "oled", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78, cardsOpacity: 0.9 }
     },
     getSavedSettings() {
         try {
@@ -124,6 +124,7 @@ export const ThemeManager = {
         SafeStorage.local.setJson(this.storageKey, settings)
     },
     getThemeSettingsReference(user) {
+        if (!user || !user.uid) return null
         const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
         return rootReference ? rootReference.collection("preferences").doc("theme") : null
     },
@@ -149,8 +150,18 @@ export const ThemeManager = {
         this.saveSettings(settings)
         if (!reference) return
         try {
+            const normalizedSettings = {
+                preset: settings?.preset || "oled",
+                p: this.normalizeHex(settings?.p),
+                bg: this.normalizeHex(settings?.bg),
+                t: this.normalizeHex(settings?.t),
+                mainBackgroundImage: typeof settings?.mainBackgroundImage === "string" ? settings.mainBackgroundImage : "",
+                sidebarBackgroundImage: typeof settings?.sidebarBackgroundImage === "string" ? settings.sidebarBackgroundImage : "",
+                uiOpacity: Math.min(1, Math.max(0.4, Number(settings?.uiOpacity ?? 0.78))),
+                cardsOpacity: Math.min(1, Math.max(0.5, Number(settings?.cardsOpacity ?? 0.9)))
+            }
             await reference.set({
-                settings,
+                settings: normalizedSettings,
                 customPresets: this.getCustomPresets(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true })
@@ -168,11 +179,12 @@ export const ThemeManager = {
         const presetKey = settings?.preset || "oled"
         const base = this.resolvePreset(presetKey)
         const normalizedOpacity = Math.min(1, Math.max(0.4, Number(settings?.uiOpacity ?? 0.78)))
-        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity }
+        const normalizedCardsOpacity = Math.min(1, Math.max(0.5, Number(settings?.cardsOpacity ?? 0.9)))
+        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity, cardsOpacity: normalizedCardsOpacity }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(settings?.mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(settings?.sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
         if (persist) {
-            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundImage: settings?.mainBackgroundImage || "", sidebarBackgroundImage: settings?.sidebarBackgroundImage || "", uiOpacity: applied.uiOpacity })
+            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundImage: settings?.mainBackgroundImage || "", sidebarBackgroundImage: settings?.sidebarBackgroundImage || "", uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity })
         }
     },
     applyToRoot(theme) {
@@ -186,6 +198,7 @@ export const ThemeManager = {
         root.style.setProperty("--surface-light", theme.surface)
         const surfaceTransparency = `color-mix(in srgb, ${theme.bg} ${Math.round((theme.uiOpacity || 0.78) * 100)}%, transparent)`
         root.style.setProperty("--surface-transparent", surfaceTransparency)
+        root.style.setProperty("--cards-opacity", String(theme.cardsOpacity || 0.9))
         root.style.setProperty("--text", theme.t)
         root.style.setProperty("--text-dim", this.fadeColor(theme.t, 0.72))
         root.style.setProperty("--border", theme.border)

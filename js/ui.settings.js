@@ -210,6 +210,11 @@ Object.assign(UI, {
                             <input type="range" min="40" max="100" step="1" class="input-area" data-appearance-opacity>
                             <span class="folder-meta" data-appearance-opacity-value></span>
                         </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_cards_opacity || "Notes and folders opacity"}</span>
+                            <input type="range" min="50" max="100" step="1" class="input-area" data-appearance-cards-opacity>
+                            <span class="folder-meta" data-appearance-cards-opacity-value></span>
+                        </div>
                     </div>
                     <div class="settings-section">
                         <div class="settings-section-title">${dict.settings_backgrounds || "Backgrounds"}</div>
@@ -265,7 +270,8 @@ Object.assign(UI, {
                 basePreset: saved.basePreset || "oled",
                 mainBackgroundImage: saved.mainBackgroundImage || "",
                 sidebarBackgroundImage: saved.sidebarBackgroundImage || "",
-                uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78
+                uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78,
+                cardsOpacity: typeof saved.cardsOpacity === "number" ? saved.cardsOpacity : 0.9
             })
             return
         }
@@ -278,7 +284,8 @@ Object.assign(UI, {
             basePreset: saved.basePreset || "oled",
             mainBackgroundImage: saved.mainBackgroundImage || "",
             sidebarBackgroundImage: saved.sidebarBackgroundImage || "",
-            uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78
+            uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78,
+            cardsOpacity: typeof saved.cardsOpacity === "number" ? saved.cardsOpacity : 0.9
         })
     },
 
@@ -293,7 +300,8 @@ Object.assign(UI, {
             ...draft,
             mainBackgroundImage: typeof draft.mainBackgroundImage === "string" ? draft.mainBackgroundImage : "",
             sidebarBackgroundImage: typeof draft.sidebarBackgroundImage === "string" ? draft.sidebarBackgroundImage : "",
-            uiOpacity: Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78)))
+            uiOpacity: Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78))),
+            cardsOpacity: Math.min(1, Math.max(0.5, Number(draft.cardsOpacity ?? 0.9)))
         }
         if (normalizedDraft.mainBackgroundImage !== draft.mainBackgroundImage || normalizedDraft.sidebarBackgroundImage !== draft.sidebarBackgroundImage) {
             draft = normalizedDraft
@@ -324,7 +332,8 @@ Object.assign(UI, {
                     basePreset: key,
                     mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
                     sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || ""),
-                    uiOpacity: typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78
+                    uiOpacity: typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78,
+                    cardsOpacity: typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -344,7 +353,8 @@ Object.assign(UI, {
                 bg: preset.bg,
                 t: preset.t,
                 basePreset: result.key,
-                uiOpacity: typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78
+                uiOpacity: typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78,
+                cardsOpacity: typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9
             })
         }
         ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
@@ -390,7 +400,8 @@ Object.assign(UI, {
                 t: preset.t,
                 mainBackgroundImage: defaults.mainBackgroundImage || "",
                 sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
-                uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78
+                uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78,
+                cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
             }
         } else {
             draft = {
@@ -400,7 +411,8 @@ Object.assign(UI, {
                 t: ThemeManager.themes.oled.t,
                 mainBackgroundImage: "",
                 sidebarBackgroundImage: "",
-                uiOpacity: 0.78
+                uiOpacity: 0.78,
+                cardsOpacity: 0.9
             }
         }
         StateStore.update("appearanceDraft", draft)
@@ -512,7 +524,10 @@ Object.assign(UI, {
     syncAppearanceOpacityControl(draft) {
         const opacityInput = document.querySelector("[data-appearance-opacity]")
         const opacityLabel = document.querySelector("[data-appearance-opacity-value]")
+        const cardsOpacityInput = document.querySelector("[data-appearance-cards-opacity]")
+        const cardsOpacityLabel = document.querySelector("[data-appearance-cards-opacity-value]")
         const uiOpacity = Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78)))
+        const cardsOpacity = Math.min(1, Math.max(0.5, Number(draft.cardsOpacity ?? 0.9)))
         if (opacityInput) {
             opacityInput.value = String(Math.round(uiOpacity * 100))
             if (!opacityInput.dataset.bound) {
@@ -524,7 +539,19 @@ Object.assign(UI, {
                 })
             }
         }
+        if (cardsOpacityInput) {
+            cardsOpacityInput.value = String(Math.round(cardsOpacity * 100))
+            if (!cardsOpacityInput.dataset.bound) {
+                cardsOpacityInput.dataset.bound = "1"
+                cardsOpacityInput.addEventListener("input", event => {
+                    const nextOpacity = Math.min(1, Math.max(0.5, Number(event.target.value || 90) / 100))
+                    const currentDraft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+                    this.applyAppearanceDraft({ ...currentDraft, cardsOpacity: nextOpacity })
+                })
+            }
+        }
         if (opacityLabel) opacityLabel.textContent = `${Math.round(uiOpacity * 100)}%`
+        if (cardsOpacityLabel) cardsOpacityLabel.textContent = `${Math.round(cardsOpacity * 100)}%`
     },
 
     showToast(msg, options = {}) {

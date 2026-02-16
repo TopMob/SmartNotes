@@ -78,13 +78,6 @@ export const createMediaHandlers = (context) => {
         if (event.target.closest(".media-resize-handle")) return
         const wrapper = event.target.closest(".media-draggable-item")
         if (!wrapper || !elements.content.contains(wrapper)) return
-        const isAudioBlock = wrapper.classList.contains("audio-block")
-        const dragHandle = event.target.closest(".audio-drag-handle")
-        if (isAudioBlock && !dragHandle) return
-        if (dragHandle) {
-            event.preventDefault()
-            event.stopPropagation()
-        }
         state.dragState = {
             wrapper,
             trailingBreak: wrapper.nextSibling && wrapper.nextSibling.nodeName === "BR" ? wrapper.nextSibling : null,
@@ -152,15 +145,8 @@ export const createMediaHandlers = (context) => {
         syncMediaSizes()
     }
 
-    const insertAudio = (src) => {
-        if (typeof EditorAudio === "undefined") return
-        const html = EditorAudio.createAudioBlockHtml(src)
-        insertHtmlAtSelection(html)
-        EditorAudio.sync(elements.content)
-    }
-
     const makeMediaDraggable = () => {
-        elements.content.querySelectorAll(".media-wrapper, .audio-block").forEach(w => {
+        elements.content.querySelectorAll(".media-wrapper").forEach(w => {
             w.classList.add("media-draggable-item")
             w.setAttribute("draggable", "true")
             w.contentEditable = "false"
@@ -296,7 +282,6 @@ export const createMediaHandlers = (context) => {
         handleMediaDragStart,
         handleNativeDragStart,
         insertMedia,
-        insertAudio,
         makeMediaDraggable,
         syncMediaSizes,
         selectMedia,

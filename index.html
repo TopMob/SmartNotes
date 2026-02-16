@@ -64,7 +64,6 @@
     <script src="js/notes/filters.js" defer></script>
     <script src="js/notes/actions.js" defer></script>
     <script src="js/editor/drawing.js" defer></script>
-    <script src="js/editor/audio.js" defer></script>
     <script src="js/calculator.js" defer></script>
     <script src="js/editor/core.js" type="module"></script>
     <script src="js/notes/app.js" defer></script>
@@ -197,19 +196,9 @@
             </nav>
 
             <footer class="sidebar-footer">
-                <button type="button" class="footer-link" data-action="open-modal" data-modal="about-modal">
-                    <i class="material-icons-round" aria-hidden="true">info</i>
-                    <span data-lang="about">О нас</span>
-                </button>
-
-                <button type="button" class="footer-link" data-action="open-modal" data-modal="rate-modal">
-                    <i class="material-icons-round" aria-hidden="true">thumb_up</i>
-                    <span data-lang="rate">Оценить</span>
-                </button>
-
-                <button type="button" class="footer-link" data-action="open-modal" data-modal="poll-modal">
-                    <i class="material-icons-round" aria-hidden="true">poll</i>
-                    <span data-lang="polls">Опросы</span>
+                <button type="button" class="footer-link" data-action="open-modal" data-modal="feedback-menu-modal">
+                    <i class="material-icons-round" aria-hidden="true">forum</i>
+                    <span data-lang="feedback_menu">Обратная связь</span>
                 </button>
 
                 <button type="button" class="footer-link" data-action="install-app" data-install-entry="footer">
@@ -341,19 +330,8 @@
 
                     <div class="divider-vertical" aria-hidden="true"></div>
 
-                    <button type="button" class="btn-icon" data-action="editor-voice" aria-label="Голосовая запись">
-                        <span class="custom-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" data-state="idle" aria-hidden="true">
-                                <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-6 8h2v3h-2z"/>
-                            </svg>
-                            <svg viewBox="0 0 24 24" data-state="active" aria-hidden="true">
-                                <rect x="7" y="7" width="10" height="10" rx="2"></rect>
-                            </svg>
-                        </span>
-                    </button>
-
-                    <button type="button" class="btn-icon" id="editor-lock-toggle" data-action="editor-lock" aria-label="Заблокировать заметку" data-lang-aria="lock_note">
-                        <i class="material-icons-round" aria-hidden="true">lock</i>
+                    <button type="button" class="btn-icon" data-action="editor-note-actions" aria-label="Действия с заметкой" data-lang-aria="folder_actions">
+                        <i class="material-icons-round" aria-hidden="true">more_vert</i>
                     </button>
 
                     <button type="button" class="btn-icon" id="toolbar-toggle" data-action="toggle-toolbar" aria-label="Скрыть панель инструментов" data-lang-aria="toolbar_hide">
@@ -369,8 +347,7 @@
                 <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования">
                     <div class="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
                         <button type="button" class="drawing-tool-btn is-active" data-drawing-tool="pen" data-lang="drawing_tool_pen">Перо</button>
-                        <button type="button" class="drawing-tool-btn" data-drawing-tool="marker" data-lang="drawing_tool_marker">Маркер</button>
-                        <button type="button" class="drawing-tool-btn" data-drawing-tool="eraser" data-lang="drawing_tool_eraser">Ластик</button>
+                                                <button type="button" class="drawing-tool-btn" data-drawing-tool="eraser" data-lang="drawing_tool_eraser">Ластик</button>
                     </div>
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_color">Цвет</span>
@@ -603,6 +580,24 @@
         </div>
     </div>
 
+    <div id="feedback-menu-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2 data-lang="feedback_menu">Обратная связь</h2>
+                <button type="button" class="btn-icon" data-action="close-modal" data-modal="feedback-menu-modal" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </header>
+            <div class="modal-body">
+                <div class="modal-actions-grid">
+                    <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="rate-modal" data-lang="rate">Оценить</button>
+                    <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="poll-modal" data-lang="polls">Опросы</button>
+                    <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="about-modal" data-lang="about">О нас</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="about-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
@@ -681,15 +676,7 @@
         </div>
     </div>
 
-    <div id="voice-indicator" class="voice-indicator" aria-hidden="true">
-        <div class="pulse-ring" aria-hidden="true"></div>
-        <span class="custom-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0h-2zm-6 8h2v3h-2z"/>
-            </svg>
-        </span>
-        <span data-lang="recording">Запись...</span>
-    </div>
+    
 
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
 

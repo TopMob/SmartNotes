@@ -244,6 +244,19 @@
     touch-action: none;
 }
 
+
+.drawing-pointer-preview {
+    position: fixed;
+    z-index: 1200;
+    border-radius: 999px;
+    border: 2px solid rgba(59, 130, 246, 0.9);
+    background: rgba(59, 130, 246, 0.18);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
 .note-content.drawing-active {
     cursor: crosshair;
     user-select: none;

@@ -25,6 +25,15 @@ function detectBraveBrowser() {
     return brands.includes("brave")
 }
 
+
+function detectSafariBrowser() {
+    if (typeof navigator === "undefined") return false
+    const userAgent = String(navigator.userAgent || "")
+    const hasSafari = /Safari/i.test(userAgent)
+    const hasExcludedBrowser = /Chrome|Chromium|CriOS|FxiOS|Edg|EdgiOS|OPR|Opera|SamsungBrowser/i.test(userAgent)
+    return hasSafari && !hasExcludedBrowser
+}
+
 function isMobileDevice() {
     if (typeof navigator === "undefined") return false
     const userAgent = String(navigator.userAgent || "").toLowerCase()
@@ -37,7 +46,7 @@ function resolveFirestoreSettings() {
         useFetchStreams: false
     }
 
-    if (detectBraveBrowser()) {
+    if (detectBraveBrowser() || detectSafariBrowser()) {
         return {
             ...baseSettings,
             experimentalForceLongPolling: true
