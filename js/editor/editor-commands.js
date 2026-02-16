@@ -14,6 +14,11 @@ const getClosestByTag = (node, tagName, root) => {
     return null
 }
 
+const getNearestElement = (node) => {
+    if (!node) return null
+    return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement
+}
+
 const rangeFullyInsideNode = (range, element) => {
     if (!range || !element) return false
     const startsInside = element.contains(range.startContainer)
@@ -65,12 +70,62 @@ const surroundRangeWithTag = (range, tagName) => {
     }
     const nextRange = document.createRange()
     nextRange.selectNodeContents(wrapper)
-    nextRange.collapse(false)
     const selection = window.getSelection()
     if (selection) {
         selection.removeAllRanges()
         selection.addRange(nextRange)
     }
+    return wrapper
+}
+
+const getTextNodesInRange = (range, root) => {
+    if (!range || !root) return []
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    const textNodes = []
+    let currentNode = walker.nextNode()
+    while (currentNode) {
+        const hasText = (currentNode.textContent || "").trim().length > 0
+        if (hasText && range.intersectsNode(currentNode)) textNodes.push(currentNode)
+        currentNode = walker.nextNode()
+    }
+    return textNodes
+}
+
+const isRangeFullyWrappedWithTag = (range, tagName, root) => {
+    const textNodes = getTextNodesInRange(range, root)
+    if (!textNodes.length) return false
+    return textNodes.every(node => !!getClosestByTag(node, tagName, root))
+}
+
+const removeTagFromFragment = (fragment, tagName) => {
+    const targetTagName = normalizeTagName(tagName)
+    const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_ELEMENT)
+    const unwrapTargets = []
+    let currentNode = walker.nextNode()
+    while (currentNode) {
+        if (normalizeTagName(currentNode.tagName) === targetTagName) unwrapTargets.push(currentNode)
+        currentNode = walker.nextNode()
+    }
+    unwrapTargets.forEach(unwrapNode)
+}
+
+const insertFragmentAndReselect = (range, fragment) => {
+    const firstNode = fragment.firstChild
+    const lastNode = fragment.lastChild
+    range.deleteContents()
+    range.insertNode(fragment)
+    const selection = window.getSelection()
+    if (!selection) return
+    const nextRange = document.createRange()
+    if (firstNode && lastNode) {
+        nextRange.setStartBefore(firstNode)
+        nextRange.setEndAfter(lastNode)
+    } else {
+        nextRange.setStart(range.endContainer, range.endOffset)
+        nextRange.collapse(true)
+    }
+    selection.removeAllRanges()
+    selection.addRange(nextRange)
 }
 
 const removeInlineTagsFromFragment = (fragment) => {
@@ -148,12 +203,18 @@ export const createEditorCommands = (context) => {
         }
 
         const root = resolveRoot()
-        const startTag = getClosestByTag(range.startContainer, tagName, root)
-        const endTag = getClosestByTag(range.endContainer, tagName, root)
+        if (!root) return false
+
+        const startElement = getNearestElement(range.startContainer)
+        const endElement = getNearestElement(range.endContainer)
+        const startTag = getClosestByTag(startElement, tagName, root)
+        const endTag = getClosestByTag(endElement, tagName, root)
         const commonTag = startTag && startTag === endTag && rangeFullyInsideNode(range, startTag) ? startTag : null
 
-        if (commonTag) {
-            unwrapNode(commonTag)
+        if (commonTag || isRangeFullyWrappedWithTag(range, tagName, root)) {
+            const fragment = range.extractContents()
+            removeTagFromFragment(fragment, tagName)
+            insertFragmentAndReselect(range, fragment)
             finalizeChange()
             return true
         }
@@ -241,9 +302,7 @@ export const createEditorCommands = (context) => {
             }
             return false
         }
-        surroundRangeWithTag(range, "a")
-        const selection = window.getSelection()
-        const anchor = selection?.anchorNode?.parentElement?.closest("a")
+        const anchor = surroundRangeWithTag(range, "a")
         if (anchor) {
             if (options.noteId) {
                 anchor.removeAttribute("href")
