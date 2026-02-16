@@ -46,8 +46,8 @@ const buildFirestoreSafeCustomPresets = (presets) => {
             p: ThemeManager.normalizeHex(item.p),
             bg: ThemeManager.normalizeHex(item.bg),
             t: ThemeManager.normalizeHex(item.t),
-            mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof item.sidebarBackgroundImage === "string" ? item.sidebarBackgroundImage : ""
+            mainBackgroundImage: normalizeSyncImageValue(item.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeSyncImageValue(item.sidebarBackgroundImage)
         }))
         .slice(0, ThemeManager.maxCustomPresets)
 }
@@ -109,7 +109,8 @@ export const ThemeManager = {
         }
     },
     saveCustomPresets(presets) {
-        SafeStorage.local.setJson(this.customPresetStorageKey, presets.slice(0, this.maxCustomPresets))
+        const safePresets = buildFirestoreSafeCustomPresets(presets).slice(0, this.maxCustomPresets)
+        SafeStorage.local.setJson(this.customPresetStorageKey, safePresets)
     },
     addCustomPreset(colors) {
         const presets = this.getCustomPresets()
@@ -121,8 +122,8 @@ export const ThemeManager = {
             p: this.normalizeHex(colors?.p),
             bg: this.normalizeHex(colors?.bg),
             t: this.normalizeHex(colors?.t),
-            mainBackgroundImage: typeof colors?.mainBackgroundImage === "string" ? colors.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof colors?.sidebarBackgroundImage === "string" ? colors.sidebarBackgroundImage : ""
+            mainBackgroundImage: normalizeSyncImageValue(colors?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeSyncImageValue(colors?.sidebarBackgroundImage)
         }
         this.saveCustomPresets([...presets, nextPreset])
         return { ok: true, key: `custom:${nextPreset.key}` }
@@ -138,8 +139,8 @@ export const ThemeManager = {
                 p: this.normalizeHex(updates?.p ?? item.p),
                 bg: this.normalizeHex(updates?.bg ?? item.bg),
                 t: this.normalizeHex(updates?.t ?? item.t),
-                mainBackgroundImage: typeof updates?.mainBackgroundImage === "string" ? updates.mainBackgroundImage : item.mainBackgroundImage,
-                sidebarBackgroundImage: typeof updates?.sidebarBackgroundImage === "string" ? updates.sidebarBackgroundImage : item.sidebarBackgroundImage
+                mainBackgroundImage: normalizeSyncImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeSyncImageValue(updates?.sidebarBackgroundImage ?? item.sidebarBackgroundImage)
             }
         })
         this.saveCustomPresets(nextPresets)
@@ -177,19 +178,19 @@ export const ThemeManager = {
     },
     async saveAccountSettings(user, settings) {
         const reference = this.getThemeSettingsReference(user)
-        this.saveSettings(settings)
+        const normalizedSettings = {
+            preset: settings?.preset || "oled",
+            p: this.normalizeHex(settings?.p),
+            bg: this.normalizeHex(settings?.bg),
+            t: this.normalizeHex(settings?.t),
+            mainBackgroundImage: normalizeSyncImageValue(settings?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeSyncImageValue(settings?.sidebarBackgroundImage),
+            uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
+            cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
+        }
+        this.saveSettings(normalizedSettings)
         if (!reference) return
         try {
-            const normalizedSettings = {
-                preset: settings?.preset || "oled",
-                p: this.normalizeHex(settings?.p),
-                bg: this.normalizeHex(settings?.bg),
-                t: this.normalizeHex(settings?.t),
-                mainBackgroundImage: normalizeSyncImageValue(settings?.mainBackgroundImage),
-                sidebarBackgroundImage: normalizeSyncImageValue(settings?.sidebarBackgroundImage),
-                uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
-                cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
-            }
             const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
             const payload = {
                 settings: normalizedSettings,
@@ -203,7 +204,7 @@ export const ThemeManager = {
                 await reference.set({ settings: normalizedSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             }
         } catch (error) {
-            SafeStorage.local.setJson("theme-pending-sync", { settings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
+            SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
             UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
         }
     },

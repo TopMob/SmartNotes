@@ -70,8 +70,24 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      function isValidThemePreferencePayload() {
+        return request.resource.data.settings is map
+          && request.resource.data.settings.preset is string
+          && request.resource.data.settings.p is string
+          && request.resource.data.settings.bg is string
+          && request.resource.data.settings.t is string
+          && request.resource.data.settings.mainBackgroundImage is string
+          && request.resource.data.settings.sidebarBackgroundImage is string
+          && request.resource.data.settings.uiOpacity is number
+          && request.resource.data.settings.cardsOpacity is number
+          && (!('customPresets' in request.resource.data) || request.resource.data.customPresets is list);
+      }
+
       match /preferences/{preferenceId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && (preferenceId != 'theme' || isValidThemePreferencePayload());
+        allow delete: if isOwner(userId);
       }
 
       match /sharedNotes/{entryId} {
