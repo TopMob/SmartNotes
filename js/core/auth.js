@@ -1,6 +1,7 @@
 import { setAuthPersistenceFromOrder, setupAuthPersistence } from "./authSafariFix.js"
 import { planAuthMethods } from "./authFlowPlanner.js"
 import { createLocalAuthManager } from "./localAuth.js"
+import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
 
 export function createAuthManager({ auth }) {
     const state = {
@@ -24,6 +25,19 @@ export function createAuthManager({ auth }) {
             const provider = new firebase.auth.GoogleAuthProvider()
             provider.setCustomParameters({ prompt: "select_account" })
             return provider
+        },
+        _getGoogleClientId() {
+            const configuredClientId = auth?.app?.options?.clientId
+            return String(configuredClientId || "").trim()
+        },
+        async _signInWithGoogleIdentity() {
+            const googleClientId = this._getGoogleClientId()
+            if (!googleClientId) {
+                throw { code: "auth/google-identity-client-id-missing", message: "Google client id is missing" }
+            }
+            const token = await requestGoogleIdentityToken({ clientId: googleClientId })
+            const credential = firebase.auth.GoogleAuthProvider.credential(token)
+            await auth.signInWithCredential(credential)
         },
         _setLoginBusy(flag) {
             state.loginInFlight = !!flag
@@ -50,7 +64,11 @@ export function createAuthManager({ auth }) {
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
                 "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
-                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser")
+                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser"),
+                "auth/google-identity-script-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-not-displayed": this._t("auth_popup_blocked", "Popup was blocked by the browser")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
             const text = map[code] || (serviceUnavailable
@@ -129,6 +147,27 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(true)
 
             await setupAuthPersistence(auth)
+            try {
+                await this._signInWithGoogleIdentity()
+                this._setLoginBusy(false)
+                return
+            } catch (googleIdentityError) {
+                const googleIdentityErrorCode = String(googleIdentityError?.code || "")
+                const googleIdentityRecoverableCodes = new Set([
+                    "auth/google-identity-script-timeout",
+                    "auth/google-identity-script-failed",
+                    "auth/google-identity-timeout",
+                    "auth/google-identity-not-displayed",
+                    "auth/google-identity-skipped",
+                    "auth/google-identity-unavailable",
+                    "auth/google-identity-empty-token"
+                ])
+                if (!googleIdentityRecoverableCodes.has(googleIdentityErrorCode)) {
+                    this._setLoginBusy(false)
+                    this.handleAuthError(googleIdentityError)
+                    return
+                }
+            }
             const { methods } = planAuthMethods()
             const storageErrorCodes = new Set([
                 "auth/web-storage-unsupported",
