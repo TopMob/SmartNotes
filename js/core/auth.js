@@ -101,6 +101,23 @@ export function createAuthManager({ auth }) {
                 message: "Redirect auth requires session or local persistence"
             }
         },
+        _canRecoverWithRedirect(error) {
+            const errorCode = String(error?.code || "")
+            return errorCode === "auth/internal-error"
+                || errorCode === "auth/network-request-failed"
+                || errorCode === "auth/popup-blocked"
+        },
+        async _attemptRedirectRecovery(error) {
+            if (!this._canRecoverWithRedirect(error)) return false
+            const selectedPersistence = await this._preparePersistenceForMethod("redirect")
+            if (!selectedPersistence) return false
+            try {
+                await this._signInWithMethod("redirect")
+                return true
+            } catch (redirectError) {
+                throw redirectError
+            }
+        },
         async login() {
             if (!auth || typeof firebase === "undefined") {
                 console.error("[Auth] Firebase auth is unavailable: SDK not initialized")
@@ -163,6 +180,17 @@ export function createAuthManager({ auth }) {
                         this.handleAuthError(retryError)
                         return
                     }
+                }
+                try {
+                    const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError)
+                    if (redirectRecoveryStarted) {
+                        this._setLoginBusy(false)
+                        return
+                    }
+                } catch (redirectRecoveryError) {
+                    this._setLoginBusy(false)
+                    this.handleAuthError(redirectRecoveryError)
+                    return
                 }
                 this._setLoginBusy(false)
                 this.handleAuthError(lastError)
