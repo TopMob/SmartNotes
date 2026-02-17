@@ -140,7 +140,7 @@ function loadExternalScript(url, timeoutMilliseconds) {
 async function ensureFirebaseRuntime() {
     if (typeof firebase !== "undefined") return true
 
-    const initialWaitSucceeded = await waitForFirebaseAvailability(4000)
+    const initialWaitSucceeded = await waitForFirebaseAvailability(350)
     if (initialWaitSucceeded) return true
 
     for (const sourceSet of firebaseRuntimeSources) {

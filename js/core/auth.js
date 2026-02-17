@@ -178,6 +178,12 @@ export function createAuthManager({ auth }) {
             }
             if (state.loginInFlight) return
 
+            const existingUser = state.currentUser || auth.currentUser || null
+            if (existingUser) {
+                await this._handleAuthState(existingUser)
+                return
+            }
+
             this._setLoginBusy(true)
             this._showGoogleSignInPendingFeedback()
 
@@ -382,6 +388,18 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
 
+            auth.onAuthStateChanged(async user => {
+                this._setLoginBusy(false)
+                await this._handleAuthState(user)
+            }, error => {
+                this._setLoginBusy(false)
+                this.handleAuthError(error)
+            })
+
+            if (auth.currentUser) {
+                await this._handleAuthState(auth.currentUser)
+            }
+
             await this._preparePersistenceForRedirectResult()
 
             try {
@@ -396,14 +414,6 @@ export function createAuthManager({ auth }) {
             } finally {
                 this._setLoginBusy(false)
             }
-
-            auth.onAuthStateChanged(async user => {
-                this._setLoginBusy(false)
-                await this._handleAuthState(user)
-            }, error => {
-                this._setLoginBusy(false)
-                this.handleAuthError(error)
-            })
         }
     }
 
