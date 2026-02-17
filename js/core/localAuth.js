@@ -1,7 +1,8 @@
 export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, getText }) {
     const uiState = {
         initialized: false,
-        mode: "signin"
+        mode: "signin",
+        requestInFlight: false
     }
 
     const elementIds = {
@@ -106,6 +107,19 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         return true
     }
 
+    const runWithBusyState = async task => {
+        if (uiState.requestInFlight) return false
+        uiState.requestInFlight = true
+        setLoginBusy(true)
+        try {
+            await task()
+            return true
+        } finally {
+            uiState.requestInFlight = false
+            setLoginBusy(false)
+        }
+    }
+
     const fetchMethods = async email => {
         if (!auth || !email) return []
         try {
@@ -113,7 +127,7 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
             return Array.isArray(methods) ? methods : []
         } catch (error) {
             handleAuthError(error)
-            return []
+            return null
         }
     }
 
@@ -125,6 +139,7 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         if (!validateSignInCredentials(credentials)) return
 
         const methods = await fetchMethods(credentials.email)
+        if (methods === null) return
         if (!methods.length) {
             setFeedback(getText("auth_email_not_found", "Аккаунт с таким email не найден"))
             return
@@ -138,14 +153,12 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
             return
         }
 
-        setLoginBusy(true)
         setFeedback("")
-        try {
+        await runWithBusyState(async () => {
             await auth.signInWithEmailAndPassword(credentials.email, credentials.password)
-        } catch (error) {
+        }).catch(error => {
             handleAuthError(error)
-        }
-        setLoginBusy(false)
+        })
     }
 
     const signUpWithEmail = async () => {
@@ -154,6 +167,7 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         if (!validateSignUpCredentials(credentials)) return
 
         const methods = await fetchMethods(credentials.email)
+        if (methods === null) return
         if (isGoogleOnlyAccount(methods)) {
             setFeedback(getText("auth_email_google_only", "Этот email зарегистрирован через Google. Войдите через Google."))
             return
@@ -166,14 +180,12 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
             return
         }
 
-        setLoginBusy(true)
         setFeedback("")
-        try {
+        await runWithBusyState(async () => {
             await auth.createUserWithEmailAndPassword(credentials.email, credentials.password)
-        } catch (error) {
+        }).catch(error => {
             handleAuthError(error)
-        }
-        setLoginBusy(false)
+        })
     }
 
     const sendPasswordReset = async () => {
@@ -189,6 +201,7 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         }
 
         const methods = await fetchMethods(email)
+        if (methods === null) return
         if (!methods.includes("password")) {
             if (isGoogleOnlyAccount(methods)) {
                 setFeedback(getText("auth_email_google_only", "Этот email зарегистрирован через Google. Войдите через Google."))
@@ -198,15 +211,13 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
             return
         }
 
-        setLoginBusy(true)
         setFeedback("")
-        try {
+        await runWithBusyState(async () => {
             await auth.sendPasswordResetEmail(email)
             setFeedback(getText("auth_reset_sent", "Письмо для восстановления пароля отправлено"), "success")
-        } catch (error) {
+        }).catch(error => {
             handleAuthError(error)
-        }
-        setLoginBusy(false)
+        })
     }
 
     const bindUi = () => {

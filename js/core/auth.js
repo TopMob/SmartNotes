@@ -9,7 +9,7 @@ export function createAuthManager({ auth }) {
         loginInFlight: false,
         authReady: false,
         currentUser: null,
-        loginButton: null,
+        authActionElements: [],
         localAuthManager: null
     }
 
@@ -39,15 +39,25 @@ export function createAuthManager({ auth }) {
             const credential = firebase.auth.GoogleAuthProvider.credential(token)
             await auth.signInWithCredential(credential)
         },
+        _collectAuthActionElements() {
+            const selector = [
+                "[data-action='login']",
+                "#email-signin-form button[type='submit']",
+                "#email-signup-form button[type='submit']",
+                "[data-auth-action='forgot-password']",
+                ".btn-auth-tab",
+                ".btn-auth-toggle-password"
+            ].join(",")
+            state.authActionElements = Array.from(document.querySelectorAll(selector))
+        },
         _setLoginBusy(flag) {
             state.loginInFlight = !!flag
-            if (!state.loginButton) {
-                state.loginButton = document.querySelector("[data-action='login']")
+            this._collectAuthActionElements()
+            for (const actionElement of state.authActionElements) {
+                actionElement.disabled = !!flag
+                actionElement.setAttribute("aria-busy", flag ? "true" : "false")
+                actionElement.classList.toggle("is-loading", !!flag)
             }
-            if (!state.loginButton) return
-            state.loginButton.disabled = !!flag
-            state.loginButton.setAttribute("aria-busy", flag ? "true" : "false")
-            state.loginButton.classList.toggle("is-loading", !!flag)
         },
         handleAuthError(err) {
             const code = err && err.code ? err.code : "auth/unknown"
