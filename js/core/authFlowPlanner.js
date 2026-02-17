@@ -24,8 +24,15 @@ function buildPrimaryMethod(browserProfile) {
     return "popup"
 }
 
-function buildMethodSequence(primaryMethod) {
+function supportsRedirectFallback(browserProfile) {
+    if (browserProfile.isEdge) return false
+    if (browserProfile.isChromeFamily) return false
+    return true
+}
+
+function buildMethodSequence(primaryMethod, browserProfile) {
     const methods = [primaryMethod]
+    if (!supportsRedirectFallback(browserProfile)) return methods
     const secondaryMethod = primaryMethod === "popup" ? "redirect" : "popup"
     if (!methods.includes(secondaryMethod)) methods.push(secondaryMethod)
     return methods
@@ -34,9 +41,9 @@ function buildMethodSequence(primaryMethod) {
 export function planAuthMethods() {
     const browserProfile = detectBrowserProfile()
     const primaryMethod = buildPrimaryMethod(browserProfile)
-    const methods = buildMethodSequence(primaryMethod)
+    const methods = buildMethodSequence(primaryMethod, browserProfile)
 
-    if (!hasWorkingSessionStorage() && !methods.includes("redirect")) {
+    if (!hasWorkingSessionStorage() && supportsRedirectFallback(browserProfile) && !methods.includes("redirect")) {
         methods.unshift("redirect")
     }
 
