@@ -27,6 +27,7 @@ function buildPrimaryMethod(browserProfile) {
 function supportsRedirectFallback(browserProfile) {
     if (browserProfile.isEdge) return false
     if (browserProfile.isChromeFamily) return false
+    if (browserProfile.isFirefox) return false
     return true
 }
 

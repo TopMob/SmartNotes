@@ -153,7 +153,8 @@ export function createAuthManager({ auth }) {
                 || errorCode === "auth/network-request-failed"
                 || errorCode === "auth/popup-blocked"
         },
-        async _attemptRedirectRecovery(error) {
+        async _attemptRedirectRecovery(error, allowRedirectRecovery) {
+            if (!allowRedirectRecovery) return false
             if (!this._canRecoverWithRedirect(error)) return false
             const selectedPersistence = await this._preparePersistenceForMethod("redirect")
             if (!selectedPersistence) return false
@@ -196,7 +197,9 @@ export function createAuthManager({ auth }) {
                     return
                 }
             }
-            const { methods } = planAuthMethods()
+            const authMethodPlan = planAuthMethods()
+            const methods = authMethodPlan.methods
+            const allowRedirectRecovery = methods.includes("redirect")
             const storageErrorCodes = new Set([
                 "auth/web-storage-unsupported",
                 "auth/operation-not-supported-in-this-environment"
@@ -249,7 +252,7 @@ export function createAuthManager({ auth }) {
                     }
                 }
                 try {
-                    const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError)
+                    const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError, allowRedirectRecovery)
                     if (redirectRecoveryStarted) {
                         this._setLoginBusy(false)
                         return
