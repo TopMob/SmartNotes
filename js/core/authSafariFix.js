@@ -1,19 +1,32 @@
-export async function setupAuthPersistence(auth) {
-    if (!auth || typeof firebase === "undefined" || !firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return
-    const persistenceModes = [
-        firebase.auth.Auth.Persistence.LOCAL,
-        firebase.auth.Auth.Persistence.SESSION,
-        firebase.auth.Auth.Persistence.NONE
-    ]
+function resolveAuthPersistenceEnum() {
+    if (typeof firebase === "undefined") return null
+    if (!firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return null
+    return firebase.auth.Auth.Persistence
+}
 
-    for (const persistenceMode of persistenceModes) {
+export async function setAuthPersistenceFromOrder(auth, persistenceOrder) {
+    if (!auth || !Array.isArray(persistenceOrder) || !persistenceOrder.length) return null
+    const persistenceEnum = resolveAuthPersistenceEnum()
+    if (!persistenceEnum) return null
+
+    for (const persistenceMode of persistenceOrder) {
+        if (!persistenceMode) continue
         try {
             await auth.setPersistence(persistenceMode)
-            return
+            return persistenceMode
         } catch {}
     }
 
-    try {
-        await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-    } catch {}
+    return null
+}
+
+export async function setupAuthPersistence(auth) {
+    const persistenceEnum = resolveAuthPersistenceEnum()
+    if (!persistenceEnum) return null
+    const persistenceOrder = [
+        persistenceEnum.LOCAL,
+        persistenceEnum.SESSION,
+        persistenceEnum.NONE
+    ]
+    return setAuthPersistenceFromOrder(auth, persistenceOrder)
 }

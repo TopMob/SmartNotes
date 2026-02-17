@@ -1,4 +1,4 @@
-import { setupAuthPersistence } from "./authSafariFix.js"
+import { setAuthPersistenceFromOrder, setupAuthPersistence } from "./authSafariFix.js"
 import { planAuthMethods } from "./authFlowPlanner.js"
 import { createLocalAuthManager } from "./localAuth.js"
 
@@ -42,13 +42,15 @@ export function createAuthManager({ auth }) {
                 "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/popup-blocked": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
                 "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
+                "auth/internal-error": this._t("auth_network_failed", "No internet connection"),
                 "auth/web-storage-unsupported": this._t("auth_storage_failed", "Storage is blocked in this browser"),
                 "auth/operation-not-supported-in-this-environment": this._t("auth_env_failed", "Authentication is blocked in this browser"),
                 "auth/invalid-email": this._t("auth_fill_required", "Fill in all required fields"),
                 "auth/wrong-password": this._t("login_failed", "Sign-in failed"),
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
-                "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email")
+                "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
+                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
             const text = map[code] || (serviceUnavailable
@@ -56,6 +58,24 @@ export function createAuthManager({ auth }) {
                 : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
             this._toast(text)
             console.error("[Auth] login error", code, err)
+        },
+        _getPersistenceEnum() {
+            if (typeof firebase === "undefined") return null
+            if (!firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return null
+            return firebase.auth.Auth.Persistence
+        },
+        async _preparePersistenceForMethod(method) {
+            const persistenceEnum = this._getPersistenceEnum()
+            if (!persistenceEnum) return null
+            if (method === "redirect") {
+                return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL])
+            }
+            return setAuthPersistenceFromOrder(auth, [persistenceEnum.LOCAL, persistenceEnum.SESSION, persistenceEnum.NONE])
+        },
+        async _preparePersistenceForRedirectResult() {
+            const persistenceEnum = this._getPersistenceEnum()
+            if (!persistenceEnum) return null
+            return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL, persistenceEnum.NONE])
         },
         async _signInWithMethod(method) {
             if (method === "redirect") {
@@ -65,13 +85,20 @@ export function createAuthManager({ auth }) {
             await auth.signInWithPopup(this._provider())
         },
         async _setNoStoragePersistence() {
-            if (!auth || typeof firebase === "undefined") return false
+            const persistenceEnum = this._getPersistenceEnum()
+            if (!persistenceEnum || !auth) return false
             try {
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+                await auth.setPersistence(persistenceEnum.NONE)
                 return true
             } catch (error) {
                 console.warn("[Auth] Failed to switch to NONE persistence", error)
                 return false
+            }
+        },
+        _createRedirectPersistenceError() {
+            return {
+                code: "auth/redirect-persistence-unavailable",
+                message: "Redirect auth requires session or local persistence"
             }
         },
         async login() {
@@ -93,6 +120,12 @@ export function createAuthManager({ auth }) {
             let lastError = null
 
             for (const method of methods) {
+                const selectedPersistence = await this._preparePersistenceForMethod(method)
+                if (method === "redirect" && !selectedPersistence) {
+                    lastError = this._createRedirectPersistenceError()
+                    continue
+                }
+
                 try {
                     await this._signInWithMethod(method)
                     this._setLoginBusy(false)
@@ -116,7 +149,13 @@ export function createAuthManager({ auth }) {
                 if (storageErrorCodes.has(errorCode)) {
                     await this._setNoStoragePersistence()
                     try {
-                        await this._signInWithMethod("redirect")
+                        const selectedPersistence = await this._preparePersistenceForMethod("popup")
+                        if (!selectedPersistence) {
+                            this._setLoginBusy(false)
+                            this.handleAuthError(lastError)
+                            return
+                        }
+                        await this._signInWithMethod("popup")
                         this._setLoginBusy(false)
                         return
                     } catch (retryError) {
@@ -151,7 +190,7 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             try {
                 await auth.signOut()
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(() => {})
+                await this._setNoStoragePersistence()
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
@@ -241,12 +280,17 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
 
-            await setupAuthPersistence(auth)
+            await this._preparePersistenceForRedirectResult()
 
             try {
                 await auth.getRedirectResult()
-            } catch (err) {
-                this.handleAuthError(err)
+            } catch (error) {
+                const errorCode = String(error?.code || "")
+                if (errorCode && errorCode !== "auth/no-auth-event" && errorCode !== "auth/internal-error") {
+                    this.handleAuthError(error)
+                } else {
+                    console.warn("[Auth] Redirect result skipped", error)
+                }
             } finally {
                 this._setLoginBusy(false)
             }
@@ -254,9 +298,9 @@ export function createAuthManager({ auth }) {
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
                 await this._handleAuthState(user)
-            }, err => {
+            }, error => {
                 this._setLoginBusy(false)
-                this.handleAuthError(err)
+                this.handleAuthError(error)
             })
         }
     }
