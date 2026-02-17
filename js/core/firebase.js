@@ -70,7 +70,7 @@ export function initFirebase() {
     const auth = firebase.auth(app)
     const db = firebase.firestore(app)
 
-    db.settings(resolveFirestoreSettings(), { merge: true })
+    db.settings({ ...resolveFirestoreSettings(), merge: true })
     try {
         db.enablePersistence({ synchronizeTabs: true }).catch((error) => {
             const code = String(error?.code || "")

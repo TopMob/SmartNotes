@@ -2,7 +2,6 @@ import { ThemeManager } from "./theme.js"
 import { LANG } from "./lang.js"
 import { Utils } from "./core/utils.js"
 import { initFirebase } from "./core/firebase.js"
-import { setupAuthPersistence } from "./core/authSafariFix.js"
 import { createAuthManager } from "./core/auth.js"
 import { bootstrapCore } from "./core/bootstrap.js"
 import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
@@ -191,7 +190,6 @@ async function startCore() {
         window.db = core.db
     }
 
-    await setupAuthPersistence(core.auth)
     const authManager = createAuthManager({ auth: core.auth })
     core.Auth = authManager
     window.Auth = core.Auth

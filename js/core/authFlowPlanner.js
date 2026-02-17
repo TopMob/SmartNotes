@@ -16,7 +16,8 @@ function hasWorkingSessionStorage() {
 function buildPrimaryMethod(browserProfile) {
     if (browserProfile.isMobile) return "redirect"
     if (browserProfile.isSafari) return "redirect"
-    if (browserProfile.isChromeFamily || browserProfile.isEdge) return "redirect"
+    if (browserProfile.isEdge) return "popup"
+    if (browserProfile.isChromeFamily) return "popup"
     if (browserProfile.isBrave) return "redirect"
     if (browserProfile.isOpera || browserProfile.isOperaGx) return "redirect"
     if (browserProfile.isYandex || browserProfile.isSamsung || browserProfile.isDuckDuckGo || browserProfile.isSoul) return "redirect"
