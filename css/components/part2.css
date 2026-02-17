@@ -323,6 +323,10 @@
     color: #3ddc97;
 }
 
+.auth-feedback.is-info {
+    color: color-mix(in srgb, var(--text) 72%, var(--primary) 28%);
+}
+
 
 .btn-auth {
     height: 48px;
@@ -345,6 +349,10 @@
 
 .btn-auth:active {
     transform: scale(0.99);
+}
+
+.btn-auth.is-loading {
+    opacity: 0.82;
 }
 
 .btn-auth.google {

@@ -2,7 +2,6 @@ import { ThemeManager } from "./theme.js"
 import { LANG } from "./lang.js"
 import { Utils } from "./core/utils.js"
 import { initFirebase } from "./core/firebase.js"
-import { setupAuthPersistence } from "./core/authSafariFix.js"
 import { createAuthManager } from "./core/auth.js"
 import { bootstrapCore } from "./core/bootstrap.js"
 import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
@@ -53,6 +52,22 @@ const firebaseRuntimeSources = [
             "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-auth-compat.js",
             "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-firestore-compat.js"
         ]
+    },
+    {
+        name: "unpkg",
+        urls: [
+            "https://unpkg.com/firebase@9.6.1/firebase-app-compat.js",
+            "https://unpkg.com/firebase@9.6.1/firebase-auth-compat.js",
+            "https://unpkg.com/firebase@9.6.1/firebase-firestore-compat.js"
+        ]
+    },
+    {
+        name: "cdnjs",
+        urls: [
+            "https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-app-compat.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-auth-compat.min.js",
+            "https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-firestore-compat.min.js"
+        ]
     }
 ]
 
@@ -82,8 +97,19 @@ function waitForFirebaseAvailability(timeoutMilliseconds) {
 
 function loadExternalScript(url, timeoutMilliseconds) {
     return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${url}"]`)) {
-            resolve()
+        const existingScriptElement = document.querySelector(`script[src="${url}"]`)
+        if (existingScriptElement) {
+            if (typeof firebase !== "undefined") {
+                resolve()
+                return
+            }
+            setTimeout(() => {
+                if (typeof firebase !== "undefined") {
+                    resolve()
+                    return
+                }
+                reject(new Error(`Script present but runtime unavailable: ${url}`))
+            }, 1200)
             return
         }
 
@@ -114,7 +140,7 @@ function loadExternalScript(url, timeoutMilliseconds) {
 async function ensureFirebaseRuntime() {
     if (typeof firebase !== "undefined") return true
 
-    const initialWaitSucceeded = await waitForFirebaseAvailability(4000)
+    const initialWaitSucceeded = await waitForFirebaseAvailability(350)
     if (initialWaitSucceeded) return true
 
     for (const sourceSet of firebaseRuntimeSources) {
@@ -164,7 +190,6 @@ async function startCore() {
         window.db = core.db
     }
 
-    await setupAuthPersistence(core.auth)
     const authManager = createAuthManager({ auth: core.auth })
     core.Auth = authManager
     window.Auth = core.Auth

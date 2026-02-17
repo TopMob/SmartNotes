@@ -1,5 +1,7 @@
-import { isBraveBrowser, isSafari, setupAuthPersistence } from "./authSafariFix.js"
+import { setAuthPersistenceFromOrder, setupAuthPersistence } from "./authSafariFix.js"
+import { planAuthMethods } from "./authFlowPlanner.js"
 import { createLocalAuthManager } from "./localAuth.js"
+import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
 
 export function createAuthManager({ auth }) {
     const state = {
@@ -7,7 +9,8 @@ export function createAuthManager({ auth }) {
         loginInFlight: false,
         authReady: false,
         currentUser: null,
-        loginButton: null,
+        authActionElements: [],
+        googleSignInPendingTimeoutId: null,
         localAuthManager: null
     }
 
@@ -24,19 +27,61 @@ export function createAuthManager({ auth }) {
             provider.setCustomParameters({ prompt: "select_account" })
             return provider
         },
-        _isIOS() {
-            const ua = (navigator.userAgent || "").toLowerCase()
-            return /iphone|ipad|ipod/.test(ua)
+        _getGoogleClientId() {
+            const configuredClientId = auth?.app?.options?.clientId
+            return String(configuredClientId || "").trim()
+        },
+        async _signInWithGoogleIdentity() {
+            const googleClientId = this._getGoogleClientId()
+            if (!googleClientId) {
+                throw { code: "auth/google-identity-client-id-missing", message: "Google client id is missing" }
+            }
+            const token = await requestGoogleIdentityToken({ clientId: googleClientId })
+            const credential = firebase.auth.GoogleAuthProvider.credential(token)
+            await auth.signInWithCredential(credential)
+        },
+        _collectAuthActionElements() {
+            const selector = [
+                "[data-action='login']",
+                "#email-signin-form button[type='submit']",
+                "#email-signup-form button[type='submit']",
+                "[data-auth-action='forgot-password']",
+                ".btn-auth-tab",
+                ".btn-auth-toggle-password"
+            ].join(",")
+            state.authActionElements = Array.from(document.querySelectorAll(selector))
+        },
+        _setAuthFeedback(message, type = "info") {
+            const feedbackElement = document.getElementById("email-auth-feedback")
+            if (!feedbackElement) return
+            feedbackElement.textContent = String(message || "")
+            feedbackElement.classList.remove("is-error", "is-success", "is-info")
+            if (type) feedbackElement.classList.add(`is-${type}`)
+        },
+        _clearGoogleSignInPendingTimeout() {
+            if (!state.googleSignInPendingTimeoutId) return
+            clearTimeout(state.googleSignInPendingTimeoutId)
+            state.googleSignInPendingTimeoutId = null
+        },
+        _showGoogleSignInPendingFeedback() {
+            this._clearGoogleSignInPendingTimeout()
+            this._setAuthFeedback(this._t("auth_google_starting", "Открываем окно входа Google..."), "info")
+            state.googleSignInPendingTimeoutId = setTimeout(() => {
+                this._setAuthFeedback(this._t("auth_google_waiting", "Если окно не появилось, проверьте блокировку всплывающих окон"), "info")
+            }, 2200)
         },
         _setLoginBusy(flag) {
             state.loginInFlight = !!flag
-            if (!state.loginButton) {
-                state.loginButton = document.querySelector("[data-action='login']")
+            this._collectAuthActionElements()
+            for (const actionElement of state.authActionElements) {
+                actionElement.disabled = !!flag
+                actionElement.setAttribute("aria-busy", flag ? "true" : "false")
+                actionElement.classList.toggle("is-loading", !!flag)
             }
-            if (!state.loginButton) return
-            state.loginButton.disabled = !!flag
-            state.loginButton.setAttribute("aria-busy", flag ? "true" : "false")
-            state.loginButton.classList.toggle("is-loading", !!flag)
+            if (!flag) {
+                this._clearGoogleSignInPendingTimeout()
+                this._setAuthFeedback("")
+            }
         },
         handleAuthError(err) {
             const code = err && err.code ? err.code : "auth/unknown"
@@ -45,13 +90,19 @@ export function createAuthManager({ auth }) {
                 "auth/popup-closed-by-user": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/popup-blocked": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
                 "auth/network-request-failed": this._t("auth_network_failed", "No internet connection"),
+                "auth/internal-error": this._t("auth_network_failed", "No internet connection"),
                 "auth/web-storage-unsupported": this._t("auth_storage_failed", "Storage is blocked in this browser"),
                 "auth/operation-not-supported-in-this-environment": this._t("auth_env_failed", "Authentication is blocked in this browser"),
                 "auth/invalid-email": this._t("auth_fill_required", "Fill in all required fields"),
                 "auth/wrong-password": this._t("login_failed", "Sign-in failed"),
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
-                "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email")
+                "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
+                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser"),
+                "auth/google-identity-script-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-not-displayed": this._t("auth_popup_blocked", "Popup was blocked by the browser")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
             const text = map[code] || (serviceUnavailable
@@ -60,24 +111,63 @@ export function createAuthManager({ auth }) {
             this._toast(text)
             console.error("[Auth] login error", code, err)
         },
-        async _signInWithRedirect() {
-            await auth.signInWithRedirect(this._provider())
+        _getPersistenceEnum() {
+            if (typeof firebase === "undefined") return null
+            if (!firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return null
+            return firebase.auth.Auth.Persistence
         },
-        async _signInWithPopupPreferred() {
-            if (this._isIOS() || isSafari()) {
-                await this._signInWithRedirect()
+        async _preparePersistenceForMethod(method) {
+            const persistenceEnum = this._getPersistenceEnum()
+            if (!persistenceEnum) return null
+            if (method === "redirect") {
+                return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL])
+            }
+            return setAuthPersistenceFromOrder(auth, [persistenceEnum.LOCAL, persistenceEnum.SESSION, persistenceEnum.NONE])
+        },
+        async _preparePersistenceForRedirectResult() {
+            const persistenceEnum = this._getPersistenceEnum()
+            if (!persistenceEnum) return null
+            return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL, persistenceEnum.NONE])
+        },
+        async _signInWithMethod(method) {
+            if (method === "redirect") {
+                await auth.signInWithRedirect(this._provider())
                 return
             }
             await auth.signInWithPopup(this._provider())
         },
         async _setNoStoragePersistence() {
-            if (!auth || typeof firebase === "undefined") return false
+            const persistenceEnum = this._getPersistenceEnum()
+            if (!persistenceEnum || !auth) return false
             try {
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+                await auth.setPersistence(persistenceEnum.NONE)
                 return true
             } catch (error) {
                 console.warn("[Auth] Failed to switch to NONE persistence", error)
                 return false
+            }
+        },
+        _createRedirectPersistenceError() {
+            return {
+                code: "auth/redirect-persistence-unavailable",
+                message: "Redirect auth requires session or local persistence"
+            }
+        },
+        _canRecoverWithRedirect(error) {
+            const errorCode = String(error?.code || "")
+            return errorCode === "auth/internal-error"
+                || errorCode === "auth/network-request-failed"
+                || errorCode === "auth/popup-blocked"
+        },
+        async _attemptRedirectRecovery(error) {
+            if (!this._canRecoverWithRedirect(error)) return false
+            const selectedPersistence = await this._preparePersistenceForMethod("redirect")
+            if (!selectedPersistence) return false
+            try {
+                await this._signInWithMethod("redirect")
+                return true
+            } catch (redirectError) {
+                throw redirectError
             }
         },
         async login() {
@@ -88,67 +178,103 @@ export function createAuthManager({ auth }) {
             }
             if (state.loginInFlight) return
 
+            const existingUser = state.currentUser || auth.currentUser || null
+            if (existingUser) {
+                await this._handleAuthState(existingUser)
+                return
+            }
+
             this._setLoginBusy(true)
+            this._showGoogleSignInPendingFeedback()
 
             await setupAuthPersistence(auth)
-
             try {
-                await this._signInWithPopupPreferred()
-            } catch (error) {
-                const errorCode = String(error?.code || "")
-                const errorMessage = String(error?.message || "").toLowerCase()
-                const storageErrorCodes = new Set([
-                    "auth/web-storage-unsupported",
-                    "auth/operation-not-supported-in-this-environment"
+                await this._signInWithGoogleIdentity()
+                this._setLoginBusy(false)
+                return
+            } catch (googleIdentityError) {
+                const googleIdentityErrorCode = String(googleIdentityError?.code || "")
+                const googleIdentityRecoverableCodes = new Set([
+                    "auth/google-identity-script-timeout",
+                    "auth/google-identity-script-failed",
+                    "auth/google-identity-timeout",
+                    "auth/google-identity-not-displayed",
+                    "auth/google-identity-skipped",
+                    "auth/google-identity-unavailable",
+                    "auth/google-identity-empty-token"
                 ])
+                if (!googleIdentityRecoverableCodes.has(googleIdentityErrorCode)) {
+                    this._setLoginBusy(false)
+                    this.handleAuthError(googleIdentityError)
+                    return
+                }
+            }
+            const { methods } = planAuthMethods()
+            const storageErrorCodes = new Set([
+                "auth/web-storage-unsupported",
+                "auth/operation-not-supported-in-this-environment"
+            ])
+            let lastError = null
 
+            for (const method of methods) {
+                const selectedPersistence = await this._preparePersistenceForMethod(method)
+                if (method === "redirect" && !selectedPersistence) {
+                    lastError = this._createRedirectPersistenceError()
+                    continue
+                }
+
+                try {
+                    await this._signInWithMethod(method)
+                    this._setLoginBusy(false)
+                    return
+                } catch (error) {
+                    const errorCode = String(error?.code || "")
+                    lastError = error
+                    if (errorCode === "auth/popup-closed-by-user") {
+                        this._setLoginBusy(false)
+                        this.handleAuthError(error)
+                        return
+                    }
+                    if (storageErrorCodes.has(errorCode)) {
+                        await this._setNoStoragePersistence()
+                    }
+                }
+            }
+
+            if (lastError) {
+                const errorCode = String(lastError?.code || "")
                 if (storageErrorCodes.has(errorCode)) {
                     await this._setNoStoragePersistence()
                     try {
-                        await this._signInWithPopupPreferred()
+                        const selectedPersistence = await this._preparePersistenceForMethod("popup")
+                        if (!selectedPersistence) {
+                            this._setLoginBusy(false)
+                            this.handleAuthError(lastError)
+                            return
+                        }
+                        await this._signInWithMethod("popup")
                         this._setLoginBusy(false)
                         return
                     } catch (retryError) {
-                        const retryCode = String(retryError?.code || "")
-                        if (!storageErrorCodes.has(retryCode)) {
-                            try {
-                                await this._signInWithRedirect()
-                                this._setLoginBusy(false)
-                                return
-                            } catch (redirectError) {
-                                this._setLoginBusy(false)
-                                this.handleAuthError(redirectError)
-                                return
-                            }
-                        }
                         this._setLoginBusy(false)
                         this.handleAuthError(retryError)
                         return
                     }
                 }
-
-                const isPopupError = errorCode.includes("popup") || errorMessage.includes("popup")
-                if (isPopupError || await isBraveBrowser()) {
-                    try {
-                        await this._signInWithRedirect()
+                try {
+                    const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError)
+                    if (redirectRecoveryStarted) {
                         this._setLoginBusy(false)
-                        return
-                    } catch (redirectError) {
-                        this._setLoginBusy(false)
-                        this.handleAuthError(redirectError)
                         return
                     }
-                }
-
-                try {
-                    await this._signInWithRedirect()
+                } catch (redirectRecoveryError) {
                     this._setLoginBusy(false)
-                    return
-                } catch (redirectError) {
-                    this._setLoginBusy(false)
-                    this.handleAuthError(redirectError)
+                    this.handleAuthError(redirectRecoveryError)
                     return
                 }
+                this._setLoginBusy(false)
+                this.handleAuthError(lastError)
+                return
             }
 
             this._setLoginBusy(false)
@@ -172,7 +298,7 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             try {
                 await auth.signOut()
-                await auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(() => {})
+                await this._setNoStoragePersistence()
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
@@ -262,23 +388,32 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
 
-            await setupAuthPersistence(auth)
-
-            try {
-                await auth.getRedirectResult()
-            } catch (err) {
-                this.handleAuthError(err)
-            } finally {
-                this._setLoginBusy(false)
-            }
-
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
                 await this._handleAuthState(user)
-            }, err => {
+            }, error => {
                 this._setLoginBusy(false)
-                this.handleAuthError(err)
+                this.handleAuthError(error)
             })
+
+            if (auth.currentUser) {
+                await this._handleAuthState(auth.currentUser)
+            }
+
+            await this._preparePersistenceForRedirectResult()
+
+            try {
+                await auth.getRedirectResult()
+            } catch (error) {
+                const errorCode = String(error?.code || "")
+                if (errorCode && errorCode !== "auth/no-auth-event" && errorCode !== "auth/internal-error") {
+                    this.handleAuthError(error)
+                } else {
+                    console.warn("[Auth] Redirect result skipped", error)
+                }
+            } finally {
+                this._setLoginBusy(false)
+            }
         }
     }
 

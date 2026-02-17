@@ -1,6 +1,6 @@
 export const firebaseConfig = {
     apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
-    authDomain: "smartnotes-f5733.firebaseapp.com",
+    authDomain: "smartnotes-f5733.web.app",
     projectId: "smartnotes-f5733",
     storageBucket: "smartnotes-f5733.firebasestorage.app",
     messagingSenderId: "523799066979",
@@ -70,7 +70,7 @@ export function initFirebase() {
     const auth = firebase.auth(app)
     const db = firebase.firestore(app)
 
-    db.settings(resolveFirestoreSettings())
+    db.settings({ ...resolveFirestoreSettings(), merge: true })
     try {
         db.enablePersistence({ synchronizeTabs: true }).catch((error) => {
             const code = String(error?.code || "")
