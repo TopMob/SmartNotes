@@ -50,7 +50,7 @@ export function createAuthManager({ auth }) {
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
                 "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
-                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser"),
+                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
             const text = map[code] || (serviceUnavailable
@@ -101,6 +101,24 @@ export function createAuthManager({ auth }) {
                 message: "Redirect auth requires session or local persistence"
             }
         },
+        _canRecoverWithRedirect(error) {
+            const errorCode = String(error?.code || "")
+            return errorCode === "auth/internal-error"
+                || errorCode === "auth/network-request-failed"
+                || errorCode === "auth/popup-blocked"
+        },
+        async _attemptRedirectRecovery(error, allowRedirectRecovery) {
+            if (!allowRedirectRecovery) return false
+            if (!this._canRecoverWithRedirect(error)) return false
+            const selectedPersistence = await this._preparePersistenceForMethod("redirect")
+            if (!selectedPersistence) return false
+            try {
+                await this._signInWithMethod("redirect")
+                return true
+            } catch (redirectError) {
+                throw redirectError
+            }
+        },
         async login() {
             if (!auth || typeof firebase === "undefined") {
                 console.error("[Auth] Firebase auth is unavailable: SDK not initialized")
@@ -111,38 +129,78 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(true)
 
-            const methods = planAuthMethods().methods
+            await setupAuthPersistence(auth)
+            const authMethodPlan = planAuthMethods()
+            const methods = authMethodPlan.methods
+            const allowRedirectRecovery = methods.includes("redirect")
+            const storageErrorCodes = new Set([
+                "auth/web-storage-unsupported",
+                "auth/operation-not-supported-in-this-environment"
+            ])
             let lastError = null
 
-            try {
-                for (const method of methods) {
-                    if (method === "redirect") {
-                        const selectedPersistence = await this._preparePersistenceForMethod("redirect")
-                        if (!selectedPersistence) {
-                            lastError = this._createRedirectPersistenceError()
-                            continue
-                        }
-                    }
+            for (const method of methods) {
+                const selectedPersistence = await this._preparePersistenceForMethod(method)
+                if (method === "redirect" && !selectedPersistence) {
+                    lastError = this._createRedirectPersistenceError()
+                    continue
+                }
 
-                    try {
-                        await this._signInWithMethod(method)
+                try {
+                    await this._signInWithMethod(method)
+                    this._setLoginBusy(false)
+                    return
+                } catch (error) {
+                    const errorCode = String(error?.code || "")
+                    lastError = error
+                    if (errorCode === "auth/popup-closed-by-user") {
+                        this._setLoginBusy(false)
+                        this.handleAuthError(error)
                         return
-                    } catch (error) {
-                        lastError = error
-                        const errorCode = String(error?.code || "")
-                        if (errorCode === "auth/popup-closed-by-user") {
-                            this.handleAuthError(error)
+                    }
+                    if (storageErrorCodes.has(errorCode)) {
+                        await this._setNoStoragePersistence()
+                    }
+                }
+            }
+
+            if (lastError) {
+                const errorCode = String(lastError?.code || "")
+                if (storageErrorCodes.has(errorCode)) {
+                    await this._setNoStoragePersistence()
+                    try {
+                        const selectedPersistence = await this._preparePersistenceForMethod("popup")
+                        if (!selectedPersistence) {
+                            this._setLoginBusy(false)
+                            this.handleAuthError(lastError)
                             return
                         }
+                        await this._signInWithMethod("popup")
+                        this._setLoginBusy(false)
+                        return
+                    } catch (retryError) {
+                        this._setLoginBusy(false)
+                        this.handleAuthError(retryError)
+                        return
                     }
                 }
-
-                if (lastError) {
-                    this.handleAuthError(lastError)
+                try {
+                    const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError, allowRedirectRecovery)
+                    if (redirectRecoveryStarted) {
+                        this._setLoginBusy(false)
+                        return
+                    }
+                } catch (redirectRecoveryError) {
+                    this._setLoginBusy(false)
+                    this.handleAuthError(redirectRecoveryError)
+                    return
                 }
-            } finally {
                 this._setLoginBusy(false)
+                this.handleAuthError(lastError)
+                return
             }
+
+            this._setLoginBusy(false)
         },
         _ensureLocalAuthManager() {
             if (state.localAuthManager) return state.localAuthManager
