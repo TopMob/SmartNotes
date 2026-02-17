@@ -153,7 +153,16 @@ export function createAuthManager({ auth }) {
                 message: "Redirect auth requires session or local persistence"
             }
         },
+        _isRedirectDomainAllowed() {
+            const currentHost = String(window?.location?.hostname || "").toLowerCase()
+            const authDomainHost = String(auth?.app?.options?.authDomain || "").toLowerCase()
+            if (!currentHost || !authDomainHost) return false
+            if (currentHost === authDomainHost) return true
+            if (currentHost.endsWith(".firebaseapp.com") || currentHost.endsWith(".web.app")) return true
+            return false
+        },
         _canRecoverWithRedirect(error) {
+            if (!this._isRedirectDomainAllowed()) return false
             const errorCode = String(error?.code || "")
             return errorCode === "auth/internal-error"
                 || errorCode === "auth/network-request-failed"

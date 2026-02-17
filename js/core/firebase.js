@@ -1,6 +1,6 @@
 export const firebaseConfig = {
     apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
-    authDomain: "smartnotes-f5733.web.app",
+    authDomain: "smartnotes-f5733.firebaseapp.com",
     projectId: "smartnotes-f5733",
     storageBucket: "smartnotes-f5733.firebasestorage.app",
     messagingSenderId: "523799066979",
@@ -32,12 +32,6 @@ function detectSafariBrowser() {
     const hasSafari = /Safari/i.test(userAgent)
     const hasExcludedBrowser = /Chrome|Chromium|CriOS|FxiOS|Edg|EdgiOS|OPR|Opera|SamsungBrowser/i.test(userAgent)
     return hasSafari && !hasExcludedBrowser
-}
-
-function isMobileDevice() {
-    if (typeof navigator === "undefined") return false
-    const userAgent = String(navigator.userAgent || "").toLowerCase()
-    return /android|iphone|ipad|ipod|mobile/.test(userAgent)
 }
 
 function resolveFirestoreSettings() {
@@ -72,7 +66,7 @@ export function initFirebase() {
 
     db.settings({ ...resolveFirestoreSettings(), merge: true })
     try {
-        db.enablePersistence({ synchronizeTabs: true }).catch((error) => {
+        db.enablePersistence().catch((error) => {
             const code = String(error?.code || "")
             if (code === "failed-precondition" || code === "unimplemented") return null
             return null
