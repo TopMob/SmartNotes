@@ -65,12 +65,16 @@ function loadGoogleIdentityScript(timeoutMilliseconds = 9000) {
     return googleIdentityScriptPromise
 }
 
-export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds = 12000 }) {
+export async function requestGoogleIdentityToken({
+    clientId,
+    scriptTimeoutMilliseconds = 9000,
+    promptTimeoutMilliseconds = 12000
+}) {
     if (!clientId) {
         throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
     }
 
-    await loadGoogleIdentityScript()
+    await loadGoogleIdentityScript(scriptTimeoutMilliseconds)
 
     if (typeof window === "undefined" || !window.google?.accounts?.id) {
         throw createError("auth/google-identity-unavailable", "Google identity API unavailable")
@@ -95,7 +99,7 @@ export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds
 
         const timeoutId = setTimeout(() => {
             finishWithReject(createError("auth/google-identity-timeout", "Google identity timeout"))
-        }, timeoutMilliseconds)
+        }, promptTimeoutMilliseconds)
 
         window.google.accounts.id.initialize({
             client_id: clientId,

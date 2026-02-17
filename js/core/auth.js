@@ -1,5 +1,6 @@
 import { setAuthPersistenceFromOrder, setupAuthPersistence } from "./authSafariFix.js"
 import { planAuthMethods } from "./authFlowPlanner.js"
+import { detectBrowserProfile } from "./authBrowserProfiles.js"
 import { createLocalAuthManager } from "./localAuth.js"
 import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
 
@@ -30,12 +31,39 @@ export function createAuthManager({ auth }) {
             const configuredClientId = auth?.app?.options?.clientId
             return String(configuredClientId || "").trim()
         },
+        _shouldUseGoogleIdentity(browserProfile) {
+            if (!browserProfile) return false
+            if (browserProfile.isMobile) return false
+            if (browserProfile.isSafari) return true
+            return false
+        },
+        _getGoogleIdentityTimeouts(browserProfile) {
+            if (browserProfile?.isSafari) {
+                return {
+                    scriptTimeoutMilliseconds: 9000,
+                    promptTimeoutMilliseconds: 12000
+                }
+            }
+            return {
+                scriptTimeoutMilliseconds: 2500,
+                promptTimeoutMilliseconds: 2500
+            }
+        },
         async _signInWithGoogleIdentity() {
             const googleClientId = this._getGoogleClientId()
             if (!googleClientId) {
                 throw { code: "auth/google-identity-client-id-missing", message: "Google client id is missing" }
             }
-            const token = await requestGoogleIdentityToken({ clientId: googleClientId })
+            const browserProfile = detectBrowserProfile()
+            if (!this._shouldUseGoogleIdentity(browserProfile)) {
+                throw { code: "auth/google-identity-skipped", message: "Google identity is skipped for this browser" }
+            }
+            const timeouts = this._getGoogleIdentityTimeouts(browserProfile)
+            const token = await requestGoogleIdentityToken({
+                clientId: googleClientId,
+                scriptTimeoutMilliseconds: timeouts.scriptTimeoutMilliseconds,
+                promptTimeoutMilliseconds: timeouts.promptTimeoutMilliseconds
+            })
             const credential = firebase.auth.GoogleAuthProvider.credential(token)
             await auth.signInWithCredential(credential)
         },
