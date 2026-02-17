@@ -10,6 +10,7 @@ export function createAuthManager({ auth }) {
         authReady: false,
         currentUser: null,
         authActionElements: [],
+        googleSignInPendingTimeoutId: null,
         localAuthManager: null
     }
 
@@ -50,6 +51,25 @@ export function createAuthManager({ auth }) {
             ].join(",")
             state.authActionElements = Array.from(document.querySelectorAll(selector))
         },
+        _setAuthFeedback(message, type = "info") {
+            const feedbackElement = document.getElementById("email-auth-feedback")
+            if (!feedbackElement) return
+            feedbackElement.textContent = String(message || "")
+            feedbackElement.classList.remove("is-error", "is-success", "is-info")
+            if (type) feedbackElement.classList.add(`is-${type}`)
+        },
+        _clearGoogleSignInPendingTimeout() {
+            if (!state.googleSignInPendingTimeoutId) return
+            clearTimeout(state.googleSignInPendingTimeoutId)
+            state.googleSignInPendingTimeoutId = null
+        },
+        _showGoogleSignInPendingFeedback() {
+            this._clearGoogleSignInPendingTimeout()
+            this._setAuthFeedback(this._t("auth_google_starting", "Открываем окно входа Google..."), "info")
+            state.googleSignInPendingTimeoutId = setTimeout(() => {
+                this._setAuthFeedback(this._t("auth_google_waiting", "Если окно не появилось, проверьте блокировку всплывающих окон"), "info")
+            }, 2200)
+        },
         _setLoginBusy(flag) {
             state.loginInFlight = !!flag
             this._collectAuthActionElements()
@@ -57,6 +77,10 @@ export function createAuthManager({ auth }) {
                 actionElement.disabled = !!flag
                 actionElement.setAttribute("aria-busy", flag ? "true" : "false")
                 actionElement.classList.toggle("is-loading", !!flag)
+            }
+            if (!flag) {
+                this._clearGoogleSignInPendingTimeout()
+                this._setAuthFeedback("")
             }
         },
         handleAuthError(err) {
@@ -155,6 +179,7 @@ export function createAuthManager({ auth }) {
             if (state.loginInFlight) return
 
             this._setLoginBusy(true)
+            this._showGoogleSignInPendingFeedback()
 
             await setupAuthPersistence(auth)
             try {
