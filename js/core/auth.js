@@ -98,7 +98,6 @@ export function createAuthManager({ auth }) {
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
                 "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
-                "auth/redirect-persistence-unavailable": this._t("auth_storage_failed", "Storage is blocked in this browser"),
                 "auth/google-identity-script-timeout": this._t("auth_network_failed", "No internet connection"),
                 "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
                 "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
@@ -145,12 +144,6 @@ export function createAuthManager({ auth }) {
             } catch (error) {
                 console.warn("[Auth] Failed to switch to NONE persistence", error)
                 return false
-            }
-        },
-        _createRedirectPersistenceError() {
-            return {
-                code: "auth/redirect-persistence-unavailable",
-                message: "Redirect auth requires session or local persistence"
             }
         },
         _isRedirectDomainAllowed() {
@@ -227,10 +220,7 @@ export function createAuthManager({ auth }) {
 
             for (const method of methods) {
                 const selectedPersistence = await this._preparePersistenceForMethod(method)
-                if (method === "redirect" && !selectedPersistence) {
-                    lastError = this._createRedirectPersistenceError()
-                    continue
-                }
+                if (!selectedPersistence) continue
 
                 try {
                     await this._signInWithMethod(method)

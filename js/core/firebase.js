@@ -66,11 +66,7 @@ export function initFirebase() {
 
     db.settings({ ...resolveFirestoreSettings(), merge: true })
     try {
-        db.enablePersistence().catch((error) => {
-            const code = String(error?.code || "")
-            if (code === "failed-precondition" || code === "unimplemented") return null
-            return null
-        })
+        db.enablePersistence().catch(() => null)
     } catch {}
 
 
