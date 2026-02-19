@@ -136,134 +136,40 @@ async function copyNoteTextById(noteId) {
     }
 }
 
-const AI_ANALYSIS_ENDPOINT = "https://backendfornmartnotes.vercel.app/api/analyze"
+const OLLAMA_MODEL = "llama3:8b"
 
-const normalizeAnalysisTags = (value) => {
-    if (!Array.isArray(value)) return []
-    return [...new Set(value
-        .map(item => String(item || "").trim())
-        .filter(Boolean))].slice(0, 8)
-}
-
-const normalizeAnalysisRelevance = (value) => {
-    const numericValue = Number(value)
-    if (!Number.isFinite(numericValue)) return 0
-    if (numericValue <= 5) return Math.max(0, Math.min(100, Math.round((numericValue / 5) * 100)))
-    return Math.max(0, Math.min(100, Math.round(numericValue)))
-}
-
-const buildFolderLookupByName = (folders) => {
-    const folderLookup = new Map()
-    folders.forEach(folder => {
-        const folderName = String(folder?.name || "").trim().toLowerCase()
-        if (folderName) folderLookup.set(folderName, folder)
+async function enqueueAiScanTask() {
+    const user = StateStore.read().user
+    const tasksCollection = DataPath.getTasksCollection()
+    if (!user || !tasksCollection) return
+    const uid = String(user.uid || "")
+    if (!uid) return
+    const existingTasks = await tasksCollection
+        .where("uid", "==", uid)
+        .where("status", "in", ["pending", "processing"])
+        .limit(1)
+        .get()
+    if (!existingTasks.empty) {
+        UI.showToast(UI.getText("analysis_task_exists", "AI scan already running"))
+        return
+    }
+    await tasksCollection.add({
+        uid,
+        status: "pending",
+        model: OLLAMA_MODEL,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        requestedAt: Date.now()
     })
-    return folderLookup
-}
-
-const resolveFolderIdFromAnalysis = (analysisResult, folders) => {
-    const candidateFolderId = String(analysisResult?.folderId || analysisResult?.folder_id || "").trim()
-    if (candidateFolderId && folders.some(folder => folder.id === candidateFolderId)) return candidateFolderId
-    const folderName = String(analysisResult?.folder || analysisResult?.folderName || analysisResult?.folder_name || analysisResult?.category || "").trim().toLowerCase()
-    if (!folderName) return null
-    const folderLookup = buildFolderLookupByName(folders)
-    return folderLookup.get(folderName)?.id || null
-}
-
-const extractAnalysisPayload = (responseBody) => {
-    if (!responseBody || typeof responseBody !== "object") return null
-    if (responseBody.result && typeof responseBody.result === "object") return responseBody.result
-    if (responseBody.data && typeof responseBody.data === "object") return responseBody.data
-    return responseBody
+    UI.showToast(UI.getText("analysis_queued", "AI analysis started"))
 }
 
 async function triggerNoteAnalysisById(noteId) {
-    const user = StateStore.read().user
-    const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note)) return
-    const ref = getNoteReference(note, user)
-    if (!ref) return
-
-    const plainTextContent = Utils.stripHtml(String(note.content || "")).trim()
-    const requestBody = {
-        text: [String(note.title || "").trim(), plainTextContent].filter(Boolean).join("\n\n")
-    }
-
-    UI.showToast(UI.getText("analysis_running", "AI analysis in progress"))
-
-    let analysisResult
+    void noteId
     try {
-        const response = await fetch(AI_ANALYSIS_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody)
-        })
-        if (!response.ok) {
-            throw new Error(`analysis_request_failed_${response.status}`)
-        }
-        const responseBody = await response.json()
-        analysisResult = extractAnalysisPayload(responseBody)
-        if (!analysisResult) throw new Error("analysis_payload_invalid")
+        await enqueueAiScanTask()
     } catch {
         UI.showToast(UI.getText("analysis_failed", "AI analysis failed"))
-        return
     }
-
-    const availableFolders = StateStore.read().folders.filter(folder => !folder.trashedAt && !folder.isHidden)
-    const resolvedFolderId = resolveFolderIdFromAnalysis(analysisResult, availableFolders)
-    const normalizedTags = normalizeAnalysisTags(analysisResult.aiTags || analysisResult.tags)
-    const analysisTimestamp = new Date().toISOString()
-    const nextFolderId = resolvedFolderId || note.folderId || null
-    const updatePayload = window.NoteHelpers.buildNoteUpdatePayload({
-        folderId: nextFolderId,
-        aiFolder: String(analysisResult.folder || analysisResult.folderName || analysisResult.category || ""),
-        aiTags: normalizedTags,
-        aiRelevance: normalizeAnalysisRelevance(analysisResult.aiRelevance || analysisResult.relevance || analysisResult.importance),
-        aiProcessed: true,
-        aiVersion: Number(note.aiVersion || 0) + 1,
-        aiLastAnalyzed: analysisTimestamp
-    })
-
-    try {
-        await ref.update(updatePayload)
-    } catch {
-        UI.showToast(UI.getText("analysis_save_failed", "Analysis completed but save failed"))
-        return
-    }
-
-    const nextNotes = StateStore.read().notes.map(item => item.id === noteId
-        ? {
-            ...item,
-            folderId: nextFolderId,
-            aiFolder: String(analysisResult.folder || analysisResult.folderName || analysisResult.category || ""),
-            aiTags: normalizedTags,
-            aiRelevance: normalizeAnalysisRelevance(analysisResult.aiRelevance || analysisResult.relevance || analysisResult.importance),
-            aiProcessed: true,
-            aiVersion: Number(item.aiVersion || 0) + 1,
-            aiLastAnalyzed: analysisTimestamp,
-            updatedAt: analysisTimestamp
-        }
-        : item)
-    StateActions.setNotes(nextNotes)
-
-    const currentNote = StateStore.read().currentNote
-    if (currentNote?.id === noteId) {
-        StateStore.update("currentNote", {
-            ...currentNote,
-            folderId: nextFolderId,
-            aiFolder: String(analysisResult.folder || analysisResult.folderName || analysisResult.category || ""),
-            aiTags: normalizedTags,
-            aiRelevance: normalizeAnalysisRelevance(analysisResult.aiRelevance || analysisResult.relevance || analysisResult.importance),
-            aiProcessed: true,
-            aiVersion: Number(currentNote.aiVersion || 0) + 1,
-            aiLastAnalyzed: analysisTimestamp,
-            updatedAt: analysisTimestamp
-        })
-    }
-
-    UI.showToast(UI.getText("analysis_completed", "AI analysis completed"))
-    UI.closeModal("note-actions-modal")
-    refreshCurrentList()
 }
 
 async function toggleFavorite(noteId) {
@@ -346,6 +252,7 @@ window.restoreNoteById = restoreNoteById
 window.scheduleReminder = scheduleReminder
 window.clearReminder = clearReminder
 window.copyNoteTextById = copyNoteTextById
+window.enqueueAiScanTask = enqueueAiScanTask
 window.triggerNoteAnalysisById = triggerNoteAnalysisById
 window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin

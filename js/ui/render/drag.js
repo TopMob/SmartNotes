@@ -27,7 +27,7 @@ Object.assign(UI, {
         if (view === "favorites") list = list.filter(n => !!n.isFavorite && !n.isArchived)
         if (view === "archive") list = list.filter(n => !!n.isArchived)
         if (view === "notes") list = list.filter(n => !n.isArchived)
-        if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
+        if (view === "folder") list = list.filter(n => n.folderId === activeFolderId)
         return list
     },
 

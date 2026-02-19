@@ -368,6 +368,10 @@ Object.assign(UI, {
             case "switch-account":
                 this.confirm("account", () => Auth.switchAccount())
                 break
+            case "run-ai-scan":
+                enqueueAiScanTask()
+                this.toggleUserMenu(false)
+                break
             case "logout":
                 this.confirm("exit", () => Auth.logout())
                 break

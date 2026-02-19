@@ -51,6 +51,10 @@
         getUserSharedCollection(user, sharedCollectionName) {
             const rootReference = getUserRootReference(user)
             return rootReference ? rootReference.collection(sharedCollectionName) : null
+        },
+        getTasksCollection() {
+            if (!db) return null
+            return db.collection("tasks")
         }
     }
 })()
