@@ -128,6 +128,14 @@ const NoteIO = {
             reminderAt: safe.reminderAt || safe.futureAt || null,
             trashedAt: safe.trashedAt || null,
             contentType: safe.contentType ? String(safe.contentType) : "text",
+            aiFolder: typeof safe.aiFolder === "string" ? safe.aiFolder : "",
+            aiTags: Array.isArray(safe.aiTags)
+                ? [...new Set(safe.aiTags.filter(value => value && typeof value === "string").map(value => value.trim()))]
+                : [],
+            aiRelevance: Number.isFinite(Number(safe.aiRelevance)) ? Math.max(0, Math.min(100, Number(safe.aiRelevance))) : 0,
+            aiProcessed: typeof safe.aiProcessed === "boolean" ? safe.aiProcessed : false,
+            aiVersion: Number.isFinite(Number(safe.aiVersion)) ? Number(safe.aiVersion) : 0,
+            aiLastAnalyzed: safe.aiLastAnalyzed || null,
             order: typeof safe.order === "number" ? safe.order : fallbackOrder,
             createdAt: normalizedCreatedAt,
             updatedAt: normalizedUpdatedAt,
