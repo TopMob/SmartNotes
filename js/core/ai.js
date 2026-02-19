@@ -1,7 +1,7 @@
 export async function analyzeNote(text) {
     try {
         const response = await fetch(
-            "https://YOUR-VERCEL-BACKEND.vercel.app/api/analyze",
+            "https://backendfornmartnotes.vercel.app/api/analyze",
             {
                 method: "POST",
                 headers: {
