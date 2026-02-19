@@ -118,7 +118,7 @@ function filterAndRender(query) {
 
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
-    else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
+    else if (view === "folder") list = list.filter(n => n.folderId === activeFolderId)
     else if (view !== "locked" && view !== "reminders" && view !== "trash") list = list.filter(n => !n.isArchived)
 
     if (view !== "folder") {

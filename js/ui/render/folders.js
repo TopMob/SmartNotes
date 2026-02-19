@@ -201,7 +201,7 @@ Object.assign(UI, {
         titleElement.className = "folder-title"
         window.DomSecurity.setText(titleElement, window.DomSecurity.sanitizeInputValue(folder?.name))
 
-        const noteCount = notes.filter(note => note.folderId === folder.id && !note.isArchived && !note.trashedAt).length
+        const noteCount = notes.filter(note => note.folderId === folder.id && !note.trashedAt).length
         const label = noteCount === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
 
         const metaElement = document.createElement("div")
