@@ -139,7 +139,7 @@ function filterAndRender(query) {
         try {
             const scored = list.map(n => ({
                 n,
-                score: SmartSearch.score(q, n.title, n.content, n.tags, n.aiTags)
+                score: SmartSearch.score(q, n.title, n.content, n.tags, n.aiTags, n.hiddenTags)
             })).filter(item => item.score >= 0.35)
             scores = new Map(scored.map(item => [item.n.id, item.score]))
             list = scored.map(item => item.n)
