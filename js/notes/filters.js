@@ -46,8 +46,10 @@ function sortVisibleNotes(list, sortMode, scores) {
             if (!!b.isFavorite !== !!a.isFavorite) return a.isFavorite ? -1 : 1
             return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
         }
-        if (sortMode === "relevance" && scores) {
-            return (scores.get(b.id) || 0) - (scores.get(a.id) || 0)
+        if (sortMode === "relevance") {
+            const firstRelevance = scores ? (scores.get(a.id) || 0) : (Number(a.aiRelevance) || 0)
+            const secondRelevance = scores ? (scores.get(b.id) || 0) : (Number(b.aiRelevance) || 0)
+            return secondRelevance - firstRelevance
         }
         return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
     }
@@ -151,8 +153,8 @@ function filterAndRender(query) {
         const orderKey = view === "folder" ? "folderOrder" : "order"
         list = normalizeVisibleNotes(list, orderKey)
     } else {
-        const mode = sortMode === "relevance" && !scores ? "updated" : sortMode
-        list = sortVisibleNotes(list, mode, scores)
+        const relevanceScores = sortMode === "relevance" && !scores ? null : scores
+        list = sortVisibleNotes(list, sortMode, relevanceScores)
     }
 
     if (view === "folders") {

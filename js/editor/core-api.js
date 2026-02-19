@@ -7,6 +7,7 @@ import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
+import { analyzeNote } from "../core/ai.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -119,6 +120,29 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+    const findFolderIdByName = (folderName, folders) => {
+        if (typeof folderName !== "string" || !folderName.trim() || !Array.isArray(folders)) return null
+        const normalizedFolderName = folderName.trim().toLowerCase()
+        const matchedFolder = folders.find(folder => String(folder?.name || "").trim().toLowerCase() === normalizedFolderName)
+        return matchedFolder?.id || null
+    }
+
+    const saveAiMetadataForNote = async (noteReference, noteContent, folders, currentFolderId) => {
+        if (!noteReference || typeof noteContent !== "string" || !noteContent.trim()) return null
+        const aiAnalysis = await analyzeNote(noteContent)
+        if (!aiAnalysis) return null
+        const matchedFolderId = findFolderIdByName(aiAnalysis.folder, folders)
+        const nextFolderId = matchedFolderId || currentFolderId || null
+        const aiUpdatePayload = {
+            aiFolder: aiAnalysis.folder,
+            aiTags: aiAnalysis.tags,
+            aiRelevance: aiAnalysis.relevance,
+            folderId: nextFolderId
+        }
+        await noteReference.update(aiUpdatePayload)
+        return aiUpdatePayload
+    }
+
     const noteHasEditableContent = (note) => {
         const titleText = String(note?.title || "").trim()
         const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
@@ -193,6 +217,14 @@ export const EditorAPI = (() => {
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const folders = StateStore.read().folders || []
+            const aiUpdatePayload = await saveAiMetadataForNote(ref, note.content || "", folders, note.folderId || null)
+            if (aiUpdatePayload) {
+                StateStore.update("currentNote", {
+                    ...StateStore.read().currentNote,
+                    ...aiUpdatePayload
+                })
+            }
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
             SaveStateService?.markSaved?.()
