@@ -7,6 +7,7 @@ import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
+import { analyzeNote } from "../core/ai.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -119,6 +120,17 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+    const saveAiMetadataForNote = async (noteReference, noteContent) => {
+        if (!noteReference || typeof noteContent !== "string" || !noteContent.trim()) return
+        const aiAnalysis = await analyzeNote(noteContent)
+        if (!aiAnalysis) return
+        await noteReference.update({
+            aiFolder: aiAnalysis.folder,
+            aiTags: aiAnalysis.tags,
+            aiImportance: aiAnalysis.importance
+        })
+    }
+
     const noteHasEditableContent = (note) => {
         const titleText = String(note?.title || "").trim()
         const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
@@ -193,6 +205,7 @@ export const EditorAPI = (() => {
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            await saveAiMetadataForNote(ref, note.content || "")
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
             SaveStateService?.markSaved?.()
