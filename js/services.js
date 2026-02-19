@@ -1,3 +1,22 @@
+const RUSSIAN_TAG_SYNONYM_MAP = new Map([
+    ["важное", ["important", "priority", "favorite", "starred", "urgent", "critical"]],
+    ["архив", ["archive", "archived", "history", "old"]],
+    ["код", ["code", "coding", "development", "programming", "snippet", "javascript", "typescript", "python", "java", "html", "css", "git"]],
+    ["учеба", ["study", "education", "learning", "school", "university", "lesson", "course"]],
+    ["проект", ["project", "work", "task", "job", "planning", "product"]],
+    ["идея", ["idea", "concept", "thought", "brainstorm", "insight"]]
+])
+
+const normalizeAiTagToRussian = (value) => {
+    const normalizedValue = String(value || "").trim().toLowerCase()
+    if (!normalizedValue) return ""
+    for (const [russianTag, synonyms] of RUSSIAN_TAG_SYNONYM_MAP.entries()) {
+        if (normalizedValue === russianTag) return russianTag
+        if (synonyms.includes(normalizedValue)) return russianTag
+    }
+    return normalizedValue
+}
+
 const buildPageDrawingsRevision = (pageDrawings) => {
     const drawings = Array.isArray(pageDrawings) ? pageDrawings : []
     let hash = 2166136261
@@ -130,7 +149,10 @@ const NoteIO = {
             contentType: safe.contentType ? String(safe.contentType) : "text",
             aiFolder: typeof safe.aiFolder === "string" ? safe.aiFolder : "",
             aiTags: Array.isArray(safe.aiTags)
-                ? [...new Set(safe.aiTags.filter(value => value && typeof value === "string").map(value => value.trim()))]
+                ? [...new Set(safe.aiTags
+                    .filter(value => value && typeof value === "string")
+                    .map(value => normalizeAiTagToRussian(value))
+                    .filter(Boolean))]
                 : [],
             aiRelevance: Number.isFinite(Number(safe.aiRelevance)) ? Math.max(0, Math.min(100, Number(safe.aiRelevance))) : 0,
             aiProcessed: typeof safe.aiProcessed === "boolean" ? safe.aiProcessed : false,
@@ -214,6 +236,11 @@ const SaveStateService = {
 
 const SmartSearch = {
     stop: new Set(["the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it","и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"]),
+    keyboardMapEnglishToRussian: new Map([
+        ["q","й"],["w","ц"],["e","у"],["r","к"],["t","е"],["y","н"],["u","г"],["i","ш"],["o","щ"],["p","з"],["[","х"],["]","ъ"],
+        ["a","ф"],["s","ы"],["d","в"],["f","а"],["g","п"],["h","р"],["j","о"],["k","л"],["l","д"],[";","ж"],["'","э"],
+        ["z","я"],["x","ч"],["c","с"],["v","м"],["b","и"],["n","т"],["m","ь"],[",","б"],[".","ю"],["`","ё"]
+    ]),
     synonyms: new Map([
         ["важное", ["избранное", "favorite", "star", "important", "!"]],
         ["архив", ["archive", "скрыто", "старое", "old"]],
@@ -223,12 +250,61 @@ const SmartSearch = {
         ["идея", ["idea", "мысль", "concept", "plan"]]
     ]),
     
+    keyboardMapRussianToEnglish: null,
+
+    buildKeyboardMapRussianToEnglish() {
+        if (this.keyboardMapRussianToEnglish) return this.keyboardMapRussianToEnglish
+        const reverseMap = new Map()
+        this.keyboardMapEnglishToRussian.forEach((russianChar, englishChar) => {
+            reverseMap.set(russianChar, englishChar)
+        })
+        this.keyboardMapRussianToEnglish = reverseMap
+        return reverseMap
+    },
+
+    convertKeyboardLayout(value, targetLayout) {
+        const sourceText = String(value || "")
+        if (!sourceText) return ""
+        const map = targetLayout === "russian"
+            ? this.keyboardMapEnglishToRussian
+            : this.buildKeyboardMapRussianToEnglish()
+        return Array.from(sourceText).map(character => {
+            const lowerChar = character.toLowerCase()
+            const convertedChar = map.get(lowerChar)
+            if (!convertedChar) return character
+            return character === lowerChar ? convertedChar : convertedChar.toUpperCase()
+        }).join("")
+    },
+
+    expandTokenVariants(token) {
+        const normalizedToken = String(token || "").trim().toLowerCase()
+        if (!normalizedToken) return []
+        const tokenVariants = new Set([normalizedToken])
+        tokenVariants.add(this.convertKeyboardLayout(normalizedToken, "russian").toLowerCase())
+        tokenVariants.add(this.convertKeyboardLayout(normalizedToken, "english").toLowerCase())
+        for (const [key, list] of this.synonyms) {
+            if (normalizedToken === key || list.includes(normalizedToken)) {
+                tokenVariants.add(key)
+                list.forEach(item => tokenVariants.add(item))
+            }
+        }
+        return [...tokenVariants].filter(Boolean)
+    },
+
     tokenize(text) {
         if (!text) return []
-        return String(text)
-            .toLowerCase()
-            .split(/[\p{P}\p{S}\s]+/u)
-            .filter(w => w && !this.stop.has(w) && w.length > 1)
+        const loweredText = String(text).toLowerCase()
+        const russianLayoutText = this.convertKeyboardLayout(loweredText, "russian").toLowerCase()
+        const englishLayoutText = this.convertKeyboardLayout(loweredText, "english").toLowerCase()
+        const sourceVariants = [loweredText, russianLayoutText, englishLayoutText]
+        const tokenSet = new Set()
+        sourceVariants.forEach(source => {
+            source
+                .split(/[\p{P}\p{S}\s]+/u)
+                .filter(word => word && !this.stop.has(word) && word.length > 1)
+                .forEach(word => tokenSet.add(word))
+        })
+        return [...tokenSet]
     },
 
     levenshtein(s, t) {
@@ -271,7 +347,7 @@ const SmartSearch = {
         return 0
     },
 
-    score(query, title, content, tags) {
+    score(query, title, content, tags, aiTags) {
         if (!query) return 0
         const qTokens = this.tokenize(query)
         if (!qTokens.length) return 0
@@ -279,23 +355,18 @@ const SmartSearch = {
         const tTokens = this.tokenize(title)
         const cTokens = this.tokenize(Utils.stripHtml(content))
         const tagTokens = Array.isArray(tags) ? tags.flatMap(t => this.tokenize(String(t))) : []
+        const aiTagTokens = Array.isArray(aiTags) ? aiTags.flatMap(tag => this.tokenize(String(tag))) : []
 
         let totalScore = 0
 
         for (const qw of qTokens) {
             let maxWordScore = 0
             
-            const variants = [qw]
-            for (const [key, list] of this.synonyms) {
-                if (qw === key || list.includes(qw)) {
-                    if (!variants.includes(key)) variants.push(key)
-                    list.forEach(s => { if (!variants.includes(s)) variants.push(s) })
-                }
-            }
+            const variants = this.expandTokenVariants(qw)
 
             for (const v of variants) {
                 for (const w of tTokens) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 2.5)
-                for (const w of tagTokens) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 2.0)
+                for (const w of [...tagTokens, ...aiTagTokens]) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 2.0)
                 for (const w of cTokens) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 1.0)
                 if (maxWordScore >= 1.0) break
             }
