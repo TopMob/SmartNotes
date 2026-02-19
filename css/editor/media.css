@@ -322,3 +322,32 @@
     position: relative;
     overflow: hidden;
 }
+
+@media (max-width: 760px) {
+    .editor-scroll-area {
+        padding-bottom: 0;
+    }
+
+    .note-content {
+        min-height: 32vh;
+        max-height: none;
+    }
+
+    .editor-bottom-panel {
+        position: sticky;
+        bottom: 0;
+        margin-left: calc(var(--editor-padding) * -1);
+        margin-right: calc(var(--editor-padding) * -1);
+        padding-left: var(--editor-padding);
+        padding-right: var(--editor-padding);
+        padding-bottom: calc(12px + var(--safe-bottom));
+    }
+
+    .editor-bottom-actions {
+        justify-content: stretch;
+    }
+
+    .editor-bottom-actions .btn-primary {
+        width: 100%;
+    }
+}

@@ -60,7 +60,7 @@
     padding: var(--editor-padding);
     display: flex;
     flex-direction: column;
-    padding-bottom: calc(var(--editor-padding) * 3);
+    gap: 12px;
 }
 
 #note-title {
@@ -75,7 +75,7 @@
 }
 
 .note-content {
-    min-height: 46vh;
+    min-height: min(46vh, 360px);
     height: auto;
     padding: 10px;
     border-radius: var(--radius-lg);
@@ -310,6 +310,17 @@
     pointer-events: none;
 }
 
+.editor-bottom-panel {
+    position: sticky;
+    bottom: 0;
+    z-index: 15;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(var(--blur-strength));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+    padding-bottom: calc(10px + var(--safe-bottom));
+}
+
 .tags-row {
     margin-top: 14px;
     display: grid;
@@ -370,7 +381,7 @@
 }
 
 .editor-bottom-actions {
-    margin-top: 14px;
+    margin-top: 10px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
