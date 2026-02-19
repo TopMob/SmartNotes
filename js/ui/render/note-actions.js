@@ -192,6 +192,9 @@ Object.assign(UI, {
                 <button type="button" class="btn-secondary" data-action="export-note-pdf" data-lang="export_pdf">
                     ${dict.export_pdf || "Export PDF"}
                 </button>
+                <button type="button" class="btn-secondary" data-action="note-trigger-analysis" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.note_trigger_analysis || "Run AI analysis"}
+                </button>
             </div>
         `
     },

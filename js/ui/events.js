@@ -437,6 +437,9 @@ Object.assign(UI, {
             case "note-copy-text":
                 copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
                 break
+            case "note-trigger-analysis":
+                triggerNoteAnalysisById(decodeURIComponent(el.dataset.noteId || ""))
+                break
             case "note-reminder-set":
                 scheduleReminder(decodeURIComponent(el.dataset.noteId || ""))
                 break

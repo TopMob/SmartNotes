@@ -136,6 +136,28 @@ async function copyNoteTextById(noteId) {
     }
 }
 
+async function triggerNoteAnalysisById(noteId) {
+    const user = StateStore.read().user
+    const note = getNoteById(noteId)
+    if (!db || !user || !note || !ensureManageAccess(note)) return
+    const ref = getNoteReference(note, user)
+    if (!ref) return
+    const updatePayload = window.NoteHelpers.buildNoteUpdatePayload({ aiProcessed: false, aiLastAnalyzed: null })
+    await ref.update(updatePayload)
+    const localUpdatedAt = new Date().toISOString()
+    const nextNotes = StateStore.read().notes.map(item => item.id === noteId
+        ? { ...item, aiProcessed: false, aiLastAnalyzed: null, updatedAt: localUpdatedAt }
+        : item)
+    StateActions.setNotes(nextNotes)
+    const currentNote = StateStore.read().currentNote
+    if (currentNote?.id === noteId) {
+        StateStore.update("currentNote", { ...currentNote, aiProcessed: false, aiLastAnalyzed: null, updatedAt: localUpdatedAt })
+    }
+    UI.showToast(UI.getText("analysis_queued", "AI analysis started"))
+    UI.closeModal("note-actions-modal")
+    refreshCurrentList()
+}
+
 async function toggleFavorite(noteId) {
     const note = getNoteById(noteId)
     if (!note || isHiddenLocked(note)) return
@@ -216,6 +238,7 @@ window.restoreNoteById = restoreNoteById
 window.scheduleReminder = scheduleReminder
 window.clearReminder = clearReminder
 window.copyNoteTextById = copyNoteTextById
+window.triggerNoteAnalysisById = triggerNoteAnalysisById
 window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive
