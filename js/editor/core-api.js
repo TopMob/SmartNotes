@@ -707,7 +707,6 @@ const addPage = () => {
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
         mediaHandlers.deselectMedia()
-        stopRecording()
         state.pageIndex = 0
         state.titleTouched = false
         state.autoSaveSnapshot = null

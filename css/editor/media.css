@@ -320,7 +320,7 @@
 
 .note-content-wrapper {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 @media (max-width: 760px) {
