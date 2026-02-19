@@ -126,7 +126,7 @@ export const EditorAPI = (() => {
         if (!aiAnalysis) return
         await noteReference.update({
             aiFolder: aiAnalysis.folder,
-            aiTags: aiAnalysis.tags,
+            tags: aiAnalysis.tags,
             aiImportance: aiAnalysis.importance
         })
     }
