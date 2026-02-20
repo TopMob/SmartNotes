@@ -46,8 +46,15 @@ function sortVisibleNotes(list, sortMode, scores) {
             if (!!b.isFavorite !== !!a.isFavorite) return a.isFavorite ? -1 : 1
             return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
         }
-        if (sortMode === "relevance" && scores) {
-            return (scores.get(b.id) || 0) - (scores.get(a.id) || 0)
+        if (sortMode === "relevance") {
+            const firstRelevance = scores
+                ? (scores.get(a.id) || 0)
+                : (Number.isFinite(Number(a.relevance)) ? Number(a.relevance) : (Number(a.aiRelevance) || 0))
+            const secondRelevance = scores
+                ? (scores.get(b.id) || 0)
+                : (Number.isFinite(Number(b.relevance)) ? Number(b.relevance) : (Number(b.aiRelevance) || 0))
+            if (secondRelevance !== firstRelevance) return secondRelevance - firstRelevance
+            return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
         }
         return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
     }
@@ -116,7 +123,7 @@ function filterAndRender(query) {
 
     if (view === "favorites") list = list.filter(n => n.isFavorite && !n.isArchived)
     else if (view === "archive") list = list.filter(n => n.isArchived)
-    else if (view === "folder") list = list.filter(n => !n.isArchived && n.folderId === activeFolderId)
+    else if (view === "folder") list = list.filter(n => n.folderId === activeFolderId)
     else if (view !== "locked" && view !== "reminders" && view !== "trash") list = list.filter(n => !n.isArchived)
 
     if (view !== "folder") {
@@ -137,7 +144,7 @@ function filterAndRender(query) {
         try {
             const scored = list.map(n => ({
                 n,
-                score: SmartSearch.score(q, n.title, n.content, n.tags)
+                score: SmartSearch.score(q, n.title, n.content, n.tags, n.aiTags, n.hiddenTags)
             })).filter(item => item.score >= 0.35)
             scores = new Map(scored.map(item => [item.n.id, item.score]))
             list = scored.map(item => item.n)
@@ -146,13 +153,14 @@ function filterAndRender(query) {
         }
     }
 
-    const sortMode = notesFilter.sort || "updated"
+    const configuredSortMode = notesFilter.sort || "updated"
+    const sortMode = q && configuredSortMode !== "manual" ? "relevance" : configuredSortMode
     if (sortMode === "manual") {
         const orderKey = view === "folder" ? "folderOrder" : "order"
         list = normalizeVisibleNotes(list, orderKey)
     } else {
-        const mode = sortMode === "relevance" && !scores ? "updated" : sortMode
-        list = sortVisibleNotes(list, mode, scores)
+        const relevanceScores = sortMode === "relevance" ? scores : null
+        list = sortVisibleNotes(list, sortMode, relevanceScores)
     }
 
     if (view === "folders") {

@@ -1,3 +1,22 @@
+const RUSSIAN_TAG_SYNONYM_MAP = new Map([
+    ["важное", ["important", "priority", "favorite", "starred", "urgent", "critical"]],
+    ["архив", ["archive", "archived", "history", "old"]],
+    ["код", ["code", "coding", "development", "programming", "snippet", "javascript", "typescript", "python", "java", "html", "css", "git"]],
+    ["учеба", ["study", "education", "learning", "school", "university", "lesson", "course"]],
+    ["проект", ["project", "work", "task", "job", "planning", "product"]],
+    ["идея", ["idea", "concept", "thought", "brainstorm", "insight"]]
+])
+
+const normalizeAiTagToRussian = (value) => {
+    const normalizedValue = String(value || "").trim().toLowerCase()
+    if (!normalizedValue) return ""
+    for (const [russianTag, synonyms] of RUSSIAN_TAG_SYNONYM_MAP.entries()) {
+        if (normalizedValue === russianTag) return russianTag
+        if (synonyms.includes(normalizedValue)) return russianTag
+    }
+    return normalizedValue
+}
+
 const buildPageDrawingsRevision = (pageDrawings) => {
     const drawings = Array.isArray(pageDrawings) ? pageDrawings : []
     let hash = 2166136261
@@ -66,8 +85,11 @@ const NoteIO = {
 
     normalizeNote(raw) {
         const safe = raw && typeof raw === "object" ? raw : {}
-        const tags = Array.isArray(safe.tags) 
-            ? [...new Set(safe.tags.filter(x => x && typeof x === "string").map(x => x.trim()))] 
+        const tags = Array.isArray(safe.tags)
+            ? [...new Set(safe.tags.filter(value => value && typeof value === "string").map(value => value.trim()))]
+            : []
+        const hiddenTags = Array.isArray(safe.hiddenTags)
+            ? [...new Set(safe.hiddenTags.filter(value => value && typeof value === "string").map(value => value.trim()))]
             : []
         const rawPageDrawings = Array.isArray(safe.pageDrawings) ? safe.pageDrawings : []
         const pageDrawings = rawPageDrawings.map(value => typeof value === "string" ? value : "")
@@ -128,6 +150,21 @@ const NoteIO = {
             reminderAt: safe.reminderAt || safe.futureAt || null,
             trashedAt: safe.trashedAt || null,
             contentType: safe.contentType ? String(safe.contentType) : "text",
+            aiFolder: typeof safe.aiFolder === "string" ? safe.aiFolder : "",
+            hiddenTags,
+            aiTags: Array.isArray(safe.aiTags)
+                ? [...new Set(safe.aiTags
+                    .filter(value => value && typeof value === "string")
+                    .map(value => normalizeAiTagToRussian(value))
+                    .filter(Boolean))]
+                : [],
+            relevance: Number.isFinite(Number(safe.relevance)) ? Math.max(0, Math.min(100, Number(safe.relevance))) : 0,
+            aiRelevance: Number.isFinite(Number(safe.aiRelevance))
+                ? Math.max(0, Math.min(100, Number(safe.aiRelevance)))
+                : (Number.isFinite(Number(safe.relevance)) ? Math.max(0, Math.min(100, Number(safe.relevance))) : 0),
+            aiProcessed: typeof safe.aiProcessed === "boolean" ? safe.aiProcessed : false,
+            aiVersion: Number.isFinite(Number(safe.aiVersion)) ? Number(safe.aiVersion) : 0,
+            aiLastAnalyzed: safe.aiLastAnalyzed || null,
             order: typeof safe.order === "number" ? safe.order : fallbackOrder,
             createdAt: normalizedCreatedAt,
             updatedAt: normalizedUpdatedAt,
@@ -205,121 +242,281 @@ const SaveStateService = {
 }
 
 const SmartSearch = {
-    stop: new Set(["the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it","и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"]),
-    synonyms: new Map([
-        ["важное", ["избранное", "favorite", "star", "important", "!"]],
-        ["архив", ["archive", "скрыто", "старое", "old"]],
-        ["код", ["code", "snippet", "js", "css", "html", "dev", "git"]],
-        ["учеба", ["учёба", "универ", "школа", "study", "university", "lesson"]],
-        ["проект", ["project", "dev", "разработка", "work", "job"]],
-        ["идея", ["idea", "мысль", "concept", "plan"]]
+    stop: new Set([
+        "the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it",
+        "и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"
     ]),
-    
+    keyboardMapEnglishToRussian: new Map([
+        ["q","й"],["w","ц"],["e","у"],["r","к"],["t","е"],["y","н"],["u","г"],["i","ш"],["o","щ"],["p","з"],["[","х"],["]","ъ"],
+        ["a","ф"],["s","ы"],["d","в"],["f","а"],["g","п"],["h","р"],["j","о"],["k","л"],["l","д"],[";","ж"],["'","э"],
+        ["z","я"],["x","ч"],["c","с"],["v","м"],["b","и"],["n","т"],["m","ь"],[",","б"],[".","ю"],["`","ё"]
+    ]),
+    russianToEnglishTranslitMap: new Map([
+        ["щ","shch"],["ш","sh"],["ч","ch"],["ц","ts"],["ю","yu"],["я","ya"],["ё","yo"],["ж","zh"],["х","kh"],
+        ["а","a"],["б","b"],["в","v"],["г","g"],["д","d"],["е","e"],["з","z"],["и","i"],["й","y"],["к","k"],
+        ["л","l"],["м","m"],["н","n"],["о","o"],["п","p"],["р","r"],["с","s"],["т","t"],["у","u"],["ф","f"],
+        ["ъ",""] ,["ы","y"],["ь",""] ,["э","e"]
+    ]),
+    synonyms: [
+        ["важное", "избранное", "favorite", "star", "important", "приоритет", "priority"],
+        ["архив", "archive", "скрыто", "старое", "old", "archived"],
+        ["код", "code", "snippet", "js", "css", "html", "dev", "git", "разработка"],
+        ["учеба", "учёба", "универ", "школа", "study", "university", "lesson", "education"],
+        ["проект", "project", "dev", "разработка", "work", "job", "task"],
+        ["идея", "idea", "мысль", "concept", "plan"],
+        ["мессенджер", "чат", "chat", "messages", "сообщения", "коммуникации"],
+        ["вкладки", "табы", "tabs", "tab", "preset", "пресеты", "presets"]
+    ],
+
+    keyboardMapRussianToEnglish: null,
+    synonymIndex: null,
+
+    buildKeyboardMapRussianToEnglish() {
+        if (this.keyboardMapRussianToEnglish) return this.keyboardMapRussianToEnglish
+        const reverseMap = new Map()
+        this.keyboardMapEnglishToRussian.forEach((russianChar, englishChar) => {
+            reverseMap.set(russianChar, englishChar)
+        })
+        this.keyboardMapRussianToEnglish = reverseMap
+        return reverseMap
+    },
+
+    buildSynonymIndex() {
+        if (this.synonymIndex) return this.synonymIndex
+        const index = new Map()
+        this.synonyms.forEach(group => {
+            const normalizedGroup = group.map(value => this.normalizeToken(value)).filter(Boolean)
+            normalizedGroup.forEach(word => {
+                if (!index.has(word)) index.set(word, new Set())
+                normalizedGroup.forEach(groupWord => index.get(word).add(groupWord))
+            })
+        })
+        this.synonymIndex = index
+        return index
+    },
+
+    normalizeToken(value) {
+        return String(value || "").trim().toLowerCase().replace(/ё/g, "е")
+    },
+
+    convertKeyboardLayout(value, targetLayout) {
+        const sourceText = String(value || "")
+        if (!sourceText) return ""
+        const map = targetLayout === "russian" ? this.keyboardMapEnglishToRussian : this.buildKeyboardMapRussianToEnglish()
+        return Array.from(sourceText).map(character => {
+            const lowerChar = character.toLowerCase()
+            const convertedChar = map.get(lowerChar)
+            if (!convertedChar) return character
+            return character === lowerChar ? convertedChar : convertedChar.toUpperCase()
+        }).join("")
+    },
+
+    transliterateRussianToEnglish(value) {
+        return Array.from(String(value || "")).map(character => {
+            const lowerChar = character.toLowerCase()
+            const convertedChar = this.russianToEnglishTranslitMap.get(lowerChar)
+            if (convertedChar === undefined) return character
+            return character === lowerChar ? convertedChar : convertedChar.charAt(0).toUpperCase() + convertedChar.slice(1)
+        }).join("")
+    },
+
+    simplifyEnglishPhonetics(value) {
+        return String(value || "")
+            .replace(/shch/g, "sch")
+            .replace(/yo/g, "io")
+            .replace(/yu/g, "iu")
+            .replace(/ya/g, "ia")
+            .replace(/zh/g, "j")
+            .replace(/kh/g, "h")
+    },
+
+    stemToken(token) {
+        const normalizedToken = this.normalizeToken(token)
+        if (normalizedToken.length < 4) return normalizedToken
+        const russianSuffixes = ["иями","ями","ами","иях","его","ого","ему","ому","ыми","ими","ий","ый","ой","ая","яя","ое","ее","ов","ев","ие","ые","ую","юю","ам","ям","ах","ях","ом","ем","а","я","ы","и","у","ю","е","о"]
+        const englishSuffixes = ["ingly","edly","ment","ness","tion","ions","ing","ers","ies","ied","ed","er","es","s"]
+        const suffixes = /[а-яё]/i.test(normalizedToken) ? russianSuffixes : englishSuffixes
+        for (const suffix of suffixes) {
+            if (normalizedToken.endsWith(suffix) && normalizedToken.length - suffix.length >= 3) {
+                return normalizedToken.slice(0, normalizedToken.length - suffix.length)
+            }
+        }
+        return normalizedToken
+    },
+
+    expandTokenVariants(token) {
+        const normalizedToken = this.normalizeToken(token)
+        if (!normalizedToken) return []
+        const tokenVariants = new Set([normalizedToken])
+        const russianLayoutVariant = this.normalizeToken(this.convertKeyboardLayout(normalizedToken, "russian"))
+        const englishLayoutVariant = this.normalizeToken(this.convertKeyboardLayout(normalizedToken, "english"))
+        const transliteratedVariant = this.normalizeToken(this.transliterateRussianToEnglish(normalizedToken))
+        const simplifiedTransliteration = this.normalizeToken(this.simplifyEnglishPhonetics(transliteratedVariant))
+        const normalizedStem = this.stemToken(normalizedToken)
+        tokenVariants.add(russianLayoutVariant)
+        tokenVariants.add(englishLayoutVariant)
+        tokenVariants.add(transliteratedVariant)
+        tokenVariants.add(simplifiedTransliteration)
+        tokenVariants.add(normalizedStem)
+        tokenVariants.add(this.stemToken(russianLayoutVariant))
+        tokenVariants.add(this.stemToken(englishLayoutVariant))
+
+        const synonymIndex = this.buildSynonymIndex()
+        const lookupVariants = [normalizedToken, russianLayoutVariant, englishLayoutVariant, normalizedStem]
+        lookupVariants.forEach(lookupVariant => {
+            if (!lookupVariant) return
+            const synonymSet = synonymIndex.get(lookupVariant)
+            if (!synonymSet) return
+            synonymSet.forEach(value => tokenVariants.add(value))
+        })
+
+        return [...tokenVariants].filter(Boolean)
+    },
+
     tokenize(text) {
         if (!text) return []
-        return String(text)
-            .toLowerCase()
-            .split(/[\p{P}\p{S}\s]+/u)
-            .filter(w => w && !this.stop.has(w) && w.length > 1)
+        const normalizedText = this.normalizeToken(text)
+        const russianLayoutText = this.normalizeToken(this.convertKeyboardLayout(normalizedText, "russian"))
+        const englishLayoutText = this.normalizeToken(this.convertKeyboardLayout(normalizedText, "english"))
+        const transliteratedText = this.normalizeToken(this.transliterateRussianToEnglish(normalizedText))
+        const variants = [normalizedText, russianLayoutText, englishLayoutText, transliteratedText]
+        const tokenSet = new Set()
+        variants.forEach(source => {
+            source
+                .split(/[\p{P}\p{S}\s]+/u)
+                .filter(word => word && !this.stop.has(word) && word.length > 1)
+                .forEach(word => {
+                    tokenSet.add(word)
+                    tokenSet.add(this.stemToken(word))
+                })
+        })
+        return [...tokenSet].filter(Boolean)
     },
 
-    levenshtein(s, t) {
-        if (s === t) return 0
-        const n = s.length
-        const m = t.length
-        if (n === 0) return m
-        if (m === 0) return n
-        if (Math.abs(n - m) > 2) return 3 
+    levenshtein(sourceWord, targetWord) {
+        if (sourceWord === targetWord) return 0
+        const sourceLength = sourceWord.length
+        const targetLength = targetWord.length
+        if (sourceLength === 0) return targetLength
+        if (targetLength === 0) return sourceLength
+        if (Math.abs(sourceLength - targetLength) > 3) return 4
 
-        let v0 = new Int8Array(m + 1)
-        let v1 = new Int8Array(m + 1)
+        let previousRow = new Int16Array(targetLength + 1)
+        let currentRow = new Int16Array(targetLength + 1)
 
-        for (let i = 0; i <= m; i++) v0[i] = i
+        for (let columnIndex = 0; columnIndex <= targetLength; columnIndex += 1) previousRow[columnIndex] = columnIndex
 
-        for (let i = 0; i < n; i++) {
-            v1[0] = i + 1
-            let minVal = v1[0]
-            for (let j = 0; j < m; j++) {
-                const cost = s[i] === t[j] ? 0 : 1
-                v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost)
-                minVal = Math.min(minVal, v1[j + 1])
+        for (let rowIndex = 0; rowIndex < sourceLength; rowIndex += 1) {
+            currentRow[0] = rowIndex + 1
+            let minimumDistance = currentRow[0]
+            for (let columnIndex = 0; columnIndex < targetLength; columnIndex += 1) {
+                const substitutionCost = sourceWord[rowIndex] === targetWord[columnIndex] ? 0 : 1
+                currentRow[columnIndex + 1] = Math.min(
+                    currentRow[columnIndex] + 1,
+                    previousRow[columnIndex + 1] + 1,
+                    previousRow[columnIndex] + substitutionCost
+                )
+                minimumDistance = Math.min(minimumDistance, currentRow[columnIndex + 1])
             }
-            if (minVal > 2) return 3
-            const tmp = v0
-            v0 = v1
-            v1 = tmp
+            if (minimumDistance > 3) return 4
+            const swapBuffer = previousRow
+            previousRow = currentRow
+            currentRow = swapBuffer
         }
-        return v0[m]
+        return previousRow[targetLength]
     },
 
-    wordScore(queryWord, docWord) {
-        if (queryWord === docWord) return 1.0
-        if (docWord.startsWith(queryWord)) return 0.85
-        if (docWord.includes(queryWord)) return 0.65
-        
-        if (docWord.length < 3 || queryWord.length < 3) return 0
-        const dist = this.levenshtein(queryWord, docWord)
-        if (dist <= 2) return 1.0 - (dist / Math.max(queryWord.length, docWord.length))
+    wordScore(queryWord, documentWord) {
+        if (queryWord === documentWord) return 1
+        if (documentWord.startsWith(queryWord) || queryWord.startsWith(documentWord)) return 0.9
+        if (documentWord.includes(queryWord) || queryWord.includes(documentWord)) return 0.72
+
+        if (documentWord.length < 3 || queryWord.length < 3) return 0
+        const distance = this.levenshtein(queryWord, documentWord)
+        if (distance <= 3) return 1 - (distance / Math.max(queryWord.length, documentWord.length))
         return 0
     },
 
-    score(query, title, content, tags) {
+    score(query, title, content, tags, aiTags, hiddenTags) {
         if (!query) return 0
-        const qTokens = this.tokenize(query)
-        if (!qTokens.length) return 0
+        const queryTokens = this.tokenize(query)
+        if (!queryTokens.length) return 0
 
-        const tTokens = this.tokenize(title)
-        const cTokens = this.tokenize(Utils.stripHtml(content))
-        const tagTokens = Array.isArray(tags) ? tags.flatMap(t => this.tokenize(String(t))) : []
-
-        let totalScore = 0
-
-        for (const qw of qTokens) {
-            let maxWordScore = 0
-            
-            const variants = [qw]
-            for (const [key, list] of this.synonyms) {
-                if (qw === key || list.includes(qw)) {
-                    if (!variants.includes(key)) variants.push(key)
-                    list.forEach(s => { if (!variants.includes(s)) variants.push(s) })
-                }
-            }
-
-            for (const v of variants) {
-                for (const w of tTokens) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 2.5)
-                for (const w of tagTokens) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 2.0)
-                for (const w of cTokens) maxWordScore = Math.max(maxWordScore, this.wordScore(v, w) * 1.0)
-                if (maxWordScore >= 1.0) break
-            }
-            totalScore += maxWordScore
+        const weightedDocumentTokens = []
+        this.tokenize(title).forEach(token => weightedDocumentTokens.push({ token, weight: 3.6 }))
+        this.tokenize(Utils.stripHtml(content)).forEach(token => weightedDocumentTokens.push({ token, weight: 0.95 }))
+        if (Array.isArray(tags)) {
+            tags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 4.2 })))
+        }
+        if (Array.isArray(hiddenTags)) {
+            hiddenTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 4.4 })))
+        }
+        if (Array.isArray(aiTags)) {
+            aiTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 3.6 })))
         }
 
-        return totalScore / qTokens.length
+        if (!weightedDocumentTokens.length) return 0
+
+        const normalizedQuery = this.normalizeToken(query)
+        const normalizedTitle = this.normalizeToken(title)
+        const normalizedVisibleTags = Array.isArray(tags) ? tags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+        const normalizedHiddenTags = Array.isArray(hiddenTags) ? hiddenTags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+        const normalizedAiTags = Array.isArray(aiTags) ? aiTags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+
+        let aggregatedScore = 0
+
+        queryTokens.forEach(queryToken => {
+            let highestTokenScore = 0
+            const queryVariants = this.expandTokenVariants(queryToken)
+            queryVariants.forEach(queryVariant => {
+                weightedDocumentTokens.forEach(documentTokenData => {
+                    const candidateScore = this.wordScore(queryVariant, documentTokenData.token) * documentTokenData.weight
+                    if (candidateScore > highestTokenScore) highestTokenScore = candidateScore
+                })
+            })
+            if (normalizedTitle.includes(queryToken)) highestTokenScore += 0.5
+            if (normalizedVisibleTags.includes(queryToken)) highestTokenScore += 0.75
+            if (normalizedHiddenTags.includes(queryToken)) highestTokenScore += 0.8
+            if (normalizedAiTags.includes(queryToken)) highestTokenScore += 0.6
+            aggregatedScore += highestTokenScore
+        })
+
+        if (normalizedTitle.includes(normalizedQuery)) aggregatedScore += 0.9
+        if (normalizedVisibleTags.includes(normalizedQuery)) aggregatedScore += 1.15
+        if (normalizedHiddenTags.includes(normalizedQuery)) aggregatedScore += 1.2
+        if (normalizedAiTags.includes(normalizedQuery)) aggregatedScore += 0.95
+
+        const normalizedScore = aggregatedScore / queryTokens.length
+        return Math.max(0, Math.min(3, normalizedScore)) / 3
     },
 
     suggestTags(title, content) {
         const text = (title + " " + Utils.stripHtml(content)).toLowerCase()
-        const res = new Set()
-        
-        for (const [tag, keys] of this.synonyms) {
-            if (keys.some(k => text.includes(k))) {
-                res.add(tag)
-            }
-        }
-        return [...res].slice(0, 6)
+        const out = new Set()
+        const synonymIndex = this.buildSynonymIndex()
+        const textTokens = this.tokenize(text)
+        textTokens.forEach(token => {
+            const synonyms = synonymIndex.get(token)
+            if (!synonyms) return
+            synonyms.forEach(synonymWord => {
+                if (/^[a-z0-9]+$/i.test(synonymWord)) return
+                out.add(synonymWord)
+            })
+        })
+        return [...out].slice(0, 6)
     },
 
     suggestFolderId(note, folders) {
         if (!folders || !folders.length) return null
         const text = (note.title + " " + Utils.stripHtml(note.content)).toLowerCase()
-        
-        const scored = folders.map(f => {
-            const fName = (f.name || "").toLowerCase()
-            if (text.includes(fName)) return { id: f.id, score: 10 }
-            const s = this.score(f.name, note.title, note.content, note.tags)
-            return { id: f.id, score: s }
+
+        const scored = folders.map(folder => {
+            const folderName = (folder.name || "").toLowerCase()
+            if (text.includes(folderName)) return { id: folder.id, score: 10 }
+            const score = this.score(folder.name, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
+            return { id: folder.id, score }
         })
-        
+
         scored.sort((a, b) => b.score - a.score)
         return scored[0]?.score > 0.5 ? scored[0].id : null
     }

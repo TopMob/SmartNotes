@@ -119,6 +119,47 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+    const AI_ANALYSIS_VERSION = 1
+
+    const hasAiRelevantChanges = (previousNote, nextNote) => {
+        const previousTitle = String(previousNote?.title || "").trim()
+        const nextTitle = String(nextNote?.title || "").trim()
+        if (previousTitle !== nextTitle) return true
+        const previousContent = String(previousNote?.content || "")
+        const nextContent = String(nextNote?.content || "")
+        if (previousContent !== nextContent) return true
+        const previousTags = Array.isArray(previousNote?.tags) ? previousNote.tags.map(tag => String(tag || "").trim().toLowerCase()) : []
+        const nextTags = Array.isArray(nextNote?.tags) ? nextNote.tags.map(tag => String(tag || "").trim().toLowerCase()) : []
+        if (previousTags.length !== nextTags.length) return true
+        for (let index = 0; index < previousTags.length; index++) {
+            if (previousTags[index] !== nextTags[index]) return true
+        }
+        return false
+    }
+
+
+    const areStringArraysEqual = (firstList, secondList) => {
+        if (firstList.length !== secondList.length) return false
+        for (let index = 0; index < firstList.length; index += 1) {
+            if (firstList[index] !== secondList[index]) return false
+        }
+        return true
+    }
+
+    const hasPersistableChanges = (previousNote, nextNote) => {
+        if (String(previousNote?.title || "") !== String(nextNote?.title || "")) return true
+        if (String(previousNote?.content || "") !== String(nextNote?.content || "")) return true
+        const previousTags = Array.isArray(previousNote?.tags) ? previousNote.tags.map(tag => String(tag || "")) : []
+        const nextTags = Array.isArray(nextNote?.tags) ? nextNote.tags.map(tag => String(tag || "")) : []
+        if (!areStringArraysEqual(previousTags, nextTags)) return true
+        const previousDrawings = Array.isArray(previousNote?.pageDrawings) ? previousNote.pageDrawings.map(value => String(value || "")) : []
+        const nextDrawings = Array.isArray(nextNote?.pageDrawings) ? nextNote.pageDrawings.map(value => String(value || "")) : []
+        if (!areStringArraysEqual(previousDrawings, nextDrawings)) return true
+        if (String(previousNote?.pageDrawingsRevision || "") !== String(nextNote?.pageDrawingsRevision || "")) return true
+        if (String(previousNote?.folderId || "") !== String(nextNote?.folderId || "")) return true
+        return false
+    }
+
     const noteHasEditableContent = (note) => {
         const titleText = String(note?.title || "").trim()
         const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
@@ -151,8 +192,10 @@ export const EditorAPI = (() => {
         }
 
         const isAutoSave = !!options.autoSave
+        const isExitSave = !!options.persistOnExit
         if (isAutoSave && state.manualSaveInProgress) return
-        if (!isAutoSave) {
+        const editorHasUnsavedChanges = !!StateStore.read().editorDirty
+        if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 note.title = NoteText.buildAutoTitle({ content: note.content || "" })
                 if (elements.title) elements.title.value = note.title
@@ -175,6 +218,21 @@ export const EditorAPI = (() => {
                 UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
             }
             return
+        }
+
+        if (!hasPersistableChanges(currentNote, note)) {
+            SaveStateService?.markSaved?.()
+            StateStore.update("editorDirty", false)
+            if (!options.silent) {
+                UI.showToast(UI.getText("saved", "Saved"))
+                await close({ persistChanges: false, silent: true })
+            }
+            return
+        }
+
+        if (hasAiRelevantChanges(currentNote, note)) {
+            note.aiProcessed = false
+            note.aiVersion = AI_ANALYSIS_VERSION
         }
 
         StateStore.update("currentNote", note)
@@ -218,7 +276,6 @@ export const EditorAPI = (() => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle: inputHandlers.syncAutoTitle,
-        save: (...args) => save(...args),
         updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn }
     })
 
@@ -343,8 +400,7 @@ export const EditorAPI = (() => {
             if (event.key !== "Escape") return
             if (!elements.wrapper?.classList.contains("active")) return
             event.preventDefault()
-            await save({ silent: true })
-            close()
+            await close({ persistChanges: true, silent: true })
         }, { signal })
         document.addEventListener("click", (event) => {
             if (!elements.alignMenu || !elements.alignMenu.classList.contains("active")) return
@@ -657,6 +713,9 @@ const addPage = () => {
     }
 
     openFromList = async (note) => {
+        if (elements.wrapper?.classList.contains("active")) {
+            await close({ persistChanges: true, silent: true })
+        }
         if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) {
             const access = CollaborationService.getAccess(note)
             if (!access?.ownerUid || !access?.noteId) {
@@ -678,13 +737,17 @@ const addPage = () => {
         open(note)
     }
 
-    const close = () => {
+    const close = async (options = {}) => {
+        const shouldPersistChanges = options.persistChanges !== false
+        const shouldStaySilent = options.silent !== false
+        if (shouldPersistChanges && StateStore.read().editorDirty) {
+            await save({ silent: shouldStaySilent, persistOnExit: true })
+        }
         elements.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
         mediaHandlers.deselectMedia()
-        stopRecording()
         state.pageIndex = 0
         state.titleTouched = false
         state.autoSaveSnapshot = null
@@ -767,7 +830,7 @@ const addPage = () => {
             if (!ref) return
             await ref.delete()
             UI.showToast(UI.getText("note_deleted", "Deleted"))
-            close()
+            await close({ persistChanges: false, silent: true })
         })
     }
 

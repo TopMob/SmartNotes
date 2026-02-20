@@ -315,6 +315,21 @@
                 </button>
 
                 <div class="editor-tools" aria-label="Действия редактора" data-lang-aria="editor_actions">
+                    <div class="editor-page-controls editor-page-controls-header" aria-label="Страницы" data-lang-aria="editor_pages">
+                        <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
+                            <i class="material-icons-round" aria-hidden="true">chevron_left</i>
+                        </button>
+                        <span id="editor-page-indicator" class="page-indicator" aria-live="polite">1/1</span>
+                        <button type="button" class="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
+                            <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                        </button>
+                        <button type="button" class="btn-icon" id="editor-page-add" data-action="editor-add-page" aria-label="Добавить страницу" data-lang-aria="page_add">
+                            <i class="material-icons-round" aria-hidden="true">note_add</i>
+                        </button>
+                    </div>
+
+                    <div class="divider-vertical" aria-hidden="true"></div>
+
                     <button type="button" class="btn-icon" data-action="editor-undo" aria-label="Отменить" data-lang-aria="undo">
                         <i class="material-icons-round" aria-hidden="true">undo</i>
                     </button>
@@ -382,33 +397,22 @@
                     </label>
                 </div>
 
-                <div class="editor-page-controls" aria-label="Страницы" data-lang-aria="editor_pages">
-                    <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
-                        <i class="material-icons-round" aria-hidden="true">chevron_left</i>
-                    </button>
-                    <span id="editor-page-indicator" class="page-indicator" aria-live="polite">1/1</span>
-                    <button type="button" class="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
-                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
-                    </button>
-                    <button type="button" class="btn-icon" id="editor-page-add" data-action="editor-add-page" aria-label="Добавить страницу" data-lang-aria="page_add">
-                        <i class="material-icons-round" aria-hidden="true">note_add</i>
-                    </button>
-                </div>
-
                 <div class="note-content-wrapper">
                     <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
                 </div>
 
-                <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
-                    <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
-                    <div id="note-tags-container" class="tags-container" aria-live="polite"></div>
-                </div>
+                <div class="editor-bottom-panel">
+                    <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
+                        <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
+                        <div id="note-tags-container" class="tags-container" aria-live="polite"></div>
+                    </div>
 
-                <div class="editor-bottom-actions">
-                    <button type="button" class="btn-primary" data-action="editor-save" aria-label="Сохранить" data-lang-aria="save_note">
-                        <i class="material-icons-round" aria-hidden="true">save</i>
-                        <span data-lang="save">Сохранить</span>
-                    </button>
+                    <div class="editor-bottom-actions">
+                        <button type="button" class="btn-primary" data-action="editor-save" aria-label="Сохранить" data-lang-aria="save_note">
+                            <i class="material-icons-round" aria-hidden="true">save</i>
+                            <span data-lang="save">Сохранить</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
