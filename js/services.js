@@ -158,7 +158,10 @@ const NoteIO = {
                     .map(value => normalizeAiTagToRussian(value))
                     .filter(Boolean))]
                 : [],
-            aiRelevance: Number.isFinite(Number(safe.aiRelevance)) ? Math.max(0, Math.min(100, Number(safe.aiRelevance))) : 0,
+            relevance: Number.isFinite(Number(safe.relevance)) ? Math.max(0, Math.min(100, Number(safe.relevance))) : 0,
+            aiRelevance: Number.isFinite(Number(safe.aiRelevance))
+                ? Math.max(0, Math.min(100, Number(safe.aiRelevance)))
+                : (Number.isFinite(Number(safe.relevance)) ? Math.max(0, Math.min(100, Number(safe.relevance))) : 0),
             aiProcessed: typeof safe.aiProcessed === "boolean" ? safe.aiProcessed : false,
             aiVersion: Number.isFinite(Number(safe.aiVersion)) ? Number(safe.aiVersion) : 0,
             aiLastAnalyzed: safe.aiLastAnalyzed || null,
@@ -440,19 +443,25 @@ const SmartSearch = {
         if (!queryTokens.length) return 0
 
         const weightedDocumentTokens = []
-        this.tokenize(title).forEach(token => weightedDocumentTokens.push({ token, weight: 3 }))
-        this.tokenize(Utils.stripHtml(content)).forEach(token => weightedDocumentTokens.push({ token, weight: 1.4 }))
+        this.tokenize(title).forEach(token => weightedDocumentTokens.push({ token, weight: 3.6 }))
+        this.tokenize(Utils.stripHtml(content)).forEach(token => weightedDocumentTokens.push({ token, weight: 0.95 }))
         if (Array.isArray(tags)) {
-            tags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 2.5 })))
+            tags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 4.2 })))
         }
         if (Array.isArray(hiddenTags)) {
-            hiddenTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 2.7 })))
+            hiddenTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 4.4 })))
         }
         if (Array.isArray(aiTags)) {
-            aiTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 2.3 })))
+            aiTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 3.6 })))
         }
 
         if (!weightedDocumentTokens.length) return 0
+
+        const normalizedQuery = this.normalizeToken(query)
+        const normalizedTitle = this.normalizeToken(title)
+        const normalizedVisibleTags = Array.isArray(tags) ? tags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+        const normalizedHiddenTags = Array.isArray(hiddenTags) ? hiddenTags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+        const normalizedAiTags = Array.isArray(aiTags) ? aiTags.map(tag => this.normalizeToken(tag)).join(" ") : ""
 
         let aggregatedScore = 0
 
@@ -465,8 +474,17 @@ const SmartSearch = {
                     if (candidateScore > highestTokenScore) highestTokenScore = candidateScore
                 })
             })
+            if (normalizedTitle.includes(queryToken)) highestTokenScore += 0.5
+            if (normalizedVisibleTags.includes(queryToken)) highestTokenScore += 0.75
+            if (normalizedHiddenTags.includes(queryToken)) highestTokenScore += 0.8
+            if (normalizedAiTags.includes(queryToken)) highestTokenScore += 0.6
             aggregatedScore += highestTokenScore
         })
+
+        if (normalizedTitle.includes(normalizedQuery)) aggregatedScore += 0.9
+        if (normalizedVisibleTags.includes(normalizedQuery)) aggregatedScore += 1.15
+        if (normalizedHiddenTags.includes(normalizedQuery)) aggregatedScore += 1.2
+        if (normalizedAiTags.includes(normalizedQuery)) aggregatedScore += 0.95
 
         const normalizedScore = aggregatedScore / queryTokens.length
         return Math.max(0, Math.min(3, normalizedScore)) / 3

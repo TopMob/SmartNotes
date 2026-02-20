@@ -137,6 +137,29 @@ export const EditorAPI = (() => {
         return false
     }
 
+
+    const areStringArraysEqual = (firstList, secondList) => {
+        if (firstList.length !== secondList.length) return false
+        for (let index = 0; index < firstList.length; index += 1) {
+            if (firstList[index] !== secondList[index]) return false
+        }
+        return true
+    }
+
+    const hasPersistableChanges = (previousNote, nextNote) => {
+        if (String(previousNote?.title || "") !== String(nextNote?.title || "")) return true
+        if (String(previousNote?.content || "") !== String(nextNote?.content || "")) return true
+        const previousTags = Array.isArray(previousNote?.tags) ? previousNote.tags.map(tag => String(tag || "")) : []
+        const nextTags = Array.isArray(nextNote?.tags) ? nextNote.tags.map(tag => String(tag || "")) : []
+        if (!areStringArraysEqual(previousTags, nextTags)) return true
+        const previousDrawings = Array.isArray(previousNote?.pageDrawings) ? previousNote.pageDrawings.map(value => String(value || "")) : []
+        const nextDrawings = Array.isArray(nextNote?.pageDrawings) ? nextNote.pageDrawings.map(value => String(value || "")) : []
+        if (!areStringArraysEqual(previousDrawings, nextDrawings)) return true
+        if (String(previousNote?.pageDrawingsRevision || "") !== String(nextNote?.pageDrawingsRevision || "")) return true
+        if (String(previousNote?.folderId || "") !== String(nextNote?.folderId || "")) return true
+        return false
+    }
+
     const noteHasEditableContent = (note) => {
         const titleText = String(note?.title || "").trim()
         const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
@@ -170,7 +193,8 @@ export const EditorAPI = (() => {
 
         const isAutoSave = !!options.autoSave
         if (isAutoSave && state.manualSaveInProgress) return
-        if (!isAutoSave) {
+        const editorHasUnsavedChanges = !!StateStore.read().editorDirty
+        if (!isAutoSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 note.title = NoteText.buildAutoTitle({ content: note.content || "" })
                 if (elements.title) elements.title.value = note.title
@@ -191,6 +215,16 @@ export const EditorAPI = (() => {
         if (!noteHasEditableContent(note)) {
             if (!isAutoSave) {
                 UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
+            }
+            return
+        }
+
+        if (!hasPersistableChanges(currentNote, note)) {
+            SaveStateService?.markSaved?.()
+            StateStore.update("editorDirty", false)
+            if (!options.silent) {
+                UI.showToast(UI.getText("saved", "Saved"))
+                close()
             }
             return
         }

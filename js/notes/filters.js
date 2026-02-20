@@ -47,9 +47,14 @@ function sortVisibleNotes(list, sortMode, scores) {
             return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
         }
         if (sortMode === "relevance") {
-            const firstRelevance = scores ? (scores.get(a.id) || 0) : (Number(a.aiRelevance) || 0)
-            const secondRelevance = scores ? (scores.get(b.id) || 0) : (Number(b.aiRelevance) || 0)
-            return secondRelevance - firstRelevance
+            const firstRelevance = scores
+                ? (scores.get(a.id) || 0)
+                : (Number.isFinite(Number(a.relevance)) ? Number(a.relevance) : (Number(a.aiRelevance) || 0))
+            const secondRelevance = scores
+                ? (scores.get(b.id) || 0)
+                : (Number.isFinite(Number(b.relevance)) ? Number(b.relevance) : (Number(b.aiRelevance) || 0))
+            if (secondRelevance !== firstRelevance) return secondRelevance - firstRelevance
+            return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
         }
         return getTimestampValue(b.updatedAt || b.createdAt) - getTimestampValue(a.updatedAt || a.createdAt)
     }
@@ -148,12 +153,13 @@ function filterAndRender(query) {
         }
     }
 
-    const sortMode = notesFilter.sort || "updated"
+    const configuredSortMode = notesFilter.sort || "updated"
+    const sortMode = q && configuredSortMode !== "manual" ? "relevance" : configuredSortMode
     if (sortMode === "manual") {
         const orderKey = view === "folder" ? "folderOrder" : "order"
         list = normalizeVisibleNotes(list, orderKey)
     } else {
-        const relevanceScores = sortMode === "relevance" && !scores ? null : scores
+        const relevanceScores = sortMode === "relevance" ? scores : null
         list = sortVisibleNotes(list, sortMode, relevanceScores)
     }
 
