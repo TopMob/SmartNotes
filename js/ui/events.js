@@ -368,10 +368,6 @@ Object.assign(UI, {
             case "switch-account":
                 this.confirm("account", () => Auth.switchAccount())
                 break
-            case "run-ai-scan":
-                enqueueAiScanTask()
-                this.toggleUserMenu(false)
-                break
             case "logout":
                 this.confirm("exit", () => Auth.logout())
                 break
@@ -440,9 +436,6 @@ Object.assign(UI, {
                 break
             case "note-copy-text":
                 copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-trigger-analysis":
-                triggerNoteAnalysisById(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-reminder-set":
                 scheduleReminder(decodeURIComponent(el.dataset.noteId || ""))

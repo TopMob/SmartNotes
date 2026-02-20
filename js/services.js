@@ -152,15 +152,12 @@ const NoteIO = {
             contentType: safe.contentType ? String(safe.contentType) : "text",
             aiFolder: typeof safe.aiFolder === "string" ? safe.aiFolder : "",
             hiddenTags,
-            aiTags: (() => {
-                const sourceTags = Array.isArray(safe.aiTags) && safe.aiTags.length ? safe.aiTags : hiddenTags
-                return Array.isArray(sourceTags)
-                    ? [...new Set(sourceTags
-                        .filter(value => value && typeof value === "string")
-                        .map(value => normalizeAiTagToRussian(value))
-                        .filter(Boolean))]
-                    : []
-            })(),
+            aiTags: Array.isArray(safe.aiTags)
+                ? [...new Set(safe.aiTags
+                    .filter(value => value && typeof value === "string")
+                    .map(value => normalizeAiTagToRussian(value))
+                    .filter(Boolean))]
+                : [],
             aiRelevance: Number.isFinite(Number(safe.aiRelevance)) ? Math.max(0, Math.min(100, Number(safe.aiRelevance))) : 0,
             aiProcessed: typeof safe.aiProcessed === "boolean" ? safe.aiProcessed : false,
             aiVersion: Number.isFinite(Number(safe.aiVersion)) ? Number(safe.aiVersion) : 0,

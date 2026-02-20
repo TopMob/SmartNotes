@@ -136,42 +136,6 @@ async function copyNoteTextById(noteId) {
     }
 }
 
-const OLLAMA_MODEL = "llama3:8b"
-
-async function enqueueAiScanTask() {
-    const user = StateStore.read().user
-    const tasksCollection = DataPath.getTasksCollection()
-    if (!user || !tasksCollection) return
-    const uid = String(user.uid || "")
-    if (!uid) return
-    const existingTasks = await tasksCollection
-        .where("uid", "==", uid)
-        .where("status", "in", ["pending", "processing"])
-        .limit(1)
-        .get()
-    if (!existingTasks.empty) {
-        UI.showToast(UI.getText("analysis_task_exists", "AI scan already running"))
-        return
-    }
-    await tasksCollection.add({
-        uid,
-        status: "pending",
-        model: OLLAMA_MODEL,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        requestedAt: Date.now()
-    })
-    UI.showToast(UI.getText("analysis_queued", "AI analysis started"))
-}
-
-async function triggerNoteAnalysisById(noteId) {
-    void noteId
-    try {
-        await enqueueAiScanTask()
-    } catch {
-        UI.showToast(UI.getText("analysis_failed", "AI analysis failed"))
-    }
-}
-
 async function toggleFavorite(noteId) {
     const note = getNoteById(noteId)
     if (!note || isHiddenLocked(note)) return
@@ -252,8 +216,6 @@ window.restoreNoteById = restoreNoteById
 window.scheduleReminder = scheduleReminder
 window.clearReminder = clearReminder
 window.copyNoteTextById = copyNoteTextById
-window.enqueueAiScanTask = enqueueAiScanTask
-window.triggerNoteAnalysisById = triggerNoteAnalysisById
 window.toggleFavorite = toggleFavorite
 window.togglePin = togglePin
 window.toggleArchive = toggleArchive
