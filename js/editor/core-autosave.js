@@ -8,7 +8,6 @@ export const createAutosaveHandlers = (context) => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle,
-        save,
         updateSnapshotFrame
     } = context
 
@@ -121,25 +120,14 @@ export const createAutosaveHandlers = (context) => {
         scheduleAutoSave()
     }, CONFIG.SNAPSHOT_DELAY)
 
-    const scheduleAutoSave = Utils.debounce(async () => {
+    const scheduleAutoSave = Utils.debounce(() => {
         const currentNote = StateStore.read().currentNote
         if (!currentNote || !StateStore.read().editorDirty) return
-        const snap = captureSnapshot()
-        if (isSnapshotEmpty(snap)) return
-        if (state.autoSaveSnapshot && snapshotsEqual(state.autoSaveSnapshot, snap)) return
-        await save({ silent: true, autoSave: true })
-        const savedSnapshot = captureSnapshot()
-        state.autoSaveSnapshot = savedSnapshot
-        const refreshedNote = StateStore.read().currentNote
-        if (refreshedNote) {
-            StateStore.update("currentNote", {
-                ...refreshedNote,
-                title: savedSnapshot.title,
-                content: savedSnapshot.content,
-                pageDrawings: savedSnapshot.pageDrawings,
-                pageDrawingsRevision: savedSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(savedSnapshot.pageDrawings)
-            })
-        }
+        const currentSnapshot = captureSnapshot()
+        if (isSnapshotEmpty(currentSnapshot)) return
+        if (state.autoSaveSnapshot && snapshotsEqual(state.autoSaveSnapshot, currentSnapshot)) return
+        state.autoSaveSnapshot = currentSnapshot
+        persistSnapshot(currentSnapshot)
     }, 1600)
 
     const scheduleSnapshotFrame = () => {

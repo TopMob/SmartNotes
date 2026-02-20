@@ -192,9 +192,10 @@ export const EditorAPI = (() => {
         }
 
         const isAutoSave = !!options.autoSave
+        const isExitSave = !!options.persistOnExit
         if (isAutoSave && state.manualSaveInProgress) return
         const editorHasUnsavedChanges = !!StateStore.read().editorDirty
-        if (!isAutoSave && editorHasUnsavedChanges) {
+        if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 note.title = NoteText.buildAutoTitle({ content: note.content || "" })
                 if (elements.title) elements.title.value = note.title
@@ -224,7 +225,7 @@ export const EditorAPI = (() => {
             StateStore.update("editorDirty", false)
             if (!options.silent) {
                 UI.showToast(UI.getText("saved", "Saved"))
-                close()
+                await close({ persistChanges: false, silent: true })
             }
             return
         }
@@ -275,7 +276,6 @@ export const EditorAPI = (() => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle: inputHandlers.syncAutoTitle,
-        save: (...args) => save(...args),
         updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn }
     })
 
@@ -400,8 +400,7 @@ export const EditorAPI = (() => {
             if (event.key !== "Escape") return
             if (!elements.wrapper?.classList.contains("active")) return
             event.preventDefault()
-            await save({ silent: true })
-            close()
+            await close({ persistChanges: true, silent: true })
         }, { signal })
         document.addEventListener("click", (event) => {
             if (!elements.alignMenu || !elements.alignMenu.classList.contains("active")) return
@@ -714,6 +713,9 @@ const addPage = () => {
     }
 
     openFromList = async (note) => {
+        if (elements.wrapper?.classList.contains("active")) {
+            await close({ persistChanges: true, silent: true })
+        }
         if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) {
             const access = CollaborationService.getAccess(note)
             if (!access?.ownerUid || !access?.noteId) {
@@ -735,7 +737,12 @@ const addPage = () => {
         open(note)
     }
 
-    const close = () => {
+    const close = async (options = {}) => {
+        const shouldPersistChanges = options.persistChanges !== false
+        const shouldStaySilent = options.silent !== false
+        if (shouldPersistChanges && StateStore.read().editorDirty) {
+            await save({ silent: shouldStaySilent, persistOnExit: true })
+        }
         elements.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
@@ -823,7 +830,7 @@ const addPage = () => {
             if (!ref) return
             await ref.delete()
             UI.showToast(UI.getText("note_deleted", "Deleted"))
-            close()
+            await close({ persistChanges: false, silent: true })
         })
     }
 
