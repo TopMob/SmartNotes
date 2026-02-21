@@ -678,19 +678,6 @@ Object.assign(UI, {
             secondaryInput.removeAttribute("maxLength")
         }
 
-        let secondaryHint = modal.querySelector('[data-prompt-secondary-hint="true"]')
-        if (secondaryField && secondaryOptions?.hintText) {
-            if (!secondaryHint) {
-                secondaryHint = document.createElement("div")
-                secondaryHint.className = "muted"
-                secondaryHint.dataset.promptSecondaryHint = "true"
-                secondaryField.appendChild(secondaryHint)
-            }
-            secondaryHint.textContent = String(secondaryOptions.hintText)
-        } else if (secondaryHint) {
-            secondaryHint.remove()
-        }
-
         let primaryCounter = modal.querySelector('[data-counter="primary"]')
         if (!primaryCounter && shouldShowCounter) {
             primaryCounter = document.createElement("span")

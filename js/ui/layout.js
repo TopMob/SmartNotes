@@ -114,7 +114,6 @@ Object.assign(UI, {
                 value: "",
                 placeholder: this.getText("folder_description_placeholder", "Describe what notes should go to this folder"),
                 ariaLabel: this.getText("folder_description_label", "Folder description"),
-                hintText: this.getText("folder_description_hint", "Recommended limit is 1024 characters, up to 1124 is allowed"),
                 showCounter: true,
                 softLimit: window.Validators.FOLDER_DESCRIPTION_SOFT_LIMIT,
                 maxLength: window.Validators.FOLDER_DESCRIPTION_HARD_LIMIT
@@ -151,7 +150,6 @@ Object.assign(UI, {
                 value: String(folder.description || ""),
                 placeholder: this.getText("folder_description_placeholder", "Describe what notes should go to this folder"),
                 ariaLabel: this.getText("folder_description_label", "Folder description"),
-                hintText: this.getText("folder_description_hint", "Recommended limit is 1024 characters, up to 1124 is allowed"),
                 showCounter: true,
                 softLimit: window.Validators.FOLDER_DESCRIPTION_SOFT_LIMIT,
                 maxLength: window.Validators.FOLDER_DESCRIPTION_HARD_LIMIT
