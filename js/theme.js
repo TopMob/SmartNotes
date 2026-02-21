@@ -29,11 +29,10 @@ const normalizeLocalImageValue = (value, maxLength = 600000) => {
     return source.length > maxLength ? "" : source
 }
 
-const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
+const normalizeCloudSyncImageValue = (value, maxLength = 700000) => {
     if (typeof value !== "string") return ""
     const source = value.trim()
     if (!source) return ""
-    if (source.startsWith("data:image/")) return ""
     return source.length > maxLength ? "" : source
 }
 
@@ -104,20 +103,15 @@ const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
 }
 
 
-const buildFirestoreSafeCustomPresets = (presets) => {
-    if (!Array.isArray(presets)) return []
-    return presets
-        .filter(item => item && typeof item === "object")
-        .map(item => ({
-            key: String(item.key || ""),
-            p: ThemeManager.normalizeHex(item.p),
-            bg: ThemeManager.normalizeHex(item.bg),
-            t: ThemeManager.normalizeHex(item.t),
-            mainBackgroundImage: normalizeCloudSyncImageValue(item.mainBackgroundImage),
-            sidebarBackgroundImage: normalizeCloudSyncImageValue(item.sidebarBackgroundImage)
-        }))
-        .slice(0, ThemeManager.maxCustomPresets)
-}
+const normalizeCloudPresetRecord = (preset) => ({
+    key: String(preset?.key || ""),
+    p: ThemeManager.normalizeHex(preset?.p),
+    bg: ThemeManager.normalizeHex(preset?.bg),
+    t: ThemeManager.normalizeHex(preset?.t),
+    mainBackgroundImage: normalizeCloudSyncImageValue(preset?.mainBackgroundImage),
+    sidebarBackgroundImage: normalizeCloudSyncImageValue(preset?.sidebarBackgroundImage)
+})
+
 
 export const ThemeManager = {
     themes: {
@@ -239,19 +233,31 @@ export const ThemeManager = {
         const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
         return rootReference ? rootReference.collection("preferences").doc("theme") : null
     },
+    getThemePresetCollectionReference(user) {
+        const themeReference = this.getThemeSettingsReference(user)
+        return themeReference ? themeReference.collection("customPresets") : null
+    },
     async loadAccountSettings(user) {
         const reference = this.getThemeSettingsReference(user)
+        const presetCollectionReference = this.getThemePresetCollectionReference(user)
         if (!reference) return null
         try {
-            const snapshot = await reference.get()
-            if (!snapshot.exists) return null
-            const data = snapshot.data() || {}
-            const settings = data.settings && typeof data.settings === "object" ? data.settings : null
-            const customPresets = Array.isArray(data.customPresets) ? data.customPresets : null
+            const settingsSnapshot = await reference.get()
+            const settingsData = settingsSnapshot.exists ? (settingsSnapshot.data() || {}) : {}
+            const settings = settingsData.settings && typeof settingsData.settings === "object" ? settingsData.settings : null
+            const legacyCustomPresets = Array.isArray(settingsData.customPresets) ? settingsData.customPresets : []
             const localSettings = this.getSavedSettings()
             const localPresets = this.getCustomPresets()
-            if (customPresets) {
-                const mergedCustomPresets = mergeCloudPresetsWithLocalPresets(localPresets, customPresets)
+            let cloudCustomPresets = []
+            if (presetCollectionReference) {
+                const presetSnapshot = await presetCollectionReference.get()
+                cloudCustomPresets = presetSnapshot.docs.map(documentEntry => normalizeCloudPresetRecord({ key: documentEntry.id, ...(documentEntry.data() || {}) }))
+            }
+            if (!cloudCustomPresets.length && legacyCustomPresets.length) {
+                cloudCustomPresets = legacyCustomPresets
+            }
+            if (cloudCustomPresets.length) {
+                const mergedCustomPresets = mergeCloudPresetsWithLocalPresets(localPresets, cloudCustomPresets)
                 this.saveCustomPresets(mergedCustomPresets)
             }
             if (settings) {
@@ -267,6 +273,7 @@ export const ThemeManager = {
     },
     async saveAccountSettings(user, settings) {
         const reference = this.getThemeSettingsReference(user)
+        const presetCollectionReference = this.getThemePresetCollectionReference(user)
         const normalizedSettings = {
             preset: settings?.preset || "oled",
             p: this.normalizeHex(settings?.p),
@@ -280,26 +287,41 @@ export const ThemeManager = {
         this.saveSettings(normalizedSettings)
         if (!reference) return
         try {
-            const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
             const cloudSettings = {
                 ...normalizedSettings,
                 mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
                 sidebarBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.sidebarBackgroundImage)
             }
-            const payload = {
+            await reference.set({
                 settings: cloudSettings,
-                customPresets: safeCustomPresets,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }
-            try {
-                await reference.set(payload, { merge: true })
-            } catch (error) {
-                if (String(error?.code || "") !== "invalid-argument") throw error
-                await reference.set({ settings: cloudSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            }, { merge: true })
+
+            if (presetCollectionReference) {
+                const currentPresets = this.getCustomPresets().map(normalizeCloudPresetRecord).filter(item => item.key)
+                const currentPresetKeys = new Set(currentPresets.map(item => item.key))
+                const existingPresetSnapshot = await presetCollectionReference.get()
+                const batch = firebase.firestore().batch()
+                currentPresets.forEach(preset => {
+                    const presetReference = presetCollectionReference.doc(preset.key)
+                    batch.set(presetReference, {
+                        p: preset.p,
+                        bg: preset.bg,
+                        t: preset.t,
+                        mainBackgroundImage: preset.mainBackgroundImage,
+                        sidebarBackgroundImage: preset.sidebarBackgroundImage,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true })
+                })
+                existingPresetSnapshot.docs.forEach(documentEntry => {
+                    if (currentPresetKeys.has(documentEntry.id)) return
+                    batch.delete(documentEntry.ref)
+                })
+                await batch.commit()
             }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
-            UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
+            throw error
         }
     },
     resolvePreset(key) {
