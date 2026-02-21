@@ -250,8 +250,13 @@ export const ThemeManager = {
             const localPresets = this.getCustomPresets()
             let cloudCustomPresets = []
             if (presetCollectionReference) {
-                const presetSnapshot = await presetCollectionReference.get()
-                cloudCustomPresets = presetSnapshot.docs.map(documentEntry => normalizeCloudPresetRecord({ key: documentEntry.id, ...(documentEntry.data() || {}) }))
+                try {
+                    const presetSnapshot = await presetCollectionReference.get()
+                    cloudCustomPresets = presetSnapshot.docs.map(documentEntry => normalizeCloudPresetRecord({ key: documentEntry.id, ...(documentEntry.data() || {}) }))
+                } catch (error) {
+                    const readErrorCode = String(error?.code || "")
+                    if (readErrorCode !== "permission-denied") throw error
+                }
             }
             if (!cloudCustomPresets.length && legacyCustomPresets.length) {
                 cloudCustomPresets = legacyCustomPresets
@@ -297,31 +302,43 @@ export const ThemeManager = {
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true })
 
+            const currentPresets = this.getCustomPresets().map(normalizeCloudPresetRecord).filter(item => item.key)
+            let presetsSavedToDedicatedCollection = false
             if (presetCollectionReference) {
-                const currentPresets = this.getCustomPresets().map(normalizeCloudPresetRecord).filter(item => item.key)
-                const currentPresetKeys = new Set(currentPresets.map(item => item.key))
-                const existingPresetSnapshot = await presetCollectionReference.get()
-                const batch = firebase.firestore().batch()
-                currentPresets.forEach(preset => {
-                    const presetReference = presetCollectionReference.doc(preset.key)
-                    batch.set(presetReference, {
-                        p: preset.p,
-                        bg: preset.bg,
-                        t: preset.t,
-                        mainBackgroundImage: preset.mainBackgroundImage,
-                        sidebarBackgroundImage: preset.sidebarBackgroundImage,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true })
-                })
-                existingPresetSnapshot.docs.forEach(documentEntry => {
-                    if (currentPresetKeys.has(documentEntry.id)) return
-                    batch.delete(documentEntry.ref)
-                })
-                await batch.commit()
+                try {
+                    const currentPresetKeys = new Set(currentPresets.map(item => item.key))
+                    const existingPresetSnapshot = await presetCollectionReference.get()
+                    const batch = firebase.firestore().batch()
+                    currentPresets.forEach(preset => {
+                        const presetReference = presetCollectionReference.doc(preset.key)
+                        batch.set(presetReference, {
+                            p: preset.p,
+                            bg: preset.bg,
+                            t: preset.t,
+                            mainBackgroundImage: preset.mainBackgroundImage,
+                            sidebarBackgroundImage: preset.sidebarBackgroundImage,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true })
+                    })
+                    existingPresetSnapshot.docs.forEach(documentEntry => {
+                        if (currentPresetKeys.has(documentEntry.id)) return
+                        batch.delete(documentEntry.ref)
+                    })
+                    await batch.commit()
+                    presetsSavedToDedicatedCollection = true
+                } catch (error) {
+                    const writeErrorCode = String(error?.code || "")
+                    if (writeErrorCode !== "permission-denied") throw error
+                }
+            }
+            if (!presetsSavedToDedicatedCollection) {
+                await reference.set({
+                    customPresets: currentPresets,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true })
             }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
-            throw error
         }
     },
     resolvePreset(key) {
