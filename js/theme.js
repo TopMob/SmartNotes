@@ -30,26 +30,25 @@ const normalizeLocalImageValue = (value, maxLength = 600000) => {
 }
 
 const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
-    if (typeof value !== "string") return null
+    if (typeof value !== "string") return ""
     const source = value.trim()
-    if (!source) return null
-    if (source.startsWith("data:")) return null
-    return source.length > maxLength ? null : source
+    if (!source) return ""
+    if (source.startsWith("data:")) return ""
+    return source.length > maxLength ? source.slice(0, maxLength) : source
 }
 
-const isDataImageValue = (value) => typeof value === "string" && value.trim().startsWith("data:image/")
 
 const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
     const safeLocalSettings = localSettings && typeof localSettings === "object" ? localSettings : {}
     const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
-    const mergedSettings = { ...safeCloudSettings }
     const localMainBackgroundImage = normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage)
     const localSidebarBackgroundImage = normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage)
-    if (!normalizeLocalImageValue(safeCloudSettings.mainBackgroundImage) && isDataImageValue(localMainBackgroundImage)) {
-        mergedSettings.mainBackgroundImage = localMainBackgroundImage
-    }
-    if (!normalizeLocalImageValue(safeCloudSettings.sidebarBackgroundImage) && isDataImageValue(localSidebarBackgroundImage)) {
-        mergedSettings.sidebarBackgroundImage = localSidebarBackgroundImage
+    const cloudMainBackgroundImage = normalizeLocalImageValue(safeCloudSettings.mainBackgroundImage)
+    const cloudSidebarBackgroundImage = normalizeLocalImageValue(safeCloudSettings.sidebarBackgroundImage)
+    const mergedSettings = {
+        ...safeCloudSettings,
+        mainBackgroundImage: cloudMainBackgroundImage || localMainBackgroundImage,
+        sidebarBackgroundImage: cloudSidebarBackgroundImage || localSidebarBackgroundImage
     }
     return mergedSettings
 }
@@ -77,24 +76,39 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
             const localPreset = mergedPresetsByKey.get(presetKey)
             const cloudMainBackgroundImage = normalizeLocalImageValue(item.mainBackgroundImage)
             const cloudSidebarBackgroundImage = normalizeLocalImageValue(item.sidebarBackgroundImage)
+            const localMainBackgroundImage = normalizeLocalImageValue(localPreset?.mainBackgroundImage)
+            const localSidebarBackgroundImage = normalizeLocalImageValue(localPreset?.sidebarBackgroundImage)
             const mergedPreset = {
                 key: presetKey,
                 p: ThemeManager.normalizeHex(item.p),
                 bg: ThemeManager.normalizeHex(item.bg),
                 t: ThemeManager.normalizeHex(item.t),
-                mainBackgroundImage: cloudMainBackgroundImage,
-                sidebarBackgroundImage: cloudSidebarBackgroundImage
-            }
-            if (!cloudMainBackgroundImage && isDataImageValue(localPreset?.mainBackgroundImage)) {
-                mergedPreset.mainBackgroundImage = normalizeLocalImageValue(localPreset.mainBackgroundImage)
-            }
-            if (!cloudSidebarBackgroundImage && isDataImageValue(localPreset?.sidebarBackgroundImage)) {
-                mergedPreset.sidebarBackgroundImage = normalizeLocalImageValue(localPreset.sidebarBackgroundImage)
+                mainBackgroundImage: cloudMainBackgroundImage || localMainBackgroundImage,
+                sidebarBackgroundImage: cloudSidebarBackgroundImage || localSidebarBackgroundImage
             }
             mergedPresetsByKey.set(presetKey, mergedPreset)
         })
 
-    return [...mergedPresetsByKey.values()]
+    return [...mergedPresetsByKey.values()].slice(0, ThemeManager.maxCustomPresets)
+}
+
+const sortObject = (value) => {
+    if (!value || typeof value !== "object") return value
+    if (Array.isArray(value)) return value.map(sortObject)
+    return Object.keys(value)
+        .sort()
+        .reduce((accumulator, key) => {
+            accumulator[key] = sortObject(value[key])
+            return accumulator
+        }, {})
+}
+
+const deepEqual = (firstValue, secondValue) => {
+    try {
+        return JSON.stringify(sortObject(firstValue)) === JSON.stringify(sortObject(secondValue))
+    } catch {
+        return false
+    }
 }
 
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
@@ -261,7 +275,10 @@ export const ThemeManager = {
         }
     },
     async saveAccountSettings(user, settings) {
-        if (this.isSavingTheme) return
+        if (this.isSavingTheme) {
+            console.warn("Theme save skipped due to active save")
+            return
+        }
         this.isSavingTheme = true
         const reference = this.getThemeSettingsReference(user)
         const normalizedSettings = {
@@ -284,16 +301,21 @@ export const ThemeManager = {
             mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
             sidebarBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.sidebarBackgroundImage)
         }
-        const normalizedCustomPresets = this.getCustomPresets()
+        const customPresets = this.getCustomPresets()
+        const localPresets = Array.isArray(customPresets)
+            ? customPresets
+            : []
+        const normalizedCustomPresets = localPresets
             .map(normalizeCloudPresetRecord)
             .filter(preset => preset.key)
+            .slice(0, this.maxCustomPresets)
         try {
             const snapshot = await reference.get()
             const currentData = snapshot.exists ? (snapshot.data() || {}) : {}
             const currentSettings = currentData.settings && typeof currentData.settings === "object" ? currentData.settings : null
             const currentCustomPresets = Array.isArray(currentData.customPresets) ? currentData.customPresets : []
-            const hasSameSettings = JSON.stringify(currentSettings) === JSON.stringify(cloudSettings)
-            const hasSameCustomPresets = JSON.stringify(currentCustomPresets) === JSON.stringify(normalizedCustomPresets)
+            const hasSameSettings = deepEqual(currentSettings, cloudSettings)
+            const hasSameCustomPresets = deepEqual(currentCustomPresets, normalizedCustomPresets)
             if (hasSameSettings && hasSameCustomPresets) {
                 return
             }
