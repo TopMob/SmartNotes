@@ -475,3 +475,12 @@
         transform: rotate(360deg);
     }
 }
+
+#confirm-modal {
+    z-index: 14000;
+}
+
+#lock-modal,
+#lock-center-modal {
+    z-index: 13000;
+}

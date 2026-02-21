@@ -310,7 +310,6 @@ Object.assign(UI, {
         }
         this.confirm("confirm_default", () => {
             this.cancelSettingsDraft()
-            this.closeModal("settings-modal")
         })
     },
 
@@ -322,9 +321,10 @@ Object.assign(UI, {
         if (this.settingsPage === "appearance") {
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
-            return
+        } else {
+            this.syncSettingsUI()
         }
-        this.syncSettingsUI()
+        this.closeModal("settings-modal")
     },
 
     async saveSettingsDraft() {
@@ -342,6 +342,7 @@ Object.assign(UI, {
                 this.syncSettingsUI()
             }
             this.showToast(this.getText("settings_saved", "Настройки сохранены"))
+            this.closeModal("settings-modal")
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
         }
@@ -445,7 +446,25 @@ Object.assign(UI, {
         ThemeManager.setupColorInputs((type, val) => {
             const current = StateStore.read().appearanceDraft || draft
             const normalizedValue = ThemeManager.normalizeHex(val)
-            const next = { ...current, preset: "manual", [type]: normalizedValue }
+            const isCustomPresetSelected = String(current.preset || "").startsWith("custom:")
+            if (isCustomPresetSelected) {
+                ThemeManager.updateCustomPreset(current.preset, { [type]: normalizedValue })
+                const updatedCustomPreset = ThemeManager.getCustomPresetByKey(current.preset)
+                const next = {
+                    ...current,
+                    p: updatedCustomPreset?.p || current.p,
+                    bg: updatedCustomPreset?.bg || current.bg,
+                    t: updatedCustomPreset?.t || current.t
+                }
+                this.applyAppearanceDraft(next)
+                ThemeManager.syncInputs(next.p, next.bg, next.t)
+                return
+            }
+            const next = {
+                ...current,
+                preset: "manual",
+                [type]: normalizedValue
+            }
             this.applyAppearanceDraft(next)
             ThemeManager.syncInputs(next.p, next.bg, next.t)
         })

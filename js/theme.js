@@ -162,6 +162,24 @@ export const ThemeManager = {
         this.saveCustomPresets([...currentPresets, nextPreset])
         return { ok: true, key: `custom:${nextPreset.key}` }
     },
+    updateCustomPreset(presetKey, updates) {
+        if (!String(presetKey || "").startsWith("custom:")) return false
+        const presetId = String(presetKey).slice(7)
+        const currentPresets = this.getCustomPresets()
+        const nextPresets = currentPresets.map(item => {
+            if (item.key !== presetId) return item
+            return {
+                ...item,
+                p: this.normalizeHex(updates?.p ?? item.p),
+                bg: this.normalizeHex(updates?.bg ?? item.bg),
+                t: this.normalizeHex(updates?.t ?? item.t),
+                mainBackgroundImage: normalizeLocalImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeLocalImageValue(updates?.sidebarBackgroundImage ?? item.sidebarBackgroundImage)
+            }
+        })
+        this.saveCustomPresets(nextPresets)
+        return true
+    },
     getCustomPresetByKey(presetKey) {
         if (!String(presetKey || "").startsWith("custom:")) return null
         const id = String(presetKey).slice(7)
@@ -244,7 +262,6 @@ export const ThemeManager = {
             }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
-            UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
         }
     },
     resolvePreset(key) {
