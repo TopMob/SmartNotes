@@ -17,13 +17,19 @@ Object.assign(UI, {
         if (!el) return
         el.classList.remove("active")
         if (id === "settings-modal") {
-            ThemeManager.revertToLastSaved()
             StateStore.update("appearanceDraft", null)
         }
     },
 
+    syncSettingsDraftFromOriginal() {
+        const originalSettings = StateStore.read().originalUserSettings
+        if (!originalSettings) return
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
+    },
+
     openSettings() {
         this.settingsPage = null
+        this.syncSettingsDraftFromOriginal()
         this.openModal("settings-modal")
         this.renderSettingsPage()
     },
@@ -95,6 +101,15 @@ Object.assign(UI, {
                             <select id="settings-folder-view" class="input-area" aria-label="${dict.folder_view_mode || "Display"}">
                                 <option value="compact">${dict.folder_view_compact || "Sidebar list"}</option>
                                 <option value="full">${dict.folder_view_full || "Full view"}</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_notes_per_page || "Notes per page"}</span>
+                            <select id="settings-notes-per-page" class="input-area" aria-label="${dict.settings_notes_per_page || "Notes per page"}">
+                                <option value="5">5</option>
+                                <option value="10">10</option>
+                                <option value="20">20</option>
+                                <option value="50">50</option>
                             </select>
                         </div>
                         <div class="settings-toggle-item">
@@ -257,40 +272,88 @@ Object.assign(UI, {
         }
     },
 
-    initAppearanceDraft() {
-        const saved = ThemeManager.getSavedSettings()
-        if (saved.preset && saved.preset !== "manual") {
-            const preset = ThemeManager.resolvePreset(saved.preset)
-            StateStore.update("appearanceDraft", {
-                preset: saved.preset,
-                p: saved.p || preset.p,
-                bg: saved.bg || preset.bg,
-                t: saved.t || preset.t,
-                brandName: saved.brandName || "SmartNotes",
-                basePreset: saved.basePreset || "oled",
-                mainBackgroundImage: saved.mainBackgroundImage || "",
-                sidebarBackgroundImage: saved.sidebarBackgroundImage || "",
-                uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78,
-                cardsOpacity: typeof saved.cardsOpacity === "number" ? saved.cardsOpacity : 0.9
-            })
-            return
+    getSettingsDraft() {
+        return StateStore.read().draftUserSettings || StateStore.read().originalUserSettings
+    },
+
+    isSettingsDirty() {
+        const originalSettings = StateStore.read().originalUserSettings
+        const draftSettings = StateStore.read().draftUserSettings
+        if (!originalSettings || !draftSettings) return false
+        return JSON.stringify(draftSettings) !== JSON.stringify(originalSettings)
+    },
+
+    updateSettingsDraft(updates) {
+        const currentDraft = this.getSettingsDraft()
+        if (!currentDraft) return
+        const nextDraft = { ...currentDraft, ...updates }
+        StateStore.update("draftUserSettings", nextDraft)
+    },
+
+    applyDraftSettingsToRuntime() {
+        const draftSettings = this.getSettingsDraft()
+        if (!draftSettings) return
+        AppLifecycle.applyUserSettingsToRuntime(draftSettings, { resetVisibleLimit: true })
+    },
+
+    requestCloseSettingsModal() {
+        if (this.isSettingsDirty()) {
+            const shouldExit = window.confirm("Вы уверены, что хотите выйти? Изменения не будут сохранены.")
+            if (!shouldExit) return
         }
+        this.cancelSettingsDraft()
+    },
+
+    cancelSettingsDraft() {
+        const originalSettings = StateStore.read().originalUserSettings
+        if (originalSettings) {
+            AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true })
+        }
+        this.syncSettingsDraftFromOriginal()
+        this.closeModal("settings-modal")
+    },
+
+    async saveSettingsDraft() {
+        const draftSettings = this.getSettingsDraft()
+        if (!draftSettings) return
+        try {
+            const savedSettings = await AppLifecycle.saveUserSettings(draftSettings)
+            if (!savedSettings) return
+            AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
+            this.syncSettingsDraftFromOriginal()
+            this.closeModal("settings-modal")
+            this.showToast(this.getText("settings_saved", "Настройки сохранены"))
+        } catch {
+            this.showToast(this.getText("sync_error", "Sync error"))
+        }
+    },
+
+    initAppearanceDraft() {
+        const settingsDraft = this.getSettingsDraft()
+        const sourceTheme = settingsDraft
+            ? {
+                preset: settingsDraft.themeId,
+                ...(settingsDraft.customTheme || {})
+            }
+            : ThemeManager.getSavedSettings()
+        const presetKey = sourceTheme.preset || "oled"
+        const preset = ThemeManager.resolvePreset(presetKey)
         StateStore.update("appearanceDraft", {
-            preset: "manual",
-            p: saved.p || ThemeManager.themes.oled.p,
-            bg: saved.bg || ThemeManager.themes.oled.bg,
-            t: saved.t || ThemeManager.themes.oled.t,
-            brandName: saved.brandName || "SmartNotes",
-            basePreset: saved.basePreset || "oled",
-            mainBackgroundImage: saved.mainBackgroundImage || "",
-            sidebarBackgroundImage: saved.sidebarBackgroundImage || "",
-            uiOpacity: typeof saved.uiOpacity === "number" ? saved.uiOpacity : 0.78,
-            cardsOpacity: typeof saved.cardsOpacity === "number" ? saved.cardsOpacity : 0.9
+            preset: presetKey,
+            p: sourceTheme.p || preset.p,
+            bg: sourceTheme.bg || preset.bg,
+            t: sourceTheme.t || preset.t,
+            brandName: sourceTheme.brandName || "SmartNotes",
+            basePreset: sourceTheme.basePreset || presetKey,
+            mainBackgroundImage: sourceTheme.mainBackgroundImage || "",
+            sidebarBackgroundImage: sourceTheme.sidebarBackgroundImage || "",
+            uiOpacity: typeof sourceTheme.uiOpacity === "number" ? sourceTheme.uiOpacity : 0.78,
+            cardsOpacity: typeof sourceTheme.cardsOpacity === "number" ? sourceTheme.cardsOpacity : 0.9
         })
     },
 
     renderAppearanceDraft() {
-        let draft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        let draft = StateStore.read().appearanceDraft || { preset: "oled", ...((this.getSettingsDraft() && this.getSettingsDraft().customTheme) || ThemeManager.getSavedSettings()) }
         if (draft.preset && draft.preset !== "manual" && (!draft.p || !draft.bg || !draft.t)) {
             const preset = ThemeManager.resolvePreset(draft.preset)
             draft = { ...draft, p: preset.p, bg: preset.bg, t: preset.t }
@@ -384,84 +447,81 @@ Object.assign(UI, {
 
     applyAppearanceDraft(nextDraft) {
         StateStore.update("appearanceDraft", nextDraft)
-        ThemeManager.applySettings(nextDraft, false)
+        this.updateSettingsDraft({
+            themeId: nextDraft.preset || "oled",
+            customTheme: {
+                p: nextDraft.p,
+                bg: nextDraft.bg,
+                t: nextDraft.t,
+                mainBackgroundImage: nextDraft.mainBackgroundImage || "",
+                sidebarBackgroundImage: nextDraft.sidebarBackgroundImage || "",
+                uiOpacity: typeof nextDraft.uiOpacity === "number" ? nextDraft.uiOpacity : 0.78,
+                cardsOpacity: typeof nextDraft.cardsOpacity === "number" ? nextDraft.cardsOpacity : 0.9
+            },
+            backgroundType: nextDraft.mainBackgroundImage ? "image" : "none",
+            backgroundValue: nextDraft.mainBackgroundImage || ""
+        })
+        this.applyDraftSettingsToRuntime()
         this.renderAppearanceDraft()
     },
 
     resetAppearanceDraft() {
         const defaults = ThemeManager.getDefaultSettings()
-        let draft = null
-        if (defaults.preset && defaults.preset !== "manual") {
-            const preset = ThemeManager.resolvePreset(defaults.preset)
-            draft = {
-                preset: defaults.preset,
-                p: preset.p,
-                bg: preset.bg,
-                t: preset.t,
-                mainBackgroundImage: defaults.mainBackgroundImage || "",
-                sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
-                uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78,
-                cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
-            }
-        } else {
-            draft = {
-                preset: "manual",
-                p: ThemeManager.themes.oled.p,
-                bg: ThemeManager.themes.oled.bg,
-                t: ThemeManager.themes.oled.t,
-                mainBackgroundImage: "",
-                sidebarBackgroundImage: "",
-                uiOpacity: 0.78,
-                cardsOpacity: 0.9
-            }
+        const preset = ThemeManager.resolvePreset(defaults.preset || "oled")
+        const draft = {
+            preset: defaults.preset || "oled",
+            p: preset.p,
+            bg: preset.bg,
+            t: preset.t,
+            mainBackgroundImage: defaults.mainBackgroundImage || "",
+            sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
+            uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78,
+            cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
         }
-        StateStore.update("appearanceDraft", draft)
-        ThemeManager.applySettings(draft, false)
-        this.renderAppearanceDraft()
+        this.applyAppearanceDraft(draft)
     },
 
     async saveAppearanceDraft() {
-        const draft = StateStore.read().appearanceDraft
-        if (!draft) return
-        ThemeManager.applySettings(draft, true)
-        const user = StateStore.read().user
-        if (user) {
-            try {
-                await ThemeManager.saveAccountSettings(user, ThemeManager.getSavedSettings())
-            } catch {
-                this.showToast(this.getText("sync_error", "Sync error"))
-            }
-        }
-        this.initAppearanceDraft()
-        this.renderAppearanceDraft()
-        this.closeModal("settings-modal")
+        await this.saveSettingsDraft()
     },
 
     bindSettingsControls() {
         const langSelect = document.getElementById("settings-language")
         if (langSelect) {
-            langSelect.addEventListener("change", (e) => {
-                this.setLang(e.target.value)
+            langSelect.addEventListener("change", event => {
+                this.updateSettingsDraft({ lang: event.target.value === "en" ? "en" : "ru" })
+                this.applyDraftSettingsToRuntime()
+                this.syncSettingsUI()
             })
         }
 
         const folderSelect = document.getElementById("settings-folder-view")
         if (folderSelect) {
-            folderSelect.addEventListener("change", (e) => {
-                const next = e.target.value === "full" ? "full" : "compact"
-                StateActions.updateConfig({ folderViewMode: next })
-                this.savePreferences()
-                this.renderFolders()
-                filterAndRender(document.getElementById("search-input")?.value || "")
+            folderSelect.addEventListener("change", event => {
+                this.updateSettingsDraft({ folderViewMode: event.target.value === "full" ? "full" : "compact" })
+                this.applyDraftSettingsToRuntime()
+                this.syncSettingsUI()
+            })
+        }
+
+        const notesPerPageSelect = document.getElementById("settings-notes-per-page")
+        if (notesPerPageSelect) {
+            notesPerPageSelect.addEventListener("change", event => {
+                const allowedValues = new Set([5, 10, 20, 50])
+                const parsedValue = Number(event.target.value)
+                const notesPerPage = allowedValues.has(parsedValue) ? parsedValue : 10
+                this.updateSettingsDraft({ notesPerPage })
+                this.applyDraftSettingsToRuntime()
+                this.syncSettingsUI()
             })
         }
 
         const reduceToggle = document.getElementById("settings-reduce-motion")
         if (reduceToggle) {
-            reduceToggle.addEventListener("change", (e) => {
-                StateActions.updateConfig({ reduceMotion: !!e.target.checked })
-                this.savePreferences()
-                ThemeManager.revertToLastSaved()
+            reduceToggle.addEventListener("change", event => {
+                this.updateSettingsDraft({ reduceMotion: !!event.target.checked })
+                this.applyDraftSettingsToRuntime()
+                this.syncSettingsUI()
             })
         }
     },
@@ -550,9 +610,7 @@ Object.assign(UI, {
             ...current,
             [key]: value
         }
-        StateStore.update("appearanceDraft", next)
-        ThemeManager.applySettings(next, false)
-        this.renderAppearanceDraft()
+        this.applyAppearanceDraft(next)
     },
 
     syncAppearanceOpacityControl(draft) {
@@ -770,12 +828,18 @@ Object.assign(UI, {
     },
 
     syncSettingsUI() {
+        const draftSettings = this.getSettingsDraft()
+        if (!draftSettings) return
         const langSelect = document.getElementById("settings-language")
-        if (langSelect) langSelect.value = StateStore.read().config.lang === "en" ? "en" : "ru"
+        if (langSelect) langSelect.value = draftSettings.lang === "en" ? "en" : "ru"
         const folderSelect = document.getElementById("settings-folder-view")
-        if (folderSelect) folderSelect.value = StateStore.read().config.folderViewMode === "full" ? "full" : "compact"
+        if (folderSelect) folderSelect.value = draftSettings.folderViewMode === "full" ? "full" : "compact"
         const reduceToggle = document.getElementById("settings-reduce-motion")
-        if (reduceToggle) reduceToggle.checked = !!StateStore.read().config.reduceMotion
+        if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
+        const notesPerPageSelect = document.getElementById("settings-notes-per-page")
+        if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 10)
+        const saveButton = document.querySelector('[data-action="settings-save"]')
+        if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },
 
     renderEditorSettings() {

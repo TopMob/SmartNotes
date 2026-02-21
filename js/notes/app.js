@@ -22,6 +22,198 @@ const AppLifecycle = {
     visibleNotesLimit: 10,
     totalVisibleNotesCount: 0,
     renderedVisibleNotesCount: 0,
+    settingsUnsubscribe: null,
+    settingsReference: null,
+    settingsStorageType: "settings",
+    createDefaultUserSettings() {
+        const cachedThemeSettings = ThemeManager.getSavedSettings()
+        return {
+            notesPerPage: 10,
+            themeId: cachedThemeSettings.preset || "oled",
+            customTheme: {
+                p: cachedThemeSettings.p || ThemeManager.themes.oled.p,
+                bg: cachedThemeSettings.bg || ThemeManager.themes.oled.bg,
+                t: cachedThemeSettings.t || ThemeManager.themes.oled.t,
+                mainBackgroundImage: cachedThemeSettings.mainBackgroundImage || "",
+                sidebarBackgroundImage: cachedThemeSettings.sidebarBackgroundImage || "",
+                uiOpacity: typeof cachedThemeSettings.uiOpacity === "number" ? cachedThemeSettings.uiOpacity : 0.78,
+                cardsOpacity: typeof cachedThemeSettings.cardsOpacity === "number" ? cachedThemeSettings.cardsOpacity : 0.9
+            },
+            backgroundType: cachedThemeSettings.mainBackgroundImage ? "image" : "none",
+            backgroundValue: cachedThemeSettings.mainBackgroundImage || "",
+            lang: StateStore.read().config.lang || "ru",
+            folderViewMode: StateStore.read().config.folderViewMode || "compact",
+            reduceMotion: !!StateStore.read().config.reduceMotion,
+            schemaVersion: 1
+        }
+    },
+    normalizeUserSettings(rawSettings) {
+        const defaults = this.createDefaultUserSettings()
+        const source = rawSettings && typeof rawSettings === "object" ? rawSettings : {}
+        const notesPerPageOptions = new Set([5, 10, 20, 50])
+        const parsedNotesPerPage = Number(source.notesPerPage)
+        const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
+        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
+        return {
+            notesPerPage,
+            themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
+            customTheme: customThemeSource,
+            backgroundType: typeof source.backgroundType === "string" && source.backgroundType ? source.backgroundType : defaults.backgroundType,
+            backgroundValue: typeof source.backgroundValue === "string" ? source.backgroundValue : defaults.backgroundValue,
+            lang: source.lang === "en" ? "en" : "ru",
+            folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
+            reduceMotion: !!source.reduceMotion,
+            schemaVersion: 1
+        }
+    },
+    cloneUserSettings(settings) {
+        return JSON.parse(JSON.stringify(settings || this.createDefaultUserSettings()))
+    },
+    getUserSettingsCacheKey(uid) {
+        return `user-settings-cache:${String(uid || "")}`
+    },
+    readCachedUserSettings(uid) {
+        return SafeStorage.local.getJson(this.getUserSettingsCacheKey(uid), null)
+    },
+    writeCachedUserSettings(uid, settings) {
+        SafeStorage.local.setJson(this.getUserSettingsCacheKey(uid), settings)
+    },
+    applyUserSettingsToRuntime(userSettings, options = {}) {
+        const normalizedSettings = this.normalizeUserSettings(userSettings)
+        const normalizedTheme = {
+            preset: normalizedSettings.themeId,
+            ...(normalizedSettings.customTheme || {})
+        }
+        ThemeManager.applySettings(normalizedTheme, true)
+        StateActions.updateConfig({
+            lang: normalizedSettings.lang,
+            folderViewMode: normalizedSettings.folderViewMode,
+            reduceMotion: normalizedSettings.reduceMotion
+        })
+        UI.applyLangToDom()
+        UI.updateViewTitle()
+        UI.updatePrimaryActionLabel()
+        UI.renderFolders()
+        this.notesRenderStep = normalizedSettings.notesPerPage
+        if (options.resetVisibleLimit) {
+            this.visibleNotesLimit = this.notesRenderStep
+        } else {
+            this.visibleNotesLimit = Math.max(this.notesRenderStep, Number(this.visibleNotesLimit) || this.notesRenderStep)
+        }
+        this.updateLoadMoreButton()
+        filterAndRender(document.getElementById("search-input")?.value || "")
+    },
+    updateOriginalUserSettings(userSettings) {
+        const normalizedSettings = this.normalizeUserSettings(userSettings)
+        StateStore.update("originalUserSettings", this.cloneUserSettings(normalizedSettings))
+    },
+    isPermissionDeniedError(error) {
+        return String(error?.code || "") === "permission-denied"
+    },
+    async resolveUserSettingsReference(user) {
+        const primaryReference = DataPath.getUserSettingsReference(user)
+        const fallbackReference = DataPath.getUserLegacySettingsReference(user)
+        if (primaryReference) {
+            try {
+                const snapshot = await primaryReference.get()
+                this.settingsStorageType = "settings"
+                return { reference: primaryReference, snapshot }
+            } catch (error) {
+                if (!this.isPermissionDeniedError(error) || !fallbackReference) throw error
+            }
+        }
+        if (!fallbackReference) return { reference: null, snapshot: null }
+        const fallbackSnapshot = await fallbackReference.get()
+        this.settingsStorageType = "preferences"
+        return { reference: fallbackReference, snapshot: fallbackSnapshot }
+    },
+    async writeUserSettingsToReference(settingsReference, normalizedSettings) {
+        if (!settingsReference) return
+        await settingsReference.set({
+            ...normalizedSettings,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+    },
+    async saveUserSettings(settingsToSave) {
+        const user = StateStore.read().user
+        if (!user) return null
+        const normalizedSettings = this.normalizeUserSettings(settingsToSave)
+        const activeSettingsReference = this.settingsReference || (await this.resolveUserSettingsReference(user)).reference
+        if (!activeSettingsReference) return null
+        try {
+            await this.writeUserSettingsToReference(activeSettingsReference, normalizedSettings)
+            this.settingsReference = activeSettingsReference
+        } catch (error) {
+            if (!this.isPermissionDeniedError(error)) throw error
+            const fallbackReference = DataPath.getUserLegacySettingsReference(user)
+            if (!fallbackReference) throw error
+            await this.writeUserSettingsToReference(fallbackReference, normalizedSettings)
+            this.settingsReference = fallbackReference
+            this.settingsStorageType = "preferences"
+        }
+        this.writeCachedUserSettings(user.uid, normalizedSettings)
+        this.updateOriginalUserSettings(normalizedSettings)
+        return normalizedSettings
+    },
+    async initializeUserSettings(user) {
+        const cachedSettings = this.readCachedUserSettings(user.uid)
+        if (cachedSettings) {
+            const normalizedCached = this.normalizeUserSettings(cachedSettings)
+            this.updateOriginalUserSettings(normalizedCached)
+            this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true })
+        } else {
+            const defaultSettings = this.createDefaultUserSettings()
+            this.updateOriginalUserSettings(defaultSettings)
+            this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true })
+        }
+
+        let resolvedReference = null
+        let snapshot = null
+        try {
+            const resolved = await this.resolveUserSettingsReference(user)
+            resolvedReference = resolved.reference
+            snapshot = resolved.snapshot
+        } catch (error) {
+            console.error("Settings init error", error)
+            return
+        }
+        if (!resolvedReference || !snapshot) return
+
+        this.settingsReference = resolvedReference
+        let loadedSettings = null
+        if (!snapshot.exists) {
+            loadedSettings = this.createDefaultUserSettings()
+            await this.writeUserSettingsToReference(resolvedReference, loadedSettings)
+        } else {
+            loadedSettings = this.normalizeUserSettings(snapshot.data() || {})
+        }
+
+        this.writeCachedUserSettings(user.uid, loadedSettings)
+        this.updateOriginalUserSettings(loadedSettings)
+        this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true })
+
+        if (this.settingsUnsubscribe) this.settingsUnsubscribe()
+        this.settingsUnsubscribe = resolvedReference.onSnapshot(nextSnapshot => {
+            if (!nextSnapshot.exists) return
+            const incomingSettings = this.normalizeUserSettings(nextSnapshot.data() || {})
+            const currentOriginalSettings = StateStore.read().originalUserSettings
+            if (JSON.stringify(incomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
+            this.writeCachedUserSettings(user.uid, incomingSettings)
+            this.updateOriginalUserSettings(incomingSettings)
+            const settingsModal = document.getElementById("settings-modal")
+            const isSettingsModalActive = !!settingsModal?.classList.contains("active")
+            const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
+            if (!isSettingsModalActive || !isDraftDirty) {
+                this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
+                if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
+                return
+            }
+            UI.showToast("Настройки были изменены на другом устройстве")
+        }, error => {
+            if (this.isPermissionDeniedError(error)) return
+            console.error("Settings sync error", error)
+        })
+    },
     normalizeDateValue(value) {
         if (window.NoteHelpers && typeof window.NoteHelpers.normalizeDateValue === "function") {
             return window.NoteHelpers.normalizeDateValue(value)
@@ -147,8 +339,18 @@ const AppLifecycle = {
         this.hasMoreOwnedNotes = false
         this.loadingMoreOwnedNotes = false
         this.lastOwnedNoteDocument = null
+        this.notesRenderStep = 10
         this.visibleNotesLimit = this.notesRenderStep
         this.totalVisibleNotesCount = 0
+        if (this.settingsUnsubscribe) this.settingsUnsubscribe()
+        this.settingsUnsubscribe = null
+        this.settingsReference = null
+        this.settingsStorageType = "settings"
+        if (typeof ThemeManager !== "undefined" && typeof ThemeManager.resetLocalThemeCache === "function") {
+            ThemeManager.resetLocalThemeCache()
+        }
+        StateStore.update("originalUserSettings", null)
+        StateStore.update("draftUserSettings", null)
         this.renderedVisibleNotesCount = 0
         this.clearSubscriptions()
         this.updateLoadMoreButton()
@@ -313,23 +515,13 @@ const AppLifecycle = {
             this.updateNotesState({ fromCache: true })
         }
 
-        if (typeof ThemeManager !== "undefined") {
-            ThemeManager.loadAccountSettings(user)
-                .then(accountThemeSettings => {
-                    if (!accountThemeSettings) return
-                    if (!this.activeUid || this.activeUid !== newUserUid) return
-                    ThemeManager.applySettings(accountThemeSettings, true)
-                })
-                .catch(() => {
-                    if (this.activeUid === newUserUid) UI.showToast(UI.getText("sync_error", "Sync error"))
-                })
-        }
-
         const userRootReference = await DataPath.ensureUserDocument(user)
         if (!userRootReference) {
             UI.showToast(UI.getText("sync_error", "Sync error"))
             return
         }
+
+        await this.initializeUserSettings(user)
 
         const userFoldersCollection = DataPath.getUserFoldersCollection(user)
         const userNotesCollection = DataPath.getUserNotesCollection(user)

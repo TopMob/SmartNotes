@@ -24,7 +24,11 @@ Object.assign(UI, {
 
             const overlay = e.target.closest(".modal-overlay")
             if (overlay && e.target === overlay && !overlay.dataset.modalStatic) {
-                this.closeModal(overlay.id)
+                if (overlay.id === "settings-modal") {
+                    this.requestCloseSettingsModal()
+                } else {
+                    this.closeModal(overlay.id)
+                }
             }
         })
 
@@ -354,6 +358,15 @@ Object.assign(UI, {
                 break
             case "open-settings":
                 this.openSettings()
+                break
+            case "settings-save":
+                this.saveSettingsDraft()
+                break
+            case "settings-cancel":
+                this.cancelSettingsDraft()
+                break
+            case "close-settings-modal":
+                this.requestCloseSettingsModal()
                 break
             case "trigger-admin-full-analysis":
                 this.triggerFullAnalysisForAllUsers()
