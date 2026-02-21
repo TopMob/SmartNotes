@@ -384,8 +384,7 @@ Object.assign(UI, {
             }
             await noteReference.update({
                 analyzed: false,
-                aiProcessed: false,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                aiProcessed: false
             })
             this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
             this.closeModal("note-actions-modal")
