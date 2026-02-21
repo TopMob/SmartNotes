@@ -29,29 +29,17 @@ const normalizeLocalImageValue = (value, maxLength = 600000) => {
     return source.length > maxLength ? "" : source
 }
 
-const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
-    if (typeof value !== "string") return ""
-    const source = value.trim()
-    if (!source) return ""
-    if (source.startsWith("data:image/")) return ""
-    return source.length > maxLength ? "" : source
-}
+const normalizeCloudSyncImageValue = () => ""
 
-const isDataImageValue = (value) => typeof value === "string" && value.trim().startsWith("data:image/")
 
 const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
     const safeLocalSettings = localSettings && typeof localSettings === "object" ? localSettings : {}
     const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
-    const mergedSettings = { ...safeCloudSettings }
-    const localMainBackgroundImage = normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage)
-    const localSidebarBackgroundImage = normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage)
-    if (!normalizeLocalImageValue(safeCloudSettings.mainBackgroundImage) && isDataImageValue(localMainBackgroundImage)) {
-        mergedSettings.mainBackgroundImage = localMainBackgroundImage
+    return {
+        ...safeCloudSettings,
+        mainBackgroundImage: normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage) || normalizeCloudSyncImageValue(),
+        sidebarBackgroundImage: normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage) || normalizeCloudSyncImageValue()
     }
-    if (!normalizeLocalImageValue(safeCloudSettings.sidebarBackgroundImage) && isDataImageValue(localSidebarBackgroundImage)) {
-        mergedSettings.sidebarBackgroundImage = localSidebarBackgroundImage
-    }
-    return mergedSettings
 }
 
 const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
@@ -65,21 +53,12 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
         .map(item => {
             const presetKey = String(item.key || "")
             const localPreset = localPresetsByKey.get(presetKey)
-            const cloudMainBackgroundImage = normalizeLocalImageValue(item.mainBackgroundImage)
-            const cloudSidebarBackgroundImage = normalizeLocalImageValue(item.sidebarBackgroundImage)
-            const mergedPreset = {
+            return {
                 ...item,
                 key: presetKey,
-                mainBackgroundImage: cloudMainBackgroundImage,
-                sidebarBackgroundImage: cloudSidebarBackgroundImage
+                mainBackgroundImage: normalizeLocalImageValue(localPreset?.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeLocalImageValue(localPreset?.sidebarBackgroundImage)
             }
-            if (!cloudMainBackgroundImage && isDataImageValue(localPreset?.mainBackgroundImage)) {
-                mergedPreset.mainBackgroundImage = normalizeLocalImageValue(localPreset.mainBackgroundImage)
-            }
-            if (!cloudSidebarBackgroundImage && isDataImageValue(localPreset?.sidebarBackgroundImage)) {
-                mergedPreset.sidebarBackgroundImage = normalizeLocalImageValue(localPreset.sidebarBackgroundImage)
-            }
-            return mergedPreset
         })
 }
 
@@ -98,9 +77,7 @@ const buildFirestoreSafeCustomPresets = (presets) => {
             key: String(item.key || ""),
             p: ThemeManager.normalizeHex(item.p),
             bg: ThemeManager.normalizeHex(item.bg),
-            t: ThemeManager.normalizeHex(item.t),
-            mainBackgroundImage: normalizeCloudSyncImageValue(item.mainBackgroundImage),
-            sidebarBackgroundImage: normalizeCloudSyncImageValue(item.sidebarBackgroundImage)
+            t: ThemeManager.normalizeHex(item.t)
         }))
         .slice(0, ThemeManager.maxCustomPresets)
 }
@@ -268,9 +245,12 @@ export const ThemeManager = {
         try {
             const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
             const cloudSettings = {
-                ...normalizedSettings,
-                mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
-                sidebarBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.sidebarBackgroundImage)
+                preset: normalizedSettings.preset,
+                p: normalizedSettings.p,
+                bg: normalizedSettings.bg,
+                t: normalizedSettings.t,
+                uiOpacity: normalizedSettings.uiOpacity,
+                cardsOpacity: normalizedSettings.cardsOpacity
             }
             const payload = {
                 settings: cloudSettings,
