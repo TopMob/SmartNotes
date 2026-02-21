@@ -77,6 +77,50 @@ async function analyzeChunkWithOllama(folders, notesChunk) {
     return parsedPayload
 }
 
+async function fetchPendingNotes(uid) {
+    const notesCollection = database.collection("users").doc(uid).collection("notes")
+    const snapshotByAnalyzedFlag = await notesCollection.where("analyzed", "==", false).get()
+    const snapshotByAiProcessedFlag = await notesCollection.where("aiProcessed", "==", false).get()
+    const pendingDocuments = new Map()
+    snapshotByAnalyzedFlag.docs.forEach(documentEntry => {
+        pendingDocuments.set(documentEntry.id, documentEntry)
+    })
+    snapshotByAiProcessedFlag.docs.forEach(documentEntry => {
+        pendingDocuments.set(documentEntry.id, documentEntry)
+    })
+    return [...pendingDocuments.values()]
+}
+
+function mapNotesForAnalysis(noteDocuments) {
+    return noteDocuments
+        .map(documentEntry => {
+            const noteData = documentEntry.data() || {}
+            const noteText = stripHtml(noteData.content || "").slice(0, NOTE_TEXT_LIMIT)
+            return {
+                id: documentEntry.id,
+                title: String(noteData.title || ""),
+                text: noteText,
+                hasFolder: !!noteData.folderId
+            }
+        })
+        .filter(note => note.text)
+}
+
+async function markChunkAnalysisError(uid, notesChunk, errorCode) {
+    if (!notesChunk.length) return
+    const batch = database.batch()
+    notesChunk.forEach(note => {
+        const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
+        batch.update(noteReference, {
+            analyzed: false,
+            aiProcessed: false,
+            aiError: errorCode,
+            aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
+        })
+    })
+    await batch.commit()
+}
+
 async function analyzeUserNotes(uid, mode = "pending") {
     const foldersSnapshot = await database.collection("users").doc(uid).collection("folders").get()
     const folders = foldersSnapshot.docs
@@ -87,31 +131,22 @@ async function analyzeUserNotes(uid, mode = "pending") {
         .filter(folder => folder.id && folder.name)
 
     const availableFolderIds = new Set(folders.map(folder => folder.id))
-    const notesSnapshot = await database.collection("users").doc(uid).collection("notes").get()
-    if (notesSnapshot.empty) return
-
     const shouldAnalyzeAllNotes = String(mode || "").trim().toLowerCase() === "all"
-    const allNotes = notesSnapshot.docs
-        .map(documentEntry => {
-            const noteData = documentEntry.data() || {}
-            const noteText = stripHtml(noteData.content || "").slice(0, NOTE_TEXT_LIMIT)
-            return {
-                id: documentEntry.id,
-                title: String(noteData.title || ""),
-                text: noteText,
-                hasFolder: !!noteData.folderId,
-                analyzed: noteData.analyzed === true
-            }
-        })
-        .filter(note => note.text)
-        .filter(note => shouldAnalyzeAllNotes || !note.analyzed)
+    const noteDocuments = shouldAnalyzeAllNotes
+        ? (await database.collection("users").doc(uid).collection("notes").get()).docs
+        : await fetchPendingNotes(uid)
+    if (!noteDocuments.length) return
+
+    const allNotes = mapNotesForAnalysis(noteDocuments)
 
     for (let index = 0; index < allNotes.length; index += ANALYSIS_BATCH_SIZE) {
         const notesChunk = allNotes.slice(index, index + ANALYSIS_BATCH_SIZE)
         let analysisResults
         try {
             analysisResults = await analyzeChunkWithOllama(folders, notesChunk)
-        } catch {
+        } catch (error) {
+            const normalizedErrorCode = String(error?.message || "analysis_failed").trim() || "analysis_failed"
+            await markChunkAnalysisError(uid, notesChunk, normalizedErrorCode)
             continue
         }
 
@@ -126,6 +161,8 @@ async function analyzeUserNotes(uid, mode = "pending") {
             batch.update(noteReference, {
                 analyzed: true,
                 aiProcessed: true,
+                aiError: admin.firestore.FieldValue.delete(),
+                aiErrorAt: admin.firestore.FieldValue.delete(),
                 aiRelevance: clampInteger(analysisResult?.relevance, 0, 100),
                 aiTagsVisible: Array.isArray(analysisResult?.userTags)
                     ? analysisResult.userTags.map(tag => String(tag || "").trim()).filter(Boolean).slice(0, 5)
