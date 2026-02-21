@@ -1,7 +1,8 @@
 const AppLifecycle = {
     initialized: false,
     activeUid: null,
-    unsubscribers: [],
+    foldersUnsubscribe: null,
+    notesUnsubscribe: null,
     ownedNotes: [],
     sharedNotes: new Map(),
     sharedEntries: new Map(),
@@ -12,6 +13,7 @@ const AppLifecycle = {
     reminderTimers: new Map(),
     networkListenersBound: false,
     networkRetryTimer: null,
+    sessionStartPromise: null,
     normalizeDateValue(value) {
         if (window.NoteHelpers && typeof window.NoteHelpers.normalizeDateValue === "function") {
             return window.NoteHelpers.normalizeDateValue(value)
@@ -78,14 +80,14 @@ const AppLifecycle = {
     },
 
     clearSubscriptions() {
-        this.unsubscribers.forEach(unsub => {
-            if (typeof unsub === "function") unsub()
-        })
-        this.unsubscribers = []
-        if (typeof this.sharedUnsub === "function") this.sharedUnsub()
+        if (this.foldersUnsubscribe) this.foldersUnsubscribe()
+        this.foldersUnsubscribe = null
+        if (this.notesUnsubscribe) this.notesUnsubscribe()
+        this.notesUnsubscribe = null
+        if (this.sharedUnsub) this.sharedUnsub()
         this.sharedUnsub = null
         this.sharedNoteUnsubs.forEach(unsub => {
-            if (typeof unsub === "function") unsub()
+            if (unsub) unsub()
         })
         this.sharedNoteUnsubs = new Map()
         this.sharedEntries = new Map()
@@ -98,7 +100,7 @@ const AppLifecycle = {
         if (typeof this.sharedUnsub === "function") this.sharedUnsub()
         this.sharedUnsub = null
         this.sharedNoteUnsubs.forEach(unsub => {
-            if (typeof unsub === "function") unsub()
+            if (unsub) unsub()
         })
         this.sharedNoteUnsubs = new Map()
         this.sharedEntries = new Map()
@@ -156,52 +158,13 @@ const AppLifecycle = {
         this.ownedNotes = this.sortOwnedNotes(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
         this.updateNotesState()
     },
-    async fetchFoldersOnce(collectionReference) {
-        try {
-            const snapshot = await collectionReference.get()
-            this.applyFoldersSnapshot(snapshot)
-            return true
-        } catch (error) {
-            console.warn("Folders single fetch failed", error)
-            return false
-        }
-    },
-    async fetchNotesOnce(collectionReference) {
-        try {
-            const snapshot = await collectionReference.get()
-            this.applyNotesSnapshot(snapshot)
-            return true
-        } catch (error) {
-            console.warn("Notes single fetch failed", error)
-            return false
-        }
-    },
-    subscribeCollectionWithFallback(options) {
-        const { collectionReference, onSnapshotData, onSnapshotError, onFallbackError } = options
-        let activeUnsubscribe = () => {}
-        let stopped = false
-        const resubscribe = () => {
-            if (stopped) return
-            activeUnsubscribe = collectionReference.onSnapshot(onSnapshotData, async error => {
-                const fallbackSucceeded = await onSnapshotError(error)
-                if (!fallbackSucceeded) {
-                    onFallbackError(error)
-                }
-                try {
-                    activeUnsubscribe()
-                } catch {}
-                if (stopped) return
-                setTimeout(() => {
-                    resubscribe()
-                }, 2000)
-            })
-        }
-        resubscribe()
+    subscribeCollection(options) {
+        const { collectionReference, onSnapshotData, onSnapshotError } = options
+        const unsubscribe = collectionReference.onSnapshot(onSnapshotData, error => {
+            onSnapshotError(error)
+        })
         return () => {
-            stopped = true
-            try {
-                activeUnsubscribe()
-            } catch {}
+            if (unsubscribe) unsubscribe()
         }
     },
 
@@ -221,15 +184,19 @@ const AppLifecycle = {
     },
     async startUserSession(user, options = {}) {
         if (!db || !user) return
+        const newUserUid = String(user.uid || "")
+        if (!newUserUid) return
+        if (this.activeUid === newUserUid && !options.forceResubscribe) return
+        if (this.sessionStartPromise) return this.sessionStartPromise
 
-        await this.initializeOnce()
+        this.sessionStartPromise = (async () => {
+            await this.initializeOnce()
         if (typeof CollaborationService !== "undefined") {
             CollaborationService.captureShareToken()
         }
 
-        if (this.activeUid === user.uid && !options.forceResubscribe) return
         this.stopUserSession()
-        this.activeUid = user.uid
+        this.activeUid = newUserUid
 
         const cachedNotes = NotesStorage.readCachedNotes(user.uid)
         if (cachedNotes.length) {
@@ -241,11 +208,11 @@ const AppLifecycle = {
             ThemeManager.loadAccountSettings(user)
                 .then(accountThemeSettings => {
                     if (!accountThemeSettings) return
-                    if (!this.activeUid || this.activeUid !== user.uid) return
+                    if (!this.activeUid || this.activeUid !== newUserUid) return
                     ThemeManager.applySettings(accountThemeSettings, true)
                 })
                 .catch(() => {
-                    if (this.activeUid === user.uid) UI.showToast(UI.getText("sync_error", "Sync error"))
+                    if (this.activeUid === newUserUid) UI.showToast(UI.getText("sync_error", "Sync error"))
                 })
         }
 
@@ -262,37 +229,35 @@ const AppLifecycle = {
             return
         }
 
-        const folderUnsub = this.subscribeCollectionWithFallback({
+        if (this.foldersUnsubscribe) {
+            this.foldersUnsubscribe()
+            this.foldersUnsubscribe = null
+        }
+        this.foldersUnsubscribe = this.subscribeCollection({
             collectionReference: userFoldersCollection,
             onSnapshotData: snapshot => {
                 this.applyFoldersSnapshot(snapshot)
             },
-            onSnapshotError: async error => {
-                console.warn("Folders snapshot error", error)
-                return this.fetchFoldersOnce(userFoldersCollection)
-            },
-            onFallbackError: error => {
+            onSnapshotError: error => {
                 UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Folders sync error", error)
             }
         })
 
-        const notesUnsub = this.subscribeCollectionWithFallback({
+        if (this.notesUnsubscribe) {
+            this.notesUnsubscribe()
+            this.notesUnsubscribe = null
+        }
+        this.notesUnsubscribe = this.subscribeCollection({
             collectionReference: userNotesCollection,
             onSnapshotData: snapshot => {
                 this.applyNotesSnapshot(snapshot)
             },
-            onSnapshotError: async error => {
-                console.warn("Notes snapshot error", error)
-                return this.fetchNotesOnce(userNotesCollection)
-            },
-            onFallbackError: error => {
+            onSnapshotError: error => {
                 UI.showToast(UI.getText("sync_error", "Sync error"))
                 console.error("Notes sync error", error)
             }
         })
-
-        this.unsubscribers = [folderUnsub, notesUnsub]
 
         const loader = document.getElementById("app-loader")
         if (loader) loader.classList.add("hidden")
@@ -330,6 +295,13 @@ const AppLifecycle = {
         if (search) search.value = ""
 
         switchView("notes")
+        })()
+
+        try {
+            await this.sessionStartPromise
+        } finally {
+            this.sessionStartPromise = null
+        }
     },
     updateNotesState(options = {}) {
         let notes = [...this.ownedNotes, ...this.sharedNotes.values()]

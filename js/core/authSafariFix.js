@@ -23,10 +23,5 @@ export async function setAuthPersistenceFromOrder(auth, persistenceOrder) {
 export async function setupAuthPersistence(auth) {
     const persistenceEnum = resolveAuthPersistenceEnum()
     if (!persistenceEnum) return null
-    const persistenceOrder = [
-        persistenceEnum.LOCAL,
-        persistenceEnum.SESSION,
-        persistenceEnum.NONE
-    ]
-    return setAuthPersistenceFromOrder(auth, persistenceOrder)
+    return setAuthPersistenceFromOrder(auth, [persistenceEnum.LOCAL])
 }

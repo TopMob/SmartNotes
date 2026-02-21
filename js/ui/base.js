@@ -9,6 +9,7 @@ const UI = {
     settingsPage: null,
     deferredInstallPromptEvent: null,
     installCapabilityKnown: false,
+    _eventsBound: false,
 
     init() {
         this.els = {

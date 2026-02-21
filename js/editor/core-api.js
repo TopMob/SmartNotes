@@ -171,6 +171,15 @@ export const EditorAPI = (() => {
         return !!titleText || !!plainTextContent || hasMedia || tagsCount > 0 || drawingCount > 0
     }
 
+    const serializeEditorStateSnapshot = (note) => JSON.stringify({
+        title: String(note?.title || ""),
+        content: String(note?.content || ""),
+        tags: Array.isArray(note?.tags) ? note.tags.map(tag => String(tag || "")) : [],
+        pageDrawings: Array.isArray(note?.pageDrawings) ? note.pageDrawings.map(value => String(value || "")) : [],
+        pageDrawingsRevision: String(note?.pageDrawingsRevision || ""),
+        folderId: String(note?.folderId || "")
+    })
+
     const save = async (options = {}) => {
         const user = StateStore.read().user
         if (!db || !user) return
@@ -214,6 +223,17 @@ export const EditorAPI = (() => {
             return
         }
 
+        const currentEditorState = serializeEditorStateSnapshot(note)
+        if (state.initialEditorState && currentEditorState === state.initialEditorState) {
+            SaveStateService?.markSaved?.()
+            StateStore.update("editorDirty", false)
+            if (!options.silent && !isExitSave) {
+                UI.showToast(UI.getText("saved", "Saved"))
+                await close({ persistChanges: false, silent: true })
+            }
+            return
+        }
+
         const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
         if (!hasRemotePersistableChanges && !editorHasUnsavedChanges) {
             SaveStateService?.markSaved?.()
@@ -248,6 +268,7 @@ export const EditorAPI = (() => {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
+            state.initialEditorState = serializeEditorStateSnapshot(note)
             SaveStateService?.markSaved?.()
             if (!options.silent) {
                 UI.showToast(UI.getText("saved", "Saved"))
@@ -698,8 +719,17 @@ const addPage = () => {
         state.future = []
         renderState()
 
-        state.history.push(captureSnapshot())
-        state.autoSaveSnapshot = captureSnapshot()
+        const openedNoteSnapshot = captureSnapshot()
+        state.history.push(openedNoteSnapshot)
+        state.autoSaveSnapshot = openedNoteSnapshot
+        state.initialEditorState = serializeEditorStateSnapshot({
+            ...prepared,
+            title: openedNoteSnapshot.title,
+            content: openedNoteSnapshot.content,
+            tags: Array.isArray(openedNoteSnapshot.tags) ? [...openedNoteSnapshot.tags] : [],
+            pageDrawings: Array.isArray(openedNoteSnapshot.pageDrawings) ? [...openedNoteSnapshot.pageDrawings] : [],
+            pageDrawingsRevision: openedNoteSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(openedNoteSnapshot.pageDrawings)
+        })
 
         elements.wrapper.classList.add("active")
         setTimeout(() => focusActivePage(), 50)
@@ -746,6 +776,7 @@ const addPage = () => {
         state.pageIndex = 0
         state.titleTouched = false
         state.autoSaveSnapshot = null
+        state.initialEditorState = null
         if (state.snapshotFrame) cancelAnimationFrame(state.snapshotFrame)
         state.snapshotFrame = null
         state.drawingState.active = false
