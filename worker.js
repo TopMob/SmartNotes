@@ -77,7 +77,7 @@ async function analyzeChunkWithOllama(folders, notesChunk) {
     return parsedPayload
 }
 
-async function analyzeUserNotes(uid) {
+async function analyzeUserNotes(uid, mode = "pending") {
     const foldersSnapshot = await database.collection("users").doc(uid).collection("folders").get()
     const folders = foldersSnapshot.docs
         .map(documentEntry => ({
@@ -90,6 +90,7 @@ async function analyzeUserNotes(uid) {
     const notesSnapshot = await database.collection("users").doc(uid).collection("notes").get()
     if (notesSnapshot.empty) return
 
+    const shouldAnalyzeAllNotes = String(mode || "").trim().toLowerCase() === "all"
     const allNotes = notesSnapshot.docs
         .map(documentEntry => {
             const noteData = documentEntry.data() || {}
@@ -98,10 +99,12 @@ async function analyzeUserNotes(uid) {
                 id: documentEntry.id,
                 title: String(noteData.title || ""),
                 text: noteText,
-                hasFolder: !!noteData.folderId
+                hasFolder: !!noteData.folderId,
+                analyzed: noteData.analyzed === true
             }
         })
         .filter(note => note.text)
+        .filter(note => shouldAnalyzeAllNotes || !note.analyzed)
 
     for (let index = 0; index < allNotes.length; index += ANALYSIS_BATCH_SIZE) {
         const notesChunk = allNotes.slice(index, index + ANALYSIS_BATCH_SIZE)
@@ -121,6 +124,7 @@ async function analyzeUserNotes(uid) {
             const noteFromChunk = notesChunk.find(note => note.id === noteId)
 
             batch.update(noteReference, {
+                analyzed: true,
                 aiProcessed: true,
                 aiRelevance: clampInteger(analysisResult?.relevance, 0, 100),
                 aiTagsVisible: Array.isArray(analysisResult?.userTags)
@@ -157,8 +161,9 @@ database.collection("tasks")
                 change.doc.ref.update({ status: "error", errorCode: "missing_uid", finishedAt: admin.firestore.FieldValue.serverTimestamp() })
                 return
             }
+            const mode = String(taskData.mode || "pending").trim().toLowerCase()
             change.doc.ref.update({ status: "processing", startedAt: admin.firestore.FieldValue.serverTimestamp() })
-                .then(() => analyzeUserNotes(uid))
+                .then(() => analyzeUserNotes(uid, mode))
                 .then(() => {
                     return change.doc.ref.update({
                         status: "done",

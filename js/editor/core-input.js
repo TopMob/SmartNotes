@@ -270,6 +270,7 @@ export const createInputHandlers = (context) => {
 
         tags.push(normalizedTag)
         StateStore.update("currentNote", { ...note, tags })
+        StateStore.update("editorDirty", true)
         renderTags()
         queueSnapshot()
     }
@@ -279,6 +280,7 @@ export const createInputHandlers = (context) => {
         if (!note) return
         const tags = (note.tags || []).filter(x => x.toLowerCase() !== tag.toLowerCase())
         StateStore.update("currentNote", { ...note, tags })
+        StateStore.update("editorDirty", true)
         renderTags()
         queueSnapshot()
     }
