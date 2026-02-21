@@ -128,23 +128,22 @@ export function createAuthManager({ auth }) {
             if (!persistenceEnum) return null
             return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL, persistenceEnum.NONE])
         },
-        async _signInWithMethod(method) {
-            if (method === "redirect") {
-                await auth.signInWithRedirect(this._provider())
-                return
-            }
-            await auth.signInWithPopup(this._provider())
-        },
         async _setNoStoragePersistence() {
             const persistenceEnum = this._getPersistenceEnum()
             if (!persistenceEnum || !auth) return false
             try {
                 await auth.setPersistence(persistenceEnum.NONE)
                 return true
-            } catch (error) {
-                console.warn("[Auth] Failed to switch to NONE persistence", error)
+            } catch {
                 return false
             }
+        },
+        async _signInWithMethod(method) {
+            if (method === "redirect") {
+                await auth.signInWithRedirect(this._provider())
+                return
+            }
+            await auth.signInWithPopup(this._provider())
         },
         _isRedirectDomainAllowed() {
             const currentHost = String(window?.location?.hostname || "").toLowerCase()
@@ -297,7 +296,6 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             try {
                 await auth.signOut()
-                await this._setNoStoragePersistence()
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
@@ -362,12 +360,16 @@ export function createAuthManager({ auth }) {
         },
         async _handleAuthState(user) {
             const normalizedUser = user || auth.currentUser || null
+            const previousUserUid = String(state.currentUser?.uid || "")
+            const nextUserUid = String(normalizedUser?.uid || "")
+            const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             state.currentUser = normalizedUser
             state.authReady = true
             StateActions.setUser(normalizedUser)
 
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
+                if (shouldSkipSessionRestart) return
                 if (typeof window.startUserSession === "function") {
                     await window.startUserSession(normalizedUser)
                 }
@@ -386,6 +388,7 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
+            await setupAuthPersistence(auth)
 
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)

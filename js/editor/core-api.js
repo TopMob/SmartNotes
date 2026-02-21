@@ -214,7 +214,8 @@ export const EditorAPI = (() => {
             return
         }
 
-        if (!hasPersistableChanges(currentNote, note)) {
+        const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
+        if (!hasRemotePersistableChanges && !editorHasUnsavedChanges) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
             if (!options.silent) {

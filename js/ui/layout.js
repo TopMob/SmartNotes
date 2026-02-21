@@ -312,7 +312,7 @@ Object.assign(UI, {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
-    async requestAnalysis({ secretToken = "", mode = "all" } = {}) {
+    async requestAnalysis({ secretToken = "", mode = "pending" } = {}) {
         const requestHeaders = {
             "Content-Type": "application/json"
         }
@@ -357,13 +357,13 @@ Object.assign(UI, {
         window.DomSecurity.setText(title, this.getText("admin_tools", "Админ-меню"))
 
         const description = document.createElement("p")
-        window.DomSecurity.setText(description, this.getText("analysis_full_reindex_button", "Проиндексировать всё"))
+        window.DomSecurity.setText(description, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
 
         const triggerButton = document.createElement("button")
         triggerButton.type = "button"
         triggerButton.className = "btn-primary"
         triggerButton.dataset.action = "trigger-admin-full-analysis"
-        window.DomSecurity.setText(triggerButton, this.getText("analysis_full_reindex_button", "Проиндексировать всё"))
+        window.DomSecurity.setText(triggerButton, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
 
         actionCard.append(title, description, triggerButton)
         root.replaceChildren(actionCard)
@@ -384,8 +384,7 @@ Object.assign(UI, {
             }
             await noteReference.update({
                 analyzed: false,
-                aiProcessed: false,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                aiProcessed: false
             })
             this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
             this.closeModal("note-actions-modal")
@@ -400,7 +399,7 @@ Object.assign(UI, {
             return
         }
         try {
-            await this.requestAnalysis({ secretToken, mode: "all" })
+            await this.requestAnalysis({ secretToken, mode: "pending" })
             this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
