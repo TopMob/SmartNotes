@@ -365,6 +365,8 @@ Object.assign(UI, {
             t: sourceTheme.t || preset.t,
             brandName: sourceTheme.brandName || "SmartNotes",
             basePreset: sourceTheme.basePreset || presetKey,
+            mainBackgroundUrl: sourceTheme.mainBackgroundUrl || "",
+            sidebarBackgroundUrl: sourceTheme.sidebarBackgroundUrl || "",
             mainBackgroundImage: sourceTheme.mainBackgroundImage || "",
             sidebarBackgroundImage: sourceTheme.sidebarBackgroundImage || "",
             uiOpacity: typeof sourceTheme.uiOpacity === "number" ? sourceTheme.uiOpacity : 0.78,
@@ -381,12 +383,14 @@ Object.assign(UI, {
         }
         const normalizedDraft = {
             ...draft,
+            mainBackgroundUrl: typeof draft.mainBackgroundUrl === "string" ? draft.mainBackgroundUrl : "",
+            sidebarBackgroundUrl: typeof draft.sidebarBackgroundUrl === "string" ? draft.sidebarBackgroundUrl : "",
             mainBackgroundImage: typeof draft.mainBackgroundImage === "string" ? draft.mainBackgroundImage : "",
             sidebarBackgroundImage: typeof draft.sidebarBackgroundImage === "string" ? draft.sidebarBackgroundImage : "",
             uiOpacity: Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78))),
             cardsOpacity: Math.min(1, Math.max(0.5, Number(draft.cardsOpacity ?? 0.9)))
         }
-        if (normalizedDraft.mainBackgroundImage !== draft.mainBackgroundImage || normalizedDraft.sidebarBackgroundImage !== draft.sidebarBackgroundImage) {
+        if (normalizedDraft.mainBackgroundUrl !== draft.mainBackgroundUrl || normalizedDraft.sidebarBackgroundUrl !== draft.sidebarBackgroundUrl || normalizedDraft.mainBackgroundImage !== draft.mainBackgroundImage || normalizedDraft.sidebarBackgroundImage !== draft.sidebarBackgroundImage) {
             draft = normalizedDraft
             StateStore.update("appearanceDraft", draft)
         }
@@ -413,6 +417,8 @@ Object.assign(UI, {
                     t: preset.t,
                     brandName: "SmartNotes",
                     basePreset: key,
+                    mainBackgroundUrl: draft.mainBackgroundUrl || "",
+                    sidebarBackgroundUrl: draft.sidebarBackgroundUrl || "",
                     mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
                     sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || ""),
                     uiOpacity: typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78,
@@ -436,6 +442,8 @@ Object.assign(UI, {
                 p: createdPreset.p,
                 bg: createdPreset.bg,
                 t: createdPreset.t,
+                mainBackgroundUrl: currentDraft.mainBackgroundUrl || "",
+                sidebarBackgroundUrl: currentDraft.sidebarBackgroundUrl || "",
                 mainBackgroundImage: createdPreset.mainBackgroundImage || "",
                 sidebarBackgroundImage: createdPreset.sidebarBackgroundImage || ""
             }
@@ -479,13 +487,15 @@ Object.assign(UI, {
                 p: nextDraft.p,
                 bg: nextDraft.bg,
                 t: nextDraft.t,
+                mainBackgroundUrl: nextDraft.mainBackgroundUrl || "",
+                sidebarBackgroundUrl: nextDraft.sidebarBackgroundUrl || "",
                 mainBackgroundImage: nextDraft.mainBackgroundImage || "",
                 sidebarBackgroundImage: nextDraft.sidebarBackgroundImage || "",
                 uiOpacity: typeof nextDraft.uiOpacity === "number" ? nextDraft.uiOpacity : 0.78,
                 cardsOpacity: typeof nextDraft.cardsOpacity === "number" ? nextDraft.cardsOpacity : 0.9
             },
-            backgroundType: nextDraft.mainBackgroundImage ? "image" : "none",
-            backgroundValue: nextDraft.mainBackgroundImage || ""
+            backgroundType: (nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage) ? "image" : "none",
+            backgroundValue: nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage || ""
         })
         this.applyDraftSettingsToRuntime()
     },
@@ -498,6 +508,8 @@ Object.assign(UI, {
             p: preset.p,
             bg: preset.bg,
             t: preset.t,
+            mainBackgroundUrl: defaults.mainBackgroundUrl || "",
+            sidebarBackgroundUrl: defaults.sidebarBackgroundUrl || "",
             mainBackgroundImage: defaults.mainBackgroundImage || "",
             sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
             uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78,
@@ -557,6 +569,12 @@ Object.assign(UI, {
     },
     bindAppearanceBackgroundControls(root) {
         if (!root) return
+        const normalizeBackgroundUrl = (value) => {
+            const source = String(value || "").trim()
+            if (!source) return ""
+            if (/^data:/i.test(source)) return ""
+            return /^https?:\/\//i.test(source) ? source : ""
+        }
         const optimizeImageDataUrlForAppearance = (dataUrl) => new Promise((resolve) => {
             const source = String(dataUrl || "")
             if (!source.startsWith("data:image/")) {
@@ -593,8 +611,8 @@ Object.assign(UI, {
         const bindTextInput = (input, key) => {
             if (!input) return
             input.addEventListener("change", (event) => {
-                const nextValue = String(event.target.value || "").trim()
-                this.updateAppearanceBackground(key, nextValue)
+                const nextValue = normalizeBackgroundUrl(event.target.value)
+                this.updateAppearanceBackground(key, { mode: "url", value: nextValue })
             })
         }
         const bindFileInput = (input, key) => {
@@ -606,7 +624,7 @@ Object.assign(UI, {
                 reader.onload = async () => {
                     const result = typeof reader.result === "string" ? reader.result : ""
                     const optimized = await optimizeImageDataUrlForAppearance(result)
-                    this.updateAppearanceBackground(key, optimized)
+                    this.updateAppearanceBackground(key, { mode: "local", value: optimized })
                     event.target.value = ""
                 }
                 reader.readAsDataURL(file)
@@ -615,28 +633,45 @@ Object.assign(UI, {
         const bindClearButton = (button, key) => {
             if (!button) return
             button.addEventListener("click", () => {
-                this.updateAppearanceBackground(key, "")
+                this.updateAppearanceBackground(key, { mode: "clear", value: "" })
             })
         }
-        bindTextInput(root.querySelector('[data-appearance-bg-input="main"]'), "mainBackgroundImage")
-        bindTextInput(root.querySelector('[data-appearance-bg-input="sidebar"]'), "sidebarBackgroundImage")
-        bindFileInput(root.querySelector('[data-appearance-bg-file="main"]'), "mainBackgroundImage")
-        bindFileInput(root.querySelector('[data-appearance-bg-file="sidebar"]'), "sidebarBackgroundImage")
-        bindClearButton(root.querySelector('[data-appearance-bg-clear="main"]'), "mainBackgroundImage")
-        bindClearButton(root.querySelector('[data-appearance-bg-clear="sidebar"]'), "sidebarBackgroundImage")
+        bindTextInput(root.querySelector('[data-appearance-bg-input="main"]'), "main")
+        bindTextInput(root.querySelector('[data-appearance-bg-input="sidebar"]'), "sidebar")
+        bindFileInput(root.querySelector('[data-appearance-bg-file="main"]'), "main")
+        bindFileInput(root.querySelector('[data-appearance-bg-file="sidebar"]'), "sidebar")
+        bindClearButton(root.querySelector('[data-appearance-bg-clear="main"]'), "main")
+        bindClearButton(root.querySelector('[data-appearance-bg-clear="sidebar"]'), "sidebar")
     },
     syncAppearanceBackgroundInputs(draft) {
         const mainInput = document.querySelector('[data-appearance-bg-input="main"]')
         const sidebarInput = document.querySelector('[data-appearance-bg-input="sidebar"]')
-        if (mainInput) mainInput.value = draft.mainBackgroundImage || ""
-        if (sidebarInput) sidebarInput.value = draft.sidebarBackgroundImage || ""
+        if (mainInput) mainInput.value = draft.mainBackgroundUrl || ""
+        if (sidebarInput) sidebarInput.value = draft.sidebarBackgroundUrl || ""
     },
-    updateAppearanceBackground(key, value) {
+    updateAppearanceBackground(key, backgroundSource) {
         const current = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+        const mode = backgroundSource?.mode || "url"
+        const value = String(backgroundSource?.value || "")
+        const fieldMap = {
+            main: { url: "mainBackgroundUrl", image: "mainBackgroundImage" },
+            sidebar: { url: "sidebarBackgroundUrl", image: "sidebarBackgroundImage" }
+        }
+        const fields = fieldMap[key]
+        if (!fields) return
         const next = {
             ...current,
-            preset: "manual",
-            [key]: value
+            preset: "manual"
+        }
+        if (mode === "url") {
+            next[fields.url] = value
+            next[fields.image] = ""
+        } else if (mode === "local") {
+            next[fields.url] = ""
+            next[fields.image] = value
+        } else {
+            next[fields.url] = ""
+            next[fields.image] = ""
         }
         this.applyAppearanceDraft(next)
     },
