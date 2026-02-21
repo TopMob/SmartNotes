@@ -305,14 +305,69 @@ Object.assign(UI, {
         this.showToast(this.getText("install_unavailable", "Installation is unavailable on this device"))
     },
 
-    async triggerAnalysisForCurrentUser() {
+    getAnalysisApiEndpoint() {
+        return "https://backendfornmartnotes.vercel.app/api/analyze"
+    },
+
+    isAdminAnalysisEnabled() {
+        return SafeStorage.local.get("smartnotes-admin-analysis-enabled", "") === "enabled"
+    },
+
+    requestAdminAnalysisAccess() {
+        this.showPrompt(this.getText("admin_analysis_access_title", "Секрет администратора"), this.getText("admin_analysis_access_placeholder", "Введите секрет"), (secretValue) => {
+            const normalizedSecret = String(secretValue || "").trim()
+            if (normalizedSecret !== "smartnotes-admin") {
+                this.showToast(this.getText("admin_analysis_access_denied", "Секрет неверный"))
+                return
+            }
+            SafeStorage.local.set("smartnotes-admin-analysis-enabled", "enabled")
+            this.showToast(this.getText("admin_analysis_access_enabled", "Режим администратора включен"))
+            this.updateActiveFolderMenu()
+        })
+    },
+
+    async enqueueAnalysisForCurrentUser() {
+        const user = StateStore.read().user
+        if (!db || !user?.uid) {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+            return
+        }
+        try {
+            const tasksCollection = DataPath.getTasksCollection()
+            if (!tasksCollection) {
+                this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+                return
+            }
+            const [pendingTasksSnapshot, processingTasksSnapshot] = await Promise.all([
+                tasksCollection.where("uid", "==", user.uid).where("status", "==", "pending").limit(1).get(),
+                tasksCollection.where("uid", "==", user.uid).where("status", "==", "processing").limit(1).get()
+            ])
+            if (!pendingTasksSnapshot.empty || !processingTasksSnapshot.empty) {
+                this.showToast(this.getText("analysis_task_exists", "ИИ-анализ уже запущен"))
+                return
+            }
+            await tasksCollection.add({
+                uid: user.uid,
+                status: "pending",
+                taskType: "analyze_unprocessed",
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                requestedAt: Date.now(),
+                requestedBy: user.uid
+            })
+            this.showToast(this.getText("analysis_queued", "Задача ИИ-анализа поставлена в очередь"))
+        } catch {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+        }
+    },
+
+    async triggerFullAnalysisForCurrentUser() {
         const user = StateStore.read().user
         if (!user?.uid) {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
             return
         }
         try {
-            const response = await fetch("/api/analyze", {
+            const response = await fetch(this.getAnalysisApiEndpoint(), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ uid: user.uid })
@@ -322,7 +377,7 @@ Object.assign(UI, {
                 this.showToast(responseData?.message || this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
                 return
             }
-            const processedCount = Number(responseData?.processed || 0)
+            const processedCount = Number(responseData?.processed || responseData?.updated || 0)
             this.showToast(`${this.getText("analysis_completed", "ИИ-анализ завершен")}: ${processedCount}`)
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
@@ -333,12 +388,14 @@ Object.assign(UI, {
         const wrapper = this.els.activeFolderMenuWrapper
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
+        const queueButton = this.els.activeFolderQueueButton
         const analyzeButton = this.els.activeFolderAnalyzeButton
         if (!wrapper) return
         const { view, activeFolderId, folders, user } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {
+            queueButton?.classList.add("hidden")
             analyzeButton?.classList.add("hidden")
             this.toggleActiveFolderMenu(false)
             return
@@ -346,7 +403,9 @@ Object.assign(UI, {
         const folder = folders.find(item => item.id === activeFolderId)
         if (!folder) return
         const normalizedFolderName = String(folder.name || "").trim().toLowerCase()
-        const canShowAnalyzeButton = normalizedFolderName === "smartnotes" && !!user?.uid
+        const canShowQueueButton = normalizedFolderName === "smartnotes" && !!user?.uid
+        const canShowAnalyzeButton = canShowQueueButton && this.isAdminAnalysisEnabled()
+        queueButton?.classList.toggle("hidden", !canShowQueueButton)
         analyzeButton?.classList.toggle("hidden", !canShowAnalyzeButton)
         if (hideLabel) hideLabel.textContent = folder.isHidden ? this.getText("show_folder", "Show folder") : this.getText("hide_folder", "Hide folder")
         if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"

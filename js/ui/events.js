@@ -57,6 +57,11 @@ Object.assign(UI, {
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && this.els.sidebar?.classList.contains("active")) {
                 this.toggleSidebar(false)
+                return
+            }
+            const normalizedKey = String(e.key || "").toLowerCase()
+            if (e.ctrlKey && e.shiftKey && normalizedKey === "a") {
+                this.requestAdminAnalysisAccess()
             }
         })
 
@@ -344,8 +349,12 @@ Object.assign(UI, {
                 this.renameFolder(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
                 break
+            case "queue-active-folder-analysis":
+                this.enqueueAnalysisForCurrentUser()
+                this.toggleActiveFolderMenu(false)
+                break
             case "trigger-active-folder-analysis":
-                this.triggerAnalysisForCurrentUser()
+                this.triggerFullAnalysisForCurrentUser()
                 this.toggleActiveFolderMenu(false)
                 break
             case "open-modal":

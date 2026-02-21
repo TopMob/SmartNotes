@@ -29,6 +29,7 @@ const UI = {
             activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
             activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
             activeFolderHideButton: document.getElementById("active-folder-hide-button"),
+            activeFolderQueueButton: document.getElementById("active-folder-queue-button"),
             activeFolderAnalyzeButton: document.getElementById("active-folder-analyze-button")
         }
         this.bindEvents()
