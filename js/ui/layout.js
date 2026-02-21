@@ -88,23 +88,37 @@ Object.assign(UI, {
         if (!window.Validators.canAddFolder(StateStore.read().folders.length)) {
             return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderLimitReached))
         }
-        this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+        this.showPrompt(this.getText("new_folder", "New folder"), this.getText("folder_placeholder", "Folder name"), async (name, description) => {
             const validatedName = window.Validators.validateFolderName(name)
+            const validatedDescription = window.Validators.validateFolderDescription(description)
             if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
             if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
+            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 1124 characters"))
             if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === validatedName.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
             await DataPath.getUserFoldersCollection(StateStore.read().user).add({
                 name: validatedName,
+                description: validatedDescription,
                 isHidden: false,
                 trashedAt: null,
                 folderOrder: Date.now(),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 ownerUid: StateStore.read().user.uid
             })
-        }, "", { maxLength: 50, showCounter: true })
+        }, "", {
+            maxLength: 50,
+            showCounter: true,
+            secondaryField: {
+                value: "",
+                placeholder: this.getText("folder_description_placeholder", "Describe what notes should go to this folder"),
+                ariaLabel: this.getText("folder_description_label", "Folder description"),
+                showCounter: true,
+                softLimit: window.Validators.FOLDER_DESCRIPTION_SOFT_LIMIT,
+                maxLength: window.Validators.FOLDER_DESCRIPTION_HARD_LIMIT
+            }
+        })
     },
 
     renameFolder(folderId) {
@@ -112,19 +126,35 @@ Object.assign(UI, {
         if (!id) return
         const folder = StateStore.read().folders.find(f => f.id === id)
         if (!folder) return
-        this.showPrompt(this.getText("rename_folder", "Rename folder"), this.getText("folder_placeholder", "Folder name"), async (name) => {
+        this.showPrompt(this.getText("rename_folder", "Rename folder"), this.getText("folder_placeholder", "Folder name"), async (name, description) => {
             const validatedName = window.Validators.validateFolderName(name)
+            const validatedDescription = window.Validators.validateFolderDescription(description)
             if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
             if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
-            if (validatedName.toLowerCase() === String(folder.name || "").toLowerCase()) return
+            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 1124 characters"))
+            const sameName = validatedName.toLowerCase() === String(folder.name || "").toLowerCase()
+            const sameDescription = validatedDescription === String(folder.description || "").trim()
+            if (sameName && sameDescription) return
             if (StateStore.read().folders.some(f => f.id !== id && f.name && f.name.toLowerCase() === validatedName.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
             await DataPath.getUserFoldersCollection(StateStore.read().user).doc(id).update({
-                name: validatedName
+                name: validatedName,
+                description: validatedDescription
             })
-        }, String(folder.name || ""), { maxLength: 50, showCounter: true })
+        }, String(folder.name || ""), {
+            maxLength: 50,
+            showCounter: true,
+            secondaryField: {
+                value: String(folder.description || ""),
+                placeholder: this.getText("folder_description_placeholder", "Describe what notes should go to this folder"),
+                ariaLabel: this.getText("folder_description_label", "Folder description"),
+                showCounter: true,
+                softLimit: window.Validators.FOLDER_DESCRIPTION_SOFT_LIMIT,
+                maxLength: window.Validators.FOLDER_DESCRIPTION_HARD_LIMIT
+            }
+        })
     },
 
     applyAppearanceSettings() {
@@ -149,7 +179,7 @@ Object.assign(UI, {
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
-            hidden_folders: "Скрытые папки"
+            hidden_folders: dict.hidden_folders || "Hidden folders"
         }
         const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"

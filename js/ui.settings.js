@@ -647,42 +647,73 @@ Object.assign(UI, {
     showPrompt(title, placeholder, cb, value = "", options = {}) {
         const modal = this.els.promptModal
         const input = document.getElementById("prompt-input")
+        const secondaryField = document.getElementById("prompt-secondary-field")
+        const secondaryInput = document.getElementById("prompt-secondary-input")
         const ok = document.getElementById("prompt-ok")
         const cancel = document.getElementById("prompt-cancel")
         const titleEl = document.getElementById("prompt-title")
         const maxLength = Number(options.maxLength || 0)
         const shouldShowCounter = !!options.showCounter && maxLength > 0
+        const secondaryOptions = options.secondaryField && typeof options.secondaryField === "object"
+            ? options.secondaryField
+            : null
+        const secondaryMaxLength = Number(secondaryOptions?.maxLength || 0)
+        const secondarySoftLimit = Number(secondaryOptions?.softLimit || 0)
+        const showSecondaryCounter = !!secondaryOptions?.showCounter && secondaryMaxLength > 0
 
         if (titleEl) titleEl.textContent = title
         input.value = value
         input.placeholder = placeholder
 
-        let counterElement = modal.querySelector(".prompt-character-counter")
-        if (!counterElement && shouldShowCounter) {
-            counterElement = document.createElement("span")
-            counterElement.className = "prompt-character-counter"
-            input.parentNode?.appendChild(counterElement)
-        }
-        if (counterElement && !shouldShowCounter) {
-            counterElement.remove()
-            counterElement = null
+        if (secondaryField && secondaryInput && secondaryOptions) {
+            secondaryField.classList.remove("hidden")
+            secondaryInput.value = String(secondaryOptions.value || "")
+            secondaryInput.placeholder = String(secondaryOptions.placeholder || "")
+            secondaryInput.setAttribute("aria-label", String(secondaryOptions.ariaLabel || secondaryInput.getAttribute("aria-label") || ""))
+            secondaryInput.maxLength = secondaryMaxLength > 0 ? secondaryMaxLength : 524288
+        } else if (secondaryField && secondaryInput) {
+            secondaryField.classList.add("hidden")
+            secondaryInput.value = ""
+            secondaryInput.placeholder = ""
+            secondaryInput.removeAttribute("maxLength")
         }
 
-        const updatePromptState = () => {
-            const currentLength = String(input.value || "").trim().length
-            const isExceeded = shouldShowCounter && currentLength > maxLength
-            if (counterElement) {
-                counterElement.textContent = `${currentLength}/${maxLength}`
-                counterElement.classList.toggle("is-limit-exceeded", isExceeded)
+        let primaryCounter = modal.querySelector('[data-counter="primary"]')
+        if (!primaryCounter && shouldShowCounter) {
+            primaryCounter = document.createElement("span")
+            primaryCounter.className = "prompt-character-counter"
+            primaryCounter.dataset.counter = "primary"
+            input.parentNode?.appendChild(primaryCounter)
+        }
+        if (primaryCounter && !shouldShowCounter) {
+            primaryCounter.remove()
+            primaryCounter = null
+        }
+
+        let secondaryCounter = modal.querySelector('[data-counter="secondary"]')
+        if (secondaryField && !secondaryCounter && showSecondaryCounter) {
+            secondaryCounter = document.createElement("span")
+            secondaryCounter.className = "prompt-character-counter"
+            secondaryCounter.dataset.counter = "secondary"
+            secondaryField.appendChild(secondaryCounter)
+        }
+        if (secondaryCounter && (!secondaryOptions || !showSecondaryCounter)) {
+            secondaryCounter.remove()
+            secondaryCounter = null
+        }
+
+        const finish = (primaryValue, secondaryValue) => {
+            if (primaryValue) {
+                if (secondaryOptions) cb(primaryValue, secondaryValue)
+                else cb(primaryValue)
             }
-            if (okClone) okClone.disabled = isExceeded
-        }
-
-        const finish = (val) => {
-            if (val) cb(val)
             modal.classList.remove("active")
             input.onkeydown = null
             input.oninput = null
+            if (secondaryInput) {
+                secondaryInput.onkeydown = null
+                secondaryInput.oninput = null
+            }
         }
 
         const okClone = ok.cloneNode(true)
@@ -691,9 +722,47 @@ Object.assign(UI, {
         const cancelClone = cancel.cloneNode(true)
         cancel.parentNode.replaceChild(cancelClone, cancel)
 
-        okClone.onclick = () => finish(String(input.value || "").trim())
+        const updatePromptState = () => {
+            const primaryLength = String(input.value || "").trim().length
+            const secondaryLength = secondaryInput ? String(secondaryInput.value || "").trim().length : 0
+            const isPrimaryExceeded = shouldShowCounter && primaryLength > maxLength
+            const isSecondaryExceeded = showSecondaryCounter && secondaryLength > secondaryMaxLength
+            const isSecondarySoftExceeded = showSecondaryCounter && secondarySoftLimit > 0 && secondaryLength > secondarySoftLimit
+
+            if (primaryCounter) {
+                primaryCounter.textContent = `${primaryLength}/${maxLength}`
+                primaryCounter.classList.toggle("is-limit-exceeded", isPrimaryExceeded)
+            }
+            if (secondaryCounter) {
+                secondaryCounter.textContent = `${secondaryLength}/${secondarySoftLimit > 0 ? secondarySoftLimit : secondaryMaxLength}`
+                secondaryCounter.classList.toggle("is-soft-limit-exceeded", isSecondarySoftExceeded && !isSecondaryExceeded)
+                secondaryCounter.classList.toggle("is-limit-exceeded", isSecondaryExceeded)
+            }
+
+            okClone.disabled = isPrimaryExceeded || isSecondaryExceeded
+        }
+
+        okClone.onclick = () => {
+            const primaryValue = String(input.value || "").trim()
+            const secondaryValue = secondaryInput ? String(secondaryInput.value || "").trim() : ""
+            finish(primaryValue, secondaryValue)
+        }
         cancelClone.onclick = () => modal.classList.remove("active")
         input.oninput = updatePromptState
+        input.onkeydown = event => {
+            if (event.key !== "Enter") return
+            event.preventDefault()
+            okClone.click()
+        }
+        if (secondaryInput && secondaryOptions) {
+            secondaryInput.oninput = updatePromptState
+            secondaryInput.onkeydown = event => {
+                if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                    event.preventDefault()
+                    okClone.click()
+                }
+            }
+        }
         updatePromptState()
 
         modal.classList.add("active")
