@@ -258,11 +258,11 @@ Object.assign(UI, {
                     </div>
                 </div>
                 <div class="settings-actions row-between">
-                    <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
                     <div class="row-right" style="gap:8px;">
+                        <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
                         <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
-                        <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                     </div>
+                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                 </div>
             `
             if (typeof ColorPalette !== "undefined") ColorPalette.init(root)
@@ -317,12 +317,8 @@ Object.assign(UI, {
     async saveSettingsDraft() {
         const draftSettings = this.getSettingsDraft()
         if (!draftSettings) return
-        const settingsToSave = {
-            ...draftSettings,
-            customPresets: ThemeManager.getCustomPresets()
-        }
         try {
-            const savedSettings = await AppLifecycle.saveUserSettings(settingsToSave)
+            const savedSettings = await AppLifecycle.saveUserSettings(draftSettings)
             if (!savedSettings) return
             AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
             this.syncSettingsDraftFromOriginal()
@@ -450,7 +446,6 @@ Object.assign(UI, {
         StateStore.update("appearanceDraft", nextDraft)
         this.updateSettingsDraft({
             themeId: nextDraft.preset || "oled",
-            customPresets: ThemeManager.getCustomPresets(),
             customTheme: {
                 p: nextDraft.p,
                 bg: nextDraft.bg,

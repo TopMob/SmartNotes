@@ -55,7 +55,7 @@ const AppLifecycle = {
         const parsedNotesPerPage = Number(source.notesPerPage)
         const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
         const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
-        const customPresets = Array.isArray(source.customPresets) ? source.customPresets : defaults.customPresets
+        const customPresets = Array.isArray(source.customPresets) ? source.customPresets : []
         return {
             notesPerPage,
             themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
@@ -87,7 +87,9 @@ const AppLifecycle = {
             preset: normalizedSettings.themeId,
             ...(normalizedSettings.customTheme || {})
         }
-        ThemeManager.saveCustomPresets(normalizedSettings.customPresets || [])
+        if (Array.isArray(normalizedSettings.customPresets) && normalizedSettings.customPresets.length > 0) {
+            ThemeManager.saveCustomPresets(normalizedSettings.customPresets)
+        }
         ThemeManager.applySettings(normalizedTheme, true)
         StateActions.updateConfig({
             lang: normalizedSettings.lang,
@@ -212,7 +214,7 @@ const AppLifecycle = {
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
                 return
             }
-            UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
+            if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
         }, error => {
             if (this.isPermissionDeniedError(error)) return
             console.error("Settings sync error", error)
