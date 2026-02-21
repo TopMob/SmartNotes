@@ -1,6 +1,5 @@
 import "dotenv/config"
 import admin from "firebase-admin"
-import fs from "fs"
 import fetch from "node-fetch"
 import { buildPrompt } from "./prompt.js"
 
@@ -9,8 +8,21 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3:8b"
 const ANALYSIS_BATCH_SIZE = Number(process.env.AI_BATCH_SIZE || 12)
 const NOTE_TEXT_LIMIT = Number(process.env.NOTE_TEXT_LIMIT || 900)
 const REQUEST_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120000)
+const MAX_NOTES_PER_TASK = 200
+const MAX_BATCH_OPERATIONS = 400
 
-const serviceAccount = JSON.parse(fs.readFileSync("./serviceAccountKey.json", "utf8"))
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    console.error("[Worker] Missing FIREBASE_SERVICE_ACCOUNT environment variable")
+    process.exit(1)
+}
+
+let serviceAccount
+try {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+} catch {
+    console.error("[Worker] FIREBASE_SERVICE_ACCOUNT must contain valid JSON")
+    process.exit(1)
+}
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -107,18 +119,30 @@ function mapNotesForAnalysis(noteDocuments) {
 
 async function markChunkAnalysisError(uid, notesChunk, errorCode) {
     if (!notesChunk.length) return
-    const batch = database.batch()
-    notesChunk.forEach(note => {
-        const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
-        batch.update(noteReference, {
-            analyzed: true,
+    await commitBatchOperations(uid, notesChunk.map(note => ({
+        id: note.id,
+        payload: {
+            analyzed: false,
             aiProcessed: false,
             aiError: true,
             aiErrorCode: errorCode,
             aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+    })))
+}
+
+async function commitBatchOperations(uid, operations) {
+    const normalizedOperations = Array.isArray(operations) ? operations : []
+    for (let index = 0; index < normalizedOperations.length; index += MAX_BATCH_OPERATIONS) {
+        const operationsChunk = normalizedOperations.slice(index, index + MAX_BATCH_OPERATIONS)
+        if (!operationsChunk.length) continue
+        const batch = database.batch()
+        operationsChunk.forEach(operation => {
+            const noteReference = database.collection("users").doc(uid).collection("notes").doc(operation.id)
+            batch.update(noteReference, operation.payload)
         })
-    })
-    await batch.commit()
+        await batch.commit()
+    }
 }
 
 async function analyzeUserNotes(uid, mode = "pending") {
@@ -126,12 +150,13 @@ async function analyzeUserNotes(uid, mode = "pending") {
     const folders = foldersSnapshot.docs
         .map(documentEntry => ({
             id: documentEntry.id,
-            name: documentEntry.data()?.name || ""
+            name: documentEntry.data()?.name || "",
+            description: documentEntry.data()?.description || ""
         }))
         .filter(folder => folder.id && folder.name)
 
     const availableFolderIds = new Set(folders.map(folder => folder.id))
-    const noteDocuments = await fetchPendingNotes(uid)
+    const noteDocuments = (await fetchPendingNotes(uid)).slice(0, MAX_NOTES_PER_TASK)
     if (!noteDocuments.length) return
 
     const allNotes = mapNotesForAnalysis(noteDocuments)
@@ -159,8 +184,7 @@ async function analyzeUserNotes(uid, mode = "pending") {
             continue
         }
 
-        const batch = database.batch()
-        let hasBatchOperations = false
+        const batchOperations = []
         const notesById = new Map(notesChunk.map(note => [note.id, note]))
         const processedNoteIds = new Set()
 
@@ -168,11 +192,12 @@ async function analyzeUserNotes(uid, mode = "pending") {
             const noteId = String(analysisResult?.id || "").trim()
             if (!noteId) continue
             if (!notesById.has(noteId)) continue
-            const noteReference = database.collection("users").doc(uid).collection("notes").doc(noteId)
             const noteFromChunk = notesById.get(noteId)
             processedNoteIds.add(noteId)
 
-            batch.update(noteReference, {
+            batchOperations.push({
+                id: noteId,
+                payload: {
                 analyzed: true,
                 aiProcessed: true,
                 indexedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -189,32 +214,32 @@ async function analyzeUserNotes(uid, mode = "pending") {
                 aiVersion: 1,
                 aiModel: OLLAMA_MODEL,
                 aiLastAnalyzed: admin.firestore.FieldValue.serverTimestamp()
+                }
             })
-            hasBatchOperations = true
 
             if (noteFromChunk && !noteFromChunk.hasFolder) {
                 const candidateFolderId = String(analysisResult?.folderId || "").trim()
                 if (candidateFolderId && availableFolderIds.has(candidateFolderId)) {
-                    batch.update(noteReference, { folderId: candidateFolderId })
-                    hasBatchOperations = true
+                    batchOperations.push({ id: noteId, payload: { folderId: candidateFolderId } })
                 }
             }
         }
 
         notesChunk.forEach(note => {
             if (processedNoteIds.has(note.id)) return
-            const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
-            batch.update(noteReference, {
-                analyzed: true,
-                aiProcessed: false,
-                aiError: true,
-                aiErrorCode: "invalid_ai_entry",
-                aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
+            batchOperations.push({
+                id: note.id,
+                payload: {
+                    analyzed: false,
+                    aiProcessed: false,
+                    aiError: true,
+                    aiErrorCode: "invalid_ai_entry",
+                    aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
+                }
             })
-            hasBatchOperations = true
         })
 
-        if (hasBatchOperations) await batch.commit()
+        if (batchOperations.length) await commitBatchOperations(uid, batchOperations)
     }
 }
 

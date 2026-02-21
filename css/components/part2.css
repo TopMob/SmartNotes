@@ -423,3 +423,55 @@
     background: color-mix(in srgb, var(--surface) 90%, transparent);
     border-color: var(--border);
 }
+
+.splash {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: var(--bg);
+    opacity: 1;
+    transition: opacity 0.35s var(--ease-out);
+}
+
+.splash.active {
+    display: flex;
+}
+
+.splash.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.splash h1 {
+    font-size: 38px;
+    letter-spacing: -0.03em;
+}
+
+.splash p {
+    color: var(--text-dim);
+}
+
+.splash .loader {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: var(--primary);
+    animation: spin 1s linear infinite;
+}
+
+.load-more-notes {
+    margin: 14px auto calc(14px + var(--safe-bottom));
+    min-width: 180px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

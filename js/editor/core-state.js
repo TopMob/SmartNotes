@@ -24,6 +24,7 @@ export const createEditorState = () => ({
     isRenderingState: false,
     snapshotFrame: null,
     manualSaveInProgress: false,
+    isSaving: false,
     drawingState: typeof EditorDrawing === "undefined"
         ? { active: false, isDrawing: false }
         : EditorDrawing.state

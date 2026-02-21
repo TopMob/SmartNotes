@@ -3,7 +3,8 @@ export function buildPrompt(folders, notesChunk) {
         ? folders
             .map(folder => ({
                 id: String(folder?.id || "").trim(),
-                name: String(folder?.name || "").trim()
+                name: String(folder?.name || "").trim(),
+                description: String(folder?.description || "").trim()
             }))
             .filter(folder => folder.id && folder.name)
         : []

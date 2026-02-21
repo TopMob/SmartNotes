@@ -1,7 +1,7 @@
 Object.assign(UI, {
     bindEvents() {
-        if (this._eventsBound) return
-        this._eventsBound = true
+        if (this.eventsBound) return
+        this.eventsBound = true
         document.addEventListener("click", (e) => {
             const actionEl = e.target.closest("[data-action]")
             if (actionEl) {
@@ -378,6 +378,9 @@ Object.assign(UI, {
                 break
             case "trigger-import":
                 this.triggerImport()
+                break
+            case "load-more-notes":
+                window.loadMoreNotes?.()
                 break
             case "editor-undo":
                 window.SmartNotesEditor?.undo()

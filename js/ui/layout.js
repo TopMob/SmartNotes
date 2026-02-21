@@ -29,6 +29,61 @@ Object.assign(UI, {
         input.click()
     },
 
+    normalizeImportedDate(inputValue) {
+        const timestampType = firebase?.firestore?.Timestamp
+        if (timestampType && typeof inputValue?.toDate === "function") return inputValue
+        if (timestampType && inputValue && typeof inputValue === "object" && Number.isFinite(inputValue.seconds)) {
+            return timestampType.fromMillis(inputValue.seconds * 1000)
+        }
+        if (timestampType && typeof inputValue === "number" && Number.isFinite(inputValue)) {
+            return timestampType.fromMillis(inputValue)
+        }
+        if (timestampType && typeof inputValue === "string") {
+            const parsedDate = new Date(inputValue)
+            if (Number.isFinite(parsedDate.getTime())) {
+                return timestampType.fromDate(parsedDate)
+            }
+        }
+        if (inputValue instanceof Date && Number.isFinite(inputValue.getTime()) && timestampType) {
+            return timestampType.fromDate(inputValue)
+        }
+        return firebase.firestore.FieldValue.serverTimestamp()
+    },
+
+    normalizeImportedTags(rawTags) {
+        if (!Array.isArray(rawTags)) return []
+        const uniqueTags = []
+        const seenTags = new Set()
+        for (const rawTag of rawTags) {
+            const normalizedTag = String(rawTag || "").trim()
+            if (!normalizedTag) continue
+            const lowerTag = normalizedTag.toLowerCase()
+            if (seenTags.has(lowerTag)) continue
+            seenTags.add(lowerTag)
+            uniqueTags.push(normalizedTag)
+            if (uniqueTags.length >= 50) break
+        }
+        return uniqueTags
+    },
+
+    buildImportedNote(rawNote, ownerUid) {
+        const sourceNote = rawNote && typeof rawNote === "object" ? rawNote : {}
+        return {
+            id: Utils.generateId(),
+            title: String(sourceNote.title || "").trim(),
+            content: String(sourceNote.content || ""),
+            tags: this.normalizeImportedTags(sourceNote.tags),
+            createdAt: this.normalizeImportedDate(sourceNote.createdAt),
+            updatedAt: this.normalizeImportedDate(sourceNote.updatedAt),
+            ownerUid: String(ownerUid || ""),
+            analyzed: false,
+            aiProcessed: false,
+            folderId: null,
+            hiddenTags: [],
+            relevance: null
+        }
+    },
+
     async handleNoteImport(e) {
         if (!db || !StateStore.read().user) return
         const file = e.target.files && e.target.files[0] ? e.target.files[0] : null
@@ -40,31 +95,23 @@ Object.assign(UI, {
         const reader = new FileReader()
         reader.onload = async () => {
             try {
-                const text = String(reader.result || "").replace(/^\uFEFF/, "")
+                const text = String(reader.result || "").replace(/^﻿/, "")
                 const parsed = JSON.parse(text)
-                const notes = NoteIO.parseImport(parsed)
-                if (!notes.length) {
+                const importedNotes = NoteIO.parseImport(parsed)
+                if (!importedNotes.length) {
                     this.showToast(this.getText("import_empty", "No notes found"))
                     return
                 }
                 const current = StateStore.read()
                 const batch = db.batch()
-                notes.forEach(note => {
-                    const normalized = note && typeof note === "object" ? note : {}
-                    const importedNote = {
-                        id: Utils.generateId(),
-                        title: String(normalized.title || "").trim(),
-                        content: String(normalized.content || ""),
-                        tags: Array.isArray(normalized.tags) ? normalized.tags.map(tag => String(tag || "").trim()).filter(Boolean).slice(0, 50) : [],
-                        createdAt: normalized.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedAt: normalized.updatedAt || firebase.firestore.FieldValue.serverTimestamp(),
-                        ownerUid: current.user.uid,
-                        analyzed: false,
-                        aiProcessed: false,
-                        folderId: null,
-                        hiddenTags: [],
-                        relevance: null
-                    }
+                importedNotes.forEach(note => {
+                    const importedNote = this.buildImportedNote({
+                        title: note?.title,
+                        content: note?.content,
+                        tags: note?.tags,
+                        createdAt: note?.createdAt,
+                        updatedAt: note?.updatedAt
+                    }, current.user.uid)
                     const reference = DataPath.getUserNotesCollection(current.user).doc(importedNote.id)
                     batch.set(reference, importedNote, { merge: true })
                 })
