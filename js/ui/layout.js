@@ -312,6 +312,28 @@ Object.assign(UI, {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
+    async requestAnalysis({ authToken = "", secretToken = "", mode = "single" } = {}) {
+        const requestHeaders = {
+            "Content-Type": "application/json"
+        }
+        if (authToken) {
+            requestHeaders.Authorization = `Bearer ${authToken}`
+        }
+        if (secretToken) {
+            requestHeaders["x-secret"] = secretToken
+        }
+        const response = await fetch(this.getAnalysisApiEndpoint(), {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({ mode })
+        })
+        if (!response.ok) {
+            throw new Error(`Analysis request failed with status ${response.status}`)
+        }
+        const responseData = await response.json().catch(() => ({}))
+        return responseData
+    },
+
     hasSmartNotesFolderAccess() {
         return StateStore.read().folders.some(folder => String(folder.name || "").trim().toLowerCase() === "smartnotes")
     },
@@ -375,22 +397,28 @@ Object.assign(UI, {
         }
     },
 
-    async triggerFullAnalysisForCurrentUser() {
+    async triggerAnalysisForCurrentUser() {
         const user = StateStore.read().user
         if (!user?.uid) {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
             return
         }
-        if (!this.hasSmartNotesFolderAccess()) {
+        try {
+            const authToken = await user.getIdToken()
+            await this.requestAnalysis({ authToken, mode: "single" })
+            this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
+        } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+        }
+    },
+
+    async triggerFullAnalysisForAllUsers() {
+        const secretToken = window.prompt(this.getText("analysis_admin_secret_prompt", "Введите admin secret"), "")
+        if (!secretToken) {
             return
         }
         try {
-            await fetch(this.getAnalysisApiEndpoint(), {
-                method: "POST",
-                mode: "no-cors",
-                body: JSON.stringify({ uid: user.uid })
-            })
+            await this.requestAnalysis({ secretToken, mode: "all" })
             this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))

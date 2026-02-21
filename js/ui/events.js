@@ -353,8 +353,11 @@ Object.assign(UI, {
             case "open-settings":
                 this.openSettings()
                 break
+            case "trigger-user-analysis":
+                this.triggerAnalysisForCurrentUser()
+                break
             case "trigger-admin-full-analysis":
-                this.triggerFullAnalysisForCurrentUser()
+                this.triggerFullAnalysisForAllUsers()
                 break
             case "install-app":
                 this.installApplication()
