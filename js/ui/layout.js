@@ -386,18 +386,12 @@ Object.assign(UI, {
             return
         }
         try {
-            const response = await fetch(this.getAnalysisApiEndpoint(), {
+            await fetch(this.getAnalysisApiEndpoint(), {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                mode: "no-cors",
                 body: JSON.stringify({ uid: user.uid })
             })
-            const responseData = await response.json().catch(() => ({}))
-            if (!response.ok || responseData?.success === false) {
-                this.showToast(responseData?.message || this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
-                return
-            }
-            const processedCount = Number(responseData?.processed || responseData?.updated || 0)
-            this.showToast(`${this.getText("analysis_completed", "ИИ-анализ завершен")}: ${processedCount}`)
+            this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         }
