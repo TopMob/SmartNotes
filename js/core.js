@@ -205,9 +205,17 @@ function showRuntimeErrorMessage(messageText) {
         UI.showToast(message)
         return
     }
-    if (typeof window !== "undefined" && typeof window.alert === "function") {
-        window.alert(message)
-    }
+    const toastRoot = typeof document !== "undefined" ? document.getElementById("toast-container") : null
+    if (!toastRoot) return
+    const toastElement = document.createElement("div")
+    toastElement.className = "toast show"
+    toastElement.setAttribute("role", "status")
+    toastElement.textContent = message
+    toastRoot.appendChild(toastElement)
+    setTimeout(() => {
+        toastElement.classList.remove("show")
+        setTimeout(() => toastElement.remove(), 300)
+    }, 2500)
 }
 
 const hideSplashScreen = initializeSplashScreen()

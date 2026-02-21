@@ -208,7 +208,7 @@ const AppLifecycle = {
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
                 return
             }
-            UI.showToast("Настройки были изменены на другом устройстве")
+            UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
         }, error => {
             if (this.isPermissionDeniedError(error)) return
             console.error("Settings sync error", error)

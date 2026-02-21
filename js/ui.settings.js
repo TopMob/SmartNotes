@@ -298,8 +298,8 @@ Object.assign(UI, {
 
     requestCloseSettingsModal() {
         if (this.isSettingsDirty()) {
-            const shouldExit = window.confirm("Вы уверены, что хотите выйти? Изменения не будут сохранены.")
-            if (!shouldExit) return
+            this.confirm("settings_close", () => this.cancelSettingsDraft())
+            return
         }
         this.cancelSettingsDraft()
     },
@@ -679,7 +679,8 @@ Object.assign(UI, {
             exit: this.getText("confirm_exit", "Sign out?"),
             account: this.getText("confirm_account", "Switch account?"),
             delete_f: this.getText("confirm_delete_folder", "Delete folder?"),
-            hide_f: this.getText("confirm_hide_folder", "Do you want to hide this folder?")
+            hide_f: this.getText("confirm_hide_folder", "Do you want to hide this folder?"),
+            settings_close: this.getText("confirm_settings_close", "Close settings without saving?")
         }
         const titleEl = document.getElementById("confirm-title")
         if (titleEl) titleEl.textContent = titles[type] || this.getText("confirm_default", "Confirm")
@@ -702,6 +703,20 @@ Object.assign(UI, {
         }
     },
 
+    showPromptAsync(title, placeholder, value = "", options = {}) {
+        return new Promise(resolve => {
+            this.showPrompt(title, placeholder, primaryValue => resolve(primaryValue), value, options)
+            const cancelButton = document.getElementById("prompt-cancel")
+            if (!cancelButton) return
+            const cancelClone = cancelButton.cloneNode(true)
+            cancelButton.parentNode.replaceChild(cancelClone, cancelButton)
+            cancelClone.onclick = () => {
+                this.els.promptModal.classList.remove("active")
+                resolve("")
+            }
+        })
+    },
+
     showPrompt(title, placeholder, cb, value = "", options = {}) {
         const modal = this.els.promptModal
         const input = document.getElementById("prompt-input")
@@ -722,6 +737,10 @@ Object.assign(UI, {
         if (titleEl) titleEl.textContent = title
         input.value = value
         input.placeholder = placeholder
+        input.type = options.inputType === "password" ? "password" : "text"
+        input.setAttribute("autocomplete", options.autocomplete || "off")
+        input.setAttribute("name", options.inputName || "smartnotes-prompt-input")
+        input.setAttribute("spellcheck", "false")
 
         if (secondaryField && secondaryInput && secondaryOptions) {
             secondaryField.classList.remove("hidden")
@@ -838,8 +857,6 @@ Object.assign(UI, {
         if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
         const notesPerPageSelect = document.getElementById("settings-notes-per-page")
         if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 10)
-        const saveButton = document.querySelector('[data-action="settings-save"]')
-        if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },
 
     renderEditorSettings() {

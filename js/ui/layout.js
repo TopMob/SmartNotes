@@ -457,7 +457,12 @@ Object.assign(UI, {
     },
 
     async triggerFullAnalysisForAllUsers() {
-        const secretToken = window.prompt(this.getText("analysis_admin_secret_prompt", "Введите admin secret"), "")
+        const secretToken = await this.showPromptAsync(
+            this.getText("analysis_admin_secret_prompt", "Введите admin secret"),
+            this.getText("analysis_admin_secret_prompt", "Введите admin secret"),
+            "",
+            { inputType: "password", autocomplete: "new-password", inputName: "analysis-secret-token" }
+        )
         if (!secretToken) return
         const triggerButton = document.querySelector("[data-action=\"trigger-admin-full-analysis\"]")
         const initialLabel = triggerButton ? triggerButton.textContent : ""
