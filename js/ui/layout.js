@@ -312,12 +312,9 @@ Object.assign(UI, {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
-    async requestAnalysis({ authToken = "", secretToken = "", mode = "single" } = {}) {
+    async requestAnalysis({ secretToken = "", mode = "all" } = {}) {
         const requestHeaders = {
             "Content-Type": "application/json"
-        }
-        if (authToken) {
-            requestHeaders.Authorization = `Bearer ${authToken}`
         }
         if (secretToken) {
             requestHeaders["x-secret"] = secretToken
@@ -392,21 +389,6 @@ Object.assign(UI, {
             })
             this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
             this.closeModal("note-actions-modal")
-        } catch {
-            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
-        }
-    },
-
-    async triggerAnalysisForCurrentUser() {
-        const user = StateStore.read().user
-        if (!user?.uid) {
-            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
-            return
-        }
-        try {
-            const authToken = await user.getIdToken()
-            await this.requestAnalysis({ authToken, mode: "single" })
-            this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         }
