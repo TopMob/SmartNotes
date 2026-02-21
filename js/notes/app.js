@@ -55,25 +55,36 @@ const AppLifecycle = {
         const notesPerPageOptions = new Set([5, 10, 20, 50])
         const parsedNotesPerPage = Number(source.notesPerPage)
         const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
-        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
-        const normalizedTheme = {
-            p: ThemeManager.normalizeHex(customThemeSource.p),
-            bg: ThemeManager.normalizeHex(customThemeSource.bg),
-            t: ThemeManager.normalizeHex(customThemeSource.t),
-            mainBackgroundUrl: typeof customThemeSource.mainBackgroundUrl === "string" ? customThemeSource.mainBackgroundUrl : "",
-            sidebarBackgroundUrl: typeof customThemeSource.sidebarBackgroundUrl === "string" ? customThemeSource.sidebarBackgroundUrl : "",
-            mainBackgroundImage: typeof customThemeSource.mainBackgroundImage === "string" ? customThemeSource.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof customThemeSource.sidebarBackgroundImage === "string" ? customThemeSource.sidebarBackgroundImage : "",
-            uiOpacity: typeof customThemeSource.uiOpacity === "number" ? customThemeSource.uiOpacity : 0.78,
-            cardsOpacity: typeof customThemeSource.cardsOpacity === "number" ? customThemeSource.cardsOpacity : 0.9
+        const defaultTheme = defaults.customTheme && typeof defaults.customTheme === "object" ? defaults.customTheme : {}
+        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaultTheme
+        const resolveThemeValue = (key, fallback = "") => {
+            if (typeof customThemeSource[key] === "string") return customThemeSource[key]
+            if (typeof defaultTheme[key] === "string") return defaultTheme[key]
+            return fallback
         }
-        const normalizedBackgroundValue = normalizedTheme.mainBackgroundUrl || normalizedTheme.mainBackgroundImage || ""
+        const resolveThemeOpacity = (key, fallback) => {
+            if (typeof customThemeSource[key] === "number") return customThemeSource[key]
+            if (typeof defaultTheme[key] === "number") return defaultTheme[key]
+            return fallback
+        }
+        const normalizedTheme = {
+            p: ThemeManager.normalizeHex(customThemeSource.p || defaultTheme.p),
+            bg: ThemeManager.normalizeHex(customThemeSource.bg || defaultTheme.bg),
+            t: ThemeManager.normalizeHex(customThemeSource.t || defaultTheme.t),
+            mainBackgroundUrl: resolveThemeValue("mainBackgroundUrl", ""),
+            sidebarBackgroundUrl: resolveThemeValue("sidebarBackgroundUrl", ""),
+            mainBackgroundImage: resolveThemeValue("mainBackgroundImage", ""),
+            sidebarBackgroundImage: resolveThemeValue("sidebarBackgroundImage", ""),
+            uiOpacity: resolveThemeOpacity("uiOpacity", 0.78),
+            cardsOpacity: resolveThemeOpacity("cardsOpacity", 0.9)
+        }
+        const normalizedMainBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedTheme.mainBackgroundUrl, normalizedTheme.mainBackgroundImage)
         return {
             notesPerPage,
             themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
             customTheme: normalizedTheme,
-            backgroundType: normalizedBackgroundValue ? "image" : "none",
-            backgroundValue: normalizedBackgroundValue,
+            backgroundType: normalizedMainBackgroundValue ? "image" : "none",
+            backgroundValue: normalizedMainBackgroundValue,
             lang: source.lang === "en" ? "en" : "ru",
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
@@ -96,15 +107,17 @@ const AppLifecycle = {
         const normalizedSettings = this.normalizeUserSettings(userSettings)
         if (!normalizedSettings || typeof normalizedSettings !== "object") return
         const normalizedThemeSource = normalizedSettings.customTheme && typeof normalizedSettings.customTheme === "object" ? normalizedSettings.customTheme : {}
+        const runtimeMainBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedThemeSource.mainBackgroundUrl, normalizedThemeSource.mainBackgroundImage)
+        const runtimeSidebarBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedThemeSource.sidebarBackgroundUrl, normalizedThemeSource.sidebarBackgroundImage)
         const normalizedTheme = {
             preset: normalizedSettings.themeId || "oled",
             p: ThemeManager.normalizeHex(normalizedThemeSource.p),
             bg: ThemeManager.normalizeHex(normalizedThemeSource.bg),
             t: ThemeManager.normalizeHex(normalizedThemeSource.t),
-            mainBackgroundUrl: typeof normalizedThemeSource.mainBackgroundUrl === "string" ? normalizedThemeSource.mainBackgroundUrl : "",
-            sidebarBackgroundUrl: typeof normalizedThemeSource.sidebarBackgroundUrl === "string" ? normalizedThemeSource.sidebarBackgroundUrl : "",
-            mainBackgroundImage: typeof normalizedThemeSource.mainBackgroundImage === "string" ? normalizedThemeSource.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof normalizedThemeSource.sidebarBackgroundImage === "string" ? normalizedThemeSource.sidebarBackgroundImage : "",
+            mainBackgroundUrl: runtimeMainBackgroundValue && runtimeMainBackgroundValue === String(normalizedThemeSource.mainBackgroundUrl || "") ? String(normalizedThemeSource.mainBackgroundUrl || "") : "",
+            sidebarBackgroundUrl: runtimeSidebarBackgroundValue && runtimeSidebarBackgroundValue === String(normalizedThemeSource.sidebarBackgroundUrl || "") ? String(normalizedThemeSource.sidebarBackgroundUrl || "") : "",
+            mainBackgroundImage: runtimeMainBackgroundValue && runtimeMainBackgroundValue !== String(normalizedThemeSource.mainBackgroundUrl || "") ? runtimeMainBackgroundValue : String(normalizedThemeSource.mainBackgroundImage || ""),
+            sidebarBackgroundImage: runtimeSidebarBackgroundValue && runtimeSidebarBackgroundValue !== String(normalizedThemeSource.sidebarBackgroundUrl || "") ? runtimeSidebarBackgroundValue : String(normalizedThemeSource.sidebarBackgroundImage || ""),
             uiOpacity: typeof normalizedThemeSource.uiOpacity === "number" ? normalizedThemeSource.uiOpacity : 0.78,
             cardsOpacity: typeof normalizedThemeSource.cardsOpacity === "number" ? normalizedThemeSource.cardsOpacity : 0.9
         }
@@ -158,11 +171,7 @@ const AppLifecycle = {
             mainBackgroundUrl: source.mainBackgroundUrl,
             sidebarBackgroundUrl: source.sidebarBackgroundUrl
         }) : fallbackPayload
-        return {
-            ...payload,
-            mainBackgroundImage: "",
-            sidebarBackgroundImage: ""
-        }
+        return payload
     },
     buildCloudSafeUserSettingsPayload(normalizedSettings) {
         const source = normalizedSettings && typeof normalizedSettings === "object" ? normalizedSettings : this.createDefaultUserSettings()
@@ -207,6 +216,19 @@ const AppLifecycle = {
         const user = StateStore.read().user
         if (!user) return null
         const normalizedSettings = this.normalizeUserSettings(settingsToSave)
+        const normalizedTheme = normalizedSettings.customTheme && typeof normalizedSettings.customTheme === "object" ? normalizedSettings.customTheme : {}
+        ThemeManager.saveSettings({
+            preset: normalizedSettings.themeId || "oled",
+            p: ThemeManager.normalizeHex(normalizedTheme.p),
+            bg: ThemeManager.normalizeHex(normalizedTheme.bg),
+            t: ThemeManager.normalizeHex(normalizedTheme.t),
+            mainBackgroundUrl: String(normalizedTheme.mainBackgroundUrl || ""),
+            sidebarBackgroundUrl: String(normalizedTheme.sidebarBackgroundUrl || ""),
+            mainBackgroundImage: String(normalizedTheme.mainBackgroundImage || ""),
+            sidebarBackgroundImage: String(normalizedTheme.sidebarBackgroundImage || ""),
+            uiOpacity: typeof normalizedTheme.uiOpacity === "number" ? normalizedTheme.uiOpacity : 0.78,
+            cardsOpacity: typeof normalizedTheme.cardsOpacity === "number" ? normalizedTheme.cardsOpacity : 0.9
+        })
         const activeSettingsReference = this.settingsReference || (await this.resolveUserSettingsReference(user)).reference
         if (!activeSettingsReference) return null
         try {

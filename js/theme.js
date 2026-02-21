@@ -279,13 +279,16 @@ export const ThemeManager = {
         if (customPreset) return createPreset(customPreset.bg, customPreset.t, customPreset.p)
         return this.themes[key] || this.themes.oled
     },
+    pickRuntimeBackgroundValue(urlValue, localImageValue) {
+        return pickRuntimeBackgroundValue(urlValue, localImageValue)
+    },
     applySettings(settings, persist) {
         const presetKey = settings?.preset || "oled"
         const base = this.resolvePreset(presetKey)
         const normalizedOpacity = normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78)
         const normalizedCardsOpacity = normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
-        const mainBackgroundImage = pickRuntimeBackgroundValue(settings?.mainBackgroundUrl, settings?.mainBackgroundImage)
-        const sidebarBackgroundImage = pickRuntimeBackgroundValue(settings?.sidebarBackgroundUrl, settings?.sidebarBackgroundImage)
+        const mainBackgroundImage = this.pickRuntimeBackgroundValue(settings?.mainBackgroundUrl, settings?.mainBackgroundImage)
+        const sidebarBackgroundImage = this.pickRuntimeBackgroundValue(settings?.sidebarBackgroundUrl, settings?.sidebarBackgroundImage)
         const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity, cardsOpacity: normalizedCardsOpacity }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey

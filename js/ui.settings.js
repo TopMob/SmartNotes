@@ -569,11 +569,31 @@ Object.assign(UI, {
     },
     bindAppearanceBackgroundControls(root) {
         if (!root) return
-        const normalizeBackgroundUrl = (value) => {
+        const validateBackgroundUrl = (value) => {
             const source = String(value || "").trim()
-            if (!source) return ""
-            if (/^data:/i.test(source)) return ""
-            return /^https?:\/\//i.test(source) ? source : ""
+            if (!source) return { ok: true, value: "" }
+            if (/pinterest\.com/i.test(source)) {
+                return {
+                    ok: false,
+                    value: "",
+                    message: "Pinterest не позволяет использовать ссылку напрямую. Откройте изображение и скопируйте прямую ссылку на файл (.jpg/.png)"
+                }
+            }
+            if (!/^https?:\/\//i.test(source) || /^data:/i.test(source)) {
+                return {
+                    ok: false,
+                    value: "",
+                    message: "Нужно указать прямую ссылку на изображение (.jpg/.png/.webp)"
+                }
+            }
+            if (!/\.(jpg|jpeg|png|webp|avif)(\?.*)?$/i.test(source)) {
+                return {
+                    ok: false,
+                    value: "",
+                    message: "Нужно указать прямую ссылку на изображение (.jpg/.png/.webp)"
+                }
+            }
+            return { ok: true, value: source }
         }
         const optimizeImageDataUrlForAppearance = (dataUrl) => new Promise((resolve) => {
             const source = String(dataUrl || "")
@@ -611,8 +631,13 @@ Object.assign(UI, {
         const bindTextInput = (input, key) => {
             if (!input) return
             input.addEventListener("change", (event) => {
-                const nextValue = normalizeBackgroundUrl(event.target.value)
-                this.updateAppearanceBackground(key, { mode: "url", value: nextValue })
+                const validationResult = validateBackgroundUrl(event.target.value)
+                if (!validationResult.ok) {
+                    this.showToast(validationResult.message)
+                    this.syncAppearanceBackgroundInputs(StateStore.read().appearanceDraft || ThemeManager.getSavedSettings())
+                    return
+                }
+                this.updateAppearanceBackground(key, { mode: "url", value: validationResult.value })
             })
         }
         const bindFileInput = (input, key) => {
