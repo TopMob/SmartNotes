@@ -167,6 +167,8 @@ function filterAndRender(query) {
         UI.renderFolderGrid()
     } else if (view === "hidden_folders") {
         UI.renderHiddenFolders()
+    } else if (view === "admin_tools") {
+        UI.renderAdminToolsView()
     } else if (view === "trash") {
         UI.renderTrash(list)
     } else {

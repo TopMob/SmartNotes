@@ -162,6 +162,9 @@ Object.assign(UI, {
                 <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
                     ${dict.copy_text || "Copy text"}
                 </button>
+                <button type="button" class="btn-secondary" data-action="note-queue-reindex" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.note_queue_reindex || "Добавить в очередь на пере-индексирование"}
+                </button>
                 <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
                     ${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
                 </button>

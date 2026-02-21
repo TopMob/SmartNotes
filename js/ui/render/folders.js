@@ -57,6 +57,7 @@ Object.assign(UI, {
         root.replaceChildren(fragment)
         this.renderFilterMenu()
         this.updateFolderLimitControls()
+        this.updateAdminToolsNavigationVisibility()
     },
 
     createHiddenFolderCard(folder) {

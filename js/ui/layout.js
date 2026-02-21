@@ -179,7 +179,8 @@ Object.assign(UI, {
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
-            hidden_folders: dict.hidden_folders || "Hidden folders"
+            hidden_folders: dict.hidden_folders || "Hidden folders",
+            admin_tools: dict.admin_tools || "Admin tools"
         }
         const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"
@@ -191,6 +192,7 @@ Object.assign(UI, {
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
         this.updateFolderLimitControls()
+        this.updateAdminToolsNavigationVisibility()
     },
 
     updatePrimaryActionLabel() {
@@ -199,6 +201,7 @@ Object.assign(UI, {
         this.els.fab.setAttribute("aria-label", label)
         this.updateActiveFolderMenu()
         this.updateFolderLimitControls()
+        this.updateAdminToolsNavigationVisibility()
     },
 
 
@@ -309,24 +312,45 @@ Object.assign(UI, {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
-    isAdminAnalysisEnabled() {
-        return SafeStorage.local.get("smartnotes-admin-analysis-enabled", "") === "enabled"
+    hasSmartNotesFolderAccess() {
+        return StateStore.read().folders.some(folder => String(folder.name || "").trim().toLowerCase() === "smartnotes")
     },
 
-    requestAdminAnalysisAccess() {
-        this.showPrompt(this.getText("admin_analysis_access_title", "Секрет администратора"), this.getText("admin_analysis_access_placeholder", "Введите секрет"), (secretValue) => {
-            const normalizedSecret = String(secretValue || "").trim()
-            if (normalizedSecret !== "smartnotes-admin") {
-                this.showToast(this.getText("admin_analysis_access_denied", "Секрет неверный"))
-                return
-            }
-            SafeStorage.local.set("smartnotes-admin-analysis-enabled", "enabled")
-            this.showToast(this.getText("admin_analysis_access_enabled", "Режим администратора включен"))
-            this.updateActiveFolderMenu()
-        })
+    updateAdminToolsNavigationVisibility() {
+        const adminToolsButton = this.els.adminToolsNavButton
+        if (!adminToolsButton) return
+        const canShowAdminTools = this.hasSmartNotesFolderAccess() && !!StateStore.read().user?.uid
+        adminToolsButton.classList.toggle("hidden", !canShowAdminTools)
+        if (!canShowAdminTools && StateStore.read().view === "admin_tools") {
+            switchView("notes")
+        }
     },
 
-    async enqueueAnalysisForCurrentUser() {
+    renderAdminToolsView() {
+        const root = this.els.grid
+        if (!root) return
+        this.els.empty.classList.add("hidden")
+        this.els.grid.classList.remove("folder-grid")
+        const actionCard = document.createElement("div")
+        actionCard.className = "note-card"
+
+        const title = document.createElement("h3")
+        window.DomSecurity.setText(title, this.getText("admin_tools", "Админ-меню"))
+
+        const description = document.createElement("p")
+        window.DomSecurity.setText(description, this.getText("analysis_full_reindex_button", "Проиндексировать всё"))
+
+        const triggerButton = document.createElement("button")
+        triggerButton.type = "button"
+        triggerButton.className = "btn-primary"
+        triggerButton.dataset.action = "trigger-admin-full-analysis"
+        window.DomSecurity.setText(triggerButton, this.getText("analysis_full_reindex_button", "Проиндексировать всё"))
+
+        actionCard.append(title, description, triggerButton)
+        root.replaceChildren(actionCard)
+    },
+
+    async enqueueAnalysisForCurrentUser(noteId = "") {
         const user = StateStore.read().user
         if (!db || !user?.uid) {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
@@ -350,11 +374,13 @@ Object.assign(UI, {
                 uid: user.uid,
                 status: "pending",
                 taskType: "analyze_unprocessed",
+                noteId: String(noteId || ""),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 requestedAt: Date.now(),
                 requestedBy: user.uid
             })
             this.showToast(this.getText("analysis_queued", "Задача ИИ-анализа поставлена в очередь"))
+            this.closeModal("note-actions-modal")
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         }
@@ -363,6 +389,10 @@ Object.assign(UI, {
     async triggerFullAnalysisForCurrentUser() {
         const user = StateStore.read().user
         if (!user?.uid) {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+            return
+        }
+        if (!this.hasSmartNotesFolderAccess()) {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
             return
         }
@@ -388,25 +418,16 @@ Object.assign(UI, {
         const wrapper = this.els.activeFolderMenuWrapper
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
-        const queueButton = this.els.activeFolderQueueButton
-        const analyzeButton = this.els.activeFolderAnalyzeButton
         if (!wrapper) return
-        const { view, activeFolderId, folders, user } = StateStore.read()
+        const { view, activeFolderId, folders } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {
-            queueButton?.classList.add("hidden")
-            analyzeButton?.classList.add("hidden")
             this.toggleActiveFolderMenu(false)
             return
         }
         const folder = folders.find(item => item.id === activeFolderId)
         if (!folder) return
-        const normalizedFolderName = String(folder.name || "").trim().toLowerCase()
-        const canShowQueueButton = normalizedFolderName === "smartnotes" && !!user?.uid
-        const canShowAnalyzeButton = canShowQueueButton && this.isAdminAnalysisEnabled()
-        queueButton?.classList.toggle("hidden", !canShowQueueButton)
-        analyzeButton?.classList.toggle("hidden", !canShowAnalyzeButton)
         if (hideLabel) hideLabel.textContent = folder.isHidden ? this.getText("show_folder", "Show folder") : this.getText("hide_folder", "Hide folder")
         if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"
     }

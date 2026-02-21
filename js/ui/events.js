@@ -57,11 +57,6 @@ Object.assign(UI, {
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && this.els.sidebar?.classList.contains("active")) {
                 this.toggleSidebar(false)
-                return
-            }
-            const normalizedKey = String(e.key || "").toLowerCase()
-            if (e.ctrlKey && e.shiftKey && normalizedKey === "a") {
-                this.requestAdminAnalysisAccess()
             }
         })
 
@@ -349,14 +344,6 @@ Object.assign(UI, {
                 this.renameFolder(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
                 break
-            case "queue-active-folder-analysis":
-                this.enqueueAnalysisForCurrentUser()
-                this.toggleActiveFolderMenu(false)
-                break
-            case "trigger-active-folder-analysis":
-                this.triggerFullAnalysisForCurrentUser()
-                this.toggleActiveFolderMenu(false)
-                break
             case "open-modal":
                 this.openModal(el.dataset.modal)
                 break
@@ -365,6 +352,9 @@ Object.assign(UI, {
                 break
             case "open-settings":
                 this.openSettings()
+                break
+            case "trigger-admin-full-analysis":
+                this.triggerFullAnalysisForCurrentUser()
                 break
             case "install-app":
                 this.installApplication()
@@ -461,6 +451,9 @@ Object.assign(UI, {
                 break
             case "note-move-folder":
                 this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-queue-reindex":
+                this.enqueueAnalysisForCurrentUser(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "download-note":
                 this.downloadSelectedNote()
