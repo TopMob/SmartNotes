@@ -350,36 +350,25 @@ Object.assign(UI, {
         root.replaceChildren(actionCard)
     },
 
-    async enqueueAnalysisForCurrentUser(noteId = "") {
+    async markNoteForReanalysis(noteId = "") {
         const user = StateStore.read().user
-        if (!db || !user?.uid) {
+        const normalizedNoteId = String(noteId || "")
+        if (!db || !user?.uid || !normalizedNoteId) {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
             return
         }
         try {
-            const tasksCollection = DataPath.getTasksCollection()
-            if (!tasksCollection) {
+            const noteReference = DataPath.getUserNotesCollection(user)?.doc(normalizedNoteId)
+            if (!noteReference) {
                 this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
                 return
             }
-            const [pendingTasksSnapshot, processingTasksSnapshot] = await Promise.all([
-                tasksCollection.where("uid", "==", user.uid).where("status", "==", "pending").limit(1).get(),
-                tasksCollection.where("uid", "==", user.uid).where("status", "==", "processing").limit(1).get()
-            ])
-            if (!pendingTasksSnapshot.empty || !processingTasksSnapshot.empty) {
-                this.showToast(this.getText("analysis_task_exists", "ИИ-анализ уже запущен"))
-                return
-            }
-            await tasksCollection.add({
-                uid: user.uid,
-                status: "pending",
-                taskType: "analyze_unprocessed",
-                noteId: String(noteId || ""),
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                requestedAt: Date.now(),
-                requestedBy: user.uid
+            await noteReference.update({
+                analyzed: false,
+                aiProcessed: false,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             })
-            this.showToast(this.getText("analysis_queued", "Задача ИИ-анализа поставлена в очередь"))
+            this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
             this.closeModal("note-actions-modal")
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))

@@ -452,8 +452,8 @@ Object.assign(UI, {
             case "note-move-folder":
                 this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
                 break
-            case "note-queue-reindex":
-                this.enqueueAnalysisForCurrentUser(decodeURIComponent(el.dataset.noteId || ""))
+            case "note-mark-for-reanalysis":
+                this.markNoteForReanalysis(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "download-note":
                 this.downloadSelectedNote()
