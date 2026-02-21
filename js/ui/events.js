@@ -353,6 +353,9 @@ Object.assign(UI, {
             case "open-settings":
                 this.openSettings()
                 break
+            case "trigger-admin-full-analysis":
+                this.triggerFullAnalysisForAllUsers()
+                break
             case "install-app":
                 this.installApplication()
                 break
@@ -448,6 +451,9 @@ Object.assign(UI, {
                 break
             case "note-move-folder":
                 this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-mark-for-reanalysis":
+                this.markNoteForReanalysis(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "download-note":
                 this.downloadSelectedNote()

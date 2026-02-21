@@ -201,12 +201,6 @@ export const EditorAPI = (() => {
                 if (elements.title) elements.title.value = note.title
             }
 
-            const autoTags = inputHandlers.collectSuggestedTags(note.title, note.content)
-            const currentTags = new Set(note.tags.map(t => t.toLowerCase()))
-            autoTags.forEach(t => {
-                if (!currentTags.has(t.toLowerCase())) note.tags.push(t)
-            })
-
             if (!note.folderId) {
                 const suggested = SmartSearch.suggestFolderId(note, StateStore.read().folders)
                 if (suggested) note.folderId = suggested
@@ -220,7 +214,8 @@ export const EditorAPI = (() => {
             return
         }
 
-        if (!hasPersistableChanges(currentNote, note)) {
+        const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
+        if (!hasRemotePersistableChanges && !editorHasUnsavedChanges) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
             if (!options.silent) {

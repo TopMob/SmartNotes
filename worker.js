@@ -17,6 +17,8 @@ admin.initializeApp({
 })
 
 const database = admin.firestore()
+const activeTaskIds = new Set()
+const activeUserAnalysisLocks = new Set()
 
 function stripHtml(html) {
     if (!html) return ""
@@ -52,6 +54,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 async function analyzeChunkWithOllama(folders, notesChunk) {
+    console.log(`[Worker] AI request started for ${notesChunk.length} notes`)
     const prompt = buildPrompt(folders, notesChunk)
     const response = await fetchWithTimeout(`${OLLAMA_URL}/api/generate`, {
         method: "POST",
@@ -74,23 +77,26 @@ async function analyzeChunkWithOllama(folders, notesChunk) {
     if (!Array.isArray(parsedPayload)) {
         throw new Error("ollama_invalid_payload")
     }
+    console.log(`[Worker] AI request finished for ${notesChunk.length} notes`)
     return parsedPayload
 }
 
-async function analyzeUserNotes(uid) {
-    const foldersSnapshot = await database.collection("users").doc(uid).collection("folders").get()
-    const folders = foldersSnapshot.docs
-        .map(documentEntry => ({
-            id: documentEntry.id,
-            name: documentEntry.data()?.name || ""
-        }))
-        .filter(folder => folder.id && folder.name)
+async function fetchPendingNotes(uid) {
+    const notesCollection = database.collection("users").doc(uid).collection("notes")
+    const snapshotByAnalyzedFlag = await notesCollection.where("analyzed", "==", false).get()
+    const snapshotByAiProcessedFlag = await notesCollection.where("aiProcessed", "==", false).get()
+    const pendingDocuments = new Map()
+    snapshotByAnalyzedFlag.docs.forEach(documentEntry => {
+        pendingDocuments.set(documentEntry.id, documentEntry)
+    })
+    snapshotByAiProcessedFlag.docs.forEach(documentEntry => {
+        pendingDocuments.set(documentEntry.id, documentEntry)
+    })
+    return [...pendingDocuments.values()]
+}
 
-    const availableFolderIds = new Set(folders.map(folder => folder.id))
-    const notesSnapshot = await database.collection("users").doc(uid).collection("notes").get()
-    if (notesSnapshot.empty) return
-
-    const allNotes = notesSnapshot.docs
+function mapNotesForAnalysis(noteDocuments) {
+    return noteDocuments
         .map(documentEntry => {
             const noteData = documentEntry.data() || {}
             const noteText = stripHtml(noteData.content || "").slice(0, NOTE_TEXT_LIMIT)
@@ -102,13 +108,55 @@ async function analyzeUserNotes(uid) {
             }
         })
         .filter(note => note.text)
+}
+
+async function markChunkAnalysisError(uid, notesChunk, errorCode) {
+    if (!notesChunk.length) return
+    const batch = database.batch()
+    notesChunk.forEach(note => {
+        const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
+        batch.update(noteReference, {
+            analyzed: false,
+            aiProcessed: false,
+            aiError: errorCode,
+            aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
+        })
+    })
+    await batch.commit()
+}
+
+async function analyzeUserNotes(uid, mode = "pending") {
+    const foldersSnapshot = await database.collection("users").doc(uid).collection("folders").get()
+    const folders = foldersSnapshot.docs
+        .map(documentEntry => ({
+            id: documentEntry.id,
+            name: documentEntry.data()?.name || ""
+        }))
+        .filter(folder => folder.id && folder.name)
+
+    const availableFolderIds = new Set(folders.map(folder => folder.id))
+    const shouldAnalyzeAllNotes = String(mode || "").trim().toLowerCase() === "all"
+    const noteDocuments = shouldAnalyzeAllNotes
+        ? (await database.collection("users").doc(uid).collection("notes").get()).docs
+        : await fetchPendingNotes(uid)
+    if (!noteDocuments.length) return
+
+    const allNotes = mapNotesForAnalysis(noteDocuments)
+    if (!allNotes.length) {
+        console.log(`[Worker] No notes with content to analyze for uid=${uid}`)
+        return
+    }
 
     for (let index = 0; index < allNotes.length; index += ANALYSIS_BATCH_SIZE) {
         const notesChunk = allNotes.slice(index, index + ANALYSIS_BATCH_SIZE)
+        if (!notesChunk.length) continue
         let analysisResults
         try {
             analysisResults = await analyzeChunkWithOllama(folders, notesChunk)
-        } catch {
+        } catch (error) {
+            const normalizedErrorCode = String(error?.message || "analysis_failed").trim() || "analysis_failed"
+            console.error(`[Worker] AI chunk failed for uid=${uid}: ${normalizedErrorCode}`)
+            await markChunkAnalysisError(uid, notesChunk, normalizedErrorCode)
             continue
         }
 
@@ -121,7 +169,10 @@ async function analyzeUserNotes(uid) {
             const noteFromChunk = notesChunk.find(note => note.id === noteId)
 
             batch.update(noteReference, {
+                analyzed: true,
                 aiProcessed: true,
+                aiError: admin.firestore.FieldValue.delete(),
+                aiErrorAt: admin.firestore.FieldValue.delete(),
                 aiRelevance: clampInteger(analysisResult?.relevance, 0, 100),
                 aiTagsVisible: Array.isArray(analysisResult?.userTags)
                     ? analysisResult.userTags.map(tag => String(tag || "").trim()).filter(Boolean).slice(0, 5)
@@ -151,28 +202,55 @@ database.collection("tasks")
     .onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
             if (change.type !== "added") return
-            const taskData = change.doc.data() || {}
-            const uid = String(taskData.uid || "").trim()
-            if (!uid) {
-                change.doc.ref.update({ status: "error", errorCode: "missing_uid", finishedAt: admin.firestore.FieldValue.serverTimestamp() })
-                return
-            }
-            change.doc.ref.update({ status: "processing", startedAt: admin.firestore.FieldValue.serverTimestamp() })
-                .then(() => analyzeUserNotes(uid))
-                .then(() => {
-                    return change.doc.ref.update({
+            const taskIdentifier = String(change.doc.id || "")
+            if (!taskIdentifier || activeTaskIds.has(taskIdentifier)) return
+            activeTaskIds.add(taskIdentifier)
+
+            ;(async () => {
+                const taskData = change.doc.data() || {}
+                const uid = String(taskData.uid || "").trim()
+                if (!uid) {
+                    await change.doc.ref.update({ status: "error", errorCode: "missing_uid", finishedAt: admin.firestore.FieldValue.serverTimestamp() })
+                    return
+                }
+
+                const mode = String(taskData.mode || "pending").trim().toLowerCase()
+                const executionLockKey = `${uid}:${mode}`
+                if (activeUserAnalysisLocks.has(executionLockKey)) {
+                    await change.doc.ref.update({
+                        status: "error",
+                        model: OLLAMA_MODEL,
+                        errorCode: "analysis_in_progress",
+                        finishedAt: admin.firestore.FieldValue.serverTimestamp()
+                    })
+                    return
+                }
+
+                activeUserAnalysisLocks.add(executionLockKey)
+                console.log(`[Worker] Task started id=${taskIdentifier} uid=${uid} mode=${mode}`)
+                try {
+                    await change.doc.ref.update({ status: "processing", startedAt: admin.firestore.FieldValue.serverTimestamp() })
+                    await analyzeUserNotes(uid, mode)
+                    await change.doc.ref.update({
                         status: "done",
                         model: OLLAMA_MODEL,
                         finishedAt: admin.firestore.FieldValue.serverTimestamp()
                     })
-                })
-                .catch(() => {
-                    change.doc.ref.update({
+                    console.log(`[Worker] Task finished id=${taskIdentifier} uid=${uid} mode=${mode}`)
+                } catch (error) {
+                    const normalizedErrorCode = String(error?.message || "analysis_task_failed").trim() || "analysis_task_failed"
+                    console.error(`[Worker] Task failed id=${taskIdentifier} uid=${uid} mode=${mode}: ${normalizedErrorCode}`)
+                    await change.doc.ref.update({
                         status: "error",
                         model: OLLAMA_MODEL,
+                        errorCode: normalizedErrorCode,
                         finishedAt: admin.firestore.FieldValue.serverTimestamp()
                     })
-                })
+                } finally {
+                    activeUserAnalysisLocks.delete(executionLockKey)
+                    activeTaskIds.delete(taskIdentifier)
+                }
+            })()
         })
     })
 

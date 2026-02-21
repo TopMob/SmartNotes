@@ -179,7 +179,8 @@ Object.assign(UI, {
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
-            hidden_folders: dict.hidden_folders || "Hidden folders"
+            hidden_folders: dict.hidden_folders || "Hidden folders",
+            admin_tools: dict.admin_tools || "Admin tools"
         }
         const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"
@@ -191,6 +192,7 @@ Object.assign(UI, {
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
         this.updateFolderLimitControls()
+        this.updateAdminToolsNavigationVisibility()
     },
 
     updatePrimaryActionLabel() {
@@ -199,6 +201,7 @@ Object.assign(UI, {
         this.els.fab.setAttribute("aria-label", label)
         this.updateActiveFolderMenu()
         this.updateFolderLimitControls()
+        this.updateAdminToolsNavigationVisibility()
     },
 
 
@@ -303,6 +306,104 @@ Object.assign(UI, {
             return
         }
         this.showToast(this.getText("install_unavailable", "Installation is unavailable on this device"))
+    },
+
+    getAnalysisApiEndpoint() {
+        return "https://backendfornmartnotes.vercel.app/api/analyze"
+    },
+
+    async requestAnalysis({ secretToken = "", mode = "pending" } = {}) {
+        const requestHeaders = {
+            "Content-Type": "application/json"
+        }
+        if (secretToken) {
+            requestHeaders["x-secret"] = secretToken
+        }
+        const response = await fetch(this.getAnalysisApiEndpoint(), {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({ mode })
+        })
+        if (!response.ok) {
+            throw new Error(`Analysis request failed with status ${response.status}`)
+        }
+        const responseData = await response.json().catch(() => ({}))
+        return responseData
+    },
+
+    hasSmartNotesFolderAccess() {
+        return StateStore.read().folders.some(folder => String(folder.name || "").trim().toLowerCase() === "smartnotes")
+    },
+
+    updateAdminToolsNavigationVisibility() {
+        const adminToolsButton = this.els.adminToolsNavButton
+        if (!adminToolsButton) return
+        const canShowAdminTools = this.hasSmartNotesFolderAccess() && !!StateStore.read().user?.uid
+        adminToolsButton.classList.toggle("hidden", !canShowAdminTools)
+        if (!canShowAdminTools && StateStore.read().view === "admin_tools") {
+            switchView("notes")
+        }
+    },
+
+    renderAdminToolsView() {
+        const root = this.els.grid
+        if (!root) return
+        this.els.empty.classList.add("hidden")
+        this.els.grid.classList.remove("folder-grid")
+        const actionCard = document.createElement("div")
+        actionCard.className = "note-card"
+
+        const title = document.createElement("h3")
+        window.DomSecurity.setText(title, this.getText("admin_tools", "Админ-меню"))
+
+        const description = document.createElement("p")
+        window.DomSecurity.setText(description, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
+
+        const triggerButton = document.createElement("button")
+        triggerButton.type = "button"
+        triggerButton.className = "btn-primary"
+        triggerButton.dataset.action = "trigger-admin-full-analysis"
+        window.DomSecurity.setText(triggerButton, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
+
+        actionCard.append(title, description, triggerButton)
+        root.replaceChildren(actionCard)
+    },
+
+    async markNoteForReanalysis(noteId = "") {
+        const user = StateStore.read().user
+        const normalizedNoteId = String(noteId || "")
+        if (!db || !user?.uid || !normalizedNoteId) {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+            return
+        }
+        try {
+            const noteReference = DataPath.getUserNotesCollection(user)?.doc(normalizedNoteId)
+            if (!noteReference) {
+                this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+                return
+            }
+            await noteReference.update({
+                analyzed: false,
+                aiProcessed: false
+            })
+            this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
+            this.closeModal("note-actions-modal")
+        } catch {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+        }
+    },
+
+    async triggerFullAnalysisForAllUsers() {
+        const secretToken = window.prompt(this.getText("analysis_admin_secret_prompt", "Введите admin secret"), "")
+        if (!secretToken) {
+            return
+        }
+        try {
+            await this.requestAnalysis({ secretToken, mode: "pending" })
+            this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
+        } catch {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+        }
     },
 
     updateActiveFolderMenu() {

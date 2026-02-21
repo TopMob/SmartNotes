@@ -28,7 +28,8 @@ const UI = {
             activeFolderMenu: document.getElementById("active-folder-menu"),
             activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
             activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
-            activeFolderHideButton: document.getElementById("active-folder-hide-button")
+            activeFolderHideButton: document.getElementById("active-folder-hide-button"),
+            adminToolsNavButton: document.getElementById("admin-tools-nav-button")
         }
         this.bindEvents()
         if (window.matchMedia("(min-width: 1024px)").matches) {
