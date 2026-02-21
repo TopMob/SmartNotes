@@ -57,19 +57,31 @@ const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
 const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
     const localPresetList = Array.isArray(localPresets) ? localPresets : []
     const cloudPresetList = Array.isArray(cloudPresets) ? cloudPresets : []
-    const localPresetsByKey = new Map(localPresetList
+    const normalizedLocalPresets = localPresetList
         .filter(item => item && typeof item === "object")
-        .map(item => [String(item.key || ""), item]))
-    return cloudPresetList
+        .map(item => ({
+            key: String(item.key || ""),
+            p: ThemeManager.normalizeHex(item.p),
+            bg: ThemeManager.normalizeHex(item.bg),
+            t: ThemeManager.normalizeHex(item.t),
+            mainBackgroundImage: normalizeLocalImageValue(item.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(item.sidebarBackgroundImage)
+        }))
+    const mergedPresetsByKey = new Map(normalizedLocalPresets.map(item => [item.key, item]))
+
+    cloudPresetList
         .filter(item => item && typeof item === "object")
-        .map(item => {
+        .forEach(item => {
             const presetKey = String(item.key || "")
-            const localPreset = localPresetsByKey.get(presetKey)
+            if (!presetKey) return
+            const localPreset = mergedPresetsByKey.get(presetKey)
             const cloudMainBackgroundImage = normalizeLocalImageValue(item.mainBackgroundImage)
             const cloudSidebarBackgroundImage = normalizeLocalImageValue(item.sidebarBackgroundImage)
             const mergedPreset = {
-                ...item,
                 key: presetKey,
+                p: ThemeManager.normalizeHex(item.p),
+                bg: ThemeManager.normalizeHex(item.bg),
+                t: ThemeManager.normalizeHex(item.t),
                 mainBackgroundImage: cloudMainBackgroundImage,
                 sidebarBackgroundImage: cloudSidebarBackgroundImage
             }
@@ -79,8 +91,10 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
             if (!cloudSidebarBackgroundImage && isDataImageValue(localPreset?.sidebarBackgroundImage)) {
                 mergedPreset.sidebarBackgroundImage = normalizeLocalImageValue(localPreset.sidebarBackgroundImage)
             }
-            return mergedPreset
+            mergedPresetsByKey.set(presetKey, mergedPreset)
         })
+
+    return [...mergedPresetsByKey.values()]
 }
 
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {

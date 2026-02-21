@@ -359,12 +359,6 @@ Object.assign(UI, {
             case "open-settings":
                 this.openSettings()
                 break
-            case "settings-save":
-                this.saveSettingsDraft()
-                break
-            case "settings-cancel":
-                this.cancelSettingsDraft()
-                break
             case "close-settings-modal":
                 this.requestCloseSettingsModal()
                 break
@@ -498,11 +492,17 @@ Object.assign(UI, {
             case "lock-move-folder":
                 this.moveLockNoteToFolder(el.dataset.noteId || "")
                 break
-            case "appearance-reset":
-                this.resetAppearanceDraft()
+            case "appearance-cancel":
+                this.cancelSettingsDraft()
                 break
             case "appearance-save":
                 this.saveAppearanceDraft()
+                break
+            case "general-cancel":
+                this.cancelSettingsDraft()
+                break
+            case "general-save":
+                this.saveSettingsDraft()
                 break
             case "toggle-filter-menu":
                 this.toggleFilterMenu()

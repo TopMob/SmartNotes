@@ -170,6 +170,7 @@
 
 .confirm-layer {
     background: rgba(0,0,0,0.65);
+    z-index: calc(var(--z-modal) + 5);
 }
 
 .confirm-box {

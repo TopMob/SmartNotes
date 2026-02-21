@@ -121,6 +121,10 @@ Object.assign(UI, {
                         </div>
                     </div>
                 </div>
+                <div class="settings-actions row-between">
+                    <button type="button" class="btn-secondary" data-action="general-cancel">${dict.cancel || "Cancel"}</button>
+                    <button type="button" class="btn-primary" data-action="general-save">${dict.save || "Save"}</button>
+                </div>
             `
             this.bindSettingsControls()
             this.syncSettingsUI()
@@ -254,7 +258,7 @@ Object.assign(UI, {
                     </div>
                 </div>
                 <div class="settings-actions row-between">
-                    <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
+                    <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
                     <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                 </div>
             `
@@ -288,12 +292,6 @@ Object.assign(UI, {
         if (!currentDraft) return
         const nextDraft = { ...currentDraft, ...updates }
         StateStore.update("draftUserSettings", nextDraft)
-    },
-
-    applyDraftSettingsToRuntime() {
-        const draftSettings = this.getSettingsDraft()
-        if (!draftSettings) return
-        AppLifecycle.applyUserSettingsToRuntime(draftSettings, { resetVisibleLimit: true })
     },
 
     requestCloseSettingsModal() {
@@ -433,15 +431,11 @@ Object.assign(UI, {
                     bg: customPreset?.bg || current.bg,
                     t: customPreset?.t || current.t
                 }
-                StateStore.update("appearanceDraft", next)
-                ThemeManager.applySettings(next, false)
-                ThemeManager.syncInputs(next.p, next.bg, next.t)
+                this.applyAppearanceDraft(next)
                 return
             }
             const next = { ...current, preset: "manual", [type]: normalizedValue }
-            StateStore.update("appearanceDraft", next)
-            ThemeManager.applySettings(next, false)
-            ThemeManager.syncInputs(next.p, next.bg, next.t)
+            this.applyAppearanceDraft(next)
         })
     },
 
@@ -461,24 +455,7 @@ Object.assign(UI, {
             backgroundType: nextDraft.mainBackgroundImage ? "image" : "none",
             backgroundValue: nextDraft.mainBackgroundImage || ""
         })
-        this.applyDraftSettingsToRuntime()
         this.renderAppearanceDraft()
-    },
-
-    resetAppearanceDraft() {
-        const defaults = ThemeManager.getDefaultSettings()
-        const preset = ThemeManager.resolvePreset(defaults.preset || "oled")
-        const draft = {
-            preset: defaults.preset || "oled",
-            p: preset.p,
-            bg: preset.bg,
-            t: preset.t,
-            mainBackgroundImage: defaults.mainBackgroundImage || "",
-            sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
-            uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78,
-            cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
-        }
-        this.applyAppearanceDraft(draft)
     },
 
     async saveAppearanceDraft() {
@@ -490,7 +467,6 @@ Object.assign(UI, {
         if (langSelect) {
             langSelect.addEventListener("change", event => {
                 this.updateSettingsDraft({ lang: event.target.value === "en" ? "en" : "ru" })
-                this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
             })
         }
@@ -499,7 +475,6 @@ Object.assign(UI, {
         if (folderSelect) {
             folderSelect.addEventListener("change", event => {
                 this.updateSettingsDraft({ folderViewMode: event.target.value === "full" ? "full" : "compact" })
-                this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
             })
         }
@@ -511,7 +486,6 @@ Object.assign(UI, {
                 const parsedValue = Number(event.target.value)
                 const notesPerPage = allowedValues.has(parsedValue) ? parsedValue : 10
                 this.updateSettingsDraft({ notesPerPage })
-                this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
             })
         }
@@ -520,7 +494,6 @@ Object.assign(UI, {
         if (reduceToggle) {
             reduceToggle.addEventListener("change", event => {
                 this.updateSettingsDraft({ reduceMotion: !!event.target.checked })
-                this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
             })
         }
