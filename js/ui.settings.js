@@ -317,8 +317,12 @@ Object.assign(UI, {
     async saveSettingsDraft() {
         const draftSettings = this.getSettingsDraft()
         if (!draftSettings) return
+        const settingsToSave = {
+            ...draftSettings,
+            customPresets: ThemeManager.getCustomPresets()
+        }
         try {
-            const savedSettings = await AppLifecycle.saveUserSettings(draftSettings)
+            const savedSettings = await AppLifecycle.saveUserSettings(settingsToSave)
             if (!savedSettings) return
             AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
             this.syncSettingsDraftFromOriginal()
