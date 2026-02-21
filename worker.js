@@ -84,11 +84,7 @@ async function analyzeChunkWithOllama(folders, notesChunk) {
 async function fetchPendingNotes(uid) {
     const notesCollection = database.collection("users").doc(uid).collection("notes")
     const snapshotByAnalyzedFlag = await notesCollection.where("analyzed", "==", false).get()
-    const snapshotByMissingAnalyzedFlag = await notesCollection.where("analyzed", "==", null).get()
-    const pendingDocuments = new Map()
-    snapshotByAnalyzedFlag.docs.forEach(documentEntry => pendingDocuments.set(documentEntry.id, documentEntry))
-    snapshotByMissingAnalyzedFlag.docs.forEach(documentEntry => pendingDocuments.set(documentEntry.id, documentEntry))
-    return [...pendingDocuments.values()].filter(documentEntry => {
+    return snapshotByAnalyzedFlag.docs.filter(documentEntry => {
         const noteData = documentEntry.data() || {}
         return noteData.analyzed !== true
     })
@@ -115,7 +111,7 @@ async function markChunkAnalysisError(uid, notesChunk, errorCode) {
     notesChunk.forEach(note => {
         const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
         batch.update(noteReference, {
-            analyzed: false,
+            analyzed: true,
             aiProcessed: false,
             aiError: true,
             aiErrorCode: errorCode,
@@ -154,6 +150,12 @@ async function analyzeUserNotes(uid, mode = "pending") {
             const normalizedErrorCode = String(error?.message || "analysis_failed").trim() || "analysis_failed"
             console.error(`[Worker] AI chunk failed for uid=${uid}: ${normalizedErrorCode}`)
             await markChunkAnalysisError(uid, notesChunk, normalizedErrorCode)
+            continue
+        }
+
+        if (!analysisResults.length) {
+            console.error(`[Worker] Empty AI payload for uid=${uid}`)
+            await markChunkAnalysisError(uid, notesChunk, "empty_ai_payload")
             continue
         }
 
@@ -203,7 +205,7 @@ async function analyzeUserNotes(uid, mode = "pending") {
             if (processedNoteIds.has(note.id)) return
             const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
             batch.update(noteReference, {
-                analyzed: false,
+                analyzed: true,
                 aiProcessed: false,
                 aiError: true,
                 aiErrorCode: "invalid_ai_entry",

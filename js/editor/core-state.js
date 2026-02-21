@@ -20,6 +20,7 @@ export const createEditorState = () => ({
     pageIndex: 0,
     titleTouched: false,
     autoSaveSnapshot: null,
+    initialEditorState: null,
     isRenderingState: false,
     snapshotFrame: null,
     manualSaveInProgress: false,

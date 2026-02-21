@@ -61,7 +61,9 @@ Object.assign(UI, {
                         ownerUid: current.user.uid,
                         analyzed: false,
                         aiProcessed: false,
-                        folderId: null
+                        folderId: null,
+                        hiddenTags: [],
+                        relevance: null
                     }
                     const reference = DataPath.getUserNotesCollection(current.user).doc(importedNote.id)
                     batch.set(reference, importedNote, { merge: true })

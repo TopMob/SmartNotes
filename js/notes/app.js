@@ -229,6 +229,10 @@ const AppLifecycle = {
             return
         }
 
+        if (this.foldersUnsubscribe) {
+            this.foldersUnsubscribe()
+            this.foldersUnsubscribe = null
+        }
         this.foldersUnsubscribe = this.subscribeCollection({
             collectionReference: userFoldersCollection,
             onSnapshotData: snapshot => {
@@ -240,6 +244,10 @@ const AppLifecycle = {
             }
         })
 
+        if (this.notesUnsubscribe) {
+            this.notesUnsubscribe()
+            this.notesUnsubscribe = null
+        }
         this.notesUnsubscribe = this.subscribeCollection({
             collectionReference: userNotesCollection,
             onSnapshotData: snapshot => {
