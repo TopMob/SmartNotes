@@ -23,7 +23,8 @@ const AppLifecycle = {
     totalVisibleNotesCount: 0,
     renderedVisibleNotesCount: 0,
     settingsUnsubscribe: null,
-    isApplyingRemoteSettings: false,
+    settingsReference: null,
+    settingsStorageType: "settings",
     createDefaultUserSettings() {
         const cachedThemeSettings = ThemeManager.getSavedSettings()
         return {
@@ -106,52 +107,97 @@ const AppLifecycle = {
         const normalizedSettings = this.normalizeUserSettings(userSettings)
         StateStore.update("originalUserSettings", this.cloneUserSettings(normalizedSettings))
     },
+    isPermissionDeniedError(error) {
+        return String(error?.code || "") === "permission-denied"
+    },
+    async resolveUserSettingsReference(user) {
+        const primaryReference = DataPath.getUserSettingsReference(user)
+        const fallbackReference = DataPath.getUserLegacySettingsReference(user)
+        if (primaryReference) {
+            try {
+                const snapshot = await primaryReference.get()
+                this.settingsStorageType = "settings"
+                return { reference: primaryReference, snapshot }
+            } catch (error) {
+                if (!this.isPermissionDeniedError(error) || !fallbackReference) throw error
+            }
+        }
+        if (!fallbackReference) return { reference: null, snapshot: null }
+        const fallbackSnapshot = await fallbackReference.get()
+        this.settingsStorageType = "preferences"
+        return { reference: fallbackReference, snapshot: fallbackSnapshot }
+    },
+    async writeUserSettingsToReference(settingsReference, normalizedSettings) {
+        if (!settingsReference) return
+        await settingsReference.set({
+            ...normalizedSettings,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+    },
     async saveUserSettings(settingsToSave) {
         const user = StateStore.read().user
         if (!user) return null
-        const settingsReference = DataPath.getUserSettingsReference(user)
-        if (!settingsReference) return null
         const normalizedSettings = this.normalizeUserSettings(settingsToSave)
-        const payload = {
-            ...normalizedSettings,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        const activeSettingsReference = this.settingsReference || (await this.resolveUserSettingsReference(user)).reference
+        if (!activeSettingsReference) return null
+        try {
+            await this.writeUserSettingsToReference(activeSettingsReference, normalizedSettings)
+            this.settingsReference = activeSettingsReference
+        } catch (error) {
+            if (!this.isPermissionDeniedError(error)) throw error
+            const fallbackReference = DataPath.getUserLegacySettingsReference(user)
+            if (!fallbackReference) throw error
+            await this.writeUserSettingsToReference(fallbackReference, normalizedSettings)
+            this.settingsReference = fallbackReference
+            this.settingsStorageType = "preferences"
         }
-        await settingsReference.set(payload, { merge: true })
         this.writeCachedUserSettings(user.uid, normalizedSettings)
         this.updateOriginalUserSettings(normalizedSettings)
         return normalizedSettings
     },
     async initializeUserSettings(user) {
-        const settingsReference = DataPath.getUserSettingsReference(user)
-        if (!settingsReference) return
         const cachedSettings = this.readCachedUserSettings(user.uid)
         if (cachedSettings) {
             const normalizedCached = this.normalizeUserSettings(cachedSettings)
             this.updateOriginalUserSettings(normalizedCached)
             this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true })
+        } else {
+            const defaultSettings = this.createDefaultUserSettings()
+            this.updateOriginalUserSettings(defaultSettings)
+            this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true })
         }
-        const snapshot = await settingsReference.get()
+
+        let resolvedReference = null
+        let snapshot = null
+        try {
+            const resolved = await this.resolveUserSettingsReference(user)
+            resolvedReference = resolved.reference
+            snapshot = resolved.snapshot
+        } catch (error) {
+            console.error("Settings init error", error)
+            return
+        }
+        if (!resolvedReference || !snapshot) return
+
+        this.settingsReference = resolvedReference
         let loadedSettings = null
         if (!snapshot.exists) {
             loadedSettings = this.createDefaultUserSettings()
-            await settingsReference.set({ ...loadedSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            await this.writeUserSettingsToReference(resolvedReference, loadedSettings)
         } else {
             loadedSettings = this.normalizeUserSettings(snapshot.data() || {})
         }
-        if (!loadedSettings) return
+
         this.writeCachedUserSettings(user.uid, loadedSettings)
         this.updateOriginalUserSettings(loadedSettings)
         this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true })
-        if (this.settingsUnsubscribe) {
-            this.settingsUnsubscribe()
-            this.settingsUnsubscribe = null
-        }
-        this.settingsUnsubscribe = settingsReference.onSnapshot(nextSnapshot => {
+
+        if (this.settingsUnsubscribe) this.settingsUnsubscribe()
+        this.settingsUnsubscribe = resolvedReference.onSnapshot(nextSnapshot => {
             if (!nextSnapshot.exists) return
             const incomingSettings = this.normalizeUserSettings(nextSnapshot.data() || {})
             const currentOriginalSettings = StateStore.read().originalUserSettings
-            const hasChanges = JSON.stringify(incomingSettings) !== JSON.stringify(currentOriginalSettings || {})
-            if (!hasChanges) return
+            if (JSON.stringify(incomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
             this.writeCachedUserSettings(user.uid, incomingSettings)
             this.updateOriginalUserSettings(incomingSettings)
             const settingsModal = document.getElementById("settings-modal")
@@ -159,13 +205,12 @@ const AppLifecycle = {
             const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
             if (!isSettingsModalActive || !isDraftDirty) {
                 this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
-                if (typeof UI.syncSettingsDraftFromOriginal === "function") {
-                    UI.syncSettingsDraftFromOriginal()
-                }
+                if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
                 return
             }
             UI.showToast("Настройки были изменены на другом устройстве")
         }, error => {
+            if (this.isPermissionDeniedError(error)) return
             console.error("Settings sync error", error)
         })
     },
@@ -299,6 +344,8 @@ const AppLifecycle = {
         this.totalVisibleNotesCount = 0
         if (this.settingsUnsubscribe) this.settingsUnsubscribe()
         this.settingsUnsubscribe = null
+        this.settingsReference = null
+        this.settingsStorageType = "settings"
         StateStore.update("originalUserSettings", null)
         StateStore.update("draftUserSettings", null)
         this.renderedVisibleNotesCount = 0
