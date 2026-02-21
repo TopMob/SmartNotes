@@ -114,6 +114,12 @@ const AppLifecycle = {
     isPermissionDeniedError(error) {
         return String(error?.code || "") === "permission-denied"
     },
+    isTransientRealtimeError(error) {
+        const errorCode = String(error?.code || "").toLowerCase()
+        if (errorCode === "cancelled" || errorCode === "aborted" || errorCode === "unavailable") return true
+        const errorMessage = String(error?.message || "").toLowerCase()
+        return errorMessage.includes("ns_binding_aborted") || errorMessage.includes("stream error")
+    },
     async resolveUserSettingsReference(user) {
         const primaryReference = DataPath.getUserSettingsReference(user)
         const fallbackReference = DataPath.getUserLegacySettingsReference(user)
@@ -494,6 +500,7 @@ const AppLifecycle = {
     subscribeCollection(options) {
         const { collectionReference, onSnapshotData, onSnapshotError } = options
         const unsubscribe = collectionReference.onSnapshot(onSnapshotData, error => {
+            if (this.isTransientRealtimeError(error)) return
             onSnapshotError(error)
         })
         return () => {

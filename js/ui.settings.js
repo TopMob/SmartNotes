@@ -321,17 +321,19 @@ Object.assign(UI, {
             ...draftSettings,
             customPresets: ThemeManager.getCustomPresets()
         }
+        let savedSettings = null
         try {
-            const savedSettings = await AppLifecycle.saveUserSettings(settingsToSave)
-            if (!savedSettings) return
-            AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
-            this.syncSettingsDraftFromOriginal()
-            this.closeModal("settings-modal")
-            this.lastSuccessfulSettingsSaveAt = Date.now()
-            this.showToast(this.getText("settings_saved", "Настройки сохранены"))
+            savedSettings = await AppLifecycle.saveUserSettings(settingsToSave)
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
+            return
         }
+        if (!savedSettings) return
+        AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
+        this.syncSettingsDraftFromOriginal()
+        this.closeModal("settings-modal")
+        this.lastSuccessfulSettingsSaveAt = Date.now()
+        this.showToast(this.getText("settings_saved", "Настройки сохранены"))
     },
 
     initAppearanceDraft() {
