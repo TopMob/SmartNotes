@@ -350,7 +350,10 @@ export const ThemeManager = {
                 if (activeKey === key) buttonElement.classList.add("active")
                 const dotElement = document.createElement("span")
                 dotElement.className = "theme-dot"
-                dotElement.style.background = this.resolvePreset(key).p
+                const customPreset = this.getCustomPresetByKey(key)
+                dotElement.style.background = customPreset
+                    ? `conic-gradient(${customPreset.p} 0deg 120deg, ${customPreset.bg} 120deg 240deg, ${customPreset.t} 240deg 360deg)`
+                    : this.resolvePreset(key).p
                 buttonElement.appendChild(dotElement)
                 buttonElement.addEventListener("click", () => onSelect?.(key))
                 presetsGrid.appendChild(buttonElement)
@@ -375,6 +378,18 @@ export const ThemeManager = {
             sectionElement.appendChild(presetsGrid)
             root.appendChild(sectionElement)
         })
+    },
+    updatePresetPreviewDot(presetKey, colors = {}) {
+        const key = String(presetKey || "")
+        if (!key.startsWith("custom:")) return
+        const presetButtons = Array.from(document.querySelectorAll(".theme-item-wrapper[data-theme-key]"))
+        const targetButton = presetButtons.find(item => item.dataset.themeKey === key)
+        const targetDot = targetButton?.querySelector(".theme-dot")
+        if (!targetDot) return
+        const primaryColor = this.normalizeHex(colors.p)
+        const backgroundColor = this.normalizeHex(colors.bg)
+        const textColor = this.normalizeHex(colors.t)
+        targetDot.style.background = `conic-gradient(${primaryColor} 0deg 120deg, ${backgroundColor} 120deg 240deg, ${textColor} 240deg 360deg)`
     },
     setupColorInputs(onChange) {
         const bind = (element, type) => {

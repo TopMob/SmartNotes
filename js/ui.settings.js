@@ -456,6 +456,7 @@ Object.assign(UI, {
                     bg: updatedCustomPreset?.bg || current.bg,
                     t: updatedCustomPreset?.t || current.t
                 }
+                ThemeManager.updatePresetPreviewDot(current.preset, next)
                 this.applyAppearanceDraft(next)
                 ThemeManager.syncInputs(next.p, next.bg, next.t)
                 return
