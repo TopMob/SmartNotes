@@ -1,3 +1,6 @@
+let draftSettings = null
+let savedSettings = null
+
 Object.assign(UI, {
     openModal(id) {
         const el = document.getElementById(id)
@@ -24,7 +27,9 @@ Object.assign(UI, {
     syncSettingsDraftFromOriginal() {
         const originalSettings = StateStore.read().originalUserSettings
         if (!originalSettings) return
-        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
+        savedSettings = JSON.parse(JSON.stringify(originalSettings))
+        draftSettings = JSON.parse(JSON.stringify(savedSettings))
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(draftSettings)))
     },
 
     openSettings() {
@@ -120,6 +125,10 @@ Object.assign(UI, {
                             </label>
                         </div>
                     </div>
+                </div>
+                <div class="settings-actions row-between">
+                    <button type="button" class="btn-secondary" data-action="settings-cancel">${dict.cancel || "Cancel"}</button>
+                    <button type="button" class="btn-primary" data-action="settings-save">${dict.save || "Save"}</button>
                 </div>
             `
             this.bindSettingsControls()
@@ -255,7 +264,10 @@ Object.assign(UI, {
                 </div>
                 <div class="settings-actions row-between">
                     <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
-                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                    <div class="row-right">
+                        <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
+                        <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                    </div>
                 </div>
             `
             if (typeof ColorPalette !== "undefined") ColorPalette.init(root)
@@ -273,6 +285,7 @@ Object.assign(UI, {
     },
 
     getSettingsDraft() {
+        if (draftSettings) return draftSettings
         return StateStore.read().draftUserSettings || StateStore.read().originalUserSettings
     },
 
@@ -287,13 +300,14 @@ Object.assign(UI, {
         const currentDraft = this.getSettingsDraft()
         if (!currentDraft) return
         const nextDraft = { ...currentDraft, ...updates }
-        StateStore.update("draftUserSettings", nextDraft)
+        draftSettings = nextDraft
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextDraft)))
     },
 
     applyDraftSettingsToRuntime() {
-        const draftSettings = this.getSettingsDraft()
-        if (!draftSettings) return
-        AppLifecycle.applyUserSettingsToRuntime(draftSettings, { resetVisibleLimit: true })
+        const currentDraftSettings = this.getSettingsDraft()
+        if (!currentDraftSettings) return
+        AppLifecycle.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
     },
 
     requestCloseSettingsModal() {
@@ -305,23 +319,34 @@ Object.assign(UI, {
     },
 
     cancelSettingsDraft() {
-        const originalSettings = StateStore.read().originalUserSettings
-        if (originalSettings) {
-            AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true })
+        if (!savedSettings) {
+            this.syncSettingsDraftFromOriginal()
         }
-        this.syncSettingsDraftFromOriginal()
-        this.closeModal("settings-modal")
+        if (savedSettings) {
+            draftSettings = JSON.parse(JSON.stringify(savedSettings))
+            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(draftSettings)))
+            AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true, persistTheme: false })
+        }
+        if (this.settingsPage === "appearance") {
+            this.initAppearanceDraft()
+            this.renderAppearanceDraft()
+            return
+        }
+        this.syncSettingsUI()
     },
 
     async saveSettingsDraft() {
-        const draftSettings = this.getSettingsDraft()
-        if (!draftSettings) return
+        const currentDraftSettings = this.getSettingsDraft()
+        if (!currentDraftSettings) return
         try {
-            const savedSettings = await AppLifecycle.saveUserSettings(draftSettings)
-            if (!savedSettings) return
-            AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
-            this.syncSettingsDraftFromOriginal()
-            this.closeModal("settings-modal")
+            const nextSavedSettings = await AppLifecycle.saveUserSettings(currentDraftSettings)
+            if (!nextSavedSettings) return
+            savedSettings = JSON.parse(JSON.stringify(nextSavedSettings))
+            draftSettings = JSON.parse(JSON.stringify(nextSavedSettings))
+            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(draftSettings)))
+            AppLifecycle.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: false })
+            if (this.settingsPage === "appearance") this.renderAppearanceDraft()
+            else this.syncSettingsUI()
             this.showToast(this.getText("settings_saved", "Настройки сохранены"))
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
@@ -403,19 +428,10 @@ Object.assign(UI, {
         }
         const onCreateCustomPreset = () => {
             const currentDraft = StateStore.read().appearanceDraft || draft
-            const result = ThemeManager.addCustomPreset(currentDraft)
-            if (!result.ok) {
-                UI.showToast("Максимум 5 пользовательских пресетов")
-                return
-            }
-            const preset = ThemeManager.resolvePreset(result.key)
             this.applyAppearanceDraft({
                 ...currentDraft,
-                preset: result.key,
-                p: preset.p,
-                bg: preset.bg,
-                t: preset.t,
-                basePreset: result.key,
+                preset: "manual",
+                basePreset: currentDraft.basePreset || "oled",
                 uiOpacity: typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78,
                 cardsOpacity: typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9
             })
@@ -424,20 +440,6 @@ Object.assign(UI, {
         ThemeManager.setupColorInputs((type, val) => {
             const current = StateStore.read().appearanceDraft || draft
             const normalizedValue = ThemeManager.normalizeHex(val)
-            if (String(current.preset || "").startsWith("custom:")) {
-                ThemeManager.updateCustomPreset(current.preset, { [type]: normalizedValue })
-                const customPreset = ThemeManager.getCustomPresetByKey(current.preset)
-                const next = {
-                    ...current,
-                    p: customPreset?.p || current.p,
-                    bg: customPreset?.bg || current.bg,
-                    t: customPreset?.t || current.t
-                }
-                StateStore.update("appearanceDraft", next)
-                ThemeManager.applySettings(next, false)
-                ThemeManager.syncInputs(next.p, next.bg, next.t)
-                return
-            }
             const next = { ...current, preset: "manual", [type]: normalizedValue }
             StateStore.update("appearanceDraft", next)
             ThemeManager.applySettings(next, false)
@@ -483,6 +485,10 @@ Object.assign(UI, {
 
     async saveAppearanceDraft() {
         await this.saveSettingsDraft()
+    },
+
+    cancelAppearanceDraft() {
+        this.cancelSettingsDraft()
     },
 
     bindSettingsControls() {
@@ -603,11 +609,9 @@ Object.assign(UI, {
     },
     updateAppearanceBackground(key, value) {
         const current = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
-        if (String(current.preset || "").startsWith("custom:")) {
-            ThemeManager.updateCustomPreset(current.preset, { [key]: value })
-        }
         const next = {
             ...current,
+            preset: "manual",
             [key]: value
         }
         this.applyAppearanceDraft(next)

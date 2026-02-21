@@ -504,6 +504,9 @@ Object.assign(UI, {
             case "appearance-save":
                 this.saveAppearanceDraft()
                 break
+            case "appearance-cancel":
+                this.cancelAppearanceDraft()
+                break
             case "toggle-filter-menu":
                 this.toggleFilterMenu()
                 break

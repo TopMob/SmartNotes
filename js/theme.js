@@ -29,16 +29,13 @@ const normalizeLocalImageValue = (value, maxLength = 600000) => {
     return source.length > maxLength ? "" : source
 }
 
-const normalizeCloudSyncImageValue = () => ""
-
-
 const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
     const safeLocalSettings = localSettings && typeof localSettings === "object" ? localSettings : {}
     const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
     return {
         ...safeCloudSettings,
-        mainBackgroundImage: normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage) || normalizeCloudSyncImageValue(),
-        sidebarBackgroundImage: normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage) || normalizeCloudSyncImageValue()
+        mainBackgroundImage: normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage) || "",
+        sidebarBackgroundImage: normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage) || ""
     }
 }
 

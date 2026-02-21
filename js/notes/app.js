@@ -84,7 +84,8 @@ const AppLifecycle = {
             preset: normalizedSettings.themeId,
             ...(normalizedSettings.customTheme || {})
         }
-        ThemeManager.applySettings(normalizedTheme, true)
+        const shouldPersistTheme = options.persistTheme !== false
+        ThemeManager.applySettings(normalizedTheme, shouldPersistTheme)
         StateActions.updateConfig({
             lang: normalizedSettings.lang,
             folderViewMode: normalizedSettings.folderViewMode,
@@ -206,9 +207,7 @@ const AppLifecycle = {
             if (!isSettingsModalActive || !isDraftDirty) {
                 this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
-                return
             }
-            UI.showToast("Настройки были изменены на другом устройстве")
         }, error => {
             if (this.isPermissionDeniedError(error)) return
             console.error("Settings sync error", error)
