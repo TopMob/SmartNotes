@@ -4,6 +4,15 @@ export const validateFolderName = (name) => {
     return trimmedName
 }
 
+export const FOLDER_DESCRIPTION_SOFT_LIMIT = 1024
+export const FOLDER_DESCRIPTION_HARD_LIMIT = 1124
+
+export const validateFolderDescription = (description) => {
+    const trimmedDescription = String(description || "").trim()
+    if (trimmedDescription.length > FOLDER_DESCRIPTION_HARD_LIMIT) return null
+    return trimmedDescription
+}
+
 export const canAddFolder = (currentCount) => Number(currentCount) < 10
 
 export const canAddCustomTheme = (count) => {
@@ -16,7 +25,10 @@ export const canAssignToFolder = (folder) => !!folder && folder.trashedAt == nul
 
 window.Validators = {
     validateFolderName,
+    validateFolderDescription,
     canAddFolder,
     canAddCustomTheme,
-    canAssignToFolder
+    canAssignToFolder,
+    FOLDER_DESCRIPTION_SOFT_LIMIT,
+    FOLDER_DESCRIPTION_HARD_LIMIT
 }

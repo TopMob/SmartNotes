@@ -398,10 +398,15 @@ select.input-area optgroup {
 }
 
 .prompt-character-counter {
-    display: inline-flex;
+    display: block;
     margin-top: 6px;
     font-size: 12px;
     color: var(--text-dim);
+    text-align: right;
+}
+
+.prompt-character-counter.is-soft-limit-exceeded {
+    color: #f59e0b;
 }
 
 .prompt-character-counter.is-limit-exceeded {

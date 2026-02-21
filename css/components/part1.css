@@ -206,6 +206,16 @@ select.input-area optgroup {
     text-align: center;
 }
 
+.prompt-secondary-field {
+    margin-top: 10px;
+    text-align: left;
+}
+
+.prompt-secondary-input {
+    min-height: 110px;
+    resize: vertical;
+}
+
 .row-center {
     display: flex;
     justify-content: center;

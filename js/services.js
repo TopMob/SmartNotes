@@ -512,9 +512,13 @@ const SmartSearch = {
 
         const scored = folders.map(folder => {
             const folderName = (folder.name || "").toLowerCase()
-            if (text.includes(folderName)) return { id: folder.id, score: 10 }
-            const score = this.score(folder.name, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
-            return { id: folder.id, score }
+            const folderDescription = String(folder.description || "")
+            if (folderName && text.includes(folderName)) return { id: folder.id, score: 10 }
+            const scoreByName = this.score(folder.name, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
+            const scoreByDescription = folderDescription
+                ? this.score(folderDescription, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
+                : 0
+            return { id: folder.id, score: Math.max(scoreByName, scoreByDescription) }
         })
 
         scored.sort((a, b) => b.score - a.score)

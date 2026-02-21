@@ -137,7 +137,15 @@ const AppLifecycle = {
         this.clearSubscriptions()
     },
     applyFoldersSnapshot(snapshot) {
-        const folders = this.sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
+        const folders = this.sortFolders(snapshot.docs.map(documentEntry => {
+            const folderData = documentEntry.data() || {}
+            const normalizedDescription = window.Validators.validateFolderDescription(folderData.description)
+            return {
+                id: documentEntry.id,
+                ...folderData,
+                description: normalizedDescription == null ? "" : normalizedDescription
+            }
+        }))
         StateStore.update("folders", folders)
         UI.renderFolders()
         if (StateStore.read().view === "folders") {

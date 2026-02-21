@@ -26,6 +26,9 @@ Object.assign(UI, {
         const nameElement = document.createElement("span")
         window.DomSecurity.setText(nameElement, window.DomSecurity.sanitizeInputValue(folder?.name))
 
+        const folderDescription = window.DomSecurity.sanitizeInputValue(folder?.description)
+        if (folderDescription) folderButton.title = folderDescription
+
         folderButton.append(iconElement, nameElement)
         return folderButton
     },
@@ -209,6 +212,14 @@ Object.assign(UI, {
         window.DomSecurity.setText(metaElement, `${noteCount} ${label}`)
 
         folderCard.append(titleElement, metaElement)
+
+        const folderDescription = window.DomSecurity.sanitizeInputValue(folder?.description)
+        if (folderDescription) {
+            const descriptionElement = document.createElement("div")
+            descriptionElement.className = "folder-meta"
+            window.DomSecurity.setText(descriptionElement, folderDescription)
+            folderCard.append(descriptionElement)
+        }
         return folderCard
     },
 
