@@ -322,6 +322,7 @@ Object.assign(UI, {
             AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
             this.syncSettingsDraftFromOriginal()
             this.closeModal("settings-modal")
+            this.showToast(this.getText("settings_saved", "Настройки сохранены"))
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
         }
