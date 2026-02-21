@@ -369,7 +369,7 @@ Object.assign(UI, {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
-    async requestAnalysis({ secretToken = "", mode = "pending" } = {}) {
+    async requestAnalysis({ secretToken = "", mode = "all" } = {}) {
         const requestHeaders = {
             "Content-Type": "application/json"
         }
@@ -467,7 +467,7 @@ Object.assign(UI, {
             window.DomSecurity.setText(triggerButton, this.getText("loading", "Loading..."))
         }
         try {
-            await this.requestAnalysis({ secretToken, mode: "pending" })
+            await this.requestAnalysis({ secretToken, mode: "all" })
             this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
