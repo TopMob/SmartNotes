@@ -346,6 +346,9 @@ const AppLifecycle = {
         this.settingsUnsubscribe = null
         this.settingsReference = null
         this.settingsStorageType = "settings"
+        if (typeof ThemeManager !== "undefined" && typeof ThemeManager.resetLocalThemeCache === "function") {
+            ThemeManager.resetLocalThemeCache()
+        }
         StateStore.update("originalUserSettings", null)
         StateStore.update("draftUserSettings", null)
         this.renderedVisibleNotesCount = 0

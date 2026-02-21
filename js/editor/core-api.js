@@ -217,8 +217,12 @@ export const EditorAPI = (() => {
         const editorHasUnsavedChanges = !!StateStore.read().editorDirty
         if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
-                note.title = NoteText.buildAutoTitle({ content: note.content || "" })
-                if (elements.title) elements.title.value = note.title
+                const plainTextContent = Utils.stripHtml(String(note.content || "")).trim()
+                const hasMediaContent = /<(img|audio|video|table|hr)/i.test(String(note.content || ""))
+                if (plainTextContent || hasMediaContent) {
+                    note.title = NoteText.buildAutoTitle({ content: note.content || "" })
+                    if (elements.title) elements.title.value = note.title
+                }
             }
 
             if (!note.folderId) {
@@ -246,7 +250,7 @@ export const EditorAPI = (() => {
         }
 
         const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
-        if (!hasRemotePersistableChanges && !editorHasUnsavedChanges) {
+        if (!hasRemotePersistableChanges) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
             if (!options.silent) {

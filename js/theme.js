@@ -214,6 +214,12 @@ export const ThemeManager = {
     saveSettings(settings) {
         SafeStorage.local.setJson(this.storageKey, settings)
     },
+    resetLocalThemeCache() {
+        SafeStorage.local.remove(this.storageKey)
+        SafeStorage.local.remove(this.customPresetStorageKey)
+        SafeStorage.local.remove("theme-pending-sync")
+        this.applySettings(this.getDefaultSettings(), true)
+    },
     getThemeSettingsReference(user) {
         if (!user || !user.uid) return null
         const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
