@@ -387,7 +387,13 @@ Object.assign(UI, {
                 this.confirm("account", () => Auth.switchAccount())
                 break
             case "logout":
-                this.confirm("exit", () => Auth.logout())
+                this.confirm("exit", () => {
+                    const settingsModalElement = document.getElementById("settings-modal")
+                    if (settingsModalElement?.classList.contains("active")) {
+                        this.closeModal("settings-modal")
+                    }
+                    Auth.logout()
+                })
                 break
             case "trigger-import":
                 this.triggerImport()
@@ -503,6 +509,9 @@ Object.assign(UI, {
                 break
             case "appearance-save":
                 this.saveAppearanceDraft()
+                break
+            case "appearance-cancel":
+                this.cancelAppearanceDraft()
                 break
             case "toggle-filter-menu":
                 this.toggleFilterMenu()

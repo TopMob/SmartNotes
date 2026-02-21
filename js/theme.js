@@ -29,29 +29,14 @@ const normalizeLocalImageValue = (value, maxLength = 600000) => {
     return source.length > maxLength ? "" : source
 }
 
-const normalizeCloudSyncImageValue = (value, maxLength = 2048) => {
-    if (typeof value !== "string") return ""
-    const source = value.trim()
-    if (!source) return ""
-    if (source.startsWith("data:image/")) return ""
-    return source.length > maxLength ? "" : source
-}
-
-const isDataImageValue = (value) => typeof value === "string" && value.trim().startsWith("data:image/")
-
 const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
     const safeLocalSettings = localSettings && typeof localSettings === "object" ? localSettings : {}
     const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
-    const mergedSettings = { ...safeCloudSettings }
-    const localMainBackgroundImage = normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage)
-    const localSidebarBackgroundImage = normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage)
-    if (!normalizeLocalImageValue(safeCloudSettings.mainBackgroundImage) && isDataImageValue(localMainBackgroundImage)) {
-        mergedSettings.mainBackgroundImage = localMainBackgroundImage
+    return {
+        ...safeCloudSettings,
+        mainBackgroundImage: normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage) || "",
+        sidebarBackgroundImage: normalizeLocalImageValue(safeLocalSettings.sidebarBackgroundImage) || ""
     }
-    if (!normalizeLocalImageValue(safeCloudSettings.sidebarBackgroundImage) && isDataImageValue(localSidebarBackgroundImage)) {
-        mergedSettings.sidebarBackgroundImage = localSidebarBackgroundImage
-    }
-    return mergedSettings
 }
 
 const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
@@ -65,21 +50,12 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
         .map(item => {
             const presetKey = String(item.key || "")
             const localPreset = localPresetsByKey.get(presetKey)
-            const cloudMainBackgroundImage = normalizeLocalImageValue(item.mainBackgroundImage)
-            const cloudSidebarBackgroundImage = normalizeLocalImageValue(item.sidebarBackgroundImage)
-            const mergedPreset = {
+            return {
                 ...item,
                 key: presetKey,
-                mainBackgroundImage: cloudMainBackgroundImage,
-                sidebarBackgroundImage: cloudSidebarBackgroundImage
+                mainBackgroundImage: normalizeLocalImageValue(localPreset?.mainBackgroundImage),
+                sidebarBackgroundImage: normalizeLocalImageValue(localPreset?.sidebarBackgroundImage)
             }
-            if (!cloudMainBackgroundImage && isDataImageValue(localPreset?.mainBackgroundImage)) {
-                mergedPreset.mainBackgroundImage = normalizeLocalImageValue(localPreset.mainBackgroundImage)
-            }
-            if (!cloudSidebarBackgroundImage && isDataImageValue(localPreset?.sidebarBackgroundImage)) {
-                mergedPreset.sidebarBackgroundImage = normalizeLocalImageValue(localPreset.sidebarBackgroundImage)
-            }
-            return mergedPreset
         })
 }
 
@@ -98,9 +74,7 @@ const buildFirestoreSafeCustomPresets = (presets) => {
             key: String(item.key || ""),
             p: ThemeManager.normalizeHex(item.p),
             bg: ThemeManager.normalizeHex(item.bg),
-            t: ThemeManager.normalizeHex(item.t),
-            mainBackgroundImage: normalizeCloudSyncImageValue(item.mainBackgroundImage),
-            sidebarBackgroundImage: normalizeCloudSyncImageValue(item.sidebarBackgroundImage)
+            t: ThemeManager.normalizeHex(item.t)
         }))
         .slice(0, ThemeManager.maxCustomPresets)
 }
@@ -173,8 +147,8 @@ export const ThemeManager = {
         SafeStorage.local.setJson(this.customPresetStorageKey, safePresets)
     },
     addCustomPreset(colors) {
-        const presets = this.getCustomPresets()
-        if (presets.length >= this.maxCustomPresets) {
+        const currentPresets = this.getCustomPresets()
+        if (currentPresets.length >= this.maxCustomPresets) {
             return { ok: false, reason: "limit" }
         }
         const nextPreset = {
@@ -185,15 +159,15 @@ export const ThemeManager = {
             mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
             sidebarBackgroundImage: normalizeLocalImageValue(colors?.sidebarBackgroundImage)
         }
-        this.saveCustomPresets([...presets, nextPreset])
+        this.saveCustomPresets([...currentPresets, nextPreset])
         return { ok: true, key: `custom:${nextPreset.key}` }
     },
     updateCustomPreset(presetKey, updates) {
         if (!String(presetKey || "").startsWith("custom:")) return false
-        const id = String(presetKey).slice(7)
-        const presets = this.getCustomPresets()
-        const nextPresets = presets.map(item => {
-            if (item.key !== id) return item
+        const presetId = String(presetKey).slice(7)
+        const currentPresets = this.getCustomPresets()
+        const nextPresets = currentPresets.map(item => {
+            if (item.key !== presetId) return item
             return {
                 ...item,
                 p: this.normalizeHex(updates?.p ?? item.p),
@@ -268,9 +242,12 @@ export const ThemeManager = {
         try {
             const safeCustomPresets = buildFirestoreSafeCustomPresets(this.getCustomPresets())
             const cloudSettings = {
-                ...normalizedSettings,
-                mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
-                sidebarBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.sidebarBackgroundImage)
+                preset: normalizedSettings.preset,
+                p: normalizedSettings.p,
+                bg: normalizedSettings.bg,
+                t: normalizedSettings.t,
+                uiOpacity: normalizedSettings.uiOpacity,
+                cardsOpacity: normalizedSettings.cardsOpacity
             }
             const payload = {
                 settings: cloudSettings,
@@ -285,7 +262,6 @@ export const ThemeManager = {
             }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
-            UI?.showToast?.(`Theme sync save failed${error?.code ? `: ${error.code}` : ""}`)
         }
     },
     resolvePreset(key) {
@@ -374,7 +350,10 @@ export const ThemeManager = {
                 if (activeKey === key) buttonElement.classList.add("active")
                 const dotElement = document.createElement("span")
                 dotElement.className = "theme-dot"
-                dotElement.style.background = this.resolvePreset(key).p
+                const customPreset = this.getCustomPresetByKey(key)
+                dotElement.style.background = customPreset
+                    ? `conic-gradient(${customPreset.p} 0deg 120deg, ${customPreset.bg} 120deg 240deg, ${customPreset.t} 240deg 360deg)`
+                    : this.resolvePreset(key).p
                 buttonElement.appendChild(dotElement)
                 buttonElement.addEventListener("click", () => onSelect?.(key))
                 presetsGrid.appendChild(buttonElement)
@@ -400,10 +379,30 @@ export const ThemeManager = {
             root.appendChild(sectionElement)
         })
     },
+    updatePresetPreviewDot(presetKey, colors = {}) {
+        const key = String(presetKey || "")
+        if (!key.startsWith("custom:")) return
+        const presetButtons = Array.from(document.querySelectorAll(".theme-item-wrapper[data-theme-key]"))
+        const targetButton = presetButtons.find(item => item.dataset.themeKey === key)
+        const targetDot = targetButton?.querySelector(".theme-dot")
+        if (!targetDot) return
+        const primaryColor = this.normalizeHex(colors.p)
+        const backgroundColor = this.normalizeHex(colors.bg)
+        const textColor = this.normalizeHex(colors.t)
+        targetDot.style.background = `conic-gradient(${primaryColor} 0deg 120deg, ${backgroundColor} 120deg 240deg, ${textColor} 240deg 360deg)`
+    },
     setupColorInputs(onChange) {
         const bind = (element, type) => {
             if (!element) return
-            element.oninput = event => onChange?.(type, event.target.value)
+            element.dataset.themeInputType = type
+            element.themeInputHandler = onChange
+            if (element.dataset.bound === "1") return
+            element.dataset.bound = "1"
+            element.addEventListener("input", event => {
+                const eventTarget = event.currentTarget
+                if (!eventTarget || typeof eventTarget.themeInputHandler !== "function") return
+                eventTarget.themeInputHandler(eventTarget.dataset.themeInputType, eventTarget.value)
+            })
         }
         bind(document.getElementById("cp-primary"), "p")
         bind(document.getElementById("cp-bg"), "bg")

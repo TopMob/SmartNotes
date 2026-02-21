@@ -121,6 +121,10 @@ Object.assign(UI, {
                         </div>
                     </div>
                 </div>
+                <div class="settings-actions row-between">
+                    <button type="button" class="btn-secondary" data-action="settings-cancel">${dict.cancel || "Cancel"}</button>
+                    <button type="button" class="btn-primary" data-action="settings-save">${dict.save || "Save"}</button>
+                </div>
             `
             this.bindSettingsControls()
             this.syncSettingsUI()
@@ -255,7 +259,10 @@ Object.assign(UI, {
                 </div>
                 <div class="settings-actions row-between">
                     <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
-                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                    <div class="row-right">
+                        <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
+                        <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                    </div>
                 </div>
             `
             if (typeof ColorPalette !== "undefined") ColorPalette.init(root)
@@ -287,42 +294,55 @@ Object.assign(UI, {
         const currentDraft = this.getSettingsDraft()
         if (!currentDraft) return
         const nextDraft = { ...currentDraft, ...updates }
-        StateStore.update("draftUserSettings", nextDraft)
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextDraft)))
     },
 
     applyDraftSettingsToRuntime() {
-        const draftSettings = this.getSettingsDraft()
-        if (!draftSettings) return
-        AppLifecycle.applyUserSettingsToRuntime(draftSettings, { resetVisibleLimit: true })
+        const currentDraftSettings = this.getSettingsDraft()
+        if (!currentDraftSettings) return
+        AppLifecycle.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
     },
 
     requestCloseSettingsModal() {
-        if (this.isSettingsDirty()) {
-            const shouldExit = window.confirm("Вы уверены, что хотите выйти? Изменения не будут сохранены.")
-            if (!shouldExit) return
+        if (!this.isSettingsDirty()) {
+            this.closeModal("settings-modal")
+            return
         }
-        this.cancelSettingsDraft()
+        this.confirm("confirm_default", () => {
+            this.cancelSettingsDraft()
+        })
     },
 
     cancelSettingsDraft() {
         const originalSettings = StateStore.read().originalUserSettings
-        if (originalSettings) {
-            AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true })
+        if (!originalSettings) return
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
+        AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true, persistTheme: false })
+        if (this.settingsPage === "appearance") {
+            this.initAppearanceDraft()
+            this.renderAppearanceDraft()
+        } else {
+            this.syncSettingsUI()
         }
-        this.syncSettingsDraftFromOriginal()
         this.closeModal("settings-modal")
     },
 
     async saveSettingsDraft() {
-        const draftSettings = this.getSettingsDraft()
-        if (!draftSettings) return
+        const currentDraftSettings = this.getSettingsDraft()
+        if (!currentDraftSettings) return
         try {
-            const savedSettings = await AppLifecycle.saveUserSettings(draftSettings)
-            if (!savedSettings) return
-            AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
-            this.syncSettingsDraftFromOriginal()
-            this.closeModal("settings-modal")
+            const nextSavedSettings = await AppLifecycle.saveUserSettings(currentDraftSettings)
+            if (!nextSavedSettings) return
+            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextSavedSettings)))
+            AppLifecycle.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
+            if (this.settingsPage === "appearance") {
+                this.initAppearanceDraft()
+                this.renderAppearanceDraft()
+            } else {
+                this.syncSettingsUI()
+            }
             this.showToast(this.getText("settings_saved", "Настройки сохранены"))
+            this.closeModal("settings-modal")
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
         }
@@ -403,44 +423,50 @@ Object.assign(UI, {
         }
         const onCreateCustomPreset = () => {
             const currentDraft = StateStore.read().appearanceDraft || draft
-            const result = ThemeManager.addCustomPreset(currentDraft)
-            if (!result.ok) {
-                UI.showToast("Максимум 5 пользовательских пресетов")
+            const createResult = ThemeManager.addCustomPreset(currentDraft)
+            if (!createResult?.ok) {
+                this.showToast("Максимум 5 пользовательских пресетов")
                 return
             }
-            const preset = ThemeManager.resolvePreset(result.key)
-            this.applyAppearanceDraft({
+            const createdPreset = ThemeManager.getCustomPresetByKey(createResult.key)
+            if (!createdPreset) return
+            const nextDraft = {
                 ...currentDraft,
-                preset: result.key,
-                p: preset.p,
-                bg: preset.bg,
-                t: preset.t,
-                basePreset: result.key,
-                uiOpacity: typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78,
-                cardsOpacity: typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9
-            })
+                preset: createResult.key,
+                p: createdPreset.p,
+                bg: createdPreset.bg,
+                t: createdPreset.t,
+                mainBackgroundImage: createdPreset.mainBackgroundImage || "",
+                sidebarBackgroundImage: createdPreset.sidebarBackgroundImage || ""
+            }
+            this.applyAppearanceDraft(nextDraft)
+            this.renderAppearanceDraft()
         }
         ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
         ThemeManager.setupColorInputs((type, val) => {
             const current = StateStore.read().appearanceDraft || draft
             const normalizedValue = ThemeManager.normalizeHex(val)
-            if (String(current.preset || "").startsWith("custom:")) {
+            const isCustomPresetSelected = String(current.preset || "").startsWith("custom:")
+            if (isCustomPresetSelected) {
                 ThemeManager.updateCustomPreset(current.preset, { [type]: normalizedValue })
-                const customPreset = ThemeManager.getCustomPresetByKey(current.preset)
+                const updatedCustomPreset = ThemeManager.getCustomPresetByKey(current.preset)
                 const next = {
                     ...current,
-                    p: customPreset?.p || current.p,
-                    bg: customPreset?.bg || current.bg,
-                    t: customPreset?.t || current.t
+                    p: updatedCustomPreset?.p || current.p,
+                    bg: updatedCustomPreset?.bg || current.bg,
+                    t: updatedCustomPreset?.t || current.t
                 }
-                StateStore.update("appearanceDraft", next)
-                ThemeManager.applySettings(next, false)
+                ThemeManager.updatePresetPreviewDot(current.preset, next)
+                this.applyAppearanceDraft(next)
                 ThemeManager.syncInputs(next.p, next.bg, next.t)
                 return
             }
-            const next = { ...current, preset: "manual", [type]: normalizedValue }
-            StateStore.update("appearanceDraft", next)
-            ThemeManager.applySettings(next, false)
+            const next = {
+                ...current,
+                preset: "manual",
+                [type]: normalizedValue
+            }
+            this.applyAppearanceDraft(next)
             ThemeManager.syncInputs(next.p, next.bg, next.t)
         })
     },
@@ -462,7 +488,6 @@ Object.assign(UI, {
             backgroundValue: nextDraft.mainBackgroundImage || ""
         })
         this.applyDraftSettingsToRuntime()
-        this.renderAppearanceDraft()
     },
 
     resetAppearanceDraft() {
@@ -479,10 +504,15 @@ Object.assign(UI, {
             cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
         }
         this.applyAppearanceDraft(draft)
+        this.renderAppearanceDraft()
     },
 
     async saveAppearanceDraft() {
         await this.saveSettingsDraft()
+    },
+
+    cancelAppearanceDraft() {
+        this.cancelSettingsDraft()
     },
 
     bindSettingsControls() {
@@ -603,11 +633,9 @@ Object.assign(UI, {
     },
     updateAppearanceBackground(key, value) {
         const current = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
-        if (String(current.preset || "").startsWith("custom:")) {
-            ThemeManager.updateCustomPreset(current.preset, { [key]: value })
-        }
         const next = {
             ...current,
+            preset: "manual",
             [key]: value
         }
         this.applyAppearanceDraft(next)
