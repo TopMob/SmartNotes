@@ -138,6 +138,7 @@ export const ThemeManager = {
     storageKey: "app-theme",
     customPresetStorageKey: "app-theme-custom-presets",
     maxCustomPresets: 5,
+    isSavingTheme: false,
     init() {
         this.applySettings(this.getSavedSettings(), false)
     },
@@ -260,6 +261,8 @@ export const ThemeManager = {
         }
     },
     async saveAccountSettings(user, settings) {
+        if (this.isSavingTheme) return
+        this.isSavingTheme = true
         const reference = this.getThemeSettingsReference(user)
         const normalizedSettings = {
             preset: settings?.preset || "oled",
@@ -272,7 +275,10 @@ export const ThemeManager = {
             cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
         }
         this.saveSettings(normalizedSettings)
-        if (!reference) return
+        if (!reference) {
+            this.isSavingTheme = false
+            return
+        }
         const cloudSettings = {
             ...normalizedSettings,
             mainBackgroundImage: normalizeCloudSyncImageValue(normalizedSettings.mainBackgroundImage),
@@ -282,6 +288,15 @@ export const ThemeManager = {
             .map(normalizeCloudPresetRecord)
             .filter(preset => preset.key)
         try {
+            const snapshot = await reference.get()
+            const currentData = snapshot.exists ? (snapshot.data() || {}) : {}
+            const currentSettings = currentData.settings && typeof currentData.settings === "object" ? currentData.settings : null
+            const currentCustomPresets = Array.isArray(currentData.customPresets) ? currentData.customPresets : []
+            const hasSameSettings = JSON.stringify(currentSettings) === JSON.stringify(cloudSettings)
+            const hasSameCustomPresets = JSON.stringify(currentCustomPresets) === JSON.stringify(normalizedCustomPresets)
+            if (hasSameSettings && hasSameCustomPresets) {
+                return
+            }
             await reference.set({
                 settings: cloudSettings,
                 customPresets: normalizedCustomPresets,
@@ -293,8 +308,10 @@ export const ThemeManager = {
                 customPresets: this.getCustomPresets(),
                 savedAt: Date.now()
             })
-            console.error("Theme sync save failed", error?.code || "unknown", error?.message || "")
+            console.error("Theme sync save failed:", error?.code || "unknown", error?.message || "")
             UI?.showToast?.(`Theme sync failed: ${error?.code || "unknown"}`)
+        } finally {
+            this.isSavingTheme = false
         }
     },
     resolvePreset(key) {
