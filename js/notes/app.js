@@ -119,10 +119,10 @@ const AppLifecycle = {
             p: ThemeManager.normalizeHex(normalizedThemeSource.p),
             bg: ThemeManager.normalizeHex(normalizedThemeSource.bg),
             t: ThemeManager.normalizeHex(normalizedThemeSource.t),
-            mainBackgroundUrl: runtimeMainBackgroundValue && runtimeMainBackgroundValue === String(normalizedThemeSource.mainBackgroundUrl || "") ? String(normalizedThemeSource.mainBackgroundUrl || "") : "",
-            sidebarBackgroundUrl: runtimeSidebarBackgroundValue && runtimeSidebarBackgroundValue === String(normalizedThemeSource.sidebarBackgroundUrl || "") ? String(normalizedThemeSource.sidebarBackgroundUrl || "") : "",
-            mainBackgroundImage: runtimeMainBackgroundValue && runtimeMainBackgroundValue !== String(normalizedThemeSource.mainBackgroundUrl || "") ? runtimeMainBackgroundValue : String(normalizedThemeSource.mainBackgroundImage || ""),
-            sidebarBackgroundImage: runtimeSidebarBackgroundValue && runtimeSidebarBackgroundValue !== String(normalizedThemeSource.sidebarBackgroundUrl || "") ? runtimeSidebarBackgroundValue : String(normalizedThemeSource.sidebarBackgroundImage || ""),
+            mainBackgroundUrl: String(normalizedThemeSource.mainBackgroundUrl || ""),
+            sidebarBackgroundUrl: String(normalizedThemeSource.sidebarBackgroundUrl || ""),
+            mainBackgroundImage: runtimeMainBackgroundValue && !normalizedThemeSource.mainBackgroundUrl ? runtimeMainBackgroundValue : String(normalizedThemeSource.mainBackgroundImage || ""),
+            sidebarBackgroundImage: runtimeSidebarBackgroundValue && !normalizedThemeSource.sidebarBackgroundUrl ? runtimeSidebarBackgroundValue : String(normalizedThemeSource.sidebarBackgroundImage || ""),
             uiOpacity: typeof normalizedThemeSource.uiOpacity === "number" ? normalizedThemeSource.uiOpacity : 0.78,
             cardsOpacity: typeof normalizedThemeSource.cardsOpacity === "number" ? normalizedThemeSource.cardsOpacity : 0.9
         }
@@ -211,9 +211,8 @@ const AppLifecycle = {
         this.settingsStorageType = "preferences"
         return { reference: fallbackReference, snapshot: fallbackSnapshot }
     },
-    async writeUserSettingsToReference(settingsReference, normalizedSettings) {
+    async writeUserSettingsToReference(settingsReference, cloudSafeSettings) {
         if (!settingsReference) return
-        const cloudSafeSettings = this.buildCloudSafeUserSettingsPayload(normalizedSettings)
         await settingsReference.set({
             ...cloudSafeSettings,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -236,20 +235,21 @@ const AppLifecycle = {
             uiOpacity: typeof normalizedTheme.uiOpacity === "number" ? normalizedTheme.uiOpacity : 0.78,
             cardsOpacity: typeof normalizedTheme.cardsOpacity === "number" ? normalizedTheme.cardsOpacity : 0.9
         })
+        ThemeManager.setCustomPresets(normalizedSettings.customPresets)
+        const cloudSafeSettings = this.buildCloudSafeUserSettingsPayload(normalizedSettings)
         const activeSettingsReference = this.settingsReference || (await this.resolveUserSettingsReference(user)).reference
         if (!activeSettingsReference) return null
         try {
-            await this.writeUserSettingsToReference(activeSettingsReference, normalizedSettings)
+            await this.writeUserSettingsToReference(activeSettingsReference, cloudSafeSettings)
             this.settingsReference = activeSettingsReference
         } catch (error) {
             if (!this.isPermissionDeniedError(error)) throw error
             const fallbackReference = DataPath.getUserLegacySettingsReference(user)
             if (!fallbackReference) throw error
-            await this.writeUserSettingsToReference(fallbackReference, normalizedSettings)
+            await this.writeUserSettingsToReference(fallbackReference, cloudSafeSettings)
             this.settingsReference = fallbackReference
             this.settingsStorageType = "preferences"
         }
-        ThemeManager.setCustomPresets(normalizedSettings.customPresets)
         this.writeCachedUserSettings(user.uid, normalizedSettings)
         this.updateOriginalUserSettings(normalizedSettings)
         return normalizedSettings
@@ -259,11 +259,11 @@ const AppLifecycle = {
         if (cachedSettings) {
             const normalizedCached = this.normalizeUserSettings(cachedSettings)
             this.updateOriginalUserSettings(normalizedCached)
-            this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true })
+            this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true, persistTheme: false })
         } else {
             const defaultSettings = this.createDefaultUserSettings()
             this.updateOriginalUserSettings(defaultSettings)
-            this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true })
+            this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true, persistTheme: false })
         }
 
         let resolvedReference = null
@@ -282,47 +282,33 @@ const AppLifecycle = {
         let loadedSettings = null
         if (!snapshot.exists) {
             loadedSettings = this.createDefaultUserSettings()
-            await this.writeUserSettingsToReference(resolvedReference, loadedSettings)
+            const cloudSafeDefaultSettings = this.buildCloudSafeUserSettingsPayload(loadedSettings)
+            await this.writeUserSettingsToReference(resolvedReference, cloudSafeDefaultSettings)
         } else {
             const snapshotData = snapshot.data() || {}
             loadedSettings = this.normalizeUserSettings(snapshotData)
-            const cloudPresets = Array.isArray(snapshotData.customPresets) ? snapshotData.customPresets : []
-            const localPresets = ThemeManager.getCustomPresets()
-            const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets)
-            ThemeManager.setCustomPresets(mergedCustomPresets)
-            loadedSettings = {
-                ...loadedSettings,
-                customPresets: mergedCustomPresets
-            }
         }
 
         ThemeManager.setCustomPresets(loadedSettings.customPresets)
         this.writeCachedUserSettings(user.uid, loadedSettings)
         this.updateOriginalUserSettings(loadedSettings)
-        this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true })
+        this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true, persistTheme: false })
 
         if (this.settingsUnsubscribe) this.settingsUnsubscribe()
         this.settingsUnsubscribe = resolvedReference.onSnapshot(nextSnapshot => {
             if (!nextSnapshot.exists) return
             const snapshotData = nextSnapshot.data() || {}
-            const incomingSettings = this.normalizeUserSettings(snapshotData)
-            const cloudPresets = Array.isArray(snapshotData.customPresets) ? snapshotData.customPresets : []
-            const localPresets = ThemeManager.getCustomPresets()
-            const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets)
-            const mergedIncomingSettings = {
-                ...incomingSettings,
-                customPresets: mergedCustomPresets
-            }
+            const normalizedIncomingSettings = this.normalizeUserSettings(snapshotData)
             const currentOriginalSettings = StateStore.read().originalUserSettings
-            if (JSON.stringify(mergedIncomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
+            if (JSON.stringify(normalizedIncomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
             const settingsModal = document.getElementById("settings-modal")
             const isSettingsModalActive = !!settingsModal?.classList.contains("active")
             const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
             if (!isSettingsModalActive || !isDraftDirty) {
-                ThemeManager.setCustomPresets(mergedCustomPresets)
-                this.writeCachedUserSettings(user.uid, mergedIncomingSettings)
-                this.updateOriginalUserSettings(mergedIncomingSettings)
-                this.applyUserSettingsToRuntime(mergedIncomingSettings, { resetVisibleLimit: false })
+                ThemeManager.setCustomPresets(normalizedIncomingSettings.customPresets)
+                this.writeCachedUserSettings(user.uid, normalizedIncomingSettings)
+                this.updateOriginalUserSettings(normalizedIncomingSettings)
+                this.applyUserSettingsToRuntime(normalizedIncomingSettings, { resetVisibleLimit: false, persistTheme: false })
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
             }
         }, error => {

@@ -482,6 +482,8 @@ Object.assign(UI, {
     },
 
     applyAppearanceDraft(nextDraft) {
+        const currentDraft = StateStore.read().appearanceDraft || null
+        if (currentDraft && JSON.stringify(currentDraft) === JSON.stringify(nextDraft)) return
         StateStore.update("appearanceDraft", nextDraft)
         this.updateSettingsDraft({
             themeId: nextDraft.preset || "oled",

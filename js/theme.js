@@ -258,7 +258,6 @@ export const ThemeManager = {
         const sourcePresets = Array.isArray(presets) ? presets : []
         return sourcePresets
             .filter(item => item && typeof item === "object")
-            .slice(0, this.maxCustomPresets)
             .map(item => ({
                 key: String(item.key || ""),
                 p: this.normalizeHex(item.p),
@@ -290,13 +289,7 @@ export const ThemeManager = {
             if (!snapshot.exists) return null
             const data = snapshot.data() || {}
             const settings = buildThemeCloudPayload(data)
-            const customPresets = null
             const localSettings = this.getSavedSettings()
-            const localPresets = this.getCustomPresets()
-            if (customPresets) {
-                const mergedCustomPresets = mergeCloudPresetsWithLocalPresets(localPresets, customPresets)
-                this.saveCustomPresets(mergedCustomPresets)
-            }
             if (settings) {
                 const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, settings)
                 this.saveSettings(mergedSettings)
