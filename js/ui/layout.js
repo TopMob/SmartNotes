@@ -357,13 +357,13 @@ Object.assign(UI, {
         window.DomSecurity.setText(title, this.getText("admin_tools", "Админ-меню"))
 
         const description = document.createElement("p")
-        window.DomSecurity.setText(description, this.getText("analysis_full_reindex_button", "Проиндексировать всё"))
+        window.DomSecurity.setText(description, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
 
         const triggerButton = document.createElement("button")
         triggerButton.type = "button"
         triggerButton.className = "btn-primary"
         triggerButton.dataset.action = "trigger-admin-full-analysis"
-        window.DomSecurity.setText(triggerButton, this.getText("analysis_full_reindex_button", "Проиндексировать всё"))
+        window.DomSecurity.setText(triggerButton, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
 
         actionCard.append(title, description, triggerButton)
         root.replaceChildren(actionCard)

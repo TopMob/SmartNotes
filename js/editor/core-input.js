@@ -261,28 +261,41 @@ export const createInputHandlers = (context) => {
         elements.title.classList.toggle("title-has-value", !!elements.title.value.trim())
     }
 
-    const addTag = (tag) => {
-        const normalizedTag = String(tag || "").trim().replace(/^#+/, "")
-        if (!normalizedTag) return
-        const note = StateStore.read().currentNote
-        const tags = note.tags ? [...note.tags] : []
-        if (tags.some(x => x.toLowerCase() === normalizedTag.toLowerCase())) return
-
-        tags.push(normalizedTag)
-        StateStore.update("currentNote", { ...note, tags })
-        StateStore.update("editorDirty", true)
+    const updateCurrentNoteTags = (nextTags) => {
+        const currentState = StateStore.read()
+        const currentNote = currentState.currentNote
+        if (!currentNote) return
+        const normalizedTags = [...new Set((Array.isArray(nextTags) ? nextTags : []).map(value => String(value || "").trim()).filter(Boolean))]
+        const updatedNote = { ...currentNote, tags: normalizedTags }
+        StateStore.set(previousState => ({
+            ...previousState,
+            currentNote: updatedNote,
+            notes: previousState.notes.map(noteItem => noteItem.id === updatedNote.id ? { ...noteItem, tags: [...normalizedTags] } : noteItem),
+            editorDirty: true
+        }))
         renderTags()
         queueSnapshot()
     }
 
+    const addTag = (tag) => {
+        const normalizedTag = String(tag || "").trim().replace(/^#+/, "")
+        if (!normalizedTag) return
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const currentTags = Array.isArray(currentNote.tags) ? [...currentNote.tags] : []
+        if (currentTags.some(existingTag => existingTag.toLowerCase() === normalizedTag.toLowerCase())) return
+        currentTags.push(normalizedTag)
+        updateCurrentNoteTags(currentTags)
+    }
+
     const removeTag = (tag) => {
-        const note = StateStore.read().currentNote
-        if (!note) return
-        const tags = (note.tags || []).filter(x => x.toLowerCase() !== tag.toLowerCase())
-        StateStore.update("currentNote", { ...note, tags })
-        StateStore.update("editorDirty", true)
-        renderTags()
-        queueSnapshot()
+        const normalizedTag = String(tag || "").trim().toLowerCase()
+        if (!normalizedTag) return
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const currentTags = Array.isArray(currentNote.tags) ? currentNote.tags : []
+        const filteredTags = currentTags.filter(existingTag => String(existingTag || "").trim().toLowerCase() !== normalizedTag)
+        updateCurrentNoteTags(filteredTags)
     }
 
     const renderTags = () => {
