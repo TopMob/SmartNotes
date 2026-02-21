@@ -380,6 +380,7 @@ Object.assign(UI, {
                 this.triggerImport()
                 break
             case "load-more-notes":
+                e.preventDefault()
                 window.loadMoreNotes?.()
                 break
             case "editor-undo":

@@ -181,9 +181,15 @@ function filterAndRender(query) {
         } else {
             UI.updateEmptyState("note_add", UI.getText("empty", "Nothing here yet"))
         }
-        NotesRenderer.render(list)
+        const visibleNotesForRender = typeof window.getVisibleNotesForRender === "function"
+            ? window.getVisibleNotesForRender(list, view)
+            : list
+        NotesRenderer.render(visibleNotesForRender)
     }
 
+    if (typeof window.updateNotesLoadMoreButton === "function") {
+        window.updateNotesLoadMoreButton()
+    }
     UI.updateViewTitle()
     UI.updatePrimaryActionLabel()
 }
