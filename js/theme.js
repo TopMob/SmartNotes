@@ -146,6 +146,22 @@ export const ThemeManager = {
         })) : []
         SafeStorage.local.setJson(this.customPresetStorageKey, safePresets)
     },
+    addCustomPreset(colors) {
+        const currentPresets = this.getCustomPresets()
+        if (currentPresets.length >= this.maxCustomPresets) {
+            return { ok: false, reason: "limit" }
+        }
+        const nextPreset = {
+            key: Utils.generateId(),
+            p: this.normalizeHex(colors?.p),
+            bg: this.normalizeHex(colors?.bg),
+            t: this.normalizeHex(colors?.t),
+            mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(colors?.sidebarBackgroundImage)
+        }
+        this.saveCustomPresets([...currentPresets, nextPreset])
+        return { ok: true, key: `custom:${nextPreset.key}` }
+    },
     getCustomPresetByKey(presetKey) {
         if (!String(presetKey || "").startsWith("custom:")) return null
         const id = String(presetKey).slice(7)

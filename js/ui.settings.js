@@ -304,12 +304,14 @@ Object.assign(UI, {
     },
 
     requestCloseSettingsModal() {
-        if (this.isSettingsDirty()) {
-            const shouldExit = window.confirm("Вы уверены, что хотите выйти? Изменения не будут сохранены.")
-            if (!shouldExit) return
+        if (!this.isSettingsDirty()) {
+            this.closeModal("settings-modal")
+            return
         }
-        this.cancelSettingsDraft()
-        this.closeModal("settings-modal")
+        this.confirm("confirm_default", () => {
+            this.cancelSettingsDraft()
+            this.closeModal("settings-modal")
+        })
     },
 
     cancelSettingsDraft() {
@@ -420,13 +422,24 @@ Object.assign(UI, {
         }
         const onCreateCustomPreset = () => {
             const currentDraft = StateStore.read().appearanceDraft || draft
-            this.applyAppearanceDraft({
+            const createResult = ThemeManager.addCustomPreset(currentDraft)
+            if (!createResult?.ok) {
+                this.showToast("Максимум 5 пользовательских пресетов")
+                return
+            }
+            const createdPreset = ThemeManager.getCustomPresetByKey(createResult.key)
+            if (!createdPreset) return
+            const nextDraft = {
                 ...currentDraft,
-                preset: "manual",
-                basePreset: currentDraft.basePreset || "oled",
-                uiOpacity: typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78,
-                cardsOpacity: typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9
-            })
+                preset: createResult.key,
+                p: createdPreset.p,
+                bg: createdPreset.bg,
+                t: createdPreset.t,
+                mainBackgroundImage: createdPreset.mainBackgroundImage || "",
+                sidebarBackgroundImage: createdPreset.sidebarBackgroundImage || ""
+            }
+            this.applyAppearanceDraft(nextDraft)
+            this.renderAppearanceDraft()
         }
         ThemeManager.renderPicker({ onSelect, onCreateCustomPreset, activeKey, manualColor: draft.p })
         ThemeManager.setupColorInputs((type, val) => {
