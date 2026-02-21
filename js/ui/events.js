@@ -492,6 +492,9 @@ Object.assign(UI, {
             case "lock-move-folder":
                 this.moveLockNoteToFolder(el.dataset.noteId || "")
                 break
+            case "appearance-reset":
+                this.resetAppearanceDraft()
+                break
             case "appearance-cancel":
                 this.cancelSettingsDraft()
                 break

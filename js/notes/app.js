@@ -44,6 +44,7 @@ const AppLifecycle = {
             lang: StateStore.read().config.lang || "ru",
             folderViewMode: StateStore.read().config.folderViewMode || "compact",
             reduceMotion: !!StateStore.read().config.reduceMotion,
+            customPresets: ThemeManager.getCustomPresets(),
             schemaVersion: 1
         }
     },
@@ -54,6 +55,7 @@ const AppLifecycle = {
         const parsedNotesPerPage = Number(source.notesPerPage)
         const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
         const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
+        const customPresets = Array.isArray(source.customPresets) ? source.customPresets : defaults.customPresets
         return {
             notesPerPage,
             themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
@@ -63,6 +65,7 @@ const AppLifecycle = {
             lang: source.lang === "en" ? "en" : "ru",
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
+            customPresets: customPresets,
             schemaVersion: 1
         }
     },
@@ -84,6 +87,7 @@ const AppLifecycle = {
             preset: normalizedSettings.themeId,
             ...(normalizedSettings.customTheme || {})
         }
+        ThemeManager.saveCustomPresets(normalizedSettings.customPresets || [])
         ThemeManager.applySettings(normalizedTheme, true)
         StateActions.updateConfig({
             lang: normalizedSettings.lang,

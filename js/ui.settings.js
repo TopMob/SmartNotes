@@ -258,8 +258,11 @@ Object.assign(UI, {
                     </div>
                 </div>
                 <div class="settings-actions row-between">
-                    <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
-                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                    <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
+                    <div class="row-right" style="gap:8px;">
+                        <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
+                        <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
+                    </div>
                 </div>
             `
             if (typeof ColorPalette !== "undefined") ColorPalette.init(root)
@@ -314,8 +317,12 @@ Object.assign(UI, {
     async saveSettingsDraft() {
         const draftSettings = this.getSettingsDraft()
         if (!draftSettings) return
+        const settingsToSave = {
+            ...draftSettings,
+            customPresets: ThemeManager.getCustomPresets()
+        }
         try {
-            const savedSettings = await AppLifecycle.saveUserSettings(draftSettings)
+            const savedSettings = await AppLifecycle.saveUserSettings(settingsToSave)
             if (!savedSettings) return
             AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
             this.syncSettingsDraftFromOriginal()
@@ -443,6 +450,7 @@ Object.assign(UI, {
         StateStore.update("appearanceDraft", nextDraft)
         this.updateSettingsDraft({
             themeId: nextDraft.preset || "oled",
+            customPresets: ThemeManager.getCustomPresets(),
             customTheme: {
                 p: nextDraft.p,
                 bg: nextDraft.bg,
@@ -455,7 +463,26 @@ Object.assign(UI, {
             backgroundType: nextDraft.mainBackgroundImage ? "image" : "none",
             backgroundValue: nextDraft.mainBackgroundImage || ""
         })
+        ThemeManager.applySettings(nextDraft, false)
         this.renderAppearanceDraft()
+    },
+
+    resetAppearanceDraft() {
+        const defaultThemeSettings = ThemeManager.getDefaultSettings()
+        const defaultPreset = ThemeManager.resolvePreset(defaultThemeSettings.preset || "oled")
+        const nextDraft = {
+            preset: defaultThemeSettings.preset || "oled",
+            p: defaultPreset.p,
+            bg: defaultPreset.bg,
+            t: defaultPreset.t,
+            brandName: "SmartNotes",
+            basePreset: defaultThemeSettings.preset || "oled",
+            mainBackgroundImage: defaultThemeSettings.mainBackgroundImage || "",
+            sidebarBackgroundImage: defaultThemeSettings.sidebarBackgroundImage || "",
+            uiOpacity: typeof defaultThemeSettings.uiOpacity === "number" ? defaultThemeSettings.uiOpacity : 0.78,
+            cardsOpacity: typeof defaultThemeSettings.cardsOpacity === "number" ? defaultThemeSettings.cardsOpacity : 0.9
+        }
+        this.applyAppearanceDraft(nextDraft)
     },
 
     async saveAppearanceDraft() {
