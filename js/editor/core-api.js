@@ -171,9 +171,19 @@ export const EditorAPI = (() => {
         return !!titleText || !!plainTextContent || hasMedia || tagsCount > 0 || drawingCount > 0
     }
 
+
+    const normalizeEditorHtml = (htmlValue) => {
+        const htmlText = String(htmlValue || "")
+            .replace(/\s+/g, " ")
+            .replace(/>\s+</g, "><")
+            .replace(/&nbsp;/gi, " ")
+            .trim()
+        return htmlText
+    }
+
     const serializeEditorStateSnapshot = (note) => JSON.stringify({
         title: String(note?.title || ""),
-        content: String(note?.content || ""),
+        content: normalizeEditorHtml(note?.content),
         tags: Array.isArray(note?.tags) ? note.tags.map(tag => String(tag || "")) : [],
         pageDrawings: Array.isArray(note?.pageDrawings) ? note.pageDrawings.map(value => String(value || "")) : [],
         pageDrawingsRevision: String(note?.pageDrawingsRevision || ""),
@@ -202,6 +212,7 @@ export const EditorAPI = (() => {
 
         const isAutoSave = !!options.autoSave
         const isExitSave = !!options.persistOnExit
+        if (state.isSaving) return
         if (isAutoSave && state.manualSaveInProgress) return
         const editorHasUnsavedChanges = !!StateStore.read().editorDirty
         if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
@@ -263,6 +274,7 @@ export const EditorAPI = (() => {
         if (!ref) return
 
         if (!isAutoSave) state.manualSaveInProgress = true
+        state.isSaving = true
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
@@ -282,6 +294,7 @@ export const EditorAPI = (() => {
                 SaveStateService?.handleStorageWriteResult?.(pendingSaveResult, { showToast: shouldShowErrorToast })
             }
         } finally {
+            state.isSaving = false
             if (!isAutoSave) state.manualSaveInProgress = false
         }
     }

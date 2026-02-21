@@ -171,6 +171,33 @@ async function ensureFirebaseRuntime() {
     return false
 }
 
+
+function initializeSplashScreen() {
+    const splashScreen = document.getElementById("splash-screen")
+    if (!splashScreen) return () => {}
+    let hidden = false
+    const hideSplashScreen = () => {
+        if (hidden) return
+        hidden = true
+        splashScreen.classList.add("hidden")
+        setTimeout(() => {
+            splashScreen.classList.remove("active")
+            splashScreen.style.display = "none"
+        }, 360)
+    }
+    splashScreen.classList.add("active")
+    splashScreen.style.display = "flex"
+    const timeoutId = setTimeout(() => {
+        hideSplashScreen()
+    }, 3000)
+    const wrappedHide = () => {
+        clearTimeout(timeoutId)
+        hideSplashScreen()
+    }
+    window.hideSplashScreen = wrappedHide
+    return wrappedHide
+}
+
 function showRuntimeErrorMessage(messageText) {
     const message = String(messageText || "")
     if (!message) return
@@ -183,9 +210,12 @@ function showRuntimeErrorMessage(messageText) {
     }
 }
 
+const hideSplashScreen = initializeSplashScreen()
+
 async function startCore() {
     const firebaseRuntimeReady = await ensureFirebaseRuntime()
     if (!firebaseRuntimeReady) {
+        hideSplashScreen()
         showRuntimeErrorMessage("Не удалось загрузить Firebase")
         throw new Error("Firebase runtime unavailable")
     }
@@ -209,6 +239,7 @@ async function startCore() {
 
 bootstrapCore({ ThemeManager, Auth: core.Auth })
 startCore().catch(error => {
+    hideSplashScreen()
     console.error("[Core] Startup failed", error)
     showRuntimeErrorMessage("Не удалось запустить приложение. Перезагрузите страницу")
 })

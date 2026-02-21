@@ -14,6 +14,14 @@ const AppLifecycle = {
     networkListenersBound: false,
     networkRetryTimer: null,
     sessionStartPromise: null,
+    notesPageSize: 100,
+    hasMoreOwnedNotes: false,
+    loadingMoreOwnedNotes: false,
+    lastOwnedNoteDocument: null,
+    notesRenderStep: 10,
+    visibleNotesLimit: 10,
+    totalVisibleNotesCount: 0,
+    renderedVisibleNotesCount: 0,
     normalizeDateValue(value) {
         if (window.NoteHelpers && typeof window.NoteHelpers.normalizeDateValue === "function") {
             return window.NoteHelpers.normalizeDateValue(value)
@@ -136,7 +144,14 @@ const AppLifecycle = {
     stopUserSession() {
         this.activeUid = null
         this.sharedSyncEnabled = true
+        this.hasMoreOwnedNotes = false
+        this.loadingMoreOwnedNotes = false
+        this.lastOwnedNoteDocument = null
+        this.visibleNotesLimit = this.notesRenderStep
+        this.totalVisibleNotesCount = 0
+        this.renderedVisibleNotesCount = 0
         this.clearSubscriptions()
+        this.updateLoadMoreButton()
     },
     applyFoldersSnapshot(snapshot) {
         const folders = this.sortFolders(snapshot.docs.map(documentEntry => {
@@ -155,9 +170,103 @@ const AppLifecycle = {
         }
     },
     applyNotesSnapshot(snapshot) {
-        this.ownedNotes = this.sortOwnedNotes(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
+        const incomingNotes = snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() }))
+        const incomingNoteIds = new Set(incomingNotes.map(note => String(note.id || "")))
+        const preservedNotes = this.ownedNotes.filter(note => !incomingNoteIds.has(String(note.id || "")))
+        this.ownedNotes = this.sortOwnedNotes([...incomingNotes, ...preservedNotes])
+        this.lastOwnedNoteDocument = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null
+        this.hasMoreOwnedNotes = snapshot.docs.length >= this.notesPageSize
+        this.updateLoadMoreButton()
         this.updateNotesState()
     },
+
+    getEffectiveTotalNotesCount() {
+        return this.totalVisibleNotesCount + (this.hasMoreOwnedNotes ? 1 : 0)
+    },
+    getVisibleNotesForRender(notesList, activeView) {
+        const normalizedList = Array.isArray(notesList) ? notesList : []
+        const isNotesViewActive = String(activeView || "") === "notes"
+        if (!isNotesViewActive) {
+            this.totalVisibleNotesCount = normalizedList.length
+            this.renderedVisibleNotesCount = normalizedList.length
+            this.updateLoadMoreButton()
+            return normalizedList
+        }
+        const safeLimit = Math.max(this.notesRenderStep, Number(this.visibleNotesLimit) || this.notesRenderStep)
+        this.visibleNotesLimit = safeLimit
+        this.totalVisibleNotesCount = normalizedList.length
+        const slicedList = normalizedList.slice(0, safeLimit)
+        this.renderedVisibleNotesCount = slicedList.length
+        this.updateLoadMoreButton()
+        return slicedList
+    },
+    updateLoadMoreButton() {
+        const loadMoreButton = document.getElementById("load-more-notes-button")
+        if (!loadMoreButton) return
+        const isNotesViewActive = String(StateStore.read().view || "") === "notes"
+        const totalNotesCount = this.getEffectiveTotalNotesCount()
+        const shouldShowButton = !!this.activeUid && isNotesViewActive && this.renderedVisibleNotesCount < totalNotesCount
+        loadMoreButton.classList.toggle("hidden", !shouldShowButton)
+        loadMoreButton.disabled = this.loadingMoreOwnedNotes
+    },
+    async loadMoreOwnedNotes() {
+        const activeView = String(StateStore.read().view || "")
+        if (activeView !== "notes") {
+            this.updateLoadMoreButton()
+            return
+        }
+
+        const previousScrollContainer = document.getElementById("notes-content-area")
+        const previousScrollTop = previousScrollContainer ? previousScrollContainer.scrollTop : 0
+
+        if (this.renderedVisibleNotesCount < this.totalVisibleNotesCount) {
+            this.visibleNotesLimit += this.notesRenderStep
+            filterAndRender(document.getElementById("search-input")?.value || "")
+            requestAnimationFrame(() => {
+                if (previousScrollContainer) previousScrollContainer.scrollTop = previousScrollTop
+            })
+            return
+        }
+
+        if (!db || !this.activeUid || this.loadingMoreOwnedNotes || !this.lastOwnedNoteDocument || !this.hasMoreOwnedNotes) {
+            this.updateLoadMoreButton()
+            return
+        }
+
+        const user = StateStore.read().user
+        if (!user) return
+        const notesCollection = DataPath.getUserNotesCollection(user)
+        if (!notesCollection) return
+
+        this.visibleNotesLimit += this.notesRenderStep
+        this.loadingMoreOwnedNotes = true
+        this.updateLoadMoreButton()
+        try {
+            const nextSnapshot = await notesCollection
+                .startAfter(this.lastOwnedNoteDocument)
+                .limit(this.notesPageSize)
+                .get()
+            const nextNotes = nextSnapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() }))
+            if (nextNotes.length) {
+                const existingIds = new Set(this.ownedNotes.map(note => String(note.id || "")))
+                const uniqueNextNotes = nextNotes.filter(note => !existingIds.has(String(note.id || "")))
+                this.ownedNotes = this.sortOwnedNotes([...this.ownedNotes, ...uniqueNextNotes])
+                this.updateNotesState()
+            }
+            this.lastOwnedNoteDocument = nextSnapshot.docs.length ? nextSnapshot.docs[nextSnapshot.docs.length - 1] : this.lastOwnedNoteDocument
+            this.hasMoreOwnedNotes = nextSnapshot.docs.length >= this.notesPageSize
+        } catch (error) {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            console.error("Load more notes error", error)
+        } finally {
+            this.loadingMoreOwnedNotes = false
+            this.updateLoadMoreButton()
+            requestAnimationFrame(() => {
+                if (previousScrollContainer) previousScrollContainer.scrollTop = previousScrollTop
+            })
+        }
+    },
+
     subscribeCollection(options) {
         const { collectionReference, onSnapshotData, onSnapshotError } = options
         const unsubscribe = collectionReference.onSnapshot(onSnapshotData, error => {
@@ -249,7 +358,7 @@ const AppLifecycle = {
             this.notesUnsubscribe = null
         }
         this.notesUnsubscribe = this.subscribeCollection({
-            collectionReference: userNotesCollection,
+            collectionReference: userNotesCollection.limit(this.notesPageSize),
             onSnapshotData: snapshot => {
                 this.applyNotesSnapshot(snapshot)
             },
@@ -424,3 +533,6 @@ async function initApp() {
 window.initApp = initApp
 window.startUserSession = (user) => AppLifecycle.startUserSession(user)
 window.stopUserSession = () => AppLifecycle.stopUserSession()
+window.loadMoreNotes = () => AppLifecycle.loadMoreOwnedNotes()
+window.getVisibleNotesForRender = (notesList, activeView) => AppLifecycle.getVisibleNotesForRender(notesList, activeView)
+window.updateNotesLoadMoreButton = () => AppLifecycle.updateLoadMoreButton()

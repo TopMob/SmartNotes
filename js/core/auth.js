@@ -11,7 +11,8 @@ export function createAuthManager({ auth }) {
         authActionElements: [],
         googleSignInPendingTimeoutId: null,
         localAuthManager: null,
-        persistenceReady: false
+        persistenceReady: false,
+        authStateResolved: false
     }
 
     const manager = {
@@ -81,6 +82,14 @@ export function createAuthManager({ auth }) {
             if (!flag) {
                 this._clearGoogleSignInPendingTimeout()
                 this._setAuthFeedback("")
+            }
+        },
+
+        _resolveStartupScreen() {
+            if (state.authStateResolved) return
+            state.authStateResolved = true
+            if (typeof window.hideSplashScreen === "function") {
+                window.hideSplashScreen()
             }
         },
         handleAuthError(err) {
@@ -361,13 +370,16 @@ export function createAuthManager({ auth }) {
 
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
+                this._resolveStartupScreen()
                 await this._handleAuthState(user)
             }, error => {
                 this._setLoginBusy(false)
+                this._resolveStartupScreen()
                 this.handleAuthError(error)
             })
 
             if (auth.currentUser) {
+                this._resolveStartupScreen()
                 await this._handleAuthState(auth.currentUser)
             }
 
@@ -384,6 +396,7 @@ export function createAuthManager({ auth }) {
                 }
             } finally {
                 this._setLoginBusy(false)
+                this._resolveStartupScreen()
             }
         }
     }

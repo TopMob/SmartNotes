@@ -66,6 +66,12 @@
 <body>
     <div class="bg-wrapper" aria-hidden="true"></div>
 
+    <div id="splash-screen" class="splash active" aria-live="polite">
+        <h1>SmartNotes</h1>
+        <p>AI-organized thinking</p>
+        <div class="loader" aria-hidden="true"></div>
+    </div>
+
     <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
         <div class="login-box">
             <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
@@ -303,6 +309,7 @@
                 </div>
 
                 <div id="notes-container" class="notes-grid" role="list"></div>
+                <button type="button" id="load-more-notes-button" class="btn-secondary load-more-notes hidden" data-action="load-more-notes" data-lang="load_more_notes">Загрузить ещё</button>
             </section>
 
             <button type="button" class="btn-fab" data-action="primary-action" aria-label="Создать заметку" data-lang-aria="create_note">
