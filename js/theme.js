@@ -92,25 +92,6 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
     return [...mergedPresetsByKey.values()].slice(0, ThemeManager.maxCustomPresets)
 }
 
-const sortObject = (value) => {
-    if (!value || typeof value !== "object") return value
-    if (Array.isArray(value)) return value.map(sortObject)
-    return Object.keys(value)
-        .sort()
-        .reduce((accumulator, key) => {
-            accumulator[key] = sortObject(value[key])
-            return accumulator
-        }, {})
-}
-
-const deepEqual = (firstValue, secondValue) => {
-    try {
-        return JSON.stringify(sortObject(firstValue)) === JSON.stringify(sortObject(secondValue))
-    } catch {
-        return false
-    }
-}
-
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
     const parsedValue = Number(value)
     if (!Number.isFinite(parsedValue)) return fallback
@@ -244,33 +225,34 @@ export const ThemeManager = {
         SafeStorage.local.remove("theme-pending-sync")
         this.applySettings(this.getDefaultSettings(), true)
     },
-    getThemeSettingsReference(user) {
-        if (!user || !user.uid) return null
-        const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
-        return rootReference ? rootReference.collection("preferences").doc("theme") : null
-    },
     async loadAccountSettings(user) {
-        const reference = this.getThemeSettingsReference(user)
-        if (!reference) return null
+        if (!user || !user.uid) return null
         try {
-            const settingsSnapshot = await reference.get()
-            if (!settingsSnapshot.exists) return null
-            const settingsData = settingsSnapshot.data() || {}
-            const settings = settingsData.settings && typeof settingsData.settings === "object" ? settingsData.settings : null
-            const cloudCustomPresets = Array.isArray(settingsData.customPresets) ? settingsData.customPresets : []
+            const encodedUserId = encodeURIComponent(String(user.uid))
+            const response = await window.ApiClient.getJson(`/api/theme-load?uid=${encodedUserId}`)
+            if (!response.ok) {
+                console.error("Theme sync load failed", response.error)
+                return this.getSavedSettings()
+            }
+            const responseData = response.data && typeof response.data === "object"
+                ? response.data
+                : {}
+            const remoteSettings = responseData.settings && typeof responseData.settings === "object"
+                ? responseData.settings
+                : null
+            const remoteCustomPresets = Array.isArray(responseData.customPresets)
+                ? responseData.customPresets
+                : []
             const localSettings = this.getSavedSettings()
             const localPresets = this.getCustomPresets()
-            if (cloudCustomPresets.length) {
-                const mergedCustomPresets = mergeCloudPresetsWithLocalPresets(localPresets, cloudCustomPresets)
-                this.saveCustomPresets(mergedCustomPresets)
-            }
-            if (!settings) return null
-            const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, settings)
+            const mergedCustomPresets = mergeCloudPresetsWithLocalPresets(localPresets, remoteCustomPresets)
+            this.saveCustomPresets(mergedCustomPresets)
+            if (!remoteSettings) return null
+            const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, remoteSettings)
             this.saveSettings(mergedSettings)
             return mergedSettings
         } catch (error) {
-            console.error("Theme sync load failed", error?.code || "unknown", error?.message || "")
-            UI?.showToast?.(`Theme sync failed: ${error?.code || "unknown"}`)
+            console.error("Theme sync load failed", error?.message || "unknown")
             return this.getSavedSettings()
         }
     },
@@ -280,7 +262,6 @@ export const ThemeManager = {
             return
         }
         this.isSavingTheme = true
-        const reference = this.getThemeSettingsReference(user)
         const normalizedSettings = {
             preset: settings?.preset || "oled",
             p: this.normalizeHex(settings?.p),
@@ -292,7 +273,7 @@ export const ThemeManager = {
             cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
         }
         this.saveSettings(normalizedSettings)
-        if (!reference) {
+        if (!user || !user.uid) {
             this.isSavingTheme = false
             return
         }
@@ -309,29 +290,30 @@ export const ThemeManager = {
             .map(normalizeCloudPresetRecord)
             .filter(preset => preset.key)
             .slice(0, this.maxCustomPresets)
+        const payload = {
+            uid: String(user.uid),
+            settings: cloudSettings,
+            customPresets: normalizedCustomPresets
+        }
         try {
-            const snapshot = await reference.get()
-            const currentData = snapshot.exists ? (snapshot.data() || {}) : {}
-            const currentSettings = currentData.settings && typeof currentData.settings === "object" ? currentData.settings : null
-            const currentCustomPresets = Array.isArray(currentData.customPresets) ? currentData.customPresets : []
-            const hasSameSettings = deepEqual(currentSettings, cloudSettings)
-            const hasSameCustomPresets = deepEqual(currentCustomPresets, normalizedCustomPresets)
-            if (hasSameSettings && hasSameCustomPresets) {
-                return
+            const response = await window.ApiClient.postJson("/api/theme-save", payload)
+            if (!response.ok) {
+                SafeStorage.local.setJson("theme-pending-sync", {
+                    settings: normalizedSettings,
+                    customPresets: this.getCustomPresets(),
+                    savedAt: Date.now()
+                })
+                console.error("Theme sync save failed:", response.error)
+                UI?.showToast?.(`Theme sync failed: ${response.error || "unknown"}`)
             }
-            await reference.set({
-                settings: cloudSettings,
-                customPresets: normalizedCustomPresets,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true })
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", {
                 settings: normalizedSettings,
                 customPresets: this.getCustomPresets(),
                 savedAt: Date.now()
             })
-            console.error("Theme sync save failed:", error?.code || "unknown", error?.message || "")
-            UI?.showToast?.(`Theme sync failed: ${error?.code || "unknown"}`)
+            console.error("Theme sync save failed:", error?.message || "unknown")
+            UI?.showToast?.(`Theme sync failed: ${error?.message || "unknown"}`)
         } finally {
             this.isSavingTheme = false
         }

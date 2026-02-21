@@ -7,6 +7,7 @@ import { bootstrapCore } from "./core/bootstrap.js"
 import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
 import { validateFolderName, validateFolderDescription, canAddFolder, canAddCustomTheme, canAssignToFolder, FOLDER_DESCRIPTION_SOFT_LIMIT, FOLDER_DESCRIPTION_HARD_LIMIT } from "./core/validators.js"
 import { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload } from "./core/noteHelpers.js"
+import { postJson, getJson } from "./core/api.js"
 
 const core = window.__smartnotesCore || (() => {
     const context = { auth: null, db: null, Auth: null }
@@ -43,6 +44,7 @@ window.Validators = {
     FOLDER_DESCRIPTION_HARD_LIMIT
 }
 window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
+window.ApiClient = { postJson, getJson }
 
 const firebaseRuntimeSources = [
     {
