@@ -417,12 +417,12 @@ Object.assign(UI, {
                     t: preset.t,
                     brandName: "SmartNotes",
                     basePreset: key,
-                    mainBackgroundUrl: draft.mainBackgroundUrl || "",
-                    sidebarBackgroundUrl: draft.sidebarBackgroundUrl || "",
+                    mainBackgroundUrl: customPreset ? (customPreset.mainBackgroundUrl || "") : (draft.mainBackgroundUrl || ""),
+                    sidebarBackgroundUrl: customPreset ? (customPreset.sidebarBackgroundUrl || "") : (draft.sidebarBackgroundUrl || ""),
                     mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
                     sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || ""),
-                    uiOpacity: typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78,
-                    cardsOpacity: typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9
+                    uiOpacity: customPreset && typeof customPreset.uiOpacity === "number" ? customPreset.uiOpacity : (typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78),
+                    cardsOpacity: customPreset && typeof customPreset.cardsOpacity === "number" ? customPreset.cardsOpacity : (typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9)
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -442,10 +442,12 @@ Object.assign(UI, {
                 p: createdPreset.p,
                 bg: createdPreset.bg,
                 t: createdPreset.t,
-                mainBackgroundUrl: currentDraft.mainBackgroundUrl || "",
-                sidebarBackgroundUrl: currentDraft.sidebarBackgroundUrl || "",
+                mainBackgroundUrl: createdPreset.mainBackgroundUrl || "",
+                sidebarBackgroundUrl: createdPreset.sidebarBackgroundUrl || "",
                 mainBackgroundImage: createdPreset.mainBackgroundImage || "",
-                sidebarBackgroundImage: createdPreset.sidebarBackgroundImage || ""
+                sidebarBackgroundImage: createdPreset.sidebarBackgroundImage || "",
+                uiOpacity: typeof createdPreset.uiOpacity === "number" ? createdPreset.uiOpacity : (typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78),
+                cardsOpacity: typeof createdPreset.cardsOpacity === "number" ? createdPreset.cardsOpacity : (typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9)
             }
             this.applyAppearanceDraft(nextDraft)
             this.renderAppearanceDraft()

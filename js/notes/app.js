@@ -46,6 +46,7 @@ const AppLifecycle = {
             lang: StateStore.read().config.lang || "ru",
             folderViewMode: StateStore.read().config.folderViewMode || "compact",
             reduceMotion: !!StateStore.read().config.reduceMotion,
+            customPresets: ThemeManager.getCustomPresets(),
             schemaVersion: 1
         }
     },
@@ -79,6 +80,9 @@ const AppLifecycle = {
             cardsOpacity: resolveThemeOpacity("cardsOpacity", 0.9)
         }
         const normalizedMainBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedTheme.mainBackgroundUrl, normalizedTheme.mainBackgroundImage)
+        const localCustomPresets = ThemeManager.getCustomPresets()
+        const cloudCustomPresets = Array.isArray(source.customPresets) ? source.customPresets : []
+        const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localCustomPresets, cloudCustomPresets)
         return {
             notesPerPage,
             themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
@@ -88,6 +92,7 @@ const AppLifecycle = {
             lang: source.lang === "en" ? "en" : "ru",
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
+            customPresets: mergedCustomPresets,
             schemaVersion: 1
         }
     },
@@ -180,9 +185,11 @@ const AppLifecycle = {
             ...sourceTheme,
             preset: source.themeId || sourceTheme.preset || "oled"
         })
+        const cloudSafeCustomPresets = ThemeManager.buildCloudSafeCustomPresets(source.customPresets)
         return {
             ...source,
             customTheme: cloudSafeTheme,
+            customPresets: cloudSafeCustomPresets,
             backgroundType: cloudSafeTheme.mainBackgroundUrl ? "image" : "none",
             backgroundValue: cloudSafeTheme.mainBackgroundUrl || ""
         }
@@ -242,6 +249,7 @@ const AppLifecycle = {
             this.settingsReference = fallbackReference
             this.settingsStorageType = "preferences"
         }
+        ThemeManager.setCustomPresets(normalizedSettings.customPresets)
         this.writeCachedUserSettings(user.uid, normalizedSettings)
         this.updateOriginalUserSettings(normalizedSettings)
         return normalizedSettings
@@ -276,9 +284,19 @@ const AppLifecycle = {
             loadedSettings = this.createDefaultUserSettings()
             await this.writeUserSettingsToReference(resolvedReference, loadedSettings)
         } else {
-            loadedSettings = this.normalizeUserSettings(snapshot.data() || {})
+            const snapshotData = snapshot.data() || {}
+            loadedSettings = this.normalizeUserSettings(snapshotData)
+            const cloudPresets = Array.isArray(snapshotData.customPresets) ? snapshotData.customPresets : []
+            const localPresets = ThemeManager.getCustomPresets()
+            const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets)
+            ThemeManager.setCustomPresets(mergedCustomPresets)
+            loadedSettings = {
+                ...loadedSettings,
+                customPresets: mergedCustomPresets
+            }
         }
 
+        ThemeManager.setCustomPresets(loadedSettings.customPresets)
         this.writeCachedUserSettings(user.uid, loadedSettings)
         this.updateOriginalUserSettings(loadedSettings)
         this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true })
@@ -286,16 +304,25 @@ const AppLifecycle = {
         if (this.settingsUnsubscribe) this.settingsUnsubscribe()
         this.settingsUnsubscribe = resolvedReference.onSnapshot(nextSnapshot => {
             if (!nextSnapshot.exists) return
-            const incomingSettings = this.normalizeUserSettings(nextSnapshot.data() || {})
+            const snapshotData = nextSnapshot.data() || {}
+            const incomingSettings = this.normalizeUserSettings(snapshotData)
+            const cloudPresets = Array.isArray(snapshotData.customPresets) ? snapshotData.customPresets : []
+            const localPresets = ThemeManager.getCustomPresets()
+            const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets)
+            const mergedIncomingSettings = {
+                ...incomingSettings,
+                customPresets: mergedCustomPresets
+            }
             const currentOriginalSettings = StateStore.read().originalUserSettings
-            if (JSON.stringify(incomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
+            if (JSON.stringify(mergedIncomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
             const settingsModal = document.getElementById("settings-modal")
             const isSettingsModalActive = !!settingsModal?.classList.contains("active")
             const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
             if (!isSettingsModalActive || !isDraftDirty) {
-                this.writeCachedUserSettings(user.uid, incomingSettings)
-                this.updateOriginalUserSettings(incomingSettings)
-                this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
+                ThemeManager.setCustomPresets(mergedCustomPresets)
+                this.writeCachedUserSettings(user.uid, mergedIncomingSettings)
+                this.updateOriginalUserSettings(mergedIncomingSettings)
+                this.applyUserSettingsToRuntime(mergedIncomingSettings, { resetVisibleLimit: false })
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
             }
         }, error => {

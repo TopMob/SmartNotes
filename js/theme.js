@@ -61,18 +61,45 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
     const localPresetsByKey = new Map(localPresetList
         .filter(item => item && typeof item === "object")
         .map(item => [String(item.key || ""), item]))
-    return cloudPresetList
+    const mergedPresets = []
+    const seenPresetKeys = new Set()
+    cloudPresetList
         .filter(item => item && typeof item === "object")
-        .map(item => {
+        .forEach(item => {
             const presetKey = String(item.key || "")
+            if (!presetKey) return
             const localPreset = localPresetsByKey.get(presetKey)
-            return {
-                ...item,
+            mergedPresets.push({
                 key: presetKey,
+                p: ThemeManager.normalizeHex(item.p),
+                bg: ThemeManager.normalizeHex(item.bg),
+                t: ThemeManager.normalizeHex(item.t),
+                uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
+                cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
+                mainBackgroundUrl: normalizeThemeUrlValue(item.mainBackgroundUrl),
+                sidebarBackgroundUrl: normalizeThemeUrlValue(item.sidebarBackgroundUrl),
                 mainBackgroundImage: normalizeLocalImageValue(localPreset?.mainBackgroundImage),
                 sidebarBackgroundImage: normalizeLocalImageValue(localPreset?.sidebarBackgroundImage)
-            }
+            })
+            seenPresetKeys.add(presetKey)
         })
+    localPresetList.forEach(item => {
+        const presetKey = String(item?.key || "")
+        if (!presetKey || seenPresetKeys.has(presetKey)) return
+        mergedPresets.push({
+            key: presetKey,
+            p: ThemeManager.normalizeHex(item?.p),
+            bg: ThemeManager.normalizeHex(item?.bg),
+            t: ThemeManager.normalizeHex(item?.t),
+            uiOpacity: normalizeNumberInRange(item?.uiOpacity, 0.4, 1, 0.78),
+            cardsOpacity: normalizeNumberInRange(item?.cardsOpacity, 0.5, 1, 0.9),
+            mainBackgroundUrl: normalizeThemeUrlValue(item?.mainBackgroundUrl),
+            sidebarBackgroundUrl: normalizeThemeUrlValue(item?.sidebarBackgroundUrl),
+            mainBackgroundImage: normalizeLocalImageValue(item?.mainBackgroundImage),
+            sidebarBackgroundImage: normalizeLocalImageValue(item?.sidebarBackgroundImage)
+        })
+    })
+    return mergedPresets.slice(0, ThemeManager.maxCustomPresets)
 }
 
 const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
@@ -144,6 +171,10 @@ export const ThemeManager = {
                     p: this.normalizeHex(item.p),
                     bg: this.normalizeHex(item.bg),
                     t: this.normalizeHex(item.t),
+                    uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
+                    cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
+                    mainBackgroundUrl: normalizeThemeUrlValue(item.mainBackgroundUrl),
+                    sidebarBackgroundUrl: normalizeThemeUrlValue(item.sidebarBackgroundUrl),
                     mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
                     sidebarBackgroundImage: typeof item.sidebarBackgroundImage === "string" ? item.sidebarBackgroundImage : ""
                 }))
@@ -158,6 +189,10 @@ export const ThemeManager = {
             p: this.normalizeHex(item?.p),
             bg: this.normalizeHex(item?.bg),
             t: this.normalizeHex(item?.t),
+            uiOpacity: normalizeNumberInRange(item?.uiOpacity, 0.4, 1, 0.78),
+            cardsOpacity: normalizeNumberInRange(item?.cardsOpacity, 0.5, 1, 0.9),
+            mainBackgroundUrl: normalizeThemeUrlValue(item?.mainBackgroundUrl),
+            sidebarBackgroundUrl: normalizeThemeUrlValue(item?.sidebarBackgroundUrl),
             mainBackgroundImage: normalizeLocalImageValue(item?.mainBackgroundImage),
             sidebarBackgroundImage: normalizeLocalImageValue(item?.sidebarBackgroundImage)
         })) : []
@@ -173,6 +208,10 @@ export const ThemeManager = {
             p: this.normalizeHex(colors?.p),
             bg: this.normalizeHex(colors?.bg),
             t: this.normalizeHex(colors?.t),
+            uiOpacity: normalizeNumberInRange(colors?.uiOpacity, 0.4, 1, 0.78),
+            cardsOpacity: normalizeNumberInRange(colors?.cardsOpacity, 0.5, 1, 0.9),
+            mainBackgroundUrl: normalizeThemeUrlValue(colors?.mainBackgroundUrl),
+            sidebarBackgroundUrl: normalizeThemeUrlValue(colors?.sidebarBackgroundUrl),
             mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
             sidebarBackgroundImage: normalizeLocalImageValue(colors?.sidebarBackgroundImage)
         }
@@ -190,6 +229,10 @@ export const ThemeManager = {
                 p: this.normalizeHex(updates?.p ?? item.p),
                 bg: this.normalizeHex(updates?.bg ?? item.bg),
                 t: this.normalizeHex(updates?.t ?? item.t),
+                uiOpacity: normalizeNumberInRange(updates?.uiOpacity ?? item.uiOpacity, 0.4, 1, 0.78),
+                cardsOpacity: normalizeNumberInRange(updates?.cardsOpacity ?? item.cardsOpacity, 0.5, 1, 0.9),
+                mainBackgroundUrl: normalizeThemeUrlValue(updates?.mainBackgroundUrl ?? item.mainBackgroundUrl),
+                sidebarBackgroundUrl: normalizeThemeUrlValue(updates?.sidebarBackgroundUrl ?? item.sidebarBackgroundUrl),
                 mainBackgroundImage: normalizeLocalImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
                 sidebarBackgroundImage: normalizeLocalImageValue(updates?.sidebarBackgroundImage ?? item.sidebarBackgroundImage)
             }
@@ -204,6 +247,29 @@ export const ThemeManager = {
     },
     saveSettings(settings) {
         SafeStorage.local.setJson(this.storageKey, settings)
+    },
+    setCustomPresets(presets) {
+        this.saveCustomPresets(presets)
+    },
+    mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets) {
+        return mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets)
+    },
+    buildCloudSafeCustomPresets(presets) {
+        const sourcePresets = Array.isArray(presets) ? presets : []
+        return sourcePresets
+            .filter(item => item && typeof item === "object")
+            .slice(0, this.maxCustomPresets)
+            .map(item => ({
+                key: String(item.key || ""),
+                p: this.normalizeHex(item.p),
+                bg: this.normalizeHex(item.bg),
+                t: this.normalizeHex(item.t),
+                uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
+                cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
+                mainBackgroundUrl: normalizeThemeUrlValue(item.mainBackgroundUrl),
+                sidebarBackgroundUrl: normalizeThemeUrlValue(item.sidebarBackgroundUrl)
+            }))
+            .filter(item => item.key)
     },
     resetLocalThemeCache() {
         SafeStorage.local.remove(this.storageKey)
