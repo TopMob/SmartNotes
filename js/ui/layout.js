@@ -305,20 +305,49 @@ Object.assign(UI, {
         this.showToast(this.getText("install_unavailable", "Installation is unavailable on this device"))
     },
 
+    async triggerAnalysisForCurrentUser() {
+        const user = StateStore.read().user
+        if (!user?.uid) {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+            return
+        }
+        try {
+            const response = await fetch("/api/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ uid: user.uid })
+            })
+            const responseData = await response.json().catch(() => ({}))
+            if (!response.ok || responseData?.success === false) {
+                this.showToast(responseData?.message || this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+                return
+            }
+            const processedCount = Number(responseData?.processed || 0)
+            this.showToast(`${this.getText("analysis_completed", "ИИ-анализ завершен")}: ${processedCount}`)
+        } catch {
+            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+        }
+    },
+
     updateActiveFolderMenu() {
         const wrapper = this.els.activeFolderMenuWrapper
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
+        const analyzeButton = this.els.activeFolderAnalyzeButton
         if (!wrapper) return
-        const { view, activeFolderId, folders } = StateStore.read()
+        const { view, activeFolderId, folders, user } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {
+            analyzeButton?.classList.add("hidden")
             this.toggleActiveFolderMenu(false)
             return
         }
         const folder = folders.find(item => item.id === activeFolderId)
         if (!folder) return
+        const normalizedFolderName = String(folder.name || "").trim().toLowerCase()
+        const canShowAnalyzeButton = normalizedFolderName === "smartnotes" && !!user?.uid
+        analyzeButton?.classList.toggle("hidden", !canShowAnalyzeButton)
         if (hideLabel) hideLabel.textContent = folder.isHidden ? this.getText("show_folder", "Show folder") : this.getText("hide_folder", "Hide folder")
         if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"
     }

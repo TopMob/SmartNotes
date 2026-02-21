@@ -344,6 +344,10 @@ Object.assign(UI, {
                 this.renameFolder(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
                 break
+            case "trigger-active-folder-analysis":
+                this.triggerAnalysisForCurrentUser()
+                this.toggleActiveFolderMenu(false)
+                break
             case "open-modal":
                 this.openModal(el.dataset.modal)
                 break
