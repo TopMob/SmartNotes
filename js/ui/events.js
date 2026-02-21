@@ -1,5 +1,7 @@
 Object.assign(UI, {
     bindEvents() {
+        if (this._eventsBound) return
+        this._eventsBound = true
         document.addEventListener("click", (e) => {
             const actionEl = e.target.closest("[data-action]")
             if (actionEl) {

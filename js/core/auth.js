@@ -1,4 +1,3 @@
-import { setAuthPersistenceFromOrder, setupAuthPersistence } from "./authSafariFix.js"
 import { planAuthMethods } from "./authFlowPlanner.js"
 import { createLocalAuthManager } from "./localAuth.js"
 import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
@@ -11,7 +10,8 @@ export function createAuthManager({ auth }) {
         currentUser: null,
         authActionElements: [],
         googleSignInPendingTimeoutId: null,
-        localAuthManager: null
+        localAuthManager: null,
+        persistenceReady: false
     }
 
     const manager = {
@@ -115,28 +115,23 @@ export function createAuthManager({ auth }) {
             if (!firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return null
             return firebase.auth.Auth.Persistence
         },
-        async _preparePersistenceForMethod(method) {
-            const persistenceEnum = this._getPersistenceEnum()
-            if (!persistenceEnum) return null
-            if (method === "redirect") {
-                return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL])
-            }
-            return setAuthPersistenceFromOrder(auth, [persistenceEnum.LOCAL, persistenceEnum.SESSION, persistenceEnum.NONE])
-        },
-        async _preparePersistenceForRedirectResult() {
-            const persistenceEnum = this._getPersistenceEnum()
-            if (!persistenceEnum) return null
-            return setAuthPersistenceFromOrder(auth, [persistenceEnum.SESSION, persistenceEnum.LOCAL, persistenceEnum.NONE])
-        },
-        async _setNoStoragePersistence() {
+        async _ensureLocalPersistence() {
+            if (state.persistenceReady) return true
             const persistenceEnum = this._getPersistenceEnum()
             if (!persistenceEnum || !auth) return false
             try {
-                await auth.setPersistence(persistenceEnum.NONE)
+                await auth.setPersistence(persistenceEnum.LOCAL)
+                state.persistenceReady = true
                 return true
             } catch {
                 return false
             }
+        },
+        async _preparePersistenceForMethod() {
+            return this._ensureLocalPersistence()
+        },
+        async _preparePersistenceForRedirectResult() {
+            return this._ensureLocalPersistence()
         },
         async _signInWithMethod(method) {
             if (method === "redirect") {
@@ -188,7 +183,7 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(true)
             this._showGoogleSignInPendingFeedback()
 
-            await setupAuthPersistence(auth)
+            await this._ensureLocalPersistence()
             try {
                 await this._signInWithGoogleIdentity()
                 this._setLoginBusy(false)
@@ -211,10 +206,6 @@ export function createAuthManager({ auth }) {
                 }
             }
             const { methods } = planAuthMethods()
-            const storageErrorCodes = new Set([
-                "auth/web-storage-unsupported",
-                "auth/operation-not-supported-in-this-environment"
-            ])
             let lastError = null
 
             for (const method of methods) {
@@ -233,32 +224,10 @@ export function createAuthManager({ auth }) {
                         this.handleAuthError(error)
                         return
                     }
-                    if (storageErrorCodes.has(errorCode)) {
-                        await this._setNoStoragePersistence()
-                    }
                 }
             }
 
             if (lastError) {
-                const errorCode = String(lastError?.code || "")
-                if (storageErrorCodes.has(errorCode)) {
-                    await this._setNoStoragePersistence()
-                    try {
-                        const selectedPersistence = await this._preparePersistenceForMethod("popup")
-                        if (!selectedPersistence) {
-                            this._setLoginBusy(false)
-                            this.handleAuthError(lastError)
-                            return
-                        }
-                        await this._signInWithMethod("popup")
-                        this._setLoginBusy(false)
-                        return
-                    } catch (retryError) {
-                        this._setLoginBusy(false)
-                        this.handleAuthError(retryError)
-                        return
-                    }
-                }
                 try {
                     const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError)
                     if (redirectRecoveryStarted) {
@@ -288,7 +257,7 @@ export function createAuthManager({ auth }) {
             return state.localAuthManager
         },
         async loginWithEmail() {
-            await setupAuthPersistence(auth)
+            await this._ensureLocalPersistence()
             await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {
@@ -388,7 +357,7 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
-            await setupAuthPersistence(auth)
+            await this._ensureLocalPersistence()
 
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)

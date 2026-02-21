@@ -84,15 +84,14 @@ async function analyzeChunkWithOllama(folders, notesChunk) {
 async function fetchPendingNotes(uid) {
     const notesCollection = database.collection("users").doc(uid).collection("notes")
     const snapshotByAnalyzedFlag = await notesCollection.where("analyzed", "==", false).get()
-    const snapshotByAiProcessedFlag = await notesCollection.where("aiProcessed", "==", false).get()
+    const snapshotByMissingAnalyzedFlag = await notesCollection.where("analyzed", "==", null).get()
     const pendingDocuments = new Map()
-    snapshotByAnalyzedFlag.docs.forEach(documentEntry => {
-        pendingDocuments.set(documentEntry.id, documentEntry)
+    snapshotByAnalyzedFlag.docs.forEach(documentEntry => pendingDocuments.set(documentEntry.id, documentEntry))
+    snapshotByMissingAnalyzedFlag.docs.forEach(documentEntry => pendingDocuments.set(documentEntry.id, documentEntry))
+    return [...pendingDocuments.values()].filter(documentEntry => {
+        const noteData = documentEntry.data() || {}
+        return noteData.analyzed !== true
     })
-    snapshotByAiProcessedFlag.docs.forEach(documentEntry => {
-        pendingDocuments.set(documentEntry.id, documentEntry)
-    })
-    return [...pendingDocuments.values()]
 }
 
 function mapNotesForAnalysis(noteDocuments) {
@@ -118,7 +117,8 @@ async function markChunkAnalysisError(uid, notesChunk, errorCode) {
         batch.update(noteReference, {
             analyzed: false,
             aiProcessed: false,
-            aiError: errorCode,
+            aiError: true,
+            aiErrorCode: errorCode,
             aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
         })
     })
@@ -135,10 +135,7 @@ async function analyzeUserNotes(uid, mode = "pending") {
         .filter(folder => folder.id && folder.name)
 
     const availableFolderIds = new Set(folders.map(folder => folder.id))
-    const shouldAnalyzeAllNotes = String(mode || "").trim().toLowerCase() === "all"
-    const noteDocuments = shouldAnalyzeAllNotes
-        ? (await database.collection("users").doc(uid).collection("notes").get()).docs
-        : await fetchPendingNotes(uid)
+    const noteDocuments = await fetchPendingNotes(uid)
     if (!noteDocuments.length) return
 
     const allNotes = mapNotesForAnalysis(noteDocuments)
@@ -161,17 +158,24 @@ async function analyzeUserNotes(uid, mode = "pending") {
         }
 
         const batch = database.batch()
+        let hasBatchOperations = false
+        const notesById = new Map(notesChunk.map(note => [note.id, note]))
+        const processedNoteIds = new Set()
 
         for (const analysisResult of analysisResults) {
             const noteId = String(analysisResult?.id || "").trim()
             if (!noteId) continue
+            if (!notesById.has(noteId)) continue
             const noteReference = database.collection("users").doc(uid).collection("notes").doc(noteId)
-            const noteFromChunk = notesChunk.find(note => note.id === noteId)
+            const noteFromChunk = notesById.get(noteId)
+            processedNoteIds.add(noteId)
 
             batch.update(noteReference, {
                 analyzed: true,
                 aiProcessed: true,
+                indexedAt: admin.firestore.FieldValue.serverTimestamp(),
                 aiError: admin.firestore.FieldValue.delete(),
+                aiErrorCode: admin.firestore.FieldValue.delete(),
                 aiErrorAt: admin.firestore.FieldValue.delete(),
                 aiRelevance: clampInteger(analysisResult?.relevance, 0, 100),
                 aiTagsVisible: Array.isArray(analysisResult?.userTags)
@@ -184,17 +188,40 @@ async function analyzeUserNotes(uid, mode = "pending") {
                 aiModel: OLLAMA_MODEL,
                 aiLastAnalyzed: admin.firestore.FieldValue.serverTimestamp()
             })
+            hasBatchOperations = true
 
             if (noteFromChunk && !noteFromChunk.hasFolder) {
                 const candidateFolderId = String(analysisResult?.folderId || "").trim()
                 if (candidateFolderId && availableFolderIds.has(candidateFolderId)) {
                     batch.update(noteReference, { folderId: candidateFolderId })
+                    hasBatchOperations = true
                 }
             }
         }
 
-        await batch.commit()
+        notesChunk.forEach(note => {
+            if (processedNoteIds.has(note.id)) return
+            const noteReference = database.collection("users").doc(uid).collection("notes").doc(note.id)
+            batch.update(noteReference, {
+                analyzed: false,
+                aiProcessed: false,
+                aiError: true,
+                aiErrorCode: "invalid_ai_entry",
+                aiErrorAt: admin.firestore.FieldValue.serverTimestamp()
+            })
+            hasBatchOperations = true
+        })
+
+        if (hasBatchOperations) await batch.commit()
     }
+}
+
+async function hasActiveProcessingTaskForUser(uid, currentTaskId) {
+    const snapshot = await database.collection("tasks")
+        .where("uid", "==", uid)
+        .where("status", "==", "processing")
+        .get()
+    return snapshot.docs.some(documentEntry => documentEntry.id !== currentTaskId)
 }
 
 database.collection("tasks")
@@ -210,18 +237,29 @@ database.collection("tasks")
                 const taskData = change.doc.data() || {}
                 const uid = String(taskData.uid || "").trim()
                 if (!uid) {
-                    await change.doc.ref.update({ status: "error", errorCode: "missing_uid", finishedAt: admin.firestore.FieldValue.serverTimestamp() })
+                    await change.doc.ref.update({ status: "failed", errorCode: "missing_uid", processedAt: admin.firestore.FieldValue.serverTimestamp() })
                     return
                 }
 
-                const mode = String(taskData.mode || "pending").trim().toLowerCase()
-                const executionLockKey = `${uid}:${mode}`
+                const mode = "pending"
+                const executionLockKey = uid
                 if (activeUserAnalysisLocks.has(executionLockKey)) {
                     await change.doc.ref.update({
-                        status: "error",
+                        status: "failed",
                         model: OLLAMA_MODEL,
                         errorCode: "analysis_in_progress",
-                        finishedAt: admin.firestore.FieldValue.serverTimestamp()
+                        processedAt: admin.firestore.FieldValue.serverTimestamp()
+                    })
+                    return
+                }
+
+                const hasRemoteProcessingTask = await hasActiveProcessingTaskForUser(uid, taskIdentifier)
+                if (hasRemoteProcessingTask) {
+                    await change.doc.ref.update({
+                        status: "failed",
+                        model: OLLAMA_MODEL,
+                        errorCode: "analysis_in_progress",
+                        processedAt: admin.firestore.FieldValue.serverTimestamp()
                     })
                     return
                 }
@@ -234,17 +272,17 @@ database.collection("tasks")
                     await change.doc.ref.update({
                         status: "done",
                         model: OLLAMA_MODEL,
-                        finishedAt: admin.firestore.FieldValue.serverTimestamp()
+                        processedAt: admin.firestore.FieldValue.serverTimestamp()
                     })
                     console.log(`[Worker] Task finished id=${taskIdentifier} uid=${uid} mode=${mode}`)
                 } catch (error) {
                     const normalizedErrorCode = String(error?.message || "analysis_task_failed").trim() || "analysis_task_failed"
                     console.error(`[Worker] Task failed id=${taskIdentifier} uid=${uid} mode=${mode}: ${normalizedErrorCode}`)
                     await change.doc.ref.update({
-                        status: "error",
+                        status: "failed",
                         model: OLLAMA_MODEL,
                         errorCode: normalizedErrorCode,
-                        finishedAt: admin.firestore.FieldValue.serverTimestamp()
+                        processedAt: admin.firestore.FieldValue.serverTimestamp()
                     })
                 } finally {
                     activeUserAnalysisLocks.delete(executionLockKey)

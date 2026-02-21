@@ -189,15 +189,23 @@ function filterAndRender(query) {
 }
 
 function switchView(view, folderId = null) {
-    StateStore.set(prev => ({ ...prev, view, activeFolderId: folderId }))
+    const currentState = StateStore.read()
+    const nextView = String(view || "notes")
+    const nextFolderId = nextView === "folder" ? folderId : null
+    if (currentState.view === nextView && currentState.activeFolderId === nextFolderId) return
+    if (nextView === "admin_tools" && !(typeof UI !== "undefined" && UI.hasSmartNotesFolderAccess && UI.hasSmartNotesFolderAccess())) {
+        return
+    }
+
+    StateStore.set(prev => ({ ...prev, view: nextView, activeFolderId: nextFolderId }))
 
     document.querySelectorAll(".nav-item").forEach(btn => {
         const v = btn.dataset.view
         const f = btn.dataset.folderId
 
         let isActive = false
-        if (v) isActive = (v === view)
-        else if (f) isActive = (view === "folder" && f === folderId)
+        if (v) isActive = (v === nextView)
+        else if (f) isActive = (nextView === "folder" && f === nextFolderId)
 
         btn.classList.toggle("active", isActive)
     })

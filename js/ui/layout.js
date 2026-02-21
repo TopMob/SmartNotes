@@ -47,16 +47,24 @@ Object.assign(UI, {
                     this.showToast(this.getText("import_empty", "No notes found"))
                     return
                 }
+                const current = StateStore.read()
                 const batch = db.batch()
                 notes.forEach(note => {
-                    let n = NoteIO.normalizeNote(note)
-                    n.ownerUid = StateStore.read().user.uid
-
-                    const current = StateStore.read()
-                    if (current.notes.some(x => x.id === n.id)) n.id = Utils.generateId()
-                    if (n.folderId && !current.folders.find(f => f.id === n.folderId)) n.folderId = null
-                    const ref = DataPath.getUserNotesCollection(current.user).doc(n.id)
-                    batch.set(ref, n, { merge: true })
+                    const normalized = note && typeof note === "object" ? note : {}
+                    const importedNote = {
+                        id: Utils.generateId(),
+                        title: String(normalized.title || "").trim(),
+                        content: String(normalized.content || ""),
+                        tags: Array.isArray(normalized.tags) ? normalized.tags.map(tag => String(tag || "").trim()).filter(Boolean).slice(0, 50) : [],
+                        createdAt: normalized.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: normalized.updatedAt || firebase.firestore.FieldValue.serverTimestamp(),
+                        ownerUid: current.user.uid,
+                        analyzed: false,
+                        aiProcessed: false,
+                        folderId: null
+                    }
+                    const reference = DataPath.getUserNotesCollection(current.user).doc(importedNote.id)
+                    batch.set(reference, importedNote, { merge: true })
                 })
                 await batch.commit()
                 this.showToast(this.getText("import_success", "Imported"))
@@ -332,6 +340,8 @@ Object.assign(UI, {
     },
 
     hasSmartNotesFolderAccess() {
+        const currentUserUid = String(StateStore.read().user?.uid || "")
+        if (!currentUserUid) return false
         return StateStore.read().folders.some(folder => String(folder.name || "").trim().toLowerCase() === "smartnotes")
     },
 
@@ -384,7 +394,11 @@ Object.assign(UI, {
             }
             await noteReference.update({
                 analyzed: false,
-                aiProcessed: false
+                aiProcessed: false,
+                tags: [],
+                hiddenTags: [],
+                relevance: null,
+                folderId: null
             })
             this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
             this.closeModal("note-actions-modal")
@@ -395,14 +409,25 @@ Object.assign(UI, {
 
     async triggerFullAnalysisForAllUsers() {
         const secretToken = window.prompt(this.getText("analysis_admin_secret_prompt", "Введите admin secret"), "")
-        if (!secretToken) {
-            return
+        if (!secretToken) return
+        const triggerButton = document.querySelector("[data-action=\"trigger-admin-full-analysis\"]")
+        const initialLabel = triggerButton ? triggerButton.textContent : ""
+        if (triggerButton) {
+            triggerButton.disabled = true
+            triggerButton.setAttribute("aria-busy", "true")
+            window.DomSecurity.setText(triggerButton, this.getText("loading", "Loading..."))
         }
         try {
             await this.requestAnalysis({ secretToken, mode: "pending" })
             this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+        } finally {
+            if (triggerButton) {
+                triggerButton.disabled = false
+                triggerButton.setAttribute("aria-busy", "false")
+                window.DomSecurity.setText(triggerButton, initialLabel || this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
+            }
         }
     },
 
