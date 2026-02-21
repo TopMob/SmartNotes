@@ -72,7 +72,7 @@ Object.assign(UI, {
 
         const metaElement = document.createElement("div")
         metaElement.className = "folder-meta"
-        window.DomSecurity.setText(metaElement, "Скрытая папка")
+        window.DomSecurity.setText(metaElement, this.getText("hidden_folder_label", "Hidden folder"))
 
         const actionsRow = document.createElement("div")
         actionsRow.className = "row-left"
@@ -82,7 +82,7 @@ Object.assign(UI, {
         openButton.className = "btn-secondary"
         openButton.dataset.action = "open-folder"
         openButton.dataset.folderId = safeFolderId
-        window.DomSecurity.setText(openButton, "Открыть")
+        window.DomSecurity.setText(openButton, this.getText("open", "Open"))
 
         const unhideButton = document.createElement("button")
         unhideButton.type = "button"
@@ -97,7 +97,7 @@ Object.assign(UI, {
     },
 
     renderHiddenFolders() {
-        this.updateEmptyState("visibility_off", "Скрытых папок нет")
+        this.updateEmptyState("visibility_off", this.getText("hidden_folders_empty", "No hidden folders"))
         const { folders } = StateStore.read()
         const hiddenFolders = folders.filter(folder => !!folder.isHidden && !folder.trashedAt)
         this.els.empty.classList.toggle("hidden", hiddenFolders.length > 0)

@@ -181,7 +181,7 @@ Object.assign(UI, {
             folder: dict.view_folder || "Folder",
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
-            hidden_folders: "Скрытые папки"
+            hidden_folders: dict.hidden_folders || "Hidden folders"
         }
         const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"
