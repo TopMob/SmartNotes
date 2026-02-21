@@ -146,40 +146,6 @@ export const ThemeManager = {
         })) : []
         SafeStorage.local.setJson(this.customPresetStorageKey, safePresets)
     },
-    addCustomPreset(colors) {
-        const presets = this.getCustomPresets()
-        if (presets.length >= this.maxCustomPresets) {
-            return { ok: false, reason: "limit" }
-        }
-        const nextPreset = {
-            key: Utils.generateId(),
-            p: this.normalizeHex(colors?.p),
-            bg: this.normalizeHex(colors?.bg),
-            t: this.normalizeHex(colors?.t),
-            mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
-            sidebarBackgroundImage: normalizeLocalImageValue(colors?.sidebarBackgroundImage)
-        }
-        this.saveCustomPresets([...presets, nextPreset])
-        return { ok: true, key: `custom:${nextPreset.key}` }
-    },
-    updateCustomPreset(presetKey, updates) {
-        if (!String(presetKey || "").startsWith("custom:")) return false
-        const id = String(presetKey).slice(7)
-        const presets = this.getCustomPresets()
-        const nextPresets = presets.map(item => {
-            if (item.key !== id) return item
-            return {
-                ...item,
-                p: this.normalizeHex(updates?.p ?? item.p),
-                bg: this.normalizeHex(updates?.bg ?? item.bg),
-                t: this.normalizeHex(updates?.t ?? item.t),
-                mainBackgroundImage: normalizeLocalImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
-                sidebarBackgroundImage: normalizeLocalImageValue(updates?.sidebarBackgroundImage ?? item.sidebarBackgroundImage)
-            }
-        })
-        this.saveCustomPresets(nextPresets)
-        return true
-    },
     getCustomPresetByKey(presetKey) {
         if (!String(presetKey || "").startsWith("custom:")) return null
         const id = String(presetKey).slice(7)
@@ -380,7 +346,15 @@ export const ThemeManager = {
     setupColorInputs(onChange) {
         const bind = (element, type) => {
             if (!element) return
-            element.oninput = event => onChange?.(type, event.target.value)
+            element.dataset.themeInputType = type
+            element.themeInputHandler = onChange
+            if (element.dataset.bound === "1") return
+            element.dataset.bound = "1"
+            element.addEventListener("input", event => {
+                const eventTarget = event.currentTarget
+                if (!eventTarget || typeof eventTarget.themeInputHandler !== "function") return
+                eventTarget.themeInputHandler(eventTarget.dataset.themeInputType, eventTarget.value)
+            })
         }
         bind(document.getElementById("cp-primary"), "p")
         bind(document.getElementById("cp-bg"), "bg")

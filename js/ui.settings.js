@@ -1,6 +1,3 @@
-let draftSettings = null
-let savedSettings = null
-
 Object.assign(UI, {
     openModal(id) {
         const el = document.getElementById(id)
@@ -27,9 +24,7 @@ Object.assign(UI, {
     syncSettingsDraftFromOriginal() {
         const originalSettings = StateStore.read().originalUserSettings
         if (!originalSettings) return
-        savedSettings = JSON.parse(JSON.stringify(originalSettings))
-        draftSettings = JSON.parse(JSON.stringify(savedSettings))
-        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(draftSettings)))
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
     },
 
     openSettings() {
@@ -285,7 +280,6 @@ Object.assign(UI, {
     },
 
     getSettingsDraft() {
-        if (draftSettings) return draftSettings
         return StateStore.read().draftUserSettings || StateStore.read().originalUserSettings
     },
 
@@ -300,7 +294,6 @@ Object.assign(UI, {
         const currentDraft = this.getSettingsDraft()
         if (!currentDraft) return
         const nextDraft = { ...currentDraft, ...updates }
-        draftSettings = nextDraft
         StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextDraft)))
     },
 
@@ -316,17 +309,14 @@ Object.assign(UI, {
             if (!shouldExit) return
         }
         this.cancelSettingsDraft()
+        this.closeModal("settings-modal")
     },
 
     cancelSettingsDraft() {
-        if (!savedSettings) {
-            this.syncSettingsDraftFromOriginal()
-        }
-        if (savedSettings) {
-            draftSettings = JSON.parse(JSON.stringify(savedSettings))
-            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(draftSettings)))
-            AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true, persistTheme: false })
-        }
+        const originalSettings = StateStore.read().originalUserSettings
+        if (!originalSettings) return
+        StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
+        AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true, persistTheme: false })
         if (this.settingsPage === "appearance") {
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
@@ -341,12 +331,14 @@ Object.assign(UI, {
         try {
             const nextSavedSettings = await AppLifecycle.saveUserSettings(currentDraftSettings)
             if (!nextSavedSettings) return
-            savedSettings = JSON.parse(JSON.stringify(nextSavedSettings))
-            draftSettings = JSON.parse(JSON.stringify(nextSavedSettings))
-            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(draftSettings)))
-            AppLifecycle.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: false })
-            if (this.settingsPage === "appearance") this.renderAppearanceDraft()
-            else this.syncSettingsUI()
+            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextSavedSettings)))
+            AppLifecycle.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
+            if (this.settingsPage === "appearance") {
+                this.initAppearanceDraft()
+                this.renderAppearanceDraft()
+            } else {
+                this.syncSettingsUI()
+            }
             this.showToast(this.getText("settings_saved", "Настройки сохранены"))
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
@@ -441,8 +433,7 @@ Object.assign(UI, {
             const current = StateStore.read().appearanceDraft || draft
             const normalizedValue = ThemeManager.normalizeHex(val)
             const next = { ...current, preset: "manual", [type]: normalizedValue }
-            StateStore.update("appearanceDraft", next)
-            ThemeManager.applySettings(next, false)
+            this.applyAppearanceDraft(next)
             ThemeManager.syncInputs(next.p, next.bg, next.t)
         })
     },
@@ -464,7 +455,6 @@ Object.assign(UI, {
             backgroundValue: nextDraft.mainBackgroundImage || ""
         })
         this.applyDraftSettingsToRuntime()
-        this.renderAppearanceDraft()
     },
 
     resetAppearanceDraft() {
@@ -481,6 +471,7 @@ Object.assign(UI, {
             cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
         }
         this.applyAppearanceDraft(draft)
+        this.renderAppearanceDraft()
     },
 
     async saveAppearanceDraft() {

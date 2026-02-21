@@ -80,9 +80,17 @@ const AppLifecycle = {
     },
     applyUserSettingsToRuntime(userSettings, options = {}) {
         const normalizedSettings = this.normalizeUserSettings(userSettings)
+        if (!normalizedSettings || typeof normalizedSettings !== "object") return
+        const normalizedThemeSource = normalizedSettings.customTheme && typeof normalizedSettings.customTheme === "object" ? normalizedSettings.customTheme : {}
         const normalizedTheme = {
-            preset: normalizedSettings.themeId,
-            ...(normalizedSettings.customTheme || {})
+            preset: normalizedSettings.themeId || "oled",
+            p: ThemeManager.normalizeHex(normalizedThemeSource.p),
+            bg: ThemeManager.normalizeHex(normalizedThemeSource.bg),
+            t: ThemeManager.normalizeHex(normalizedThemeSource.t),
+            mainBackgroundImage: typeof normalizedThemeSource.mainBackgroundImage === "string" ? normalizedThemeSource.mainBackgroundImage : "",
+            sidebarBackgroundImage: typeof normalizedThemeSource.sidebarBackgroundImage === "string" ? normalizedThemeSource.sidebarBackgroundImage : "",
+            uiOpacity: typeof normalizedThemeSource.uiOpacity === "number" ? normalizedThemeSource.uiOpacity : 0.78,
+            cardsOpacity: typeof normalizedThemeSource.cardsOpacity === "number" ? normalizedThemeSource.cardsOpacity : 0.9
         }
         const shouldPersistTheme = options.persistTheme !== false
         ThemeManager.applySettings(normalizedTheme, shouldPersistTheme)
@@ -199,12 +207,12 @@ const AppLifecycle = {
             const incomingSettings = this.normalizeUserSettings(nextSnapshot.data() || {})
             const currentOriginalSettings = StateStore.read().originalUserSettings
             if (JSON.stringify(incomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
-            this.writeCachedUserSettings(user.uid, incomingSettings)
-            this.updateOriginalUserSettings(incomingSettings)
             const settingsModal = document.getElementById("settings-modal")
             const isSettingsModalActive = !!settingsModal?.classList.contains("active")
             const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
             if (!isSettingsModalActive || !isDraftDirty) {
+                this.writeCachedUserSettings(user.uid, incomingSettings)
+                this.updateOriginalUserSettings(incomingSettings)
                 this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
             }
