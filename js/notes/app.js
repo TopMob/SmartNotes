@@ -159,6 +159,11 @@ const AppLifecycle = {
         }
         this.writeCachedUserSettings(user.uid, normalizedSettings)
         this.updateOriginalUserSettings(normalizedSettings)
+        const themeSettingsForCloudSync = {
+            preset: normalizedSettings.themeId,
+            ...(normalizedSettings.customTheme || {})
+        }
+        await ThemeManager.saveAccountSettings(user, themeSettingsForCloudSync)
         return normalizedSettings
     },
     async initializeUserSettings(user) {
@@ -192,6 +197,19 @@ const AppLifecycle = {
             await this.writeUserSettingsToReference(resolvedReference, loadedSettings)
         } else {
             loadedSettings = this.normalizeUserSettings(snapshot.data() || {})
+        }
+
+        const syncedThemeSettings = await ThemeManager.loadAccountSettings(user)
+        if (syncedThemeSettings && typeof syncedThemeSettings === "object") {
+            loadedSettings = this.normalizeUserSettings({
+                ...loadedSettings,
+                themeId: syncedThemeSettings.preset || loadedSettings.themeId,
+                customTheme: {
+                    ...(loadedSettings.customTheme || {}),
+                    ...syncedThemeSettings
+                },
+                customPresets: ThemeManager.getCustomPresets()
+            })
         }
 
         this.writeCachedUserSettings(user.uid, loadedSettings)

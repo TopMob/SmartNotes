@@ -73,7 +73,7 @@ async function deleteNoteById(noteId) {
             refreshCurrentList()
             return
         }
-        await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() }))
+        await ref.update({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() })
         StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, trashedAt: new Date().toISOString() } : item))
         if (StateStore.read().currentNote?.id === noteId) window.SmartNotesEditor?.close?.()
         UI.showToast(UI.getText("note_deleted", "Moved to trash"))
@@ -106,7 +106,7 @@ async function scheduleReminder(noteId) {
     }
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ reminderAt: date.toISOString(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    await ref.update({ reminderAt: date.toISOString() })
     UI.showToast(UI.getText("reminder_saved", "Reminder saved"))
     UI.closeModal("note-actions-modal")
 }
@@ -117,7 +117,7 @@ async function clearReminder(noteId) {
     if (!db || !user || !note || !ensureManageAccess(note)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ reminderAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    await ref.update({ reminderAt: null })
     UI.showToast(UI.getText("reminder_cleared", "Reminder cleared"))
     UI.closeModal("note-actions-modal")
 }
@@ -171,7 +171,7 @@ async function toggleArchive(noteId, archive, options = {}) {
     if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ isArchived: !!archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    await ref.update({ isArchived: !!archive })
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
 }
 
@@ -186,7 +186,7 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
     }
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ folderId: folderId || null }))
+    await ref.update({ folderId: folderId || null })
     StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, folderId: folderId || null } : item))
     refreshCurrentList()
 }

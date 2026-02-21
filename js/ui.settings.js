@@ -323,6 +323,7 @@ Object.assign(UI, {
             AppLifecycle.applyUserSettingsToRuntime(savedSettings, { resetVisibleLimit: true })
             this.syncSettingsDraftFromOriginal()
             this.closeModal("settings-modal")
+            this.lastSuccessfulSettingsSaveAt = Date.now()
             this.showToast(this.getText("settings_saved", "Настройки сохранены"))
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
@@ -642,11 +643,16 @@ Object.assign(UI, {
     },
 
     showToast(msg, options = {}) {
+        const messageText = String(msg || "")
+        const syncErrorMessage = this.getText("sync_error", "Sync error")
+        if (messageText === syncErrorMessage && Number(this.lastSuccessfulSettingsSaveAt || 0) > 0) {
+            if (Date.now() - this.lastSuccessfulSettingsSaveAt < 3500) return
+        }
         const div = document.createElement("div")
         div.className = "toast show"
         div.setAttribute("role", "status")
         const text = document.createElement("span")
-        text.textContent = msg
+        text.textContent = messageText
         div.appendChild(text)
         if (options.actionLabel && options.onAction) {
             const btn = document.createElement("button")
@@ -679,6 +685,10 @@ Object.assign(UI, {
         }
         const titleEl = document.getElementById("confirm-title")
         if (titleEl) titleEl.textContent = titles[type] || this.getText("confirm_default", "Confirm")
+
+        if (typeof this.toggleActiveFolderMenu === "function") this.toggleActiveFolderMenu(false)
+        if (typeof this.toggleUserMenu === "function") this.toggleUserMenu(false)
+        if (typeof this.toggleFilterMenu === "function") this.toggleFilterMenu(false)
 
         const okBtn = document.getElementById("confirm-ok")
         const newBtn = okBtn.cloneNode(true)

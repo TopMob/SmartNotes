@@ -132,7 +132,7 @@ body.platform-android .sidebar-glass {
 .footer-link {
     height: var(--hit-size);
     border-radius: var(--radius-md);
-    border: 1px solid transparent;
+    border: none;
     background: rgba(255, 255, 255, 0.04);
     color: var(--text);
     cursor: pointer;
@@ -626,7 +626,6 @@ body.platform-android .top-bar {
     background: color-mix(in srgb, var(--surface) 84%, var(--primary) 16%);
 }
 
-.footer-link,
 .note-card,
 .filter-section,
 .search-container,
