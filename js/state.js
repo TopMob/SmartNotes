@@ -16,6 +16,8 @@ const StateStore = (() => {
         isTyping: false,
         orderHistory: [],
         appearanceDraft: null,
+        originalUserSettings: null,
+        draftUserSettings: null,
         saveStatus: { status: "idle", message: "", updatedAt: 0 }
     }
 
@@ -50,6 +52,8 @@ const StateStore = (() => {
         isTyping: false,
         orderHistory: [],
         appearanceDraft: null,
+        originalUserSettings: null,
+        draftUserSettings: null,
         saveStatus: { ...initialState.saveStatus },
         config: { ...initialState.config }
     }))

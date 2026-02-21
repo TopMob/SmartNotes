@@ -51,6 +51,10 @@
         getUserSharedCollection(user, sharedCollectionName) {
             const rootReference = getUserRootReference(user)
             return rootReference ? rootReference.collection(sharedCollectionName) : null
+        },
+        getUserSettingsReference(user) {
+            const rootReference = getUserRootReference(user)
+            return rootReference ? rootReference.collection("settings").doc("profile") : null
         }
     }
 })()

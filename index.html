@@ -584,11 +584,15 @@
                     <i class="material-icons-round" aria-hidden="true">arrow_back</i>
                 </button>
                 <h2 id="settings-title" data-lang="settings_menu_title">Настройки</h2>
-                <button type="button" class="btn-icon" data-action="close-modal" data-modal="settings-modal" aria-label="Закрыть" data-lang-aria="close">
+                <button type="button" class="btn-icon" data-action="close-settings-modal" aria-label="Закрыть" data-lang-aria="close">
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
             <div class="modal-body" id="settings-content"></div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="settings-cancel" data-lang="cancel">Отмена</button>
+                <button type="button" class="btn-primary" data-action="settings-save" data-lang="save">Сохранить</button>
+            </footer>
         </div>
     </div>
 

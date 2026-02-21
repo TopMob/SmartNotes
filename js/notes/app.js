@@ -22,6 +22,153 @@ const AppLifecycle = {
     visibleNotesLimit: 10,
     totalVisibleNotesCount: 0,
     renderedVisibleNotesCount: 0,
+    settingsUnsubscribe: null,
+    isApplyingRemoteSettings: false,
+    createDefaultUserSettings() {
+        const cachedThemeSettings = ThemeManager.getSavedSettings()
+        return {
+            notesPerPage: 10,
+            themeId: cachedThemeSettings.preset || "oled",
+            customTheme: {
+                p: cachedThemeSettings.p || ThemeManager.themes.oled.p,
+                bg: cachedThemeSettings.bg || ThemeManager.themes.oled.bg,
+                t: cachedThemeSettings.t || ThemeManager.themes.oled.t,
+                mainBackgroundImage: cachedThemeSettings.mainBackgroundImage || "",
+                sidebarBackgroundImage: cachedThemeSettings.sidebarBackgroundImage || "",
+                uiOpacity: typeof cachedThemeSettings.uiOpacity === "number" ? cachedThemeSettings.uiOpacity : 0.78,
+                cardsOpacity: typeof cachedThemeSettings.cardsOpacity === "number" ? cachedThemeSettings.cardsOpacity : 0.9
+            },
+            backgroundType: cachedThemeSettings.mainBackgroundImage ? "image" : "none",
+            backgroundValue: cachedThemeSettings.mainBackgroundImage || "",
+            lang: StateStore.read().config.lang || "ru",
+            folderViewMode: StateStore.read().config.folderViewMode || "compact",
+            reduceMotion: !!StateStore.read().config.reduceMotion,
+            schemaVersion: 1
+        }
+    },
+    normalizeUserSettings(rawSettings) {
+        const defaults = this.createDefaultUserSettings()
+        const source = rawSettings && typeof rawSettings === "object" ? rawSettings : {}
+        const notesPerPageOptions = new Set([5, 10, 20, 50])
+        const parsedNotesPerPage = Number(source.notesPerPage)
+        const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
+        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
+        return {
+            notesPerPage,
+            themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
+            customTheme: customThemeSource,
+            backgroundType: typeof source.backgroundType === "string" && source.backgroundType ? source.backgroundType : defaults.backgroundType,
+            backgroundValue: typeof source.backgroundValue === "string" ? source.backgroundValue : defaults.backgroundValue,
+            lang: source.lang === "en" ? "en" : "ru",
+            folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
+            reduceMotion: !!source.reduceMotion,
+            schemaVersion: 1
+        }
+    },
+    cloneUserSettings(settings) {
+        return JSON.parse(JSON.stringify(settings || this.createDefaultUserSettings()))
+    },
+    getUserSettingsCacheKey(uid) {
+        return `user-settings-cache:${String(uid || "")}`
+    },
+    readCachedUserSettings(uid) {
+        return SafeStorage.local.getJson(this.getUserSettingsCacheKey(uid), null)
+    },
+    writeCachedUserSettings(uid, settings) {
+        SafeStorage.local.setJson(this.getUserSettingsCacheKey(uid), settings)
+    },
+    applyUserSettingsToRuntime(userSettings, options = {}) {
+        const normalizedSettings = this.normalizeUserSettings(userSettings)
+        const normalizedTheme = {
+            preset: normalizedSettings.themeId,
+            ...(normalizedSettings.customTheme || {})
+        }
+        ThemeManager.applySettings(normalizedTheme, true)
+        StateActions.updateConfig({
+            lang: normalizedSettings.lang,
+            folderViewMode: normalizedSettings.folderViewMode,
+            reduceMotion: normalizedSettings.reduceMotion
+        })
+        UI.applyLangToDom()
+        UI.updateViewTitle()
+        UI.updatePrimaryActionLabel()
+        UI.renderFolders()
+        this.notesRenderStep = normalizedSettings.notesPerPage
+        if (options.resetVisibleLimit) {
+            this.visibleNotesLimit = this.notesRenderStep
+        } else {
+            this.visibleNotesLimit = Math.max(this.notesRenderStep, Number(this.visibleNotesLimit) || this.notesRenderStep)
+        }
+        this.updateLoadMoreButton()
+        filterAndRender(document.getElementById("search-input")?.value || "")
+    },
+    updateOriginalUserSettings(userSettings) {
+        const normalizedSettings = this.normalizeUserSettings(userSettings)
+        StateStore.update("originalUserSettings", this.cloneUserSettings(normalizedSettings))
+    },
+    async saveUserSettings(settingsToSave) {
+        const user = StateStore.read().user
+        if (!user) return null
+        const settingsReference = DataPath.getUserSettingsReference(user)
+        if (!settingsReference) return null
+        const normalizedSettings = this.normalizeUserSettings(settingsToSave)
+        const payload = {
+            ...normalizedSettings,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }
+        await settingsReference.set(payload, { merge: true })
+        this.writeCachedUserSettings(user.uid, normalizedSettings)
+        this.updateOriginalUserSettings(normalizedSettings)
+        return normalizedSettings
+    },
+    async initializeUserSettings(user) {
+        const settingsReference = DataPath.getUserSettingsReference(user)
+        if (!settingsReference) return
+        const cachedSettings = this.readCachedUserSettings(user.uid)
+        if (cachedSettings) {
+            const normalizedCached = this.normalizeUserSettings(cachedSettings)
+            this.updateOriginalUserSettings(normalizedCached)
+            this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true })
+        }
+        const snapshot = await settingsReference.get()
+        let loadedSettings = null
+        if (!snapshot.exists) {
+            loadedSettings = this.createDefaultUserSettings()
+            await settingsReference.set({ ...loadedSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+        } else {
+            loadedSettings = this.normalizeUserSettings(snapshot.data() || {})
+        }
+        if (!loadedSettings) return
+        this.writeCachedUserSettings(user.uid, loadedSettings)
+        this.updateOriginalUserSettings(loadedSettings)
+        this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true })
+        if (this.settingsUnsubscribe) {
+            this.settingsUnsubscribe()
+            this.settingsUnsubscribe = null
+        }
+        this.settingsUnsubscribe = settingsReference.onSnapshot(nextSnapshot => {
+            if (!nextSnapshot.exists) return
+            const incomingSettings = this.normalizeUserSettings(nextSnapshot.data() || {})
+            const currentOriginalSettings = StateStore.read().originalUserSettings
+            const hasChanges = JSON.stringify(incomingSettings) !== JSON.stringify(currentOriginalSettings || {})
+            if (!hasChanges) return
+            this.writeCachedUserSettings(user.uid, incomingSettings)
+            this.updateOriginalUserSettings(incomingSettings)
+            const settingsModal = document.getElementById("settings-modal")
+            const isSettingsModalActive = !!settingsModal?.classList.contains("active")
+            const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
+            if (!isSettingsModalActive || !isDraftDirty) {
+                this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
+                if (typeof UI.syncSettingsDraftFromOriginal === "function") {
+                    UI.syncSettingsDraftFromOriginal()
+                }
+                return
+            }
+            UI.showToast("Настройки были изменены на другом устройстве")
+        }, error => {
+            console.error("Settings sync error", error)
+        })
+    },
     normalizeDateValue(value) {
         if (window.NoteHelpers && typeof window.NoteHelpers.normalizeDateValue === "function") {
             return window.NoteHelpers.normalizeDateValue(value)
@@ -147,8 +294,13 @@ const AppLifecycle = {
         this.hasMoreOwnedNotes = false
         this.loadingMoreOwnedNotes = false
         this.lastOwnedNoteDocument = null
+        this.notesRenderStep = 10
         this.visibleNotesLimit = this.notesRenderStep
         this.totalVisibleNotesCount = 0
+        if (this.settingsUnsubscribe) this.settingsUnsubscribe()
+        this.settingsUnsubscribe = null
+        StateStore.update("originalUserSettings", null)
+        StateStore.update("draftUserSettings", null)
         this.renderedVisibleNotesCount = 0
         this.clearSubscriptions()
         this.updateLoadMoreButton()
@@ -313,23 +465,13 @@ const AppLifecycle = {
             this.updateNotesState({ fromCache: true })
         }
 
-        if (typeof ThemeManager !== "undefined") {
-            ThemeManager.loadAccountSettings(user)
-                .then(accountThemeSettings => {
-                    if (!accountThemeSettings) return
-                    if (!this.activeUid || this.activeUid !== newUserUid) return
-                    ThemeManager.applySettings(accountThemeSettings, true)
-                })
-                .catch(() => {
-                    if (this.activeUid === newUserUid) UI.showToast(UI.getText("sync_error", "Sync error"))
-                })
-        }
-
         const userRootReference = await DataPath.ensureUserDocument(user)
         if (!userRootReference) {
             UI.showToast(UI.getText("sync_error", "Sync error"))
             return
         }
+
+        await this.initializeUserSettings(user)
 
         const userFoldersCollection = DataPath.getUserFoldersCollection(user)
         const userNotesCollection = DataPath.getUserNotesCollection(user)
