@@ -146,8 +146,9 @@ const AppLifecycle = {
         this.updateLoadMoreButton()
         filterAndRender(document.getElementById("search-input")?.value || "")
     },
-    updateOriginalUserSettings(userSettings) {
-        const normalizedSettings = this.normalizeUserSettings(userSettings)
+    updateOriginalUserSettings(userSettings, options = {}) {
+        const shouldSkipNormalization = !!options.skipNormalization
+        const normalizedSettings = shouldSkipNormalization ? userSettings : this.normalizeUserSettings(userSettings)
         StateStore.update("originalUserSettings", this.cloneUserSettings(normalizedSettings))
     },
     isPermissionDeniedError(error) {
@@ -251,18 +252,18 @@ const AppLifecycle = {
             this.settingsStorageType = "preferences"
         }
         this.writeCachedUserSettings(user.uid, normalizedSettings)
-        this.updateOriginalUserSettings(normalizedSettings)
+        this.updateOriginalUserSettings(normalizedSettings, { skipNormalization: true })
         return normalizedSettings
     },
     async initializeUserSettings(user) {
         const cachedSettings = this.readCachedUserSettings(user.uid)
         if (cachedSettings) {
             const normalizedCached = this.normalizeUserSettings(cachedSettings)
-            this.updateOriginalUserSettings(normalizedCached)
+            this.updateOriginalUserSettings(normalizedCached, { skipNormalization: true })
             this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true, persistTheme: false })
         } else {
             const defaultSettings = this.createDefaultUserSettings()
-            this.updateOriginalUserSettings(defaultSettings)
+            this.updateOriginalUserSettings(defaultSettings, { skipNormalization: true })
             this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true, persistTheme: false })
         }
 
@@ -291,7 +292,7 @@ const AppLifecycle = {
 
         ThemeManager.setCustomPresets(loadedSettings.customPresets)
         this.writeCachedUserSettings(user.uid, loadedSettings)
-        this.updateOriginalUserSettings(loadedSettings)
+        this.updateOriginalUserSettings(loadedSettings, { skipNormalization: true })
         this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true, persistTheme: false })
 
         if (this.settingsUnsubscribe) this.settingsUnsubscribe()
@@ -307,7 +308,7 @@ const AppLifecycle = {
             if (!isSettingsModalActive || !isDraftDirty) {
                 ThemeManager.setCustomPresets(normalizedIncomingSettings.customPresets)
                 this.writeCachedUserSettings(user.uid, normalizedIncomingSettings)
-                this.updateOriginalUserSettings(normalizedIncomingSettings)
+                this.updateOriginalUserSettings(normalizedIncomingSettings, { skipNormalization: true })
                 this.applyUserSettingsToRuntime(normalizedIncomingSettings, { resetVisibleLimit: false, persistTheme: false })
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
             }
