@@ -12,7 +12,36 @@ export const EditorAPI = (() => {
     const state = createEditorState()
     const elements = state.elements
 
-    const getPages = () => elements.content ? Array.from(elements.content.querySelectorAll(".note-page")) : []
+    const getEditorDomElements = () => ({
+        wrapper: document.getElementById("note-editor"),
+        title: document.getElementById("note-title"),
+        contentWrapper: document.querySelector(".note-content-wrapper"),
+        content: document.getElementById("note-content-editable"),
+        toolbar: document.getElementById("editor-toolbar"),
+        pageIndicator: document.getElementById("editor-page-indicator"),
+        pagePrev: document.querySelector('[data-action="editor-prev-page"]'),
+        pageNext: document.querySelector('[data-action="editor-next-page"]'),
+        pageAdd: document.querySelector('[data-action="editor-add-page"]'),
+        tagsInput: document.getElementById("note-tags-input"),
+        tagsContainer: document.getElementById("note-tags-container"),
+        ctxMenu: document.getElementById("media-context-menu"),
+        alignMenu: document.getElementById("editor-align-menu"),
+        scrollArea: document.querySelector(".editor-scroll-area"),
+        drawingControls: document.getElementById("drawing-controls"),
+        drawingColor: document.getElementById("drawing-color"),
+        drawingSize: document.getElementById("drawing-size")
+    })
+
+    const refreshEditorDomElements = () => {
+        const resolvedElements = getEditorDomElements()
+        Object.assign(elements, resolvedElements)
+        return resolvedElements
+    }
+
+    const getPages = () => {
+        const contentElement = document.getElementById("note-content-editable")
+        return contentElement ? Array.from(contentElement.querySelectorAll(".note-page")) : []
+    }
     const getActivePage = () => getPages()[state.pageIndex] || null
 
     const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
@@ -102,7 +131,7 @@ export const EditorAPI = (() => {
     confirmEquationAtCaret = mathHandlers.confirmEquationAtCaret
 
     const editorCommands = createEditorCommands({
-        getRoot: () => elements.content,
+        getRoot: () => document.getElementById("note-content-editable"),
         getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
         storeSelection: inputHandlers.storeSelection,
         queueSnapshot: (...args) => queueSnapshot(...args),
@@ -221,7 +250,8 @@ export const EditorAPI = (() => {
                 const hasMediaContent = /<(img|audio|video|table|hr)/i.test(String(note.content || ""))
                 if (plainTextContent || hasMediaContent) {
                     note.title = NoteText.buildAutoTitle({ content: note.content || "" })
-                    if (elements.title) elements.title.value = note.title
+                    const titleElement = document.getElementById("note-title")
+                    if (titleElement) titleElement.value = note.title
                 }
             }
 
@@ -335,23 +365,7 @@ export const EditorAPI = (() => {
     })
 
     const init = () => {
-        elements.wrapper = document.getElementById("note-editor")
-        elements.title = document.getElementById("note-title")
-        elements.contentWrapper = document.querySelector(".note-content-wrapper")
-        elements.content = document.getElementById("note-content-editable")
-        elements.toolbar = document.getElementById("editor-toolbar")
-        elements.pageIndicator = document.getElementById("editor-page-indicator")
-        elements.pagePrev = document.querySelector('[data-action="editor-prev-page"]')
-        elements.pageNext = document.querySelector('[data-action="editor-next-page"]')
-        elements.pageAdd = document.querySelector('[data-action="editor-add-page"]')
-        elements.tagsInput = document.getElementById("note-tags-input")
-        elements.tagsContainer = document.getElementById("note-tags-container")
-        elements.ctxMenu = document.getElementById("media-context-menu")
-        elements.alignMenu = document.getElementById("editor-align-menu")
-        elements.scrollArea = document.querySelector(".editor-scroll-area")
-        elements.drawingControls = document.getElementById("drawing-controls")
-        elements.drawingColor = document.getElementById("drawing-color")
-        elements.drawingSize = document.getElementById("drawing-size")
+        refreshEditorDomElements()
 
         loadToolSettings()
         buildToolbar()
@@ -370,32 +384,34 @@ export const EditorAPI = (() => {
     }
 
     const bind = () => {
+        const boundElements = refreshEditorDomElements()
         if (state.abortController) state.abortController.abort()
         state.abortController = new AbortController()
         const { signal } = state.abortController
 
-        if (elements.title) {
-            elements.title.addEventListener("input", () => {
-                state.titleTouched = !!elements.title.value.trim()
+        if (boundElements.title) {
+            boundElements.title.addEventListener("input", (event) => {
+                const titleElement = event.currentTarget
+                state.titleTouched = !!titleElement.value.trim()
                 inputHandlers.syncAutoTitle()
                 queueSnapshot()
             }, { signal })
         }
 
-        if (elements.content) {
+        if (boundElements.content) {
             state.observer = new MutationObserver(scheduleSnapshotFrame)
-            state.observer.observe(elements.content, { childList: true, subtree: true, characterData: true, attributes: true })
+            state.observer.observe(boundElements.content, { childList: true, subtree: true, characterData: true, attributes: true })
 
-            elements.content.addEventListener("paste", handlePaste, { signal })
-            elements.content.addEventListener("keydown", inputHandlers.handleTagLineEnter, { signal })
-            elements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
-            elements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
-            elements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
-            elements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
+            boundElements.content.addEventListener("paste", handlePaste, { signal })
+            boundElements.content.addEventListener("keydown", inputHandlers.handleTagLineEnter, { signal })
+            boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
+            boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
+            boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
+            boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
 
-            elements.content.addEventListener("click", (event) => {
+            boundElements.content.addEventListener("click", (event) => {
                 const link = event.target.closest("a")
-                if (link && elements.content.contains(link)) {
+                if (link && boundElements.content.contains(link)) {
                     const noteId = link.dataset.noteId
                     if (noteId) {
                         event.preventDefault()
@@ -423,41 +439,42 @@ export const EditorAPI = (() => {
                 mediaHandlers.deselectMedia()
             }, { signal })
 
-            elements.content.addEventListener("pointerdown", mediaHandlers.handleResizeStart, { signal })
-            elements.content.addEventListener("pointerdown", mediaHandlers.handleMediaDragStart, { signal })
-            elements.content.addEventListener("dragstart", mediaHandlers.handleNativeDragStart, { signal })
+            boundElements.content.addEventListener("pointerdown", mediaHandlers.handleResizeStart, { signal })
+            boundElements.content.addEventListener("pointerdown", mediaHandlers.handleMediaDragStart, { signal })
+            boundElements.content.addEventListener("dragstart", mediaHandlers.handleNativeDragStart, { signal })
         }
 
         document.addEventListener("selectionchange", inputHandlers.storeSelection, { signal })
         document.addEventListener("keydown", async (event) => {
             if (event.key !== "Escape") return
-            if (!elements.wrapper?.classList.contains("active")) return
+            if (!document.getElementById("note-editor")?.classList.contains("active")) return
             event.preventDefault()
             await close({ persistChanges: true, silent: true })
         }, { signal })
         document.addEventListener("click", (event) => {
-            if (!elements.alignMenu || !elements.alignMenu.classList.contains("active")) return
+            const alignMenuElement = document.getElementById("editor-align-menu")
+            if (!alignMenuElement || !alignMenuElement.classList.contains("active")) return
             if (event.target.closest("#editor-align-menu")) return
             if (state.alignMenuTarget && event.target.closest(".tool-btn") === state.alignMenuTarget) return
             mediaHandlers.closeAlignMenu()
         }, { signal })
 
-        if (elements.scrollArea) {
-            elements.scrollArea.addEventListener("scroll", mediaHandlers.deselectMedia, { signal, passive: true })
+        if (boundElements.scrollArea) {
+            boundElements.scrollArea.addEventListener("scroll", mediaHandlers.deselectMedia, { signal, passive: true })
         }
 
-        if (elements.tagsInput) {
-            elements.tagsInput.addEventListener("keydown", (event) => {
+        if (boundElements.tagsInput) {
+            boundElements.tagsInput.addEventListener("keydown", (event) => {
                 if (event.key === "Enter") {
                     event.preventDefault()
-                    inputHandlers.addTag(elements.tagsInput.value)
-                    elements.tagsInput.value = ""
+                    inputHandlers.addTag(boundElements.tagsInput.value)
+                    boundElements.tagsInput.value = ""
                 }
             }, { signal })
         }
 
-        if (elements.tagsContainer) {
-            elements.tagsContainer.addEventListener("click", (event) => {
+        if (boundElements.tagsContainer) {
+            boundElements.tagsContainer.addEventListener("click", (event) => {
                 const remove = event.target.closest("[data-action='remove-tag']")
                 if (remove) inputHandlers.removeTag(decodeURIComponent(remove.dataset.tag || ""))
                 const add = event.target.closest("[data-action='add-tag']")
@@ -495,9 +512,11 @@ export const EditorAPI = (() => {
 
     const syncAccessState = (note) => {
         const editable = canEditNote(note)
-        if (elements.title) elements.title.readOnly = !editable
-        if (elements.toolbar) {
-            elements.toolbar.querySelectorAll("button").forEach(btn => {
+        const titleElement = document.getElementById("note-title")
+        const toolbarElement = document.getElementById("editor-toolbar")
+        if (titleElement) titleElement.readOnly = !editable
+        if (toolbarElement) {
+            toolbarElement.querySelectorAll("button").forEach(btn => {
                 btn.disabled = !editable
                 btn.setAttribute("aria-disabled", editable ? "false" : "true")
             })
@@ -506,17 +525,18 @@ export const EditorAPI = (() => {
 
     const updateEditableState = () => {
         const editable = !state.drawingState?.active && canEditNote(StateStore.read().currentNote)
+        const contentElement = document.getElementById("note-content-editable")
         getPages().forEach(page => {
             page.contentEditable = editable ? "true" : "false"
         })
-        if (elements.content) {
-            elements.content.classList.toggle("drawing-active", !!state.drawingState?.active)
+        if (contentElement) {
+            contentElement.classList.toggle("drawing-active", !!state.drawingState?.active)
         }
         mediaHandlers.makeMediaDraggable()
     }
 
     const buildToolbar = () => {
-        const root = elements.toolbar
+        const root = document.getElementById("editor-toolbar")
         if (!root) return
         const enabled = getEnabledTools()
         const tools = getToolList().filter(t => enabled[t.id] !== false)
@@ -556,17 +576,18 @@ export const EditorAPI = (() => {
         page.contentEditable = "true"
         page.setAttribute("role", "textbox")
         page.setAttribute("aria-multiline", "true")
-        const label = elements.content?.getAttribute("aria-label")
+        const label = document.getElementById("note-content-editable")?.getAttribute("aria-label")
         if (label) page.setAttribute("aria-label", label)
         page.innerHTML = html
         return page
     }
 
     const updatePageIndicator = () => {
-        if (!elements.pageIndicator) return
+        const pageIndicatorElement = document.getElementById("editor-page-indicator")
+        if (!pageIndicatorElement) return
         const pages = getPages()
         const total = pages.length || 1
-        elements.pageIndicator.textContent = `${state.pageIndex + 1}/${total}`
+        pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
     }
 
     const setActivePage = (index) => {
@@ -584,12 +605,13 @@ export const EditorAPI = (() => {
     }
 
     const ensurePages = () => {
-        if (!elements.content) return
+        const contentElement = document.getElementById("note-content-editable")
+        if (!contentElement) return
         const pages = getPages()
         if (!pages.length) {
-            const html = elements.content.innerHTML
-            elements.content.innerHTML = ""
-            elements.content.appendChild(createPageElement(html))
+            const html = contentElement.innerHTML
+            contentElement.innerHTML = ""
+            contentElement.appendChild(createPageElement(html))
         } else {
             pages.forEach(page => {
                 page.setAttribute("role", "textbox")
@@ -610,8 +632,9 @@ export const EditorAPI = (() => {
         page.focus()
     }
 
-const addPage = () => {
-    if (!elements.content) return
+    const addPage = () => {
+    const contentElement = document.getElementById("note-content-editable")
+    if (!contentElement) return
 
     const pages = getPages()
     if (pages.length >= 99) {
@@ -623,7 +646,7 @@ const addPage = () => {
     const page = createPageElement("")
     const current = pages[state.pageIndex]
     if (current) current.after(page)
-    else elements.content.appendChild(page)
+    else contentElement.appendChild(page)
     ensurePages()
 
     const currentNote = StateStore.read().currentNote
@@ -712,19 +735,25 @@ const addPage = () => {
     }
 
     const open = (note = null) => {
-  const current = StateStore.read()
-  const folderId = current.view === "folder" ? current.activeFolderId : null
-  const user = current.user
+        const resolvedElements = refreshEditorDomElements()
+        if (!resolvedElements.wrapper || !resolvedElements.title || !resolvedElements.content) {
+            console.warn("Editor DOM not ready")
+            return
+        }
 
-  const base = note
-    ? NoteIO.normalizeNote(note)
-    : NoteIO.normalizeNote({
-        id: Utils.generateId(),
-        folderId,
-        createdAt: Utils.serverTimestamp(),
-        order: Date.now(),
-        ownerUid: user?.uid || null
-      })
+        const current = StateStore.read()
+        const folderId = current.view === "folder" ? current.activeFolderId : null
+        const user = current.user
+
+        const base = note
+            ? NoteIO.normalizeNote(note)
+            : NoteIO.normalizeNote({
+                id: Utils.generateId(),
+                folderId,
+                createdAt: Utils.serverTimestamp(),
+                order: Date.now(),
+                ownerUid: user?.uid || null
+            })
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)
         StateStore.update("isEditing", true)
@@ -748,14 +777,14 @@ const addPage = () => {
             pageDrawingsRevision: openedNoteSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(openedNoteSnapshot.pageDrawings)
         })
 
-        elements.wrapper.classList.add("active")
+        resolvedElements.wrapper.classList.add("active")
         setTimeout(() => focusActivePage(), 50)
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
     }
 
     openFromList = async (note) => {
-        if (elements.wrapper?.classList.contains("active")) {
+        if (document.getElementById("note-editor")?.classList.contains("active")) {
             await close({ persistChanges: true, silent: true })
         }
         if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) {
@@ -785,7 +814,8 @@ const addPage = () => {
         if (shouldPersistChanges && StateStore.read().editorDirty) {
             await save({ silent: shouldStaySilent, persistOnExit: true })
         }
-        if (elements.wrapper) elements.wrapper.classList.remove("active")
+        const wrapperElement = document.getElementById("note-editor")
+        if (wrapperElement) wrapperElement.classList.remove("active")
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
@@ -798,8 +828,9 @@ const addPage = () => {
         state.snapshotFrame = null
         state.drawingState.active = false
         state.drawingState.isDrawing = false
-        if (elements.drawingControls) {
-            elements.drawingControls.classList.add("hidden")
+        const drawingControlsElement = document.getElementById("drawing-controls")
+        if (drawingControlsElement) {
+            drawingControlsElement.classList.add("hidden")
         }
         if (typeof EditorDrawing !== "undefined") {
             EditorDrawing.setDrawingData("", { recordHistory: true, replaceHistory: true })
@@ -820,10 +851,17 @@ const addPage = () => {
     const renderState = () => {
         const note = StateStore.read().currentNote
         if (!note) return
+        const resolvedElements = refreshEditorDomElements()
+        const titleElement = resolvedElements.title
+        const contentElement = resolvedElements.content
+        if (!titleElement || !contentElement) {
+            console.warn("Editor DOM not ready")
+            return
+        }
         state.isRenderingState = true
         try {
-            elements.title.value = note.title || ""
-            elements.content.innerHTML = Utils.sanitizeHtml(note.content || "")
+            titleElement.value = note.title || ""
+            contentElement.innerHTML = Utils.sanitizeHtml(note.content || "")
             ensurePages()
             inputHandlers.syncAutoTitle()
             inputHandlers.renderTags()
@@ -831,16 +869,16 @@ const addPage = () => {
             mediaHandlers.syncMediaSizes()
             syncDrawingForActivePage()
             syncAccessState(note)
-            if (state.observer && elements.content) {
+            if (state.observer) {
                 state.observer.disconnect()
-                state.observer.observe(elements.content, { childList: true, subtree: true, characterData: true, attributes: true })
+                state.observer.observe(contentElement, { childList: true, subtree: true, characterData: true, attributes: true })
             }
         } finally {
             state.isRenderingState = false
         }
     }
 
-    const toggleToolbar = () => elements.toolbar?.classList.toggle("is-hidden")
+    const toggleToolbar = () => document.getElementById("editor-toolbar")?.classList.toggle("is-hidden")
 
     const undo = () => {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
