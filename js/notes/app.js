@@ -34,16 +34,19 @@ const AppLifecycle = {
                 p: cachedThemeSettings.p || ThemeManager.themes.oled.p,
                 bg: cachedThemeSettings.bg || ThemeManager.themes.oled.bg,
                 t: cachedThemeSettings.t || ThemeManager.themes.oled.t,
+                mainBackgroundUrl: cachedThemeSettings.mainBackgroundUrl || "",
+                sidebarBackgroundUrl: cachedThemeSettings.sidebarBackgroundUrl || "",
                 mainBackgroundImage: cachedThemeSettings.mainBackgroundImage || "",
                 sidebarBackgroundImage: cachedThemeSettings.sidebarBackgroundImage || "",
                 uiOpacity: typeof cachedThemeSettings.uiOpacity === "number" ? cachedThemeSettings.uiOpacity : 0.78,
                 cardsOpacity: typeof cachedThemeSettings.cardsOpacity === "number" ? cachedThemeSettings.cardsOpacity : 0.9
             },
-            backgroundType: cachedThemeSettings.mainBackgroundImage ? "image" : "none",
-            backgroundValue: cachedThemeSettings.mainBackgroundImage || "",
+            backgroundType: (cachedThemeSettings.mainBackgroundUrl || cachedThemeSettings.mainBackgroundImage) ? "image" : "none",
+            backgroundValue: cachedThemeSettings.mainBackgroundUrl || cachedThemeSettings.mainBackgroundImage || "",
             lang: StateStore.read().config.lang || "ru",
             folderViewMode: StateStore.read().config.folderViewMode || "compact",
             reduceMotion: !!StateStore.read().config.reduceMotion,
+            customPresets: ThemeManager.getCustomPresets(),
             schemaVersion: 1
         }
     },
@@ -53,16 +56,63 @@ const AppLifecycle = {
         const notesPerPageOptions = new Set([5, 10, 20, 50])
         const parsedNotesPerPage = Number(source.notesPerPage)
         const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
-        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
+        const defaultTheme = defaults.customTheme && typeof defaults.customTheme === "object" ? defaults.customTheme : {}
+        const normalizedThemeId = typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId
+        const localCustomPresets = ThemeManager.getCustomPresets()
+        const cloudCustomPresets = Array.isArray(source.customPresets) ? source.customPresets : []
+        const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localCustomPresets, cloudCustomPresets)
+        const themePreset = ThemeManager.resolvePreset(normalizedThemeId)
+        const activeCustomPreset = mergedCustomPresets.find(item => `custom:${String(item.key || "")}` === normalizedThemeId) || null
+        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : {}
+        const fallbackTheme = {
+            p: ThemeManager.normalizeHex(activeCustomPreset?.p || themePreset?.p || defaultTheme.p),
+            bg: ThemeManager.normalizeHex(activeCustomPreset?.bg || themePreset?.bg || defaultTheme.bg),
+            t: ThemeManager.normalizeHex(activeCustomPreset?.t || themePreset?.t || defaultTheme.t),
+            mainBackgroundUrl: typeof activeCustomPreset?.mainBackgroundUrl === "string" ? activeCustomPreset.mainBackgroundUrl : (typeof defaultTheme.mainBackgroundUrl === "string" ? defaultTheme.mainBackgroundUrl : ""),
+            sidebarBackgroundUrl: typeof activeCustomPreset?.sidebarBackgroundUrl === "string" ? activeCustomPreset.sidebarBackgroundUrl : (typeof defaultTheme.sidebarBackgroundUrl === "string" ? defaultTheme.sidebarBackgroundUrl : ""),
+            mainBackgroundImage: typeof activeCustomPreset?.mainBackgroundImage === "string" ? activeCustomPreset.mainBackgroundImage : (typeof defaultTheme.mainBackgroundImage === "string" ? defaultTheme.mainBackgroundImage : ""),
+            sidebarBackgroundImage: typeof activeCustomPreset?.sidebarBackgroundImage === "string" ? activeCustomPreset.sidebarBackgroundImage : (typeof defaultTheme.sidebarBackgroundImage === "string" ? defaultTheme.sidebarBackgroundImage : ""),
+            uiOpacity: typeof activeCustomPreset?.uiOpacity === "number" ? activeCustomPreset.uiOpacity : (typeof defaultTheme.uiOpacity === "number" ? defaultTheme.uiOpacity : 0.78),
+            cardsOpacity: typeof activeCustomPreset?.cardsOpacity === "number" ? activeCustomPreset.cardsOpacity : (typeof defaultTheme.cardsOpacity === "number" ? defaultTheme.cardsOpacity : 0.9)
+        }
+        const resolveThemeValue = (key, fallback = "") => {
+            if (typeof customThemeSource[key] === "string") return customThemeSource[key]
+            if (typeof fallbackTheme[key] === "string") return fallbackTheme[key]
+            return fallback
+        }
+        const resolveThemeOpacity = (key, fallback) => {
+            if (typeof customThemeSource[key] === "number") return customThemeSource[key]
+            if (typeof fallbackTheme[key] === "number") return fallbackTheme[key]
+            return fallback
+        }
+        const normalizeThemeColor = (key) => {
+            if (typeof customThemeSource[key] === "string" && customThemeSource[key].trim()) {
+                return ThemeManager.normalizeHex(customThemeSource[key])
+            }
+            return ThemeManager.normalizeHex(fallbackTheme[key])
+        }
+        const normalizedTheme = {
+            p: normalizeThemeColor("p"),
+            bg: normalizeThemeColor("bg"),
+            t: normalizeThemeColor("t"),
+            mainBackgroundUrl: resolveThemeValue("mainBackgroundUrl", ""),
+            sidebarBackgroundUrl: resolveThemeValue("sidebarBackgroundUrl", ""),
+            mainBackgroundImage: resolveThemeValue("mainBackgroundImage", ""),
+            sidebarBackgroundImage: resolveThemeValue("sidebarBackgroundImage", ""),
+            uiOpacity: resolveThemeOpacity("uiOpacity", 0.78),
+            cardsOpacity: resolveThemeOpacity("cardsOpacity", 0.9)
+        }
+        const normalizedMainBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedTheme.mainBackgroundUrl, normalizedTheme.mainBackgroundImage)
         return {
             notesPerPage,
-            themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
-            customTheme: customThemeSource,
-            backgroundType: typeof source.backgroundType === "string" && source.backgroundType ? source.backgroundType : defaults.backgroundType,
-            backgroundValue: typeof source.backgroundValue === "string" ? source.backgroundValue : defaults.backgroundValue,
+            themeId: normalizedThemeId,
+            customTheme: normalizedTheme,
+            backgroundType: normalizedMainBackgroundValue ? "image" : "none",
+            backgroundValue: normalizedMainBackgroundValue,
             lang: source.lang === "en" ? "en" : "ru",
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
+            customPresets: mergedCustomPresets,
             schemaVersion: 1
         }
     },
@@ -82,13 +132,17 @@ const AppLifecycle = {
         const normalizedSettings = this.normalizeUserSettings(userSettings)
         if (!normalizedSettings || typeof normalizedSettings !== "object") return
         const normalizedThemeSource = normalizedSettings.customTheme && typeof normalizedSettings.customTheme === "object" ? normalizedSettings.customTheme : {}
+        const runtimeMainBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedThemeSource.mainBackgroundUrl, normalizedThemeSource.mainBackgroundImage)
+        const runtimeSidebarBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedThemeSource.sidebarBackgroundUrl, normalizedThemeSource.sidebarBackgroundImage)
         const normalizedTheme = {
             preset: normalizedSettings.themeId || "oled",
             p: ThemeManager.normalizeHex(normalizedThemeSource.p),
             bg: ThemeManager.normalizeHex(normalizedThemeSource.bg),
             t: ThemeManager.normalizeHex(normalizedThemeSource.t),
-            mainBackgroundImage: typeof normalizedThemeSource.mainBackgroundImage === "string" ? normalizedThemeSource.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof normalizedThemeSource.sidebarBackgroundImage === "string" ? normalizedThemeSource.sidebarBackgroundImage : "",
+            mainBackgroundUrl: String(normalizedThemeSource.mainBackgroundUrl || ""),
+            sidebarBackgroundUrl: String(normalizedThemeSource.sidebarBackgroundUrl || ""),
+            mainBackgroundImage: runtimeMainBackgroundValue && !normalizedThemeSource.mainBackgroundUrl ? runtimeMainBackgroundValue : String(normalizedThemeSource.mainBackgroundImage || ""),
+            sidebarBackgroundImage: runtimeSidebarBackgroundValue && !normalizedThemeSource.sidebarBackgroundUrl ? runtimeSidebarBackgroundValue : String(normalizedThemeSource.sidebarBackgroundImage || ""),
             uiOpacity: typeof normalizedThemeSource.uiOpacity === "number" ? normalizedThemeSource.uiOpacity : 0.78,
             cardsOpacity: typeof normalizedThemeSource.cardsOpacity === "number" ? normalizedThemeSource.cardsOpacity : 0.9
         }
@@ -112,12 +166,54 @@ const AppLifecycle = {
         this.updateLoadMoreButton()
         filterAndRender(document.getElementById("search-input")?.value || "")
     },
-    updateOriginalUserSettings(userSettings) {
-        const normalizedSettings = this.normalizeUserSettings(userSettings)
+    updateOriginalUserSettings(userSettings, options = {}) {
+        const shouldSkipNormalization = !!options.skipNormalization
+        const normalizedSettings = shouldSkipNormalization ? userSettings : this.normalizeUserSettings(userSettings)
         StateStore.update("originalUserSettings", this.cloneUserSettings(normalizedSettings))
     },
     isPermissionDeniedError(error) {
         return String(error?.code || "") === "permission-denied"
+    },
+    getCloudSafeThemeForUserSettings(themeSource) {
+        const source = themeSource && typeof themeSource === "object" ? themeSource : {}
+        const cloudPayloadBuilder = typeof window.buildThemeCloudPayload === "function" ? window.buildThemeCloudPayload : null
+        const fallbackPayload = {
+            preset: String(source.preset || source.themeId || "oled"),
+            p: ThemeManager.normalizeHex(source.p),
+            bg: ThemeManager.normalizeHex(source.bg),
+            t: ThemeManager.normalizeHex(source.t),
+            uiOpacity: typeof source.uiOpacity === "number" ? source.uiOpacity : 0.78,
+            cardsOpacity: typeof source.cardsOpacity === "number" ? source.cardsOpacity : 0.9,
+            mainBackgroundUrl: "",
+            sidebarBackgroundUrl: ""
+        }
+        const payload = cloudPayloadBuilder ? cloudPayloadBuilder({
+            preset: source.preset || source.themeId || "oled",
+            p: source.p,
+            bg: source.bg,
+            t: source.t,
+            uiOpacity: source.uiOpacity,
+            cardsOpacity: source.cardsOpacity,
+            mainBackgroundUrl: source.mainBackgroundUrl,
+            sidebarBackgroundUrl: source.sidebarBackgroundUrl
+        }) : fallbackPayload
+        return payload
+    },
+    buildCloudSafeUserSettingsPayload(normalizedSettings) {
+        const source = normalizedSettings && typeof normalizedSettings === "object" ? normalizedSettings : this.createDefaultUserSettings()
+        const sourceTheme = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : {}
+        const cloudSafeTheme = this.getCloudSafeThemeForUserSettings({
+            ...sourceTheme,
+            preset: source.themeId || sourceTheme.preset || "oled"
+        })
+        const cloudSafeCustomPresets = ThemeManager.buildCloudSafeCustomPresets(source.customPresets)
+        return {
+            ...source,
+            customTheme: cloudSafeTheme,
+            customPresets: cloudSafeCustomPresets,
+            backgroundType: cloudSafeTheme.mainBackgroundUrl ? "image" : "none",
+            backgroundValue: cloudSafeTheme.mainBackgroundUrl || ""
+        }
     },
     async resolveUserSettingsReference(user) {
         const primaryReference = DataPath.getUserSettingsReference(user)
@@ -136,10 +232,10 @@ const AppLifecycle = {
         this.settingsStorageType = "preferences"
         return { reference: fallbackReference, snapshot: fallbackSnapshot }
     },
-    async writeUserSettingsToReference(settingsReference, normalizedSettings) {
+    async writeUserSettingsToReference(settingsReference, cloudSafeSettings) {
         if (!settingsReference) return
         await settingsReference.set({
-            ...normalizedSettings,
+            ...cloudSafeSettings,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true })
     },
@@ -147,33 +243,48 @@ const AppLifecycle = {
         const user = StateStore.read().user
         if (!user) return null
         const normalizedSettings = this.normalizeUserSettings(settingsToSave)
+        const normalizedTheme = normalizedSettings.customTheme && typeof normalizedSettings.customTheme === "object" ? normalizedSettings.customTheme : {}
+        ThemeManager.saveSettings({
+            preset: normalizedSettings.themeId || "oled",
+            p: ThemeManager.normalizeHex(normalizedTheme.p),
+            bg: ThemeManager.normalizeHex(normalizedTheme.bg),
+            t: ThemeManager.normalizeHex(normalizedTheme.t),
+            mainBackgroundUrl: String(normalizedTheme.mainBackgroundUrl || ""),
+            sidebarBackgroundUrl: String(normalizedTheme.sidebarBackgroundUrl || ""),
+            mainBackgroundImage: String(normalizedTheme.mainBackgroundImage || ""),
+            sidebarBackgroundImage: String(normalizedTheme.sidebarBackgroundImage || ""),
+            uiOpacity: typeof normalizedTheme.uiOpacity === "number" ? normalizedTheme.uiOpacity : 0.78,
+            cardsOpacity: typeof normalizedTheme.cardsOpacity === "number" ? normalizedTheme.cardsOpacity : 0.9
+        })
+        ThemeManager.setCustomPresets(normalizedSettings.customPresets)
+        const cloudSafeSettings = this.buildCloudSafeUserSettingsPayload(normalizedSettings)
         const activeSettingsReference = this.settingsReference || (await this.resolveUserSettingsReference(user)).reference
         if (!activeSettingsReference) return null
         try {
-            await this.writeUserSettingsToReference(activeSettingsReference, normalizedSettings)
+            await this.writeUserSettingsToReference(activeSettingsReference, cloudSafeSettings)
             this.settingsReference = activeSettingsReference
         } catch (error) {
             if (!this.isPermissionDeniedError(error)) throw error
             const fallbackReference = DataPath.getUserLegacySettingsReference(user)
             if (!fallbackReference) throw error
-            await this.writeUserSettingsToReference(fallbackReference, normalizedSettings)
+            await this.writeUserSettingsToReference(fallbackReference, cloudSafeSettings)
             this.settingsReference = fallbackReference
             this.settingsStorageType = "preferences"
         }
         this.writeCachedUserSettings(user.uid, normalizedSettings)
-        this.updateOriginalUserSettings(normalizedSettings)
+        this.updateOriginalUserSettings(normalizedSettings, { skipNormalization: true })
         return normalizedSettings
     },
     async initializeUserSettings(user) {
         const cachedSettings = this.readCachedUserSettings(user.uid)
         if (cachedSettings) {
             const normalizedCached = this.normalizeUserSettings(cachedSettings)
-            this.updateOriginalUserSettings(normalizedCached)
-            this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true })
+            this.updateOriginalUserSettings(normalizedCached, { skipNormalization: true })
+            this.applyUserSettingsToRuntime(normalizedCached, { resetVisibleLimit: true, persistTheme: false })
         } else {
             const defaultSettings = this.createDefaultUserSettings()
-            this.updateOriginalUserSettings(defaultSettings)
-            this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true })
+            this.updateOriginalUserSettings(defaultSettings, { skipNormalization: true })
+            this.applyUserSettingsToRuntime(defaultSettings, { resetVisibleLimit: true, persistTheme: false })
         }
 
         let resolvedReference = null
@@ -192,28 +303,33 @@ const AppLifecycle = {
         let loadedSettings = null
         if (!snapshot.exists) {
             loadedSettings = this.createDefaultUserSettings()
-            await this.writeUserSettingsToReference(resolvedReference, loadedSettings)
+            const cloudSafeDefaultSettings = this.buildCloudSafeUserSettingsPayload(loadedSettings)
+            await this.writeUserSettingsToReference(resolvedReference, cloudSafeDefaultSettings)
         } else {
-            loadedSettings = this.normalizeUserSettings(snapshot.data() || {})
+            const snapshotData = snapshot.data() || {}
+            loadedSettings = this.normalizeUserSettings(snapshotData)
         }
 
+        ThemeManager.setCustomPresets(loadedSettings.customPresets)
         this.writeCachedUserSettings(user.uid, loadedSettings)
-        this.updateOriginalUserSettings(loadedSettings)
-        this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true })
+        this.updateOriginalUserSettings(loadedSettings, { skipNormalization: true })
+        this.applyUserSettingsToRuntime(loadedSettings, { resetVisibleLimit: true, persistTheme: false })
 
         if (this.settingsUnsubscribe) this.settingsUnsubscribe()
         this.settingsUnsubscribe = resolvedReference.onSnapshot(nextSnapshot => {
             if (!nextSnapshot.exists) return
-            const incomingSettings = this.normalizeUserSettings(nextSnapshot.data() || {})
+            const snapshotData = nextSnapshot.data() || {}
+            const normalizedIncomingSettings = this.normalizeUserSettings(snapshotData)
             const currentOriginalSettings = StateStore.read().originalUserSettings
-            if (JSON.stringify(incomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
+            if (JSON.stringify(normalizedIncomingSettings) === JSON.stringify(currentOriginalSettings || {})) return
             const settingsModal = document.getElementById("settings-modal")
             const isSettingsModalActive = !!settingsModal?.classList.contains("active")
             const isDraftDirty = typeof UI.isSettingsDirty === "function" ? UI.isSettingsDirty() : false
             if (!isSettingsModalActive || !isDraftDirty) {
-                this.writeCachedUserSettings(user.uid, incomingSettings)
-                this.updateOriginalUserSettings(incomingSettings)
-                this.applyUserSettingsToRuntime(incomingSettings, { resetVisibleLimit: false })
+                ThemeManager.setCustomPresets(normalizedIncomingSettings.customPresets)
+                this.writeCachedUserSettings(user.uid, normalizedIncomingSettings)
+                this.updateOriginalUserSettings(normalizedIncomingSettings, { skipNormalization: true })
+                this.applyUserSettingsToRuntime(normalizedIncomingSettings, { resetVisibleLimit: false, persistTheme: false })
                 if (typeof UI.syncSettingsDraftFromOriginal === "function") UI.syncSettingsDraftFromOriginal()
             }
         }, error => {

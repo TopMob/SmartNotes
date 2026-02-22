@@ -174,7 +174,7 @@ const ColorPalette = (() => {
         if (!state.input) return
         const force = !!options.force
         const now = Date.now()
-        const interval = 300
+        const interval = 48
         if (force) {
             if (state.pendingEmitTimer) {
                 clearTimeout(state.pendingEmitTimer)
@@ -202,9 +202,11 @@ const ColorPalette = (() => {
     const setColorFromHex = (state, hex, notify = true) => {
         const rgb = hexToRgb(hex)
         const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b)
-        state.hue = hsv.h
-        state.sat = hsv.s
-        state.val = hsv.v
+        const nextHue = hsv.s === 0 ? state.hue : hsv.h
+        const nextSaturation = hsv.v === 0 ? state.sat : hsv.s
+        state.hue = Number.isFinite(nextHue) ? nextHue : 0
+        state.sat = Number.isFinite(nextSaturation) ? nextSaturation : 1
+        state.val = Number.isFinite(hsv.v) ? hsv.v : 1
         const updatedHex = updateUi(state)
         if (notify) emitChange(state, updatedHex)
     }
