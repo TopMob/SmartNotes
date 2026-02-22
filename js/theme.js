@@ -69,6 +69,10 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
             const presetKey = String(item.key || "")
             if (!presetKey) return
             const localPreset = localPresetsByKey.get(presetKey)
+            const cloudMainBackgroundUrl = normalizeThemeUrlValue(item.mainBackgroundUrl)
+            const cloudSidebarBackgroundUrl = normalizeThemeUrlValue(item.sidebarBackgroundUrl)
+            const localMainBackgroundUrl = normalizeThemeUrlValue(localPreset?.mainBackgroundUrl)
+            const localSidebarBackgroundUrl = normalizeThemeUrlValue(localPreset?.sidebarBackgroundUrl)
             mergedPresets.push({
                 key: presetKey,
                 p: ThemeManager.normalizeHex(item.p),
@@ -76,8 +80,8 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
                 t: ThemeManager.normalizeHex(item.t),
                 uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
                 cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
-                mainBackgroundUrl: normalizeThemeUrlValue(item.mainBackgroundUrl),
-                sidebarBackgroundUrl: normalizeThemeUrlValue(item.sidebarBackgroundUrl),
+                mainBackgroundUrl: cloudMainBackgroundUrl || localMainBackgroundUrl,
+                sidebarBackgroundUrl: cloudSidebarBackgroundUrl || localSidebarBackgroundUrl,
                 mainBackgroundImage: normalizeLocalImageValue(localPreset?.mainBackgroundImage),
                 sidebarBackgroundImage: normalizeLocalImageValue(localPreset?.sidebarBackgroundImage)
             })
