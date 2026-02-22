@@ -174,7 +174,7 @@ const ColorPalette = (() => {
         if (!state.input) return
         const force = !!options.force
         const now = Date.now()
-        const interval = 300
+        const interval = 48
         if (force) {
             if (state.pendingEmitTimer) {
                 clearTimeout(state.pendingEmitTimer)

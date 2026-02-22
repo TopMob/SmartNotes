@@ -17,6 +17,11 @@ Object.assign(UI, {
         if (!el) return
         el.classList.remove("active")
         if (id === "settings-modal") {
+            const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
+            if (pendingTimerId) {
+                clearTimeout(pendingTimerId)
+                this.draftRuntimeApplyTimerId = 0
+            }
             StateStore.update("appearanceDraft", null)
         }
     },
@@ -303,6 +308,15 @@ Object.assign(UI, {
         AppLifecycle.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
     },
 
+    scheduleDraftSettingsRuntimeApply() {
+        const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
+        if (pendingTimerId) clearTimeout(pendingTimerId)
+        this.draftRuntimeApplyTimerId = setTimeout(() => {
+            this.draftRuntimeApplyTimerId = 0
+            this.applyDraftSettingsToRuntime()
+        }, 48)
+    },
+
     requestCloseSettingsModal() {
         if (!this.isSettingsDirty()) {
             this.closeModal("settings-modal")
@@ -328,6 +342,12 @@ Object.assign(UI, {
     },
 
     async saveSettingsDraft() {
+        const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
+        if (pendingTimerId) {
+            clearTimeout(pendingTimerId)
+            this.draftRuntimeApplyTimerId = 0
+            this.applyDraftSettingsToRuntime()
+        }
         const currentDraftSettings = this.getSettingsDraft()
         if (!currentDraftSettings) return
         try {
@@ -426,6 +446,7 @@ Object.assign(UI, {
                 }
             }
             this.applyAppearanceDraft(nextDraft)
+            this.renderAppearanceDraft()
         }
         const onCreateCustomPreset = () => {
             const currentDraft = StateStore.read().appearanceDraft || draft
@@ -501,7 +522,9 @@ Object.assign(UI, {
             backgroundType: (nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage) ? "image" : "none",
             backgroundValue: nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage || ""
         })
-        this.applyDraftSettingsToRuntime()
+        this.scheduleDraftSettingsRuntimeApply()
+        this.syncAppearanceBackgroundInputs(nextDraft)
+        this.syncAppearanceOpacityControl(nextDraft)
     },
 
     resetAppearanceDraft() {
@@ -688,9 +711,10 @@ Object.assign(UI, {
         }
         const fields = fieldMap[key]
         if (!fields) return
+        const isCustomPresetSelected = String(current.preset || "").startsWith("custom:")
         const next = {
             ...current,
-            preset: "manual"
+            preset: isCustomPresetSelected ? current.preset : "manual"
         }
         if (mode === "url") {
             next[fields.url] = value
@@ -701,6 +725,12 @@ Object.assign(UI, {
         } else {
             next[fields.url] = ""
             next[fields.image] = ""
+        }
+        if (isCustomPresetSelected) {
+            ThemeManager.updateCustomPreset(current.preset, {
+                [fields.url]: next[fields.url],
+                [fields.image]: next[fields.image]
+            })
         }
         this.applyAppearanceDraft(next)
     },
@@ -719,6 +749,9 @@ Object.assign(UI, {
                 opacityInput.addEventListener("input", event => {
                     const nextOpacity = Math.min(1, Math.max(0.4, Number(event.target.value || 78) / 100))
                     const currentDraft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+                    if (String(currentDraft.preset || "").startsWith("custom:")) {
+                        ThemeManager.updateCustomPreset(currentDraft.preset, { uiOpacity: nextOpacity })
+                    }
                     this.applyAppearanceDraft({ ...currentDraft, uiOpacity: nextOpacity })
                 })
             }
@@ -730,6 +763,9 @@ Object.assign(UI, {
                 cardsOpacityInput.addEventListener("input", event => {
                     const nextOpacity = Math.min(1, Math.max(0.5, Number(event.target.value || 90) / 100))
                     const currentDraft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+                    if (String(currentDraft.preset || "").startsWith("custom:")) {
+                        ThemeManager.updateCustomPreset(currentDraft.preset, { cardsOpacity: nextOpacity })
+                    }
                     this.applyAppearanceDraft({ ...currentDraft, cardsOpacity: nextOpacity })
                 })
             }
