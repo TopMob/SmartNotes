@@ -1,52 +1,54 @@
 Object.assign(UI, {
     bindEvents() {
-        if (this.eventsBound) return
+        if (this.eventListenersController) return
         this.eventsBound = true
-        document.addEventListener("click", (e) => {
-            const actionEl = e.target.closest("[data-action]")
-            if (actionEl) {
-                this.handleAction(actionEl, e)
+        this.eventListenersController = new AbortController()
+        const listenersSignal = this.eventListenersController.signal
+
+        document.addEventListener("click", (event) => {
+            const actionElement = event.target.closest("[data-action]")
+            if (actionElement) {
+                this.handleAction(actionElement, event)
             }
 
             const isDesktop = window.matchMedia("(min-width: 1024px)").matches
-            if (!isDesktop && this.els.sidebar?.classList.contains("active") && !this.els.sidebar.contains(e.target) && !e.target.closest("#menu-toggle")) {
+            if (!isDesktop && this.els.sidebar?.classList.contains("active") && this.els.sidebar && !this.els.sidebar.contains(event.target) && !event.target.closest("#menu-toggle")) {
                 this.toggleSidebar(false)
             }
-            if (this.els.userMenu?.classList.contains("active") && !e.target.closest(".user-avatar-wrapper")) {
+            if (this.els.userMenu?.classList.contains("active") && !event.target.closest(".user-avatar-wrapper")) {
                 this.toggleUserMenu(false)
             }
-            if (this.els.filterMenu?.classList.contains("active") && !e.target.closest("#notes-filter-menu") && !e.target.closest("#notes-filter-toggle")) {
+            if (this.els.filterMenu?.classList.contains("active") && !event.target.closest("#notes-filter-menu") && !event.target.closest("#notes-filter-toggle")) {
                 this.toggleFilterMenu(false)
             }
-            if (this.els.activeFolderMenu?.classList.contains("active") && !e.target.closest("#active-folder-menu-wrapper")) {
+            if (this.els.activeFolderMenu?.classList.contains("active") && !event.target.closest("#active-folder-menu-wrapper")) {
                 this.toggleActiveFolderMenu(false)
             }
 
-            const overlay = e.target.closest(".modal-overlay")
-            if (overlay && e.target === overlay && !overlay.dataset.modalStatic) {
-                if (overlay.id === "settings-modal") {
+            const overlayElement = event.target.closest(".modal-overlay")
+            if (overlayElement && event.target === overlayElement && !overlayElement.dataset.modalStatic) {
+                if (overlayElement.id === "settings-modal") {
                     this.requestCloseSettingsModal()
                 } else {
-                    this.closeModal(overlay.id)
+                    this.closeModal(overlayElement.id)
                 }
             }
-        })
+        }, { signal: listenersSignal })
 
-        if (this.els.sidebarOverlay) {
-            this.els.sidebarOverlay.addEventListener("click", () => this.toggleSidebar(false))
-        }
+        this.els.sidebarOverlay?.addEventListener("click", () => this.toggleSidebar(false), { signal: listenersSignal })
+
         if (this.els.folderList) {
             this.els.folderList.addEventListener("dragstart", event => {
                 const folderElement = event.target.closest("[data-folder-draggable='true']")
                 if (!folderElement) return
                 this.draggedFolderId = folderElement.dataset.folderId
-            })
+            }, { signal: listenersSignal })
             this.els.folderList.addEventListener("dragover", event => {
                 if (!this.draggedFolderId) return
                 const targetElement = event.target.closest("[data-folder-draggable='true']")
                 if (!targetElement || targetElement.dataset.folderId === this.draggedFolderId) return
                 event.preventDefault()
-            })
+            }, { signal: listenersSignal })
             this.els.folderList.addEventListener("drop", event => {
                 if (!this.draggedFolderId) return
                 const targetElement = event.target.closest("[data-folder-draggable='true']")
@@ -54,116 +56,123 @@ Object.assign(UI, {
                 event.preventDefault()
                 this.reorderFolders(this.draggedFolderId, targetElement.dataset.folderId)
                 this.draggedFolderId = null
-            })
+            }, { signal: listenersSignal })
             this.els.folderList.addEventListener("dragend", () => {
                 this.draggedFolderId = null
-            })
+            }, { signal: listenersSignal })
         }
 
-        document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && this.els.sidebar?.classList.contains("active")) {
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && this.els.sidebar?.classList.contains("active")) {
                 this.toggleSidebar(false)
             }
-        })
+        }, { signal: listenersSignal })
 
-        document.querySelectorAll(".star").forEach(star => {
-            star.addEventListener("click", () => {
-                const val = parseInt(star.dataset.val, 10)
-                StateActions.setTempRating(val)
-                document.querySelectorAll(".star").forEach(s => {
-                    const v = parseInt(s.dataset.val, 10)
-                    s.textContent = v <= val ? "star" : "star_border"
-                    s.classList.toggle("active", v <= val)
+        document.querySelectorAll(".star").forEach(starElement => {
+            starElement.addEventListener("click", () => {
+                const selectedRating = parseInt(starElement.dataset.val, 10)
+                StateActions.setTempRating(selectedRating)
+                document.querySelectorAll(".star").forEach(iteratedStarElement => {
+                    const starValue = parseInt(iteratedStarElement.dataset.val, 10)
+                    iteratedStarElement.textContent = starValue <= selectedRating ? "star" : "star_border"
+                    iteratedStarElement.classList.toggle("active", starValue <= selectedRating)
                 })
-            })
+            }, { signal: listenersSignal })
         })
 
-        const promptInput = document.getElementById("prompt-input")
-        if (promptInput) {
-            promptInput.onkeydown = (e) => {
-                if (e.key === "Enter") document.getElementById("prompt-ok")?.click()
-            }
+        const promptInputElement = document.getElementById("prompt-input")
+        if (promptInputElement) {
+            promptInputElement.addEventListener("keydown", event => {
+                if (event.key === "Enter") document.getElementById("prompt-ok")?.click()
+            }, { signal: listenersSignal })
         }
 
-        const search = document.getElementById("search-input")
-        if (search) {
-            search.addEventListener("input", (e) => {
-                updateSearchQuery(e.target.value)
-            })
+        const searchInputElement = document.getElementById("search-input")
+        if (searchInputElement) {
+            searchInputElement.addEventListener("input", event => {
+                const nextQueryValue = typeof event.target?.value === "string" ? event.target.value : ""
+                updateSearchQuery(nextQueryValue)
+            }, { signal: listenersSignal })
         }
 
-        if (this.els.filterSort) {
-            this.els.filterSort.addEventListener("change", event => {
-                const safeSortValue = window.DomSecurity.sanitizeInputValue(event.target.value, "updated")
-                this.updateFilterConfig({ sort: safeSortValue })
-            })
-        }
+        this.els.filterSort?.addEventListener("change", event => {
+            const safeSortValue = window.DomSecurity.sanitizeInputValue(event.target?.value, "updated")
+            this.updateFilterConfig({ sort: safeSortValue })
+        }, { signal: listenersSignal })
 
-        if (this.els.filterFolders) {
-            this.els.filterFolders.addEventListener("change", (e) => {
-                const input = e.target.closest("input[type='checkbox']")
-                if (!input) return
-                const selected = this.readFolderFilterSelection()
-                this.updateFilterConfig({ folders: selected })
-            })
-        }
+        this.els.filterFolders?.addEventListener("change", event => {
+            const checkboxInput = event.target.closest("input[type='checkbox']")
+            if (!checkboxInput) return
+            const selectedFolders = this.readFolderFilterSelection()
+            this.updateFilterConfig({ folders: selectedFolders })
+        }, { signal: listenersSignal })
 
-        this.els.grid?.addEventListener("click", async (e) => {
-            const action = e.target.closest(".action-btn")
-            if (action) return
+        this.els.grid?.addEventListener("click", async event => {
+            const actionElement = event.target.closest(".action-btn")
+            if (actionElement) return
             if (this.els.userMenu?.classList.contains("active")) return
-            const card = e.target.closest(".note-card")
-            if (!card) return
-            const id = card.dataset.noteId ? decodeURIComponent(card.dataset.noteId) : null
-            const note = StateStore.read().notes.find(n => n.id === id)
-            if (note) await window.SmartNotesEditor?.openFromList?.(note)
-        })
+            const noteCardElement = event.target.closest(".note-card")
+            if (!noteCardElement) return
+            const noteIdentifier = noteCardElement.dataset.noteId ? decodeURIComponent(noteCardElement.dataset.noteId) : ""
+            if (!noteIdentifier) return
+            const note = StateStore.read().notes.find(noteEntry => noteEntry.id === noteIdentifier)
+            if (!note) return
+            await window.SmartNotesEditor?.openFromList?.(note)
+        }, { signal: listenersSignal })
 
-        this.els.grid?.addEventListener("dragstart", (e) => {
-            const card = e.target.closest(".note-card")
-            if (!card) return
+        this.els.grid?.addEventListener("dragstart", event => {
+            const noteCardElement = event.target.closest(".note-card")
+            if (!noteCardElement) return
             if (StateStore.read().searchQuery.trim()) {
-                e.preventDefault()
+                event.preventDefault()
                 this.showToast(this.getText("reorder_search_disabled", "Reordering is disabled while searching"))
                 return
             }
-            this.draggedNoteId = decodeURIComponent(card.dataset.noteId)
-            card.classList.add("dragging")
-            e.dataTransfer.effectAllowed = "move"
-            e.dataTransfer.setData("text/plain", this.draggedNoteId)
-        })
+            const encodedNoteIdentifier = noteCardElement.dataset.noteId || ""
+            if (!encodedNoteIdentifier) return
+            this.draggedNoteId = decodeURIComponent(encodedNoteIdentifier)
+            noteCardElement.classList.add("dragging")
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move"
+                event.dataTransfer.setData("text/plain", this.draggedNoteId)
+            }
+        }, { signal: listenersSignal })
 
-        this.els.grid?.addEventListener("dragover", (e) => {
+        this.els.grid?.addEventListener("dragover", event => {
             if (!this.draggedNoteId) return
-            e.preventDefault()
-            const card = e.target.closest(".note-card")
-            if (!card) return
-            const targetId = decodeURIComponent(card.dataset.noteId)
-            if (!targetId || targetId === this.draggedNoteId) return
-            const rect = card.getBoundingClientRect()
-            const before = e.clientY < rect.top + rect.height / 2
-            this.dragTargetId = targetId
-            this.dragPosition = before ? "before" : "after"
-            this.setDropIndicator(card, this.dragPosition)
-            this.autoScroll(e.clientY)
-        })
+            event.preventDefault()
+            const noteCardElement = event.target.closest(".note-card")
+            if (!noteCardElement) return
+            const encodedTargetIdentifier = noteCardElement.dataset.noteId || ""
+            if (!encodedTargetIdentifier) return
+            const targetIdentifier = decodeURIComponent(encodedTargetIdentifier)
+            if (!targetIdentifier || targetIdentifier === this.draggedNoteId) return
+            const cardRect = noteCardElement.getBoundingClientRect()
+            const shouldInsertBefore = event.clientY < cardRect.top + cardRect.height / 2
+            this.dragTargetId = targetIdentifier
+            this.dragPosition = shouldInsertBefore ? "before" : "after"
+            this.setDropIndicator(noteCardElement, this.dragPosition)
+            this.autoScroll(event.clientY)
+        }, { signal: listenersSignal })
 
-        this.els.grid?.addEventListener("drop", (e) => {
+        this.els.grid?.addEventListener("drop", event => {
             if (!this.draggedNoteId || !this.dragTargetId) return
-            e.preventDefault()
+            event.preventDefault()
             this.reorderNotes(this.draggedNoteId, this.dragTargetId, this.dragPosition)
             this.clearDragIndicators()
-        })
+        }, { signal: listenersSignal })
 
-        this.els.grid?.addEventListener("dragend", (e) => {
-            const card = e.target.closest(".note-card")
-            if (card) card.classList.remove("dragging")
+        this.els.grid?.addEventListener("dragend", event => {
+            const noteCardElement = event.target.closest(".note-card")
+            if (noteCardElement) noteCardElement.classList.remove("dragging")
             this.clearDragIndicators()
             this.draggedNoteId = null
-        })
+        }, { signal: listenersSignal })
 
-        const noteImport = document.getElementById("note-import")
-        if (noteImport) noteImport.addEventListener("change", (e) => this.handleNoteImport(e))
+        const noteImportInputElement = document.getElementById("note-import")
+        if (noteImportInputElement) {
+            noteImportInputElement.addEventListener("change", event => this.handleNoteImport(event), { signal: listenersSignal })
+        }
     },
 
     readFolderFilterSelection() {
@@ -395,13 +404,16 @@ Object.assign(UI, {
             case "trigger-import":
                 this.triggerImport()
                 break
-            case "load-more-notes":
+            case "load-more-notes": {
                 e.preventDefault()
+                const loadMoreState = PaginationService.getLoadMoreState()
+                if (!loadMoreState.hasMoreItems || loadMoreState.isLoading) break
                 PaginationService.loadMoreVisibleNotes()
                 if (PaginationService.shouldLoadMoreOwnedFromServer()) {
                     OwnedNotesService.loadMore()
                 }
                 break
+            }
             case "toggle-folder-description": {
                 e.preventDefault()
                 const folderCard = el.closest(".folder-card")

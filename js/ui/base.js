@@ -5,9 +5,11 @@ const UI = {
     dragTargetId: null,
     dragPosition: null,
     draggedFolderId: null,
-    visibleNotes: [],
     settingsPage: null,
     eventsBound: false,
+    eventListenersController: null,
+    resizeListenersController: null,
+    toastDeduplication: { lastMessage: "", lastShownAt: 0 },
 
     init() {
         this.els = {
@@ -35,7 +37,9 @@ const UI = {
             this.els.sidebar?.classList.add("active")
         }
         this.updateSidebarLayout()
-        window.addEventListener("resize", () => this.updateSidebarLayout())
+        if (this.resizeListenersController) this.resizeListenersController.abort()
+        this.resizeListenersController = new AbortController()
+        window.addEventListener("resize", () => this.updateSidebarLayout(), { signal: this.resizeListenersController.signal })
         this.applyAppearanceSettings()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()

@@ -441,6 +441,8 @@ export const EditorAPI = (() => {
                     return
                 }
                 mediaHandlers.deselectMedia()
+        mediaHandlers.cleanupPointerInteractions()
+        mediaHandlers.cleanupPointerInteractions()
             }, { signal })
 
             boundElements.content.addEventListener("pointerdown", mediaHandlers.handleResizeStart, { signal })
@@ -486,20 +488,22 @@ export const EditorAPI = (() => {
             }, { signal })
         }
 
-        const imgUpload = document.getElementById("img-upload")
-        if (imgUpload) {
-            imgUpload.onchange = async (event) => {
-                const file = event.target.files?.[0]
+        const imageUploadInputElement = document.getElementById("img-upload")
+        if (imageUploadInputElement) {
+            imageUploadInputElement.addEventListener("change", async event => {
+                const targetElement = event.target
+                if (!(targetElement instanceof HTMLInputElement)) return
+                const file = targetElement.files?.[0]
                 if (!file) return
                 try {
                     const imageUrl = await fileToDataUrl(file)
                     mediaHandlers.insertMedia(imageUrl, "image")
-                    imgUpload.value = ""
+                    targetElement.value = ""
                 } catch (error) {
                     const errorCode = error?.code || error?.message || "unknown"
-                    UI.showToast(`Image save failed (${errorCode})`)
+                    UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
                 }
-            }
+            }, { signal })
         }
 
     }
@@ -824,6 +828,7 @@ export const EditorAPI = (() => {
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
         mediaHandlers.deselectMedia()
+        mediaHandlers.cleanupPointerInteractions()
         state.pageIndex = 0
         state.titleTouched = false
         state.autoSaveSnapshot = null

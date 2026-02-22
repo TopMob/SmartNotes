@@ -11,14 +11,6 @@ function switchView(view, folderId = null) {
     if (currentState.view === nextView && currentState.activeFolderId === nextFolderId) return
     if (nextView === "admin_tools" && !(UI.hasSmartNotesFolderAccess && UI.hasSmartNotesFolderAccess())) return
     StateStore.set(previousState => ({ ...previousState, view: nextView, activeFolderId: nextFolderId }))
-    document.querySelectorAll(".nav-item").forEach(button => {
-        const viewIdentifier = button.dataset.view
-        const folderIdentifier = button.dataset.folderId
-        let isActive = false
-        if (viewIdentifier) isActive = viewIdentifier === nextView
-        else if (folderIdentifier) isActive = nextView === "folder" && folderIdentifier === nextFolderId
-        button.classList.toggle("active", isActive)
-    })
 }
 
 function getLockedNotes() {

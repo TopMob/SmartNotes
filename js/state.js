@@ -19,7 +19,17 @@ const StateStore = (() => {
         originalUserSettings: null,
         draftUserSettings: null,
         saveStatus: { status: "idle", message: "", updatedAt: 0 },
-        pagination: { displayLimit: 20 }
+        pagination: {
+            displayLimit: 20,
+            renderStep: 20,
+            pageSize: 500,
+            hasMoreOwnedNotes: false,
+            loadingMoreOwnedNotes: false,
+            lastOwnedNoteDocument: null,
+            totalVisibleNotesCount: 0,
+            renderedVisibleNotesCount: 0,
+            searchActive: false
+        }
     }
 
     let state = { ...initialState, config: { ...initialState.config }, pagination: { ...initialState.pagination } }
@@ -67,8 +77,8 @@ const StateStore = (() => {
         originalUserSettings: null,
         draftUserSettings: null,
         saveStatus: { ...initialState.saveStatus },
-        pagination: { ...initialState.pagination },
-        config: { ...initialState.config }
+        pagination: { ...initialState.pagination, renderStep: previousState.pagination.renderStep, pageSize: previousState.pagination.pageSize },
+        config: { ...previousState.config }
     }))
 
     const subscribe = (subscriber) => {

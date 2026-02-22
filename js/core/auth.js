@@ -285,7 +285,6 @@ export function createAuthManager({ auth }) {
         clearState() {
             if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
             if (typeof UI !== "undefined") {
-                UI.visibleNotes = []
                 UI.currentNoteActionId = null
                 UI.draggedNoteId = null
                 UI.dragTargetId = null
