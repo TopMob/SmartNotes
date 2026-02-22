@@ -9,13 +9,16 @@ Object.assign(UI, {
             return
         }
         const text = String(document.getElementById("feedback-text")?.value || "")
+        const sanitize = typeof window.sanitizeLogValue === "function" ? window.sanitizeLogValue : value => value
+        const consoleLogs = window.ConsoleLogStore?.getEntries ? window.ConsoleLogStore.getEntries() : []
         const { user, tempRating, config } = StateStore.read()
         const payload = {
             uid: user.uid,
             email: user.email || "",
             displayName: user.displayName || "",
             rating: tempRating,
-            text: text.trim(),
+            text: String(sanitize(text.trim()) || ""),
+            consoleLogs: sanitize(consoleLogs),
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             userAgent: navigator.userAgent || "",
             appVersion: "web",
@@ -151,6 +154,8 @@ Object.assign(UI, {
         }
         const { user, config } = StateStore.read()
         const answers = this.surveyState?.answers || {}
+        const sanitize = typeof window.sanitizeLogValue === "function" ? window.sanitizeLogValue : value => value
+        const consoleLogs = window.ConsoleLogStore?.getEntries ? window.ConsoleLogStore.getEntries() : []
         const questions = this.getSurveyQuestions()
         const payloadAnswers = questions
             .map(question => ({
@@ -164,7 +169,8 @@ Object.assign(UI, {
                 uid: user.uid,
                 email: user.email || "",
                 displayName: user.displayName || "",
-                answers: payloadAnswers,
+                answers: sanitize(payloadAnswers),
+                consoleLogs: sanitize(consoleLogs),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 userAgent: navigator.userAgent || "",
                 appVersion: "web",

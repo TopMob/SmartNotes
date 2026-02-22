@@ -785,7 +785,7 @@ const addPage = () => {
         if (shouldPersistChanges && StateStore.read().editorDirty) {
             await save({ silent: shouldStaySilent, persistOnExit: true })
         }
-        elements.wrapper.classList.remove("active")
+        if (elements.wrapper) elements.wrapper.classList.remove("active")
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)

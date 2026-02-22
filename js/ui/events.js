@@ -371,9 +371,6 @@ Object.assign(UI, {
             case "trigger-admin-full-analysis":
                 this.triggerFullAnalysisForAllUsers()
                 break
-            case "install-app":
-                this.installApplication()
-                break
             case "settings-back":
                 this.backSettingsPage()
                 break
