@@ -1,5 +1,6 @@
 const NotesRenderer = (() => {
     const cardCache = new Map()
+    const getIsHiddenLocked = () => (typeof window.isHiddenLocked === "function" ? window.isHiddenLocked : () => false)
 
     const areTagListsEqual = (firstTags, secondTags) => {
         const left = Array.isArray(firstTags) ? firstTags : []
@@ -36,7 +37,7 @@ const NotesRenderer = (() => {
 
     const createCard = (note) => {
         const isLockedView = StateStore.read().view === "locked"
-        const isLockedNote = isHiddenLocked(note)
+        const isLockedNote = getIsHiddenLocked()(note)
         const canManage = typeof CollaborationService !== "undefined" ? CollaborationService.canManage(note) : true
         const card = el("div", ["note-card"])
         card.draggable = !(isLockedView && isLockedNote) && canManage
@@ -109,7 +110,7 @@ const NotesRenderer = (() => {
         const { el: card, refs, data } = cached
 
         const isLockedView = StateStore.read().view === "locked"
-        const isLockedNote = isHiddenLocked(note)
+        const isLockedNote = getIsHiddenLocked()(note)
 
         if (note.title !== data.title || note.content !== data.content || isLockedView) {
             refs.h3.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || NoteText.buildAutoTitle(note))

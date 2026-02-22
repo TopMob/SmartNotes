@@ -1,3 +1,7 @@
+const isHiddenLocked = (note) => !!(note && note.lock && note.lock.hidden)
+
+window.isHiddenLocked = isHiddenLocked
+
 Object.assign(UI, {
     renderLockCenter() {
         const listRoot = document.getElementById("lock-center-list")
