@@ -20,7 +20,7 @@ const baseTheme = {
     toolbarShadow: "0 16px 28px rgba(0, 0, 0, 0.42)"
 }
 
-const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: bg, surfaceTransparent: `color-mix(in srgb, ${bg} 86%, transparent)`, border: `color-mix(in srgb, ${p} 38%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
+const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: `color-mix(in srgb, ${bg} 88%, ${t} 12%)`, surfaceTransparent: `color-mix(in srgb, ${bg} 82%, ${t} 18%, transparent)`, border: `color-mix(in srgb, ${p} 38%, ${t} 8%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
 
 const normalizeLocalImageValue = (value, maxLength = 600000) => {
     if (typeof value !== "string") return ""
@@ -348,7 +348,22 @@ export const ThemeManager = {
         const normalizedCardsOpacity = normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
         const mainBackgroundImage = this.pickRuntimeBackgroundValue(settings?.mainBackgroundUrl, settings?.mainBackgroundImage)
         const sidebarBackgroundImage = this.pickRuntimeBackgroundValue(settings?.sidebarBackgroundUrl, settings?.sidebarBackgroundImage)
-        const applied = { ...base, p: settings?.p || base.p, bg: settings?.bg || base.bg, t: settings?.t || base.t, uiOpacity: normalizedOpacity, cardsOpacity: normalizedCardsOpacity }
+        const appliedPrimaryColor = settings?.p || base.p
+        const appliedBackgroundColor = settings?.bg || base.bg
+        const appliedTextColor = settings?.t || base.t
+        const applied = {
+            ...base,
+            p: appliedPrimaryColor,
+            bg: appliedBackgroundColor,
+            t: appliedTextColor,
+            surface: `color-mix(in srgb, ${appliedBackgroundColor} 88%, ${appliedTextColor} 12%)`,
+            surfaceTransparent: `color-mix(in srgb, ${appliedBackgroundColor} 82%, ${appliedTextColor} 18%, transparent)`,
+            border: `color-mix(in srgb, ${appliedPrimaryColor} 38%, ${appliedTextColor} 8%, transparent)`,
+            toolbarBg: `color-mix(in srgb, ${appliedBackgroundColor} 80%, ${appliedPrimaryColor} 20%)`,
+            toolbarBorder: `color-mix(in srgb, ${appliedPrimaryColor} 42%, transparent)`,
+            uiOpacity: normalizedOpacity,
+            cardsOpacity: normalizedCardsOpacity
+        }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
         if (persist) {
