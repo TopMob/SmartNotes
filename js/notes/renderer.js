@@ -187,9 +187,7 @@ const NotesRenderer = (() => {
             if (!currentIds.has(id)) cardCache.delete(id)
         }
 
-        requestAnimationFrame(() => {
-            grid.replaceChildren(fragment)
-        })
+        grid.replaceChildren(fragment)
     }
 
     return { render }

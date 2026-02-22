@@ -386,6 +386,10 @@ export const EditorAPI = (() => {
     const bind = () => {
         const boundElements = refreshEditorDomElements()
         if (state.abortController) state.abortController.abort()
+        if (state.observer) {
+            state.observer.disconnect()
+            state.observer = null
+        }
         state.abortController = new AbortController()
         const { signal } = state.abortController
 
@@ -629,7 +633,7 @@ export const EditorAPI = (() => {
     const focusActivePage = () => {
         const page = getPages()[state.pageIndex]
         if (!page) return
-        page.focus()
+        page.focus({ preventScroll: true })
     }
 
     const addPage = () => {
@@ -763,7 +767,9 @@ export const EditorAPI = (() => {
 
         state.history = []
         state.future = []
+        resolvedElements.wrapper.classList.add("active")
         renderState()
+        focusActivePage()
 
         const openedNoteSnapshot = captureSnapshot()
         state.history.push(openedNoteSnapshot)
@@ -777,8 +783,6 @@ export const EditorAPI = (() => {
             pageDrawingsRevision: openedNoteSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(openedNoteSnapshot.pageDrawings)
         })
 
-        resolvedElements.wrapper.classList.add("active")
-        setTimeout(() => focusActivePage(), 50)
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
     }

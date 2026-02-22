@@ -3,7 +3,6 @@ import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing
 
 export const createAutosaveHandlers = (context) => {
     const {
-        elements,
         state,
         getPages,
         updateNotePageDrawings,
@@ -13,6 +12,24 @@ export const createAutosaveHandlers = (context) => {
 
     const captureSnapshot = () => {
         const currentNote = StateStore.read().currentNote
+        const titleElement = document.getElementById("note-title")
+        const contentElement = document.getElementById("note-content-editable")
+        if (!titleElement || !contentElement) {
+            console.warn("Editor DOM not ready")
+            let fallbackPageDrawings = []
+            try {
+                fallbackPageDrawings = normalizePageDrawings(currentNote, getPages().length)
+            } catch (error) {
+                fallbackPageDrawings = []
+            }
+            return {
+                title: String(currentNote?.title || ""),
+                content: String(currentNote?.content || ""),
+                tags: [...(currentNote?.tags || [])],
+                pageDrawings: fallbackPageDrawings,
+                pageDrawingsRevision: currentNote?.pageDrawingsRevision || ""
+            }
+        }
         let drawings = []
         try {
             drawings = normalizePageDrawings(currentNote, getPages().length)
@@ -28,8 +45,8 @@ export const createAutosaveHandlers = (context) => {
         }
         if (!pageDrawingsRevision) pageDrawingsRevision = buildPageDrawingsRevision(drawings)
         return {
-            title: elements.title.value || "",
-            content: elements.content.innerHTML || "",
+            title: titleElement.value || "",
+            content: contentElement.innerHTML || "",
             tags: [...(currentNote?.tags || [])],
             pageDrawings: drawings,
             pageDrawingsRevision

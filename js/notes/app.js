@@ -3,9 +3,19 @@ const NotesApplication = (() => {
     let networkRetryTimer = null
     let initializationPromise = null
 
-    function renderFromState() {
+    function getNotesScrollContainer() {
+        return document.getElementById("notes-content-area")
+    }
+
+    function renderFromState(options = {}) {
+        const shouldPreserveScrollPosition = !!options.preserveScrollPosition
+        const scrollContainer = shouldPreserveScrollPosition ? getNotesScrollContainer() : null
+        const scrollTopBeforeRender = scrollContainer ? scrollContainer.scrollTop : 0
         const viewModel = NotesPresenter.createViewModel(StateStore.read())
         NotesUIAdapter.render(viewModel)
+        if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTopBeforeRender
+        }
     }
 
     function startStateRendering() {
@@ -20,7 +30,7 @@ const NotesApplication = (() => {
             }
             const paginationChanged = nextState.pagination !== previousState.pagination
             if (nextState.notes !== previousState.notes || nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId || nextState.searchQuery !== previousState.searchQuery || nextState.folders !== previousState.folders || configChanged || paginationChanged) {
-                renderFromState()
+                renderFromState({ preserveScrollPosition: paginationChanged })
             }
         })
     }

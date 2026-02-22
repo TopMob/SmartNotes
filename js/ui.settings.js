@@ -263,11 +263,11 @@ Object.assign(UI, {
                     </div>
                 </div>
                 <div class="settings-actions row-between">
-                    <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
-                    <div class="row-right">
+                    <div class="row-left">
+                        <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
                         <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
-                        <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                     </div>
+                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                 </div>
             `
             if (typeof ColorPalette !== "undefined") ColorPalette.init(root)
