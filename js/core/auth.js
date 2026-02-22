@@ -348,14 +348,14 @@ export function createAuthManager({ auth }) {
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) return
-                if (typeof window.startUserSession === "function") {
-                    await window.startUserSession(normalizedUser)
+                if (typeof SessionService !== "undefined" && typeof SessionService.startUserSession === "function") {
+                    await SessionService.startUserSession(normalizedUser)
                 }
                 return
             }
 
-            if (typeof window.stopUserSession === "function") {
-                window.stopUserSession()
+            if (typeof SessionService !== "undefined" && typeof SessionService.stopUserSession === "function") {
+                SessionService.stopUserSession()
             }
             this.clearState()
             this.applySignedOutUI()

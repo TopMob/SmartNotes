@@ -305,7 +305,7 @@ Object.assign(UI, {
     applyDraftSettingsToRuntime() {
         const currentDraftSettings = this.getSettingsDraft()
         if (!currentDraftSettings) return
-        AppLifecycle.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
+        SettingsSyncService.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
     },
 
     scheduleDraftSettingsRuntimeApply() {
@@ -331,7 +331,7 @@ Object.assign(UI, {
         const originalSettings = StateStore.read().originalUserSettings
         if (!originalSettings) return
         StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
-        AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true, persistTheme: false })
+        SettingsSyncService.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true, persistTheme: false })
         if (this.settingsPage === "appearance") {
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
@@ -351,10 +351,10 @@ Object.assign(UI, {
         const currentDraftSettings = this.getSettingsDraft()
         if (!currentDraftSettings) return
         try {
-            const nextSavedSettings = await AppLifecycle.saveUserSettings(currentDraftSettings)
+            const nextSavedSettings = await SettingsSyncService.saveUserSettings(currentDraftSettings)
             if (!nextSavedSettings) return
             StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextSavedSettings)))
-            AppLifecycle.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
+            SettingsSyncService.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
             if (this.settingsPage === "appearance") {
                 this.initAppearanceDraft()
                 this.renderAppearanceDraft()

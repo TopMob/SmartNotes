@@ -261,6 +261,14 @@ Object.assign(UI, {
         this.updateAdminToolsNavigationVisibility()
     },
 
+    updateNotesLoadMoreButton(loadMoreState) {
+        const loadMoreButton = document.getElementById("load-more-notes-button")
+        if (!loadMoreButton) return
+        const state = loadMoreState || { hasMoreItems: false, isLoading: false }
+        loadMoreButton.disabled = !!state.isLoading
+        loadMoreButton.classList.toggle("hidden", !state.hasMoreItems)
+    },
+
 
     async setFolderHidden(folderId, hiddenState) {
         const user = StateStore.read().user

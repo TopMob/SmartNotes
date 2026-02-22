@@ -22,21 +22,32 @@ const StateStore = (() => {
     }
 
     let state = { ...initialState, config: { ...initialState.config } }
+    const subscribers = new Set()
+
+    const notifySubscribers = (nextState, previousState) => {
+        subscribers.forEach(subscriber => {
+            subscriber(nextState, previousState)
+        })
+    }
 
     const read = () => state
 
     const set = (updater) => {
-        const next = typeof updater === "function" ? updater(state) : { ...state, ...updater }
-        state = next
+        const previousState = state
+        const nextState = typeof updater === "function" ? updater(previousState) : { ...previousState, ...updater }
+        if (!nextState || typeof nextState !== "object") return state
+        if (nextState === previousState) return state
+        state = nextState
+        notifySubscribers(state, previousState)
         return state
     }
 
-    const update = (key, value) => set(prev => ({ ...prev, [key]: value }))
+    const update = (key, value) => set(previousState => ({ ...previousState, [key]: value }))
 
-    const updateConfig = (updates) => set(prev => ({ ...prev, config: { ...prev.config, ...updates } }))
+    const updateConfig = (updates) => set(previousState => ({ ...previousState, config: { ...previousState.config, ...updates } }))
 
-    const resetSession = () => set(prev => ({
-        ...prev,
+    const resetSession = () => set(previousState => ({
+        ...previousState,
         user: null,
         notes: [],
         folders: [],
@@ -58,12 +69,21 @@ const StateStore = (() => {
         config: { ...initialState.config }
     }))
 
+    const subscribe = (subscriber) => {
+        if (typeof subscriber !== "function") return () => {}
+        subscribers.add(subscriber)
+        return () => {
+            subscribers.delete(subscriber)
+        }
+    }
+
     return {
         read,
         set,
         update,
         updateConfig,
         resetSession,
+        subscribe,
         initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus } })
     }
 })()

@@ -400,7 +400,9 @@ Object.assign(UI, {
                 break
             case "load-more-notes":
                 e.preventDefault()
-                window.loadMoreNotes?.()
+                PaginationService.loadMore()
+                SessionService.loadMoreOwnedNotes?.()
+                filterAndRender(StateStore.read().searchQuery || "")
                 break
             case "editor-undo":
                 window.SmartNotesEditor?.undo()
