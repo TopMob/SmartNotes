@@ -336,6 +336,29 @@ export function createAuthManager({ auth }) {
                 loginScreen.style.opacity = "1"
             }
         },
+        async _startSessionWhenReady(user, attempt = 0) {
+            const maxAttempts = 20
+            if (typeof SessionService !== "undefined" && typeof SessionService.startUserSession === "function") {
+                await SessionService.startUserSession(user)
+                return true
+            }
+            if (attempt >= maxAttempts) {
+                this._toast(this._t("sync_error", "Sync error"))
+                console.error("[Session] error", { code: "session-service-unavailable", message: "SessionService is not ready" })
+                return false
+            }
+            await new Promise(resolve => setTimeout(resolve, 100))
+            return this._startSessionWhenReady(user, attempt + 1)
+        },
+        _stopSessionWhenReady(attempt = 0) {
+            const maxAttempts = 20
+            if (typeof SessionService !== "undefined" && typeof SessionService.stopUserSession === "function") {
+                SessionService.stopUserSession()
+                return
+            }
+            if (attempt >= maxAttempts) return
+            setTimeout(() => this._stopSessionWhenReady(attempt + 1), 100)
+        },
         async _handleAuthState(user) {
             const normalizedUser = user || auth.currentUser || null
             const previousUserUid = String(state.currentUser?.uid || "")
@@ -349,15 +372,11 @@ export function createAuthManager({ auth }) {
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) return
-                if (typeof SessionService !== "undefined" && typeof SessionService.startUserSession === "function") {
-                    await SessionService.startUserSession(normalizedUser)
-                }
+                await this._startSessionWhenReady(normalizedUser)
                 return
             }
 
-            if (typeof SessionService !== "undefined" && typeof SessionService.stopUserSession === "function") {
-                SessionService.stopUserSession()
-            }
+            this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()
         },

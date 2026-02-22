@@ -1,10 +1,13 @@
 const NotesApplication = (() => {
     let unsubscribeStateRender = null
     let networkRetryTimer = null
+    let initializationPromise = null
+
     function renderFromState() {
         const viewModel = NotesPresenter.createViewModel(StateStore.read())
         NotesUIAdapter.render(viewModel)
     }
+
     function startStateRendering() {
         if (unsubscribeStateRender) return
         unsubscribeStateRender = StateStore.subscribe((nextState, previousState) => {
@@ -13,6 +16,7 @@ const NotesApplication = (() => {
             }
         })
     }
+
     function startUiEventListeners() {
         EventBus.subscribe("reminderTriggered", note => {
             UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
@@ -42,8 +46,8 @@ const NotesApplication = (() => {
             UI.showToast(UI.getText("sync_error", "Sync error"))
             console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
         })
-
     }
+
     function bindNetworkLifecycle() {
         window.addEventListener("online", () => {
             clearTimeout(networkRetryTimer)
@@ -53,27 +57,53 @@ const NotesApplication = (() => {
             }, 1000)
         })
     }
+
     async function disableServiceWorkerCaching() {
-        if (!("serviceWorker" in navigator)) return
-        const registrations = await navigator.serviceWorker.getRegistrations()
-        await Promise.all(registrations.map(registration => registration.unregister()))
-        if ("caches" in window) {
-            const cacheKeys = await caches.keys()
-            await Promise.all(cacheKeys.map(cacheKey => caches.delete(cacheKey)))
+        try {
+            if (!("serviceWorker" in navigator)) return
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            await Promise.all(registrations.map(registration => registration.unregister()))
+            if ("caches" in window) {
+                const cacheKeys = await caches.keys()
+                await Promise.all(cacheKeys.map(cacheKey => caches.delete(cacheKey)))
+            }
+        } catch (error) {
+            console.warn("[Core] service worker cleanup skipped", { message: error?.message || String(error || "") })
         }
     }
 
-    async function init() {
+    async function initializeRuntime() {
         await disableServiceWorkerCaching()
+        if (typeof UI.init === "function") UI.init()
         startStateRendering()
         startUiEventListeners()
         bindNetworkLifecycle()
         const user = StateStore.read().user
-        if (!user) return
-        await SessionService.startUserSession(user)
+        if (user?.uid) {
+            await SessionService.startUserSession(user)
+        }
         renderFromState()
     }
-    return { init }
+
+    async function init() {
+        if (!initializationPromise) {
+            initializationPromise = initializeRuntime()
+        }
+        return initializationPromise
+    }
+
+    function initWhenDomReady() {
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", () => {
+                init().catch(error => console.error("[Core] NotesApplication init failed", { message: error?.message || String(error || "") }))
+            }, { once: true })
+            return
+        }
+        init().catch(error => console.error("[Core] NotesApplication init failed", { message: error?.message || String(error || "") }))
+    }
+
+    return { init, initWhenDomReady }
 })()
 
 window.initApp = () => NotesApplication.init()
+NotesApplication.initWhenDomReady()
