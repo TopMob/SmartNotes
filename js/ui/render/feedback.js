@@ -12,7 +12,7 @@ Object.assign(UI, {
         const sanitize = typeof window.sanitizeLogValue === "function" ? window.sanitizeLogValue : value => value
         const consoleLogs = window.ConsoleLogStore?.getEntries ? window.ConsoleLogStore.getEntries() : []
         const { user, tempRating, config } = StateStore.read()
-        const payload = {
+        const rawPayload = {
             uid: user.uid,
             email: user.email || "",
             displayName: user.displayName || "",
@@ -25,6 +25,7 @@ Object.assign(UI, {
             language: config.lang
         }
         try {
+            const payload = sanitize(rawPayload)
             await db.collection("feedback").add(payload)
             StateActions.setTempRating(0)
             document.querySelectorAll(".star").forEach(s => {
@@ -165,7 +166,7 @@ Object.assign(UI, {
             }))
             .filter(item => item.answer)
         try {
-            await db.collection("feedback").add({
+            const rawPayload = {
                 uid: user.uid,
                 email: user.email || "",
                 displayName: user.displayName || "",
@@ -176,7 +177,9 @@ Object.assign(UI, {
                 appVersion: "web",
                 language: config.lang,
                 type: "survey"
-            })
+            }
+            const payload = sanitize(rawPayload)
+            await db.collection("feedback").add(payload)
             this.showToast(this.getText("poll_thanks", "Thanks!"))
             this.closeModal("poll-modal")
         } catch {
