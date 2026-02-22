@@ -309,6 +309,17 @@ export const createMediaHandlers = (context) => {
         queueSnapshot()
     }
 
+    const cleanupPointerInteractions = () => {
+        state.resizeState = null
+        state.dragState = null
+        document.removeEventListener("pointermove", handleResizeMove)
+        document.removeEventListener("pointerup", handleResizeEnd)
+        document.removeEventListener("pointercancel", handleResizeEnd)
+        document.removeEventListener("pointermove", handleMediaDragMove)
+        document.removeEventListener("pointerup", handleMediaDragEnd)
+        document.removeEventListener("pointercancel", handleMediaDragEnd)
+    }
+
     const getDropRange = (x, y) => {
         if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y)
         if (document.caretPositionFromPoint) {
@@ -336,6 +347,7 @@ export const createMediaHandlers = (context) => {
         alignMediaOrText,
         toggleAlignMenu,
         closeAlignMenu,
-        deleteSelectedMedia
+        deleteSelectedMedia,
+        cleanupPointerInteractions
     }
 }

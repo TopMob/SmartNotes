@@ -1,3 +1,7 @@
+const isHiddenLocked = (note) => !!(note && note.lock && note.lock.hidden)
+
+window.isHiddenLocked = isHiddenLocked
+
 Object.assign(UI, {
     renderLockCenter() {
         const listRoot = document.getElementById("lock-center-list")
@@ -96,7 +100,7 @@ Object.assign(UI, {
         }
         const nextNotes = StateStore.read().notes.map(n => n.id === id ? { ...n, lock: { ...n.lock, hidden: false } } : n)
         StateActions.setNotes(nextNotes)
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderLockCenter()
         if (!db || !StateStore.read().user) return
         try {
@@ -125,7 +129,7 @@ Object.assign(UI, {
         }
         const nextNotes = StateStore.read().notes.map(n => n.id === id ? { ...n, lock: null } : n)
         StateActions.setNotes(nextNotes)
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderLockCenter()
         if (!db || !StateStore.read().user) return
         try {

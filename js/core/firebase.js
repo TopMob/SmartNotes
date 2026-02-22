@@ -71,5 +71,6 @@ export function initFirebase() {
 
 
     firebaseSingleton = { app, auth, db }
+    console.info("[Firebase] db initialized", !!db)
     return firebaseSingleton
 }

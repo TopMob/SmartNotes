@@ -1,4 +1,19 @@
 Object.assign(UI, {
+    updateNavigationActiveState() {
+        const stateSnapshot = StateStore.read()
+        document.querySelectorAll(".nav-item").forEach(buttonElement => {
+            const buttonView = buttonElement.dataset.view
+            const buttonFolderId = buttonElement.dataset.folderId
+            let isActive = false
+            if (buttonView) {
+                isActive = stateSnapshot.view === buttonView
+            } else if (buttonFolderId) {
+                isActive = stateSnapshot.view === "folder" && stateSnapshot.activeFolderId === buttonFolderId
+            }
+            buttonElement.classList.toggle("active", isActive)
+        })
+    },
+
     updateEmptyState(icon, text) {
         const iconElement = this.els.empty.querySelector("i")
         const textElement = this.els.empty.querySelector("p")
@@ -55,6 +70,7 @@ Object.assign(UI, {
             if (folderButton) fragment.append(folderButton)
         })
         root.replaceChildren(fragment)
+        this.updateNavigationActiveState()
         this.renderFilterMenu()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
@@ -216,10 +232,21 @@ Object.assign(UI, {
 
         const folderDescription = window.DomSecurity.sanitizeInputValue(folder?.description)
         if (folderDescription) {
-            const descriptionElement = document.createElement("div")
-            descriptionElement.className = "folder-meta"
+            const descriptionElement = document.createElement("p")
+            descriptionElement.className = "folder-description-preview"
             window.DomSecurity.setText(descriptionElement, folderDescription)
-            folderCard.append(descriptionElement)
+            const shouldShowExpandButton = folderDescription.length > 140
+            if (shouldShowExpandButton) {
+                const expandButton = document.createElement("button")
+                expandButton.type = "button"
+                expandButton.className = "folder-description-more"
+                expandButton.dataset.action = "toggle-folder-description"
+                expandButton.setAttribute("aria-expanded", "false")
+                window.DomSecurity.setText(expandButton, this.getText("show_more", "Ещё"))
+                folderCard.append(descriptionElement, expandButton)
+            } else {
+                folderCard.append(descriptionElement)
+            }
         }
         return folderCard
     },

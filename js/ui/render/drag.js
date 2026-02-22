@@ -31,6 +31,17 @@ Object.assign(UI, {
         return list
     },
 
+    getRenderedScopeNotes() {
+        const stateSnapshot = StateStore.read()
+        const queriedNotes = NotesQueryService.execute(stateSnapshot, stateSnapshot.searchQuery || "").notes
+        const view = String(stateSnapshot.view || "notes")
+        const supportsPagination = ["notes", "favorites", "archive", "folder", "reminders", "locked"].includes(view)
+        const hasActiveSearch = String(stateSnapshot.searchQuery || "").trim().length > 0
+        if (!supportsPagination || hasActiveSearch) return queriedNotes
+        const displayLimit = Number(stateSnapshot.pagination?.displayLimit) || 20
+        return queriedNotes.slice(0, displayLimit)
+    },
+
     reorderNotes(draggedId, targetId, position) {
         if (!db || !StateStore.read().user) return
         if (draggedId === targetId) return
@@ -53,7 +64,7 @@ Object.assign(UI, {
             return
         }
         const orderKey = isFolderView ? "folderOrder" : "order"
-        const groupIds = this.visibleNotes.filter(n => !!n.isPinned === !!draggedNote.isPinned).map(n => n.id)
+        const groupIds = this.getRenderedScopeNotes().filter(note => !!note.isPinned === !!draggedNote.isPinned).map(note => note.id)
         const fromIndex = groupIds.indexOf(draggedId)
         const toIndex = groupIds.indexOf(targetId)
         if (fromIndex === -1 || toIndex === -1) return
@@ -87,7 +98,7 @@ Object.assign(UI, {
             actionLabel: this.getText("undo", "Undo"),
             onAction: () => this.undoOrder()
         })
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
     },
 
     undoOrder() {
@@ -107,6 +118,6 @@ Object.assign(UI, {
             batch.update(ref, { [orderKey]: item.value })
         })
         batch.commit()
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
     }
 })

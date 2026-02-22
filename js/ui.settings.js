@@ -263,11 +263,11 @@ Object.assign(UI, {
                     </div>
                 </div>
                 <div class="settings-actions row-between">
-                    <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
-                    <div class="row-right">
+                    <div class="row-left">
+                        <button type="button" class="btn-secondary" data-action="appearance-reset">${dict.reset || "Reset"}</button>
                         <button type="button" class="btn-secondary" data-action="appearance-cancel">${dict.cancel || "Cancel"}</button>
-                        <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                     </div>
+                    <button type="button" class="btn-primary" data-action="appearance-save">${dict.save || "Save"}</button>
                 </div>
             `
             if (typeof ColorPalette !== "undefined") ColorPalette.init(root)
@@ -305,7 +305,7 @@ Object.assign(UI, {
     applyDraftSettingsToRuntime() {
         const currentDraftSettings = this.getSettingsDraft()
         if (!currentDraftSettings) return
-        AppLifecycle.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
+        SettingsSyncService.applyUserSettingsToRuntime(currentDraftSettings, { resetVisibleLimit: true, persistTheme: false })
     },
 
     scheduleDraftSettingsRuntimeApply() {
@@ -331,7 +331,7 @@ Object.assign(UI, {
         const originalSettings = StateStore.read().originalUserSettings
         if (!originalSettings) return
         StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(originalSettings)))
-        AppLifecycle.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true, persistTheme: false })
+        SettingsSyncService.applyUserSettingsToRuntime(originalSettings, { resetVisibleLimit: true, persistTheme: false })
         if (this.settingsPage === "appearance") {
             this.initAppearanceDraft()
             this.renderAppearanceDraft()
@@ -351,17 +351,16 @@ Object.assign(UI, {
         const currentDraftSettings = this.getSettingsDraft()
         if (!currentDraftSettings) return
         try {
-            const nextSavedSettings = await AppLifecycle.saveUserSettings(currentDraftSettings)
+            const nextSavedSettings = await SettingsSyncService.saveUserSettings(currentDraftSettings)
             if (!nextSavedSettings) return
             StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextSavedSettings)))
-            AppLifecycle.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
+            SettingsSyncService.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
             if (this.settingsPage === "appearance") {
                 this.initAppearanceDraft()
                 this.renderAppearanceDraft()
             } else {
                 this.syncSettingsUI()
             }
-            this.showToast(this.getText("settings_saved", "Настройки сохранены"))
             this.closeModal("settings-modal")
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
@@ -578,7 +577,7 @@ Object.assign(UI, {
             notesPerPageSelect.addEventListener("change", event => {
                 const allowedValues = new Set([5, 10, 20, 50])
                 const parsedValue = Number(event.target.value)
-                const notesPerPage = allowedValues.has(parsedValue) ? parsedValue : 10
+                const notesPerPage = allowedValues.has(parsedValue) ? parsedValue : 20
                 this.updateSettingsDraft({ notesPerPage })
                 this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
@@ -775,11 +774,19 @@ Object.assign(UI, {
     },
 
     showToast(msg, options = {}) {
+        const message = String(msg || "").trim()
+        if (!message) return
+        const now = Date.now()
+        const deduplicationWindow = Number(options.deduplicationWindowMs) || 1800
+        if (!options.allowDuplicate && this.toastDeduplication.lastMessage === message && (now - this.toastDeduplication.lastShownAt) < deduplicationWindow) {
+            return
+        }
+        this.toastDeduplication = { lastMessage: message, lastShownAt: now }
         const div = document.createElement("div")
         div.className = "toast show"
         div.setAttribute("role", "status")
         const text = document.createElement("span")
-        text.textContent = msg
+        text.textContent = message
         div.appendChild(text)
         if (options.actionLabel && options.onAction) {
             const btn = document.createElement("button")
@@ -965,7 +972,7 @@ Object.assign(UI, {
         const reduceToggle = document.getElementById("settings-reduce-motion")
         if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
         const notesPerPageSelect = document.getElementById("settings-notes-per-page")
-        if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 10)
+        if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 20)
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },

@@ -563,6 +563,31 @@ body.platform-android .top-bar {
     opacity: 0.75;
 }
 
+.folder-description-preview {
+    margin: 0;
+    font-size: 13px;
+    opacity: 0.8;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.folder-description-preview.expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+
+.folder-description-more {
+    align-self: flex-start;
+    border: 0;
+    background: transparent;
+    color: var(--primary);
+    font-size: 12px;
+    padding: 0;
+    cursor: pointer;
+}
+
 .note-card.dragging {
     opacity: 0.6;
     transform: scale(0.98);

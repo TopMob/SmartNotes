@@ -285,7 +285,6 @@ export function createAuthManager({ auth }) {
         clearState() {
             if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
             if (typeof UI !== "undefined") {
-                UI.visibleNotes = []
                 UI.currentNoteActionId = null
                 UI.draggedNoteId = null
                 UI.dragTargetId = null
@@ -336,27 +335,47 @@ export function createAuthManager({ auth }) {
                 loginScreen.style.opacity = "1"
             }
         },
+        async _startSessionWhenReady(user, attempt = 0) {
+            const maxAttempts = 20
+            if (typeof SessionService !== "undefined" && typeof SessionService.startUserSession === "function") {
+                await SessionService.startUserSession(user)
+                return true
+            }
+            if (attempt >= maxAttempts) {
+                this._toast(this._t("sync_error", "Sync error"))
+                console.error("[Session] error", { code: "session-service-unavailable", message: "SessionService is not ready" })
+                return false
+            }
+            await new Promise(resolve => setTimeout(resolve, 100))
+            return this._startSessionWhenReady(user, attempt + 1)
+        },
+        _stopSessionWhenReady(attempt = 0) {
+            const maxAttempts = 20
+            if (typeof SessionService !== "undefined" && typeof SessionService.stopUserSession === "function") {
+                SessionService.stopUserSession()
+                return
+            }
+            if (attempt >= maxAttempts) return
+            setTimeout(() => this._stopSessionWhenReady(attempt + 1), 100)
+        },
         async _handleAuthState(user) {
             const normalizedUser = user || auth.currentUser || null
             const previousUserUid = String(state.currentUser?.uid || "")
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             state.currentUser = normalizedUser
+            console.info("[Auth] state changed", normalizedUser ? "logged in" : "logged out")
             state.authReady = true
             StateActions.setUser(normalizedUser)
 
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) return
-                if (typeof window.startUserSession === "function") {
-                    await window.startUserSession(normalizedUser)
-                }
+                await this._startSessionWhenReady(normalizedUser)
                 return
             }
 
-            if (typeof window.stopUserSession === "function") {
-                window.stopUserSession()
-            }
+            this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()
         },
