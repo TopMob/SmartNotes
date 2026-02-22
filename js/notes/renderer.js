@@ -144,7 +144,7 @@ const NotesRenderer = (() => {
         const lockHash = note.lock?.hash || ""
         const prevHash = data.lock?.hash || ""
         if (lockHash !== prevHash) {
-            refs.lockContainer.innerHTML = ""
+            refs.lockContainer.replaceChildren()
             if (note.lock && note.lock.hidden) {
                 const badge = el("span", ["lock-badge"])
                 const i = createIcon("lock")
@@ -165,21 +165,22 @@ const NotesRenderer = (() => {
 
         if (!list || !list.length) {
             UI.els.empty.classList.remove("hidden")
-            grid.innerHTML = ""
+            grid.replaceChildren()
             cardCache.clear()
             return
         }
 
         UI.els.empty.classList.add("hidden")
         grid.classList.remove("folder-grid")
-        UI.visibleNotes = list
 
         const fragment = document.createDocumentFragment()
         const currentIds = new Set()
+        const nodesInNextOrder = []
 
         list.forEach(note => {
             currentIds.add(note.id)
             const node = cardCache.has(note.id) ? updateCard(note) : createCard(note)
+            nodesInNextOrder.push(node)
             fragment.appendChild(node)
         })
 
@@ -187,7 +188,11 @@ const NotesRenderer = (() => {
             if (!currentIds.has(id)) cardCache.delete(id)
         }
 
-        grid.replaceChildren(fragment)
+        const hasSameStructure = grid.children.length === nodesInNextOrder.length
+            && nodesInNextOrder.every((node, index) => grid.children[index] === node)
+        if (!hasSameStructure) {
+            grid.replaceChildren(fragment)
+        }
     }
 
     return { render }

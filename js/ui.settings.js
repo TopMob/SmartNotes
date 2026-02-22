@@ -774,11 +774,19 @@ Object.assign(UI, {
     },
 
     showToast(msg, options = {}) {
+        const message = String(msg || "").trim()
+        if (!message) return
+        const now = Date.now()
+        const deduplicationWindow = Number(options.deduplicationWindowMs) || 1800
+        if (!options.allowDuplicate && this.toastDeduplication.lastMessage === message && (now - this.toastDeduplication.lastShownAt) < deduplicationWindow) {
+            return
+        }
+        this.toastDeduplication = { lastMessage: message, lastShownAt: now }
         const div = document.createElement("div")
         div.className = "toast show"
         div.setAttribute("role", "status")
         const text = document.createElement("span")
-        text.textContent = msg
+        text.textContent = message
         div.appendChild(text)
         if (options.actionLabel && options.onAction) {
             const btn = document.createElement("button")

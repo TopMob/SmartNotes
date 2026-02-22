@@ -2,6 +2,8 @@ const NotesApplication = (() => {
     let unsubscribeStateRender = null
     let networkRetryTimer = null
     let initializationPromise = null
+    let unsubscribeUiEvents = []
+    let networkListenersController = null
 
     function getNotesScrollContainer() {
         return document.getElementById("notes-content-area")
@@ -22,15 +24,45 @@ const NotesApplication = (() => {
         if (unsubscribeStateRender) return
         unsubscribeStateRender = StateStore.subscribe((nextState, previousState) => {
             const configChanged = nextState.config !== previousState.config
-            if (configChanged && nextState.config.lang !== previousState.config.lang) {
+            const languageChanged = configChanged && nextState.config.lang !== previousState.config.lang
+            if (languageChanged) {
                 UI.applyLangToDom()
             }
-            if (nextState.folders !== previousState.folders || configChanged) {
+
+            const folderUiDependenciesChanged = nextState.folders !== previousState.folders
+                || nextState.activeFolderId !== previousState.activeFolderId
+                || languageChanged
+                || (configChanged && nextState.config.folderViewMode !== previousState.config.folderViewMode)
+            if (folderUiDependenciesChanged) {
                 UI.renderFolders()
             }
-            const paginationChanged = nextState.pagination !== previousState.pagination
-            if (nextState.notes !== previousState.notes || nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId || nextState.searchQuery !== previousState.searchQuery || nextState.folders !== previousState.folders || configChanged || paginationChanged) {
-                renderFromState({ preserveScrollPosition: paginationChanged })
+
+            const paginationStateChanged = nextState.pagination !== previousState.pagination
+            const displayLimitChanged = paginationStateChanged && nextState.pagination.displayLimit !== previousState.pagination.displayLimit
+            const loadMoreStateChanged = paginationStateChanged
+                && (
+                    nextState.pagination.loadingMoreOwnedNotes !== previousState.pagination.loadingMoreOwnedNotes
+                    || nextState.pagination.hasMoreOwnedNotes !== previousState.pagination.hasMoreOwnedNotes
+                    || nextState.pagination.totalVisibleNotesCount !== previousState.pagination.totalVisibleNotesCount
+                    || nextState.pagination.renderedVisibleNotesCount !== previousState.pagination.renderedVisibleNotesCount
+                    || nextState.pagination.searchActive !== previousState.pagination.searchActive
+                )
+
+            const shouldRenderNotes = nextState.notes !== previousState.notes
+                || nextState.view !== previousState.view
+                || nextState.activeFolderId !== previousState.activeFolderId
+                || nextState.searchQuery !== previousState.searchQuery
+                || nextState.folders !== previousState.folders
+                || languageChanged
+                || displayLimitChanged
+
+            if (shouldRenderNotes) {
+                renderFromState({ preserveScrollPosition: displayLimitChanged })
+                return
+            }
+
+            if (loadMoreStateChanged) {
+                UI.updateNotesLoadMoreButton(PaginationService.getLoadMoreState())
             }
         })
     }
@@ -51,32 +83,40 @@ const NotesApplication = (() => {
     }
 
     function startUiEventListeners() {
-        EventBus.subscribe("reminderTriggered", note => {
+        if (unsubscribeUiEvents.length) {
+            unsubscribeUiEvents.forEach(unsubscribe => {
+                if (typeof unsubscribe === "function") unsubscribe()
+            })
+            unsubscribeUiEvents = []
+        }
+        unsubscribeUiEvents.push(EventBus.subscribe("reminderTriggered", note => {
             UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
                 new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("reminder_note", "Reminder") })
             }
-        })
-        EventBus.subscribe("permissionRevoked", () => {
+        }))
+        unsubscribeUiEvents.push(EventBus.subscribe("permissionRevoked", () => {
             UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
-        })
-        EventBus.subscribe("settingsSaved", () => {
+        }))
+        unsubscribeUiEvents.push(EventBus.subscribe("settingsSaved", () => {
             UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
-        })
-        EventBus.subscribe("notesLoadFailed", error => reportSyncError(error, "notes load"))
-        EventBus.subscribe("notesSyncError", error => reportSyncError(error, "owned notes sync"))
-        EventBus.subscribe("sharedSyncError", error => reportSyncError(error, "shared notes sync"))
-        EventBus.subscribe("foldersSyncError", error => reportSyncError(error, "folders sync"))
+        }))
+        unsubscribeUiEvents.push(EventBus.subscribe("notesLoadFailed", error => reportSyncError(error, "notes load")))
+        unsubscribeUiEvents.push(EventBus.subscribe("notesSyncError", error => reportSyncError(error, "owned notes sync")))
+        unsubscribeUiEvents.push(EventBus.subscribe("sharedSyncError", error => reportSyncError(error, "shared notes sync")))
+        unsubscribeUiEvents.push(EventBus.subscribe("foldersSyncError", error => reportSyncError(error, "folders sync")))
     }
 
     function bindNetworkLifecycle() {
+        if (networkListenersController) return
+        networkListenersController = new AbortController()
         window.addEventListener("online", () => {
             clearTimeout(networkRetryTimer)
             networkRetryTimer = setTimeout(() => {
                 const user = StateStore.read().user
                 if (user?.uid) SessionService.startUserSession(user, { forceResubscribe: true }).catch(() => {})
             }, 1000)
-        })
+        }, { signal: networkListenersController.signal })
     }
 
     async function disableServiceWorkerCaching() {

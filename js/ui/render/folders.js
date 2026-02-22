@@ -1,4 +1,19 @@
 Object.assign(UI, {
+    updateNavigationActiveState() {
+        const stateSnapshot = StateStore.read()
+        document.querySelectorAll(".nav-item").forEach(buttonElement => {
+            const buttonView = buttonElement.dataset.view
+            const buttonFolderId = buttonElement.dataset.folderId
+            let isActive = false
+            if (buttonView) {
+                isActive = stateSnapshot.view === buttonView
+            } else if (buttonFolderId) {
+                isActive = stateSnapshot.view === "folder" && stateSnapshot.activeFolderId === buttonFolderId
+            }
+            buttonElement.classList.toggle("active", isActive)
+        })
+    },
+
     updateEmptyState(icon, text) {
         const iconElement = this.els.empty.querySelector("i")
         const textElement = this.els.empty.querySelector("p")
@@ -55,6 +70,7 @@ Object.assign(UI, {
             if (folderButton) fragment.append(folderButton)
         })
         root.replaceChildren(fragment)
+        this.updateNavigationActiveState()
         this.renderFilterMenu()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
