@@ -2,7 +2,6 @@ const PaginationService = (() => {
     const state = {
         pageSize: 500,
         renderStep: 20,
-        visibleLimit: 20,
         hasMoreOwnedNotes: false,
         loadingMoreOwnedNotes: false,
         lastOwnedNoteDocument: null,
@@ -17,14 +16,24 @@ const PaginationService = (() => {
         return 20
     }
 
+    function getDisplayLimit() {
+        return Number(StateStore.read().pagination?.displayLimit) || state.renderStep
+    }
+
+    function setDisplayLimit(nextDisplayLimit) {
+        const normalizedDisplayLimit = Math.max(state.renderStep, Number(nextDisplayLimit) || state.renderStep)
+        if (normalizedDisplayLimit === getDisplayLimit()) return
+        StateStore.update("pagination", { displayLimit: normalizedDisplayLimit })
+    }
+
     function configureFromSettings(settings) {
         const nextRenderStep = normalizeRenderStep(settings)
         state.renderStep = nextRenderStep
-        state.visibleLimit = Math.max(nextRenderStep, state.visibleLimit || nextRenderStep)
+        setDisplayLimit(Math.max(nextRenderStep, getDisplayLimit()))
     }
 
     function resetVisibleLimit() {
-        state.visibleLimit = state.renderStep
+        setDisplayLimit(state.renderStep)
     }
 
     function setOwnedPaginationInfo(info) {
@@ -57,21 +66,21 @@ const PaginationService = (() => {
             return notes
         }
 
-        const visibleNotes = notes.slice(0, state.visibleLimit)
+        const visibleNotes = notes.slice(0, getDisplayLimit())
         state.totalVisibleNotesCount = notes.length
         state.renderedVisibleNotesCount = visibleNotes.length
         return visibleNotes
     }
 
     function loadMoreVisibleNotes() {
-        state.visibleLimit += state.renderStep
+        setDisplayLimit(getDisplayLimit() + state.renderStep)
     }
 
     function shouldLoadMoreOwnedFromServer() {
         return !state.searchActive
             && state.hasMoreOwnedNotes
             && !state.loadingMoreOwnedNotes
-            && state.visibleLimit >= state.totalVisibleNotesCount
+            && getDisplayLimit() >= state.totalVisibleNotesCount
     }
 
     function getLoadMoreState() {

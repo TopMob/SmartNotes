@@ -18,7 +18,8 @@ const NotesApplication = (() => {
             if (nextState.folders !== previousState.folders || configChanged) {
                 UI.renderFolders()
             }
-            if (nextState.notes !== previousState.notes || nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId || nextState.searchQuery !== previousState.searchQuery || nextState.folders !== previousState.folders || configChanged) {
+            const paginationChanged = nextState.pagination !== previousState.pagination
+            if (nextState.notes !== previousState.notes || nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId || nextState.searchQuery !== previousState.searchQuery || nextState.folders !== previousState.folders || configChanged || paginationChanged) {
                 renderFromState()
             }
         })

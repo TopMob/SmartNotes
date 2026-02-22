@@ -18,10 +18,11 @@ const StateStore = (() => {
         appearanceDraft: null,
         originalUserSettings: null,
         draftUserSettings: null,
-        saveStatus: { status: "idle", message: "", updatedAt: 0 }
+        saveStatus: { status: "idle", message: "", updatedAt: 0 },
+        pagination: { displayLimit: 20 }
     }
 
-    let state = { ...initialState, config: { ...initialState.config } }
+    let state = { ...initialState, config: { ...initialState.config }, pagination: { ...initialState.pagination } }
     const subscribers = new Set()
 
     const notifySubscribers = (nextState, previousState) => {
@@ -66,6 +67,7 @@ const StateStore = (() => {
         originalUserSettings: null,
         draftUserSettings: null,
         saveStatus: { ...initialState.saveStatus },
+        pagination: { ...initialState.pagination },
         config: { ...initialState.config }
     }))
 
@@ -84,6 +86,6 @@ const StateStore = (() => {
         updateConfig,
         resetSession,
         subscribe,
-        initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus } })
+        initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus }, pagination: { ...initialState.pagination } })
     }
 })()
