@@ -57,21 +57,40 @@ const AppLifecycle = {
         const parsedNotesPerPage = Number(source.notesPerPage)
         const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
         const defaultTheme = defaults.customTheme && typeof defaults.customTheme === "object" ? defaults.customTheme : {}
-        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaultTheme
+        const normalizedThemeId = typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId
+        const themePreset = ThemeManager.resolvePreset(normalizedThemeId)
+        const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : {}
+        const fallbackTheme = {
+            p: ThemeManager.normalizeHex(themePreset?.p || defaultTheme.p),
+            bg: ThemeManager.normalizeHex(themePreset?.bg || defaultTheme.bg),
+            t: ThemeManager.normalizeHex(themePreset?.t || defaultTheme.t),
+            mainBackgroundUrl: typeof defaultTheme.mainBackgroundUrl === "string" ? defaultTheme.mainBackgroundUrl : "",
+            sidebarBackgroundUrl: typeof defaultTheme.sidebarBackgroundUrl === "string" ? defaultTheme.sidebarBackgroundUrl : "",
+            mainBackgroundImage: typeof defaultTheme.mainBackgroundImage === "string" ? defaultTheme.mainBackgroundImage : "",
+            sidebarBackgroundImage: typeof defaultTheme.sidebarBackgroundImage === "string" ? defaultTheme.sidebarBackgroundImage : "",
+            uiOpacity: typeof defaultTheme.uiOpacity === "number" ? defaultTheme.uiOpacity : 0.78,
+            cardsOpacity: typeof defaultTheme.cardsOpacity === "number" ? defaultTheme.cardsOpacity : 0.9
+        }
         const resolveThemeValue = (key, fallback = "") => {
             if (typeof customThemeSource[key] === "string") return customThemeSource[key]
-            if (typeof defaultTheme[key] === "string") return defaultTheme[key]
+            if (typeof fallbackTheme[key] === "string") return fallbackTheme[key]
             return fallback
         }
         const resolveThemeOpacity = (key, fallback) => {
             if (typeof customThemeSource[key] === "number") return customThemeSource[key]
-            if (typeof defaultTheme[key] === "number") return defaultTheme[key]
+            if (typeof fallbackTheme[key] === "number") return fallbackTheme[key]
             return fallback
         }
+        const normalizeThemeColor = (key) => {
+            if (typeof customThemeSource[key] === "string" && customThemeSource[key].trim()) {
+                return ThemeManager.normalizeHex(customThemeSource[key])
+            }
+            return ThemeManager.normalizeHex(fallbackTheme[key])
+        }
         const normalizedTheme = {
-            p: ThemeManager.normalizeHex(customThemeSource.p || defaultTheme.p),
-            bg: ThemeManager.normalizeHex(customThemeSource.bg || defaultTheme.bg),
-            t: ThemeManager.normalizeHex(customThemeSource.t || defaultTheme.t),
+            p: normalizeThemeColor("p"),
+            bg: normalizeThemeColor("bg"),
+            t: normalizeThemeColor("t"),
             mainBackgroundUrl: resolveThemeValue("mainBackgroundUrl", ""),
             sidebarBackgroundUrl: resolveThemeValue("sidebarBackgroundUrl", ""),
             mainBackgroundImage: resolveThemeValue("mainBackgroundImage", ""),
@@ -85,7 +104,7 @@ const AppLifecycle = {
         const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localCustomPresets, cloudCustomPresets)
         return {
             notesPerPage,
-            themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
+            themeId: normalizedThemeId,
             customTheme: normalizedTheme,
             backgroundType: normalizedMainBackgroundValue ? "image" : "none",
             backgroundValue: normalizedMainBackgroundValue,
