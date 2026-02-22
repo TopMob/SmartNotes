@@ -58,18 +58,22 @@ const AppLifecycle = {
         const notesPerPage = notesPerPageOptions.has(parsedNotesPerPage) ? parsedNotesPerPage : defaults.notesPerPage
         const defaultTheme = defaults.customTheme && typeof defaults.customTheme === "object" ? defaults.customTheme : {}
         const normalizedThemeId = typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId
+        const localCustomPresets = ThemeManager.getCustomPresets()
+        const cloudCustomPresets = Array.isArray(source.customPresets) ? source.customPresets : []
+        const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localCustomPresets, cloudCustomPresets)
         const themePreset = ThemeManager.resolvePreset(normalizedThemeId)
+        const activeCustomPreset = mergedCustomPresets.find(item => `custom:${String(item.key || "")}` === normalizedThemeId) || null
         const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : {}
         const fallbackTheme = {
-            p: ThemeManager.normalizeHex(themePreset?.p || defaultTheme.p),
-            bg: ThemeManager.normalizeHex(themePreset?.bg || defaultTheme.bg),
-            t: ThemeManager.normalizeHex(themePreset?.t || defaultTheme.t),
-            mainBackgroundUrl: typeof defaultTheme.mainBackgroundUrl === "string" ? defaultTheme.mainBackgroundUrl : "",
-            sidebarBackgroundUrl: typeof defaultTheme.sidebarBackgroundUrl === "string" ? defaultTheme.sidebarBackgroundUrl : "",
-            mainBackgroundImage: typeof defaultTheme.mainBackgroundImage === "string" ? defaultTheme.mainBackgroundImage : "",
-            sidebarBackgroundImage: typeof defaultTheme.sidebarBackgroundImage === "string" ? defaultTheme.sidebarBackgroundImage : "",
-            uiOpacity: typeof defaultTheme.uiOpacity === "number" ? defaultTheme.uiOpacity : 0.78,
-            cardsOpacity: typeof defaultTheme.cardsOpacity === "number" ? defaultTheme.cardsOpacity : 0.9
+            p: ThemeManager.normalizeHex(activeCustomPreset?.p || themePreset?.p || defaultTheme.p),
+            bg: ThemeManager.normalizeHex(activeCustomPreset?.bg || themePreset?.bg || defaultTheme.bg),
+            t: ThemeManager.normalizeHex(activeCustomPreset?.t || themePreset?.t || defaultTheme.t),
+            mainBackgroundUrl: typeof activeCustomPreset?.mainBackgroundUrl === "string" ? activeCustomPreset.mainBackgroundUrl : (typeof defaultTheme.mainBackgroundUrl === "string" ? defaultTheme.mainBackgroundUrl : ""),
+            sidebarBackgroundUrl: typeof activeCustomPreset?.sidebarBackgroundUrl === "string" ? activeCustomPreset.sidebarBackgroundUrl : (typeof defaultTheme.sidebarBackgroundUrl === "string" ? defaultTheme.sidebarBackgroundUrl : ""),
+            mainBackgroundImage: typeof activeCustomPreset?.mainBackgroundImage === "string" ? activeCustomPreset.mainBackgroundImage : (typeof defaultTheme.mainBackgroundImage === "string" ? defaultTheme.mainBackgroundImage : ""),
+            sidebarBackgroundImage: typeof activeCustomPreset?.sidebarBackgroundImage === "string" ? activeCustomPreset.sidebarBackgroundImage : (typeof defaultTheme.sidebarBackgroundImage === "string" ? defaultTheme.sidebarBackgroundImage : ""),
+            uiOpacity: typeof activeCustomPreset?.uiOpacity === "number" ? activeCustomPreset.uiOpacity : (typeof defaultTheme.uiOpacity === "number" ? defaultTheme.uiOpacity : 0.78),
+            cardsOpacity: typeof activeCustomPreset?.cardsOpacity === "number" ? activeCustomPreset.cardsOpacity : (typeof defaultTheme.cardsOpacity === "number" ? defaultTheme.cardsOpacity : 0.9)
         }
         const resolveThemeValue = (key, fallback = "") => {
             if (typeof customThemeSource[key] === "string") return customThemeSource[key]
@@ -99,9 +103,6 @@ const AppLifecycle = {
             cardsOpacity: resolveThemeOpacity("cardsOpacity", 0.9)
         }
         const normalizedMainBackgroundValue = ThemeManager.pickRuntimeBackgroundValue(normalizedTheme.mainBackgroundUrl, normalizedTheme.mainBackgroundImage)
-        const localCustomPresets = ThemeManager.getCustomPresets()
-        const cloudCustomPresets = Array.isArray(source.customPresets) ? source.customPresets : []
-        const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(localCustomPresets, cloudCustomPresets)
         return {
             notesPerPage,
             themeId: normalizedThemeId,
