@@ -320,24 +320,6 @@ Object.assign(UI, {
         return document.body.classList.contains("platform-ios") && !this.isStandaloneAppMode()
     },
 
-    updateInstallEntryVisibility() {
-        const installEntries = document.querySelectorAll('[data-install-entry]')
-        const shouldShow = false
-        installEntries.forEach(entry => {
-            entry.classList.toggle("hidden", !shouldShow)
-        })
-    },
-
-    initializeInstallFlow() {
-        this.installCapabilityKnown = true
-        this.deferredInstallPromptEvent = null
-        this.updateInstallEntryVisibility()
-    },
-
-    async installApplication() {
-        this.updateInstallEntryVisibility()
-    },
-
     getAnalysisApiEndpoint() {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },

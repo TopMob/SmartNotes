@@ -7,8 +7,6 @@ const UI = {
     draggedFolderId: null,
     visibleNotes: [],
     settingsPage: null,
-    deferredInstallPromptEvent: null,
-    installCapabilityKnown: false,
     eventsBound: false,
 
     init() {
@@ -41,7 +39,6 @@ const UI = {
         this.applyAppearanceSettings()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
-        this.initializeInstallFlow()
     },
 
     getText(key, fallback = "") {
@@ -55,7 +52,6 @@ const UI = {
         this.applyLangToDom()
         this.updateViewTitle()
         this.updatePrimaryActionLabel()
-        this.initializeInstallFlow()
         ThemeManager.renderPicker()
         this.syncSettingsUI()
         this.renderEditorSettings()

@@ -17,6 +17,21 @@ const NotesApplication = (() => {
         })
     }
 
+    function isNonCriticalSyncError(error) {
+        const errorCode = String(error?.code || "")
+        return errorCode === "permission-denied" || errorCode === "failed-precondition" || errorCode === "not-found"
+    }
+
+    function reportSyncError(error, context) {
+        const details = { code: error?.code || "", message: error?.message || String(error || "") }
+        if (isNonCriticalSyncError(error)) {
+            console.info(`[Session] ${context} secondary error`, details)
+            return
+        }
+        UI.showToast(UI.getText("sync_error", "Sync error"))
+        console.error(`[Session] ${context} error`, details)
+    }
+
     function startUiEventListeners() {
         EventBus.subscribe("reminderTriggered", note => {
             UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
@@ -30,22 +45,10 @@ const NotesApplication = (() => {
         EventBus.subscribe("settingsSaved", () => {
             UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
         })
-        EventBus.subscribe("notesLoadFailed", error => {
-            UI.showToast(UI.getText("sync_error", "Sync error"))
-            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
-        })
-        EventBus.subscribe("notesSyncError", error => {
-            UI.showToast(UI.getText("sync_error", "Sync error"))
-            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
-        })
-        EventBus.subscribe("sharedSyncError", error => {
-            UI.showToast(UI.getText("sync_error", "Sync error"))
-            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
-        })
-        EventBus.subscribe("foldersSyncError", error => {
-            UI.showToast(UI.getText("sync_error", "Sync error"))
-            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
-        })
+        EventBus.subscribe("notesLoadFailed", error => reportSyncError(error, "notes load"))
+        EventBus.subscribe("notesSyncError", error => reportSyncError(error, "owned notes sync"))
+        EventBus.subscribe("sharedSyncError", error => reportSyncError(error, "shared notes sync"))
+        EventBus.subscribe("foldersSyncError", error => reportSyncError(error, "folders sync"))
     }
 
     function bindNetworkLifecycle() {

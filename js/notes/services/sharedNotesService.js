@@ -72,7 +72,15 @@ const SharedNotesService = (() => {
                 entries.set(documentEntry.id, { id: documentEntry.id, noteId: entry.noteId, ownerUid: entry.ownerUid, permission: entry.permission || "viewer" })
             })
             updateEntries(entries)
-        }, error => EventBus.publish("sharedSyncError", error))
+        }, error => {
+            if (shouldIgnoreSharedError(error)) {
+                state.sharedEntries.clear()
+                state.sharedNotes.clear()
+                publishSharedNotes()
+                return
+            }
+            EventBus.publish("sharedSyncError", error)
+        })
     }
     function clear() {
         if (state.unsubscribeEntries) state.unsubscribeEntries()
