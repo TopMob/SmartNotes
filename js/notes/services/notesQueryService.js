@@ -127,7 +127,7 @@ const NotesQueryService = (() => {
                 scores: new Map(scoredNotes.map(item => [item.note.id, item.score]))
             }
         } catch (error) {
-            console.error("Search failed", error)
+            EventBus.publish("searchFailed", error)
             return { notes, scores: null }
         }
     }

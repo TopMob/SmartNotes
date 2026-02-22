@@ -1,11 +1,9 @@
 const NotesApplication = (() => {
     let unsubscribeStateRender = null
-    let unsubscribeReminder = null
     let networkRetryTimer = null
     function renderFromState() {
-        const stateSnapshot = StateStore.read()
-        const viewModel = NotesQueryService.execute(stateSnapshot, stateSnapshot.searchQuery || "")
-        NotesViewService.render(viewModel)
+        const viewModel = NotesPresenter.createViewModel(StateStore.read())
+        NotesUIAdapter.render(viewModel)
     }
     function startStateRendering() {
         if (unsubscribeStateRender) return
@@ -15,13 +13,18 @@ const NotesApplication = (() => {
             }
         })
     }
-    function startReminderNotifications() {
-        if (unsubscribeReminder) return
-        unsubscribeReminder = RemindersService.subscribe(note => {
+    function startUiEventListeners() {
+        EventBus.subscribe("reminderTriggered", note => {
             UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
                 new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("reminder_note", "Reminder") })
             }
+        })
+        EventBus.subscribe("permissionRevoked", () => {
+            UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
+        })
+        EventBus.subscribe("settingsSaved", () => {
+            UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
         })
     }
     function bindNetworkLifecycle() {
@@ -35,7 +38,7 @@ const NotesApplication = (() => {
     }
     async function init() {
         startStateRendering()
-        startReminderNotifications()
+        startUiEventListeners()
         bindNetworkLifecycle()
         const user = StateStore.read().user
         if (!user) return

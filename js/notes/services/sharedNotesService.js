@@ -11,7 +11,10 @@ const SharedNotesService = (() => {
         state.sharedEntries.delete(sharedId)
         state.sharedNotes.delete(sharedId)
     }
-    function updateEntries(nextEntries, onChange) {
+    function publishSharedNotes() {
+        EventBus.publish("sharedNotesUpdated", [...state.sharedNotes.values()])
+    }
+    function updateEntries(nextEntries) {
         const removedIds = []
         state.sharedEntries.forEach((entry, sharedId) => {
             if (!nextEntries.has(sharedId)) removedIds.push(sharedId)
@@ -27,7 +30,7 @@ const SharedNotesService = (() => {
             const unsubscribeNote = NotesRepository.subscribeSharedNote(entry.ownerUid, entry.noteId, noteSnapshot => {
                 if (!noteSnapshot.exists) {
                     removeSharedEntry(sharedId)
-                    onChange(new Map(state.sharedNotes))
+                    publishSharedNotes()
                     return
                 }
                 const normalizedNote = NoteIO.normalizeNote({ id: entry.noteId, ...noteSnapshot.data() })
@@ -35,7 +38,8 @@ const SharedNotesService = (() => {
                 const roles = normalizedNote.access?.roles && typeof normalizedNote.access.roles === "object" ? normalizedNote.access.roles : {}
                 if (currentUserUid && !roles[currentUserUid]) {
                     removeSharedEntry(sharedId)
-                    onChange(new Map(state.sharedNotes))
+                    EventBus.publish("permissionRevoked", { sharedId, ownerUid: entry.ownerUid, noteId: entry.noteId })
+                    publishSharedNotes()
                     return
                 }
                 state.sharedNotes.set(sharedId, {
@@ -43,20 +47,20 @@ const SharedNotesService = (() => {
                     id: CollaborationService.sharedNoteId(entry.ownerUid, entry.noteId),
                     access: { ownerUid: entry.ownerUid, ownerCollection: "users", noteId: entry.noteId, shareId: sharedId, roles: { ...roles, ...(currentUserUid ? { [currentUserUid]: entry.permission } : {}) } }
                 })
-                onChange(new Map(state.sharedNotes))
+                publishSharedNotes()
             }, error => {
                 if (shouldIgnoreSharedError(error)) {
                     removeSharedEntry(sharedId)
-                    onChange(new Map(state.sharedNotes))
+                    publishSharedNotes()
                     return
                 }
-                console.error("Shared note sync error", error)
+                EventBus.publish("sharedSyncError", error)
             })
             state.sharedNoteUnsubscribers.set(sharedId, unsubscribeNote)
         })
-        onChange(new Map(state.sharedNotes))
+        publishSharedNotes()
     }
-    function subscribe(user, onChange) {
+    function subscribe(user) {
         state.user = user
         if (state.unsubscribeEntries) state.unsubscribeEntries()
         state.unsubscribeEntries = NotesRepository.subscribeSharedEntries(user, snapshot => {
@@ -65,8 +69,8 @@ const SharedNotesService = (() => {
                 const entry = documentEntry.data() || {}
                 entries.set(documentEntry.id, { id: documentEntry.id, noteId: entry.noteId, ownerUid: entry.ownerUid, permission: entry.permission || "viewer" })
             })
-            updateEntries(entries, onChange)
-        }, error => console.error("Shared sync error", error))
+            updateEntries(entries)
+        }, error => EventBus.publish("sharedSyncError", error))
     }
     function clear() {
         if (state.unsubscribeEntries) state.unsubscribeEntries()

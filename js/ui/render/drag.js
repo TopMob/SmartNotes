@@ -87,7 +87,7 @@ Object.assign(UI, {
             actionLabel: this.getText("undo", "Undo"),
             onAction: () => this.undoOrder()
         })
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
     },
 
     undoOrder() {
@@ -107,6 +107,6 @@ Object.assign(UI, {
             batch.update(ref, { [orderKey]: item.value })
         })
         batch.commit()
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
     }
 })

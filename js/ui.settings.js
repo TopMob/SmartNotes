@@ -361,7 +361,6 @@ Object.assign(UI, {
             } else {
                 this.syncSettingsUI()
             }
-            this.showToast(this.getText("settings_saved", "Настройки сохранены"))
             this.closeModal("settings-modal")
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))

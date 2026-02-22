@@ -88,7 +88,7 @@ Object.assign(UI, {
         const search = document.getElementById("search-input")
         if (search) {
             search.addEventListener("input", (e) => {
-                filterAndRender(e.target.value)
+                updateSearchQuery(e.target.value)
             })
         }
 
@@ -180,7 +180,7 @@ Object.assign(UI, {
         const updated = { ...current, ...next }
         StateActions.updateConfig({ notesFilter: updated })
         SafeStorage.local.setJson("notes-filter", updated)
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderFilterMenu()
     },
 
@@ -401,8 +401,7 @@ Object.assign(UI, {
             case "load-more-notes":
                 e.preventDefault()
                 PaginationService.loadMore()
-                SessionService.loadMoreOwnedNotes?.()
-                filterAndRender(StateStore.read().searchQuery || "")
+                StateStore.update("loadMoreRequestToken", Date.now())
                 break
             case "editor-undo":
                 window.SmartNotesEditor?.undo()

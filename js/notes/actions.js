@@ -33,7 +33,7 @@ const getNoteById = (noteId) => StateStore.read().notes.find(n => n.id === noteI
 
 const refreshCurrentList = () => {
     const currentSearchValue = document.getElementById("search-input")?.value || ""
-    filterAndRender(currentSearchValue)
+    updateSearchQuery(currentSearchValue)
 }
 
 const ensureManageAccess = (note) => {
@@ -143,7 +143,7 @@ async function toggleFavorite(noteId) {
     const nextNotes = StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: nextValue } : n)
     StateActions.setNotes(nextNotes)
     NotesStorage.syncFavoritesStorage(nextNotes)
-    filterAndRender(document.getElementById("search-input")?.value || "")
+    updateSearchQuery(document.getElementById("search-input")?.value || "")
     const user = StateStore.read().user
     if (!db || !user) return
     if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) return

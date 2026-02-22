@@ -8,24 +8,28 @@ const SessionService = (() => {
             return String(firstFolder?.name || "").localeCompare(String(secondFolder?.name || ""), StateStore.read().config.lang || "ru")
         })
     }
-    function publishNotesState() {
-        const ownedNotes = OwnedNotesService.getNotes()
-        const sharedNotes = state.sharedNotes
-        const notes = NotesStorage.applyStoredFavorites([...ownedNotes, ...sharedNotes])
-        StateStore.update("notes", notes)
-        if (state.activeUid) NotesStorage.writeCachedNotes(state.activeUid, notes)
-        NotesStorage.syncFavoritesStorage(notes)
+    function publishNotes() {
+        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.sharedNotes, state.activeUid)
+        StateStore.update("notes", aggregatedNotes)
     }
-    function applySharedNotes(sharedNotesMap) {
-        state.sharedNotes = [...sharedNotesMap.values()]
-        publishNotesState()
+    function bindAggregation() {
+        EventBus.subscribe("ownedNotesUpdated", ownedNotes => {
+            state.ownedNotes = Array.isArray(ownedNotes) ? ownedNotes : []
+            publishNotes()
+        })
+        EventBus.subscribe("sharedNotesUpdated", sharedNotes => {
+            state.sharedNotes = Array.isArray(sharedNotes) ? sharedNotes : []
+            publishNotes()
+        })
     }
+    bindAggregation()
     function stopUserSession() {
         if (state.foldersUnsubscribe) state.foldersUnsubscribe()
         state.foldersUnsubscribe = null
         SettingsSyncService.clear()
         OwnedNotesService.clear()
         SharedNotesService.clear()
+        RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
         state.sharedNotes = []
@@ -40,7 +44,7 @@ const SessionService = (() => {
             StateActions.setUser(user)
             await DataPath.ensureUserDocument(user)
             await SettingsSyncService.initialize(user)
-            OwnedNotesService.subscribe(user, () => publishNotesState(), error => console.error("Notes sync error", error))
+            OwnedNotesService.subscribe(user)
             const cachedNotes = NotesStorage.readCachedNotes(user.uid)
             if (cachedNotes.length) {
                 StateStore.update("notes", NotesStorage.applyStoredFavorites(cachedNotes))
@@ -49,16 +53,17 @@ const SessionService = (() => {
             state.foldersUnsubscribe = FoldersRepository.subscribeFolders(user, snapshot => {
                 const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
                 StateStore.update("folders", folders)
-            }, error => console.error("Folders sync error", error))
-            SharedNotesService.subscribe(user, applySharedNotes)
-RemindersService.start()
+            }, error => EventBus.publish("foldersSyncError", error))
+            SharedNotesService.subscribe(user)
+            RemindersService.start()
             return true
         })()
         return state.sessionStartPromise
     }
-    async function loadMoreOwnedNotes() {
-        await OwnedNotesService.loadMore()
-        publishNotesState()
-    }
-    return { startUserSession, stopUserSession, loadMoreOwnedNotes }
+    StateStore.subscribe((nextState, previousState) => {
+        if (nextState.loadMoreRequestToken === previousState.loadMoreRequestToken) return
+        const paginationState = PaginationService.getOwnedPaginationInfo()
+        if (!paginationState.loadingMoreOwnedNotes && paginationState.hasMoreOwnedNotes) OwnedNotesService.loadMore()
+    })
+    return { startUserSession, stopUserSession }
 })()

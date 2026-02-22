@@ -71,6 +71,7 @@ const SettingsSyncService = (() => {
         state.reference = resolved.reference
         SafeStorage.local.setJson(getCacheKey(user.uid), normalized)
         writeOriginal(normalized)
+        EventBus.publish("settingsSaved", normalized)
         return normalized
     }
     async function initialize(user) {
@@ -94,7 +95,7 @@ const SettingsSyncService = (() => {
             SafeStorage.local.setJson(getCacheKey(user.uid), incoming)
             writeOriginal(incoming)
             applyToRuntime(incoming, { resetVisibleLimit: false, persistTheme: false })
-        }, error => console.error("Settings sync error", error))
+        }, error => EventBus.publish("settingsSyncError", error))
     }
     function clear() { if (state.unsubscribe) state.unsubscribe(); state.unsubscribe = null; state.reference = null }
     return { initialize, clear, saveUserSettings, applyUserSettingsToRuntime: applyToRuntime, normalizeUserSettings }

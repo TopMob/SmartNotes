@@ -806,7 +806,7 @@ const addPage = () => {
             EditorDrawing.cleanup()
         }
         if (state.observer) state.observer.disconnect()
-        filterAndRender(document.getElementById("search-input")?.value || "")
+        updateSearchQuery(document.getElementById("search-input")?.value || "")
     }
 
     const refreshFromRemote = (note) => {
