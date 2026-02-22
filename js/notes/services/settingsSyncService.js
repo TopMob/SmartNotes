@@ -3,7 +3,7 @@ const SettingsSyncService = (() => {
     function createDefaultUserSettings() {
         const cachedThemeSettings = ThemeManager.getSavedSettings()
         return {
-            notesPerPage: 10,
+            notesPerPage: 20,
             themeId: cachedThemeSettings.preset || "oled",
             customTheme: {
                 p: cachedThemeSettings.p || ThemeManager.themes.oled.p,
@@ -29,7 +29,7 @@ const SettingsSyncService = (() => {
         const defaults = createDefaultUserSettings()
         const source = rawSettings && typeof rawSettings === "object" ? rawSettings : {}
         const notesPerPageOptions = new Set([5, 10, 20, 50])
-        const notesPerPage = notesPerPageOptions.has(Number(source.notesPerPage)) ? Number(source.notesPerPage) : defaults.notesPerPage
+        const notesPerPage = notesPerPageOptions.has(Number(source.notesPerPage)) ? Number(source.notesPerPage) : 20
         const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
         const normalizedTheme = {
             p: ThemeManager.normalizeHex(customThemeSource.p), bg: ThemeManager.normalizeHex(customThemeSource.bg), t: ThemeManager.normalizeHex(customThemeSource.t),
@@ -47,7 +47,7 @@ const SettingsSyncService = (() => {
             lang: source.lang === "en" ? "en" : "ru",
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
-            customPresets: Array.isArray(source.customPresets) ? source.customPresets : ThemeManager.getCustomPresets(),
+            customPresets: Array.isArray(source.customPresets) ? source.customPresets : defaults.customPresets,
             schemaVersion: 1
         }
     }
@@ -56,7 +56,8 @@ const SettingsSyncService = (() => {
     function applyToRuntime(userSettings, options = {}) {
         const settings = normalizeUserSettings(userSettings)
         ThemeManager.applySettings({ preset: settings.themeId, ...settings.customTheme }, options.persistTheme !== false)
-        ThemeManager.setCustomPresets(settings.customPresets)
+        const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(ThemeManager.getCustomPresets(), settings.customPresets)
+        ThemeManager.setCustomPresets(mergedCustomPresets)
         StateActions.updateConfig({ lang: settings.lang, folderViewMode: settings.folderViewMode, reduceMotion: settings.reduceMotion })
         PaginationService.configureFromSettings(settings)
         if (options.resetVisibleLimit) PaginationService.resetVisibleLimit()

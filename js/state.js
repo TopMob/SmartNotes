@@ -18,8 +18,7 @@ const StateStore = (() => {
         appearanceDraft: null,
         originalUserSettings: null,
         draftUserSettings: null,
-        saveStatus: { status: "idle", message: "", updatedAt: 0 },
-        loadMoreRequestToken: 0
+        saveStatus: { status: "idle", message: "", updatedAt: 0 }
     }
 
     let state = { ...initialState, config: { ...initialState.config } }
@@ -67,7 +66,6 @@ const StateStore = (() => {
         originalUserSettings: null,
         draftUserSettings: null,
         saveStatus: { ...initialState.saveStatus },
-        loadMoreRequestToken: 0,
         config: { ...initialState.config }
     }))
 

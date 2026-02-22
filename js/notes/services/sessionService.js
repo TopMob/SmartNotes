@@ -67,10 +67,5 @@ const SessionService = (() => {
         })()
         return state.sessionStartPromise
     }
-    StateStore.subscribe((nextState, previousState) => {
-        if (nextState.loadMoreRequestToken === previousState.loadMoreRequestToken) return
-        const paginationState = PaginationService.getOwnedPaginationInfo()
-        if (!paginationState.loadingMoreOwnedNotes && paginationState.hasMoreOwnedNotes) OwnedNotesService.loadMore()
-    })
     return { startUserSession, stopUserSession }
 })()

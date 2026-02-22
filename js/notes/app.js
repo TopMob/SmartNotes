@@ -11,7 +11,14 @@ const NotesApplication = (() => {
     function startStateRendering() {
         if (unsubscribeStateRender) return
         unsubscribeStateRender = StateStore.subscribe((nextState, previousState) => {
-            if (nextState.notes !== previousState.notes || nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId || nextState.searchQuery !== previousState.searchQuery || nextState.folders !== previousState.folders || nextState.config !== previousState.config) {
+            const configChanged = nextState.config !== previousState.config
+            if (configChanged && nextState.config.lang !== previousState.config.lang) {
+                UI.applyLangToDom()
+            }
+            if (nextState.folders !== previousState.folders || configChanged) {
+                UI.renderFolders()
+            }
+            if (nextState.notes !== previousState.notes || nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId || nextState.searchQuery !== previousState.searchQuery || nextState.folders !== previousState.folders || configChanged) {
                 renderFromState()
             }
         })

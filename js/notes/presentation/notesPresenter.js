@@ -5,7 +5,7 @@ const NotesPresenter = (() => {
     }
     function createViewModel(stateSnapshot) {
         const queryResult = NotesQueryService.execute(stateSnapshot, stateSnapshot.searchQuery || "")
-        const visibleNotes = PaginationService.getVisibleNotesForRender(queryResult.notes, queryResult.view)
+        const visibleNotes = PaginationService.getVisibleNotesForRender(queryResult.notes, queryResult.view, stateSnapshot.searchQuery || "")
         const emptyState = queryResult.view === "locked"
             ? { icon: "lock", text: getText(stateSnapshot, "lock_center_empty", "No protected notes") }
             : queryResult.view === "reminders"

@@ -397,9 +397,21 @@ Object.assign(UI, {
                 break
             case "load-more-notes":
                 e.preventDefault()
-                PaginationService.loadMore()
-                StateStore.update("loadMoreRequestToken", Date.now())
+                PaginationService.loadMoreVisibleNotes()
+                if (PaginationService.shouldLoadMoreOwnedFromServer()) {
+                    OwnedNotesService.loadMore()
+                }
                 break
+            case "toggle-folder-description": {
+                e.preventDefault()
+                const folderCard = el.closest(".folder-card")
+                const descriptionElement = folderCard?.querySelector(".folder-description-preview")
+                if (!descriptionElement) break
+                const expanded = descriptionElement.classList.toggle("expanded")
+                el.setAttribute("aria-expanded", String(expanded))
+                window.DomSecurity.setText(el, expanded ? this.getText("show_less", "Свернуть") : this.getText("show_more", "Ещё"))
+                break
+            }
             case "editor-undo":
                 window.SmartNotesEditor?.undo()
                 break

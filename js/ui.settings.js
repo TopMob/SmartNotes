@@ -577,7 +577,7 @@ Object.assign(UI, {
             notesPerPageSelect.addEventListener("change", event => {
                 const allowedValues = new Set([5, 10, 20, 50])
                 const parsedValue = Number(event.target.value)
-                const notesPerPage = allowedValues.has(parsedValue) ? parsedValue : 10
+                const notesPerPage = allowedValues.has(parsedValue) ? parsedValue : 20
                 this.updateSettingsDraft({ notesPerPage })
                 this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
@@ -964,7 +964,7 @@ Object.assign(UI, {
         const reduceToggle = document.getElementById("settings-reduce-motion")
         if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
         const notesPerPageSelect = document.getElementById("settings-notes-per-page")
-        if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 10)
+        if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 20)
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },
