@@ -3,6 +3,7 @@ const OwnedNotesService = (() => {
     function applySnapshot(snapshot) {
         const incomingNotes = snapshot.docs.map(documentEntry => NoteIO.normalizeNote({ id: documentEntry.id, ...documentEntry.data() }))
         state.notes = NotesSortingStrategy.sortOwnedNotes(incomingNotes, StateStore.read().config.lang || "ru")
+        console.info("[Session] subscribe owned notes snapshot size=", state.notes.length)
         PaginationService.setOwnedPaginationInfo({ hasMoreOwnedNotes: snapshot.docs.length >= PaginationService.getOwnedPaginationInfo().pageSize, lastOwnedNoteDocument: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null })
         EventBus.publish("ownedNotesUpdated", state.notes.slice())
     }
@@ -27,6 +28,7 @@ const OwnedNotesService = (() => {
     function subscribe(user) {
         state.user = user
         if (state.unsubscribe) state.unsubscribe()
+        console.info("[Session] subscribe owned notes begin")
         state.unsubscribe = NotesRepository.subscribeOwnedNotes(user, { pageSize: PaginationService.getOwnedPaginationInfo().pageSize }, applySnapshot, error => EventBus.publish("notesSyncError", error))
     }
     function clear() {

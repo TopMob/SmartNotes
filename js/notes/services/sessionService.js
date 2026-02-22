@@ -36,12 +36,14 @@ const SessionService = (() => {
         StateStore.resetSession()
     }
     async function startUserSession(user, options = {}) {
+        console.info("[Session] startUserSession begin", user?.uid || "")
         if (!user?.uid) return
         const userIdentifier = String(user.uid)
         if (!options.forceResubscribe && state.activeUid === userIdentifier && state.sessionStartPromise) return state.sessionStartPromise
         state.activeUid = userIdentifier
         state.sessionStartPromise = (async () => {
-            StateActions.setUser(user)
+            try {
+                StateActions.setUser(user)
             await DataPath.ensureUserDocument(user)
             await SettingsSyncService.initialize(user)
             OwnedNotesService.subscribe(user)
@@ -55,8 +57,13 @@ const SessionService = (() => {
                 StateStore.update("folders", folders)
             }, error => EventBus.publish("foldersSyncError", error))
             SharedNotesService.subscribe(user)
-            RemindersService.start()
-            return true
+                RemindersService.start()
+                return true
+            } catch (error) {
+                console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || ""), stack: error?.stack || "" })
+                EventBus.publish("notesLoadFailed", error)
+                throw error
+            }
         })()
         return state.sessionStartPromise
     }

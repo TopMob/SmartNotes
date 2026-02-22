@@ -12,7 +12,9 @@ const SharedNotesService = (() => {
         state.sharedNotes.delete(sharedId)
     }
     function publishSharedNotes() {
-        EventBus.publish("sharedNotesUpdated", [...state.sharedNotes.values()])
+        const sharedNotes = [...state.sharedNotes.values()]
+        console.info("[Session] subscribe shared notes snapshot size=", sharedNotes.length)
+        EventBus.publish("sharedNotesUpdated", sharedNotes)
     }
     function updateEntries(nextEntries) {
         const removedIds = []

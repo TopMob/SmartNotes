@@ -342,6 +342,7 @@ export function createAuthManager({ auth }) {
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             state.currentUser = normalizedUser
+            console.info("[Auth] state changed", normalizedUser ? "logged in" : "logged out")
             state.authReady = true
             StateActions.setUser(normalizedUser)
 

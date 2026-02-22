@@ -26,6 +26,23 @@ const NotesApplication = (() => {
         EventBus.subscribe("settingsSaved", () => {
             UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
         })
+        EventBus.subscribe("notesLoadFailed", error => {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
+        })
+        EventBus.subscribe("notesSyncError", error => {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
+        })
+        EventBus.subscribe("sharedSyncError", error => {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
+        })
+        EventBus.subscribe("foldersSyncError", error => {
+            UI.showToast(UI.getText("sync_error", "Sync error"))
+            console.error("[Session] error", { code: error?.code || "", message: error?.message || String(error || "") })
+        })
+
     }
     function bindNetworkLifecycle() {
         window.addEventListener("online", () => {
