@@ -674,11 +674,11 @@ body.platform-android .top-bar {
 }
 
 .note-card.pinned {
-    background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 22%, transparent), color-mix(in srgb, var(--surface) calc(var(--cards-opacity, 0.9) * 100%), transparent));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 28%, var(--surface) 72%), color-mix(in srgb, var(--surface) 96%, var(--primary) 4%));
 }
 
 .note-card.favorite {
-    background: linear-gradient(160deg, color-mix(in srgb, #facc15 22%, transparent), color-mix(in srgb, var(--surface) calc(var(--cards-opacity, 0.9) * 100%), transparent));
+    background: linear-gradient(160deg, color-mix(in srgb, #facc15 30%, var(--surface) 70%), color-mix(in srgb, var(--surface) 95%, #facc15 5%));
 }
 
 .search-container {

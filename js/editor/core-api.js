@@ -697,8 +697,7 @@ export const EditorAPI = (() => {
             })
         }},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
-            inputHandlers.storeSelection()
-            document.getElementById("img-upload")?.click()
+            UI.showToast(UI.getText("feature_disabled_temporarily", "Функция временно отключена"))
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             inputHandlers.storeSelection()

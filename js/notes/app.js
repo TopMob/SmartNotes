@@ -15,6 +15,7 @@ const NotesApplication = (() => {
         const scrollTopBeforeRender = scrollContainer ? scrollContainer.scrollTop : 0
         const viewModel = NotesPresenter.createViewModel(StateStore.read())
         NotesUIAdapter.render(viewModel)
+        UI.updateNavigationActiveState()
         if (scrollContainer) {
             scrollContainer.scrollTop = scrollTopBeforeRender
         }
@@ -55,6 +56,7 @@ const NotesApplication = (() => {
                 || nextState.folders !== previousState.folders
                 || languageChanged
                 || displayLimitChanged
+                || (configChanged && nextState.config.notesFilter !== previousState.config.notesFilter)
 
             if (shouldRenderNotes) {
                 renderFromState({ preserveScrollPosition: displayLimitChanged })
@@ -136,6 +138,9 @@ const NotesApplication = (() => {
     async function initializeRuntime() {
         await disableServiceWorkerCaching()
         if (typeof UI.init === "function") UI.init()
+        if (typeof window.SmartNotesEditor?.init === "function") {
+            window.SmartNotesEditor.init()
+        }
         startStateRendering()
         startUiEventListeners()
         bindNetworkLifecycle()

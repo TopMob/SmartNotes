@@ -118,10 +118,16 @@ const NotesQueryService = (() => {
         const normalizedQuery = String(query || "").trim()
         if (!normalizedQuery) return { notes, scores: null }
         try {
+            const normalizedNeedle = normalizedQuery.toLocaleLowerCase()
             const scoredNotes = notes.map(note => ({
                 note,
                 score: SmartSearch.score(normalizedQuery, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
-            })).filter(item => item.score >= 0.35)
+            })).map(item => {
+                const normalizedTitle = String(item.note?.title || "").toLocaleLowerCase()
+                if (normalizedTitle === normalizedNeedle) return { ...item, score: item.score + 2 }
+                if (normalizedTitle.startsWith(normalizedNeedle)) return { ...item, score: item.score + 1 }
+                return item
+            }).filter(item => item.score >= 0.35)
             return {
                 notes: scoredNotes.map(item => item.note),
                 scores: new Map(scoredNotes.map(item => [item.note.id, item.score]))
@@ -136,7 +142,7 @@ const NotesQueryService = (() => {
         const filteredByView = filterByView(stateSnapshot.notes || [], stateSnapshot)
         const searchResult = applySearch(filteredByView, query)
         const configuredSortMode = stateSnapshot.config?.notesFilter?.sort || "updated"
-        const useRelevanceSorting = String(query || "").trim() && configuredSortMode !== "manual"
+        const useRelevanceSorting = String(query || "").trim().length > 0
         const sortMode = useRelevanceSorting ? "relevance" : configuredSortMode
         const sortedNotes = sortMode === "manual"
             ? normalizeVisibleNotes(searchResult.notes, stateSnapshot.view === "folder" ? "folderOrder" : "order")

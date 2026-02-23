@@ -188,6 +188,9 @@ const NoteIO = {
         if (parsed.note) return [this.normalizeNote(parsed.note)]
         if (Array.isArray(parsed.notes)) return parsed.notes.map(n => this.normalizeNote(n))
         if (Array.isArray(parsed)) return parsed.map(n => this.normalizeNote(n))
+        if (typeof parsed === "object" && (parsed.title || parsed.content || parsed.tags || parsed.pageDrawings)) {
+            return [this.normalizeNote(parsed)]
+        }
         return []
     },
 
