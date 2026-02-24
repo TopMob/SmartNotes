@@ -770,6 +770,7 @@ export const EditorAPI = (() => {
         StateStore.update("currentNote", prepared)
         StateStore.update("isEditing", true)
         StateStore.update("isTyping", false)
+        StateStore.update("editorDirty", false)
         state.pageIndex = 0
         state.titleTouched = !!prepared.title
 
@@ -832,6 +833,7 @@ export const EditorAPI = (() => {
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
+        StateStore.update("editorDirty", false)
         mediaHandlers.deselectMedia()
         mediaHandlers.cleanupPointerInteractions()
         state.pageIndex = 0
