@@ -254,7 +254,7 @@ export const EditorAPI = (() => {
         if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 const plainTextContent = Utils.stripHtml(String(note.content || "")).trim()
-                const hasMediaContent = /<(img|audio|video|table|hr)/i.test(String(note.content || ""))
+                const hasMediaContent = /<(img|audio|video|table|hr)\b/i.test(String(note.content || ""))
                 if (plainTextContent || hasMediaContent) {
                     note.title = NoteText.buildAutoTitle({ content: note.content || "" })
                     const titleElement = document.getElementById("note-title")
@@ -275,8 +275,9 @@ export const EditorAPI = (() => {
             return
         }
 
+        const noteAlreadyPersisted = isNotePresentInState(note.id)
         const currentEditorState = serializeEditorStateSnapshot(note)
-        if (state.initialEditorState && currentEditorState === state.initialEditorState) {
+        if (noteAlreadyPersisted && state.initialEditorState && currentEditorState === state.initialEditorState) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
             if (!options.silent && !isExitSave) {
@@ -287,7 +288,6 @@ export const EditorAPI = (() => {
         }
 
         const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
-        const noteAlreadyPersisted = isNotePresentInState(note.id)
         if (!hasRemotePersistableChanges && noteAlreadyPersisted) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
