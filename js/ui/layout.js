@@ -150,7 +150,7 @@ Object.assign(UI, {
             const validatedDescription = window.Validators.validateFolderDescription(description)
             if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
             if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
-            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 1124 characters"))
+            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 300 characters"))
             if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === validatedName.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
@@ -188,7 +188,7 @@ Object.assign(UI, {
             const validatedDescription = window.Validators.validateFolderDescription(description)
             if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
             if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
-            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 1124 characters"))
+            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 300 characters"))
             const sameName = validatedName.toLowerCase() === String(folder.name || "").toLowerCase()
             const sameDescription = validatedDescription === String(folder.description || "").trim()
             if (sameName && sameDescription) return
@@ -388,9 +388,9 @@ Object.assign(UI, {
 
         const actions = [
             { key: "pending", className: "btn-primary", action: "trigger-admin-analysis-pending", labelKey: "analysis_pending_reindex_button", fallback: "Проиндексировать непроиндексированные" },
-            { key: "reindex_query", className: "btn-secondary", action: "trigger-admin-analysis-reindex-query", labelKey: "analysis_reindex_query_button", fallback: "Полный прогон через query" },
-            { key: "reindex_body", className: "btn-secondary", action: "trigger-admin-analysis-reindex-body", labelKey: "analysis_reindex_body_button", fallback: "Полный прогон через body" },
-            { key: "reindex_force", className: "btn-secondary", action: "trigger-admin-analysis-reindex-force", labelKey: "analysis_force_reindex_button", fallback: "Полный прогон forceReindex" }
+            { key: "reindex_query", className: "btn-secondary", action: "trigger-admin-analysis-reindex-query", labelKey: "analysis_reindex_query_button", fallback: "Полная переиндексация через query-параметр" },
+            { key: "reindex_body", className: "btn-secondary", action: "trigger-admin-analysis-reindex-body", labelKey: "analysis_reindex_body_button", fallback: "Полная переиндексация через body reindexAll" },
+            { key: "reindex_force", className: "btn-secondary", action: "trigger-admin-analysis-reindex-force", labelKey: "analysis_force_reindex_button", fallback: "Полная переиндексация через body forceReindex" }
         ]
 
         const buttonsContainer = document.createElement("div")
