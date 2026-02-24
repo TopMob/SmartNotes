@@ -196,6 +196,25 @@ export const EditorAPI = (() => {
         return notes.some(noteItem => String(noteItem?.id || "") === normalizedNoteId)
     }
 
+    const upsertSavedNoteIntoState = (savedNote) => {
+        const noteIdentifier = String(savedNote?.id || "")
+        if (!noteIdentifier) return
+        const stateNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        let updated = false
+        const nextNotes = stateNotes.map((stateNote) => {
+            if (String(stateNote?.id || "") !== noteIdentifier) return stateNote
+            updated = true
+            return NoteIO.normalizeNote({
+                ...stateNote,
+                ...savedNote
+            })
+        })
+        if (!updated) {
+            nextNotes.unshift(NoteIO.normalizeNote(savedNote))
+        }
+        StateStore.update("notes", nextNotes)
+    }
+
     const noteHasEditableContent = (note) => {
         const titleText = String(note?.title || "").trim()
         const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
@@ -320,6 +339,7 @@ export const EditorAPI = (() => {
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            upsertSavedNoteIntoState(note)
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
             state.initialEditorState = serializeEditorStateSnapshot(note)
