@@ -449,8 +449,7 @@ export const EditorAPI = (() => {
                     return
                 }
                 mediaHandlers.deselectMedia()
-        mediaHandlers.cleanupPointerInteractions()
-        mediaHandlers.cleanupPointerInteractions()
+                mediaHandlers.cleanupPointerInteractions()
             }, { signal })
 
             boundElements.content.addEventListener("pointerdown", mediaHandlers.handleResizeStart, { signal })
@@ -577,8 +576,8 @@ export const EditorAPI = (() => {
             btn.addEventListener("click", (event) => {
                 event.preventDefault()
                 inputHandlers.restoreSelection()
-                const idx = parseInt(btn.dataset.toolIdx, 10)
-                const tool = tools[idx]
+                const toolIndex = parseInt(btn.dataset.toolIdx, 10)
+                const tool = tools[toolIndex]
                 if (tool) {
                     tool.cmd(btn)
                 }
@@ -705,23 +704,26 @@ export const EditorAPI = (() => {
             })
         }},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
-            UI.showToast(UI.getText("feature_disabled_temporarily", "Функция временно отключена"))
+            const imageUploadInputElement = document.getElementById("img-upload")
+            if (!imageUploadInputElement) return
+            imageUploadInputElement.value = ""
+            imageUploadInputElement.click()
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             inputHandlers.storeSelection()
             if (typeof EditorDrawing !== "undefined") EditorDrawing.toggleDrawingMode()
         }},
-        { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => mediaHandlers.toggleAlignMenu(btn) },
+        { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => { inputHandlers.storeSelection(); mediaHandlers.toggleAlignMenu(btn) } },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => editorCommands.clearFormatting() }
     ]
 
     const getEnabledTools = () => StateStore.read().config.editorTools || {}
 
     const setToolEnabled = (id, enabled) => {
-        const current = getEnabledTools()
-        current[id] = !!enabled
-        StateStore.updateConfig({ editorTools: { ...current } })
-        SafeStorage.local.setJson("editor-tools", current)
+        const currentEnabledTools = getEnabledTools()
+        const nextEnabledTools = { ...currentEnabledTools, [id]: !!enabled }
+        StateStore.updateConfig({ editorTools: nextEnabledTools })
+        SafeStorage.local.setJson("editor-tools", nextEnabledTools)
         buildToolbar()
     }
 
@@ -779,6 +781,7 @@ export const EditorAPI = (() => {
         state.history = []
         state.future = []
         resolvedElements.wrapper.classList.add("active")
+        buildToolbar()
         renderState()
         focusActivePage()
 
@@ -896,11 +899,41 @@ export const EditorAPI = (() => {
 
     const toggleToolbar = () => document.getElementById("editor-toolbar")?.classList.toggle("is-hidden")
 
+    const pushCurrentSnapshotToHistory = () => {
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const currentSnapshot = captureSnapshot()
+        const latestSnapshot = state.history[state.history.length - 1]
+        const currentSnapshotState = serializeEditorStateSnapshot({
+            ...currentNote,
+            title: currentSnapshot.title,
+            content: currentSnapshot.content,
+            tags: Array.isArray(currentSnapshot.tags) ? [...currentSnapshot.tags] : [],
+            pageDrawings: Array.isArray(currentSnapshot.pageDrawings) ? [...currentSnapshot.pageDrawings] : [],
+            pageDrawingsRevision: currentSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(currentSnapshot.pageDrawings)
+        })
+        const latestSnapshotState = latestSnapshot
+            ? serializeEditorStateSnapshot({
+                ...currentNote,
+                title: latestSnapshot.title,
+                content: latestSnapshot.content,
+                tags: Array.isArray(latestSnapshot.tags) ? [...latestSnapshot.tags] : [],
+                pageDrawings: Array.isArray(latestSnapshot.pageDrawings) ? [...latestSnapshot.pageDrawings] : [],
+                pageDrawingsRevision: latestSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(latestSnapshot.pageDrawings)
+            })
+            : ""
+        if (currentSnapshotState === latestSnapshotState) return
+        state.history.push(currentSnapshot)
+        if (state.history.length > CONFIG.MAX_HISTORY) state.history.shift()
+        state.future = []
+    }
+
     const undo = () => {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
             EditorDrawing.undo?.()
             return
         }
+        pushCurrentSnapshotToHistory()
         historyHandlers.undo()
     }
 
