@@ -35,9 +35,10 @@ export const buildNotePayload = ({ note, user, access } = {}) => {
     }
 }
 
-export const buildNoteUpdatePayload = (updates = {}) => {
+export const buildNoteUpdatePayload = (updates = {}, options = {}) => {
     const payload = { ...updates }
-    if (payload.updatedAt === undefined) {
+    const shouldUpdateTimestamp = options.updateTimestamp !== false
+    if (shouldUpdateTimestamp && payload.updatedAt === undefined) {
         payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp()
     }
     return payload
