@@ -1,7 +1,7 @@
 import { CONFIG } from "./core-state.js"
 
 export const createMediaHandlers = (context) => {
-    const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText } = context
+    const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText, restoreSelection } = context
 
     const optimizeImageDataUrl = (dataUrl, options = {}) => new Promise((resolve) => {
         const source = String(dataUrl || "")
@@ -269,9 +269,12 @@ export const createMediaHandlers = (context) => {
         if (state.selectedMediaElement) {
             state.selectedMediaElement.classList.remove("align-left", "align-right")
             if (side !== "center") state.selectedMediaElement.classList.add(`align-${side}`)
-        } else {
-            alignText(side)
+            queueSnapshot()
+            closeAlignMenu()
+            return
         }
+        restoreSelection?.()
+        alignText(side)
         closeAlignMenu()
     }
 
