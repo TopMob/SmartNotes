@@ -189,6 +189,13 @@ export const EditorAPI = (() => {
         return false
     }
 
+    const isNotePresentInState = (noteId) => {
+        const normalizedNoteId = String(noteId || "")
+        if (!normalizedNoteId) return false
+        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        return notes.some(noteItem => String(noteItem?.id || "") === normalizedNoteId)
+    }
+
     const noteHasEditableContent = (note) => {
         const titleText = String(note?.title || "").trim()
         const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
@@ -280,7 +287,8 @@ export const EditorAPI = (() => {
         }
 
         const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
-        if (!hasRemotePersistableChanges) {
+        const noteAlreadyPersisted = isNotePresentInState(note.id)
+        if (!hasRemotePersistableChanges && noteAlreadyPersisted) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
             if (!options.silent) {
