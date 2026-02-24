@@ -14,24 +14,30 @@
         return db.collection(usersCollectionName).doc(userIdentifier)
     }
 
-    const buildUserDocumentPayload = user => {
+    const buildUserDocumentPayload = (user, createdAtValue) => {
         const userIdentifier = resolveUserIdentifier(user)
         const providerId = Array.isArray(user?.providerData) && user.providerData.length
             ? String(user.providerData[0]?.providerId || "")
             : ""
-        return {
+        const payload = {
             uid: userIdentifier,
             email: user?.email ? String(user.email).toLowerCase() : null,
             providerId,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }
+        if (createdAtValue !== undefined) {
+            payload.createdAt = createdAtValue
+        }
+        return payload
     }
 
     const ensureUserDocument = async user => {
         const rootReference = getUserRootReference(user)
         if (!rootReference) return null
-        const payload = buildUserDocumentPayload(user)
+        const existingDocument = await rootReference.get()
+        const existingData = existingDocument.exists ? (existingDocument.data() || {}) : {}
+        const createdAtValue = existingData.createdAt ?? firebase.firestore.FieldValue.serverTimestamp()
+        const payload = buildUserDocumentPayload(user, createdAtValue)
         await rootReference.set(payload, { merge: true })
         return rootReference
     }

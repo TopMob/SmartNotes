@@ -570,7 +570,7 @@ const LockService = {
 
 const CollaborationService = {
     shareCollection: "noteShares",
-    sharedNotesCollection: "shared",
+    sharedNotesCollection: "sharedNotes",
     pendingTokenKey: "pending-share-token",
     getAccess(note) {
         const access = note && typeof note === "object" ? note.access : null

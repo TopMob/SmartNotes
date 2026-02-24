@@ -16,7 +16,7 @@ const NotesRepository = (() => {
         return { documents: snapshot.docs, lastDocument: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : options.startAfterDocument }
     }
     function subscribeSharedEntries(user, next, error) {
-        const collection = DataPath.getUserSharedCollection(user, "shared")
+        const collection = DataPath.getUserSharedCollection(user, "sharedNotes")
         if (!collection) return () => {}
         return collection.onSnapshot(next, error)
     }
