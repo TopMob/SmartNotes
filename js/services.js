@@ -126,9 +126,15 @@ const NoteIO = {
             if (!roles[normalizedUid]) roles[normalizedUid] = "viewer"
         })
         if (ownerUid) roles[ownerUid] = "owner"
+        const noteAccessIdentifier = safe.access?.noteId ? String(safe.access.noteId) : ""
+        const shareIdentifier = safe.access?.shareId ? String(safe.access.shareId) : ""
+        const ownerCollectionName = safe.access?.ownerCollection ? String(safe.access.ownerCollection) : ""
         const access = {
             ownerUid,
-            roles
+            roles,
+            noteId: noteAccessIdentifier,
+            shareId: shareIdentifier,
+            ownerCollection: ownerCollectionName
         }
 
         return {

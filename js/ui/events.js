@@ -377,8 +377,17 @@ Object.assign(UI, {
             case "close-settings-modal":
                 this.requestCloseSettingsModal()
                 break
-            case "trigger-admin-full-analysis":
-                this.triggerFullAnalysisForAllUsers()
+            case "trigger-admin-analysis-pending":
+                this.triggerAnalysisRequest("pending", "trigger-admin-analysis-pending")
+                break
+            case "trigger-admin-analysis-reindex-query":
+                this.triggerAnalysisRequest("reindex_query", "trigger-admin-analysis-reindex-query")
+                break
+            case "trigger-admin-analysis-reindex-body":
+                this.triggerAnalysisRequest("reindex_body", "trigger-admin-analysis-reindex-body")
+                break
+            case "trigger-admin-analysis-reindex-force":
+                this.triggerAnalysisRequest("reindex_force", "trigger-admin-analysis-reindex-force")
                 break
             case "settings-back":
                 this.backSettingsPage()

@@ -175,18 +175,30 @@ export const EditorAPI = (() => {
         return true
     }
 
-    const hasPersistableChanges = (previousNote, nextNote) => {
-        if (String(previousNote?.title || "") !== String(nextNote?.title || "")) return true
-        if (String(previousNote?.content || "") !== String(nextNote?.content || "")) return true
-        const previousTags = Array.isArray(previousNote?.tags) ? previousNote.tags.map(tag => String(tag || "")) : []
-        const nextTags = Array.isArray(nextNote?.tags) ? nextNote.tags.map(tag => String(tag || "")) : []
-        if (!areStringArraysEqual(previousTags, nextTags)) return true
-        const previousDrawings = Array.isArray(previousNote?.pageDrawings) ? previousNote.pageDrawings.map(value => String(value || "")) : []
-        const nextDrawings = Array.isArray(nextNote?.pageDrawings) ? nextNote.pageDrawings.map(value => String(value || "")) : []
-        if (!areStringArraysEqual(previousDrawings, nextDrawings)) return true
-        if (String(previousNote?.pageDrawingsRevision || "") !== String(nextNote?.pageDrawingsRevision || "")) return true
-        if (String(previousNote?.folderId || "") !== String(nextNote?.folderId || "")) return true
-        return false
+    const isNotePresentInState = (noteId) => {
+        const normalizedNoteId = String(noteId || "")
+        if (!normalizedNoteId) return false
+        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        return notes.some(noteItem => String(noteItem?.id || "") === normalizedNoteId)
+    }
+
+    const upsertSavedNoteIntoState = (savedNote) => {
+        const noteIdentifier = String(savedNote?.id || "")
+        if (!noteIdentifier) return
+        const stateNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        let updated = false
+        const nextNotes = stateNotes.map((stateNote) => {
+            if (String(stateNote?.id || "") !== noteIdentifier) return stateNote
+            updated = true
+            return NoteIO.normalizeNote({
+                ...stateNote,
+                ...savedNote
+            })
+        })
+        if (!updated) {
+            nextNotes.unshift(NoteIO.normalizeNote(savedNote))
+        }
+        StateStore.update("notes", nextNotes)
     }
 
     const noteHasEditableContent = (note) => {
@@ -247,7 +259,7 @@ export const EditorAPI = (() => {
         if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
                 const plainTextContent = Utils.stripHtml(String(note.content || "")).trim()
-                const hasMediaContent = /<(img|audio|video|table|hr)/i.test(String(note.content || ""))
+                const hasMediaContent = /<(img|audio|video|table|hr)\b/i.test(String(note.content || ""))
                 if (plainTextContent || hasMediaContent) {
                     note.title = NoteText.buildAutoTitle({ content: note.content || "" })
                     const titleElement = document.getElementById("note-title")
@@ -268,22 +280,12 @@ export const EditorAPI = (() => {
             return
         }
 
+        const noteAlreadyPersisted = isNotePresentInState(note.id)
         const currentEditorState = serializeEditorStateSnapshot(note)
-        if (state.initialEditorState && currentEditorState === state.initialEditorState) {
+        if (noteAlreadyPersisted && state.initialEditorState && currentEditorState === state.initialEditorState) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
             if (!options.silent && !isExitSave) {
-                UI.showToast(UI.getText("saved", "Saved"))
-                await close({ persistChanges: false, silent: true })
-            }
-            return
-        }
-
-        const hasRemotePersistableChanges = hasPersistableChanges(currentNote, note)
-        if (!hasRemotePersistableChanges) {
-            SaveStateService?.markSaved?.()
-            StateStore.update("editorDirty", false)
-            if (!options.silent) {
                 UI.showToast(UI.getText("saved", "Saved"))
                 await close({ persistChanges: false, silent: true })
             }
@@ -312,6 +314,7 @@ export const EditorAPI = (() => {
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            upsertSavedNoteIntoState(note)
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
             state.initialEditorState = serializeEditorStateSnapshot(note)
@@ -441,8 +444,7 @@ export const EditorAPI = (() => {
                     return
                 }
                 mediaHandlers.deselectMedia()
-        mediaHandlers.cleanupPointerInteractions()
-        mediaHandlers.cleanupPointerInteractions()
+                mediaHandlers.cleanupPointerInteractions()
             }, { signal })
 
             boundElements.content.addEventListener("pointerdown", mediaHandlers.handleResizeStart, { signal })
@@ -569,8 +571,8 @@ export const EditorAPI = (() => {
             btn.addEventListener("click", (event) => {
                 event.preventDefault()
                 inputHandlers.restoreSelection()
-                const idx = parseInt(btn.dataset.toolIdx, 10)
-                const tool = tools[idx]
+                const toolIndex = parseInt(btn.dataset.toolIdx, 10)
+                const tool = tools[toolIndex]
                 if (tool) {
                     tool.cmd(btn)
                 }
@@ -697,23 +699,26 @@ export const EditorAPI = (() => {
             })
         }},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
-            UI.showToast(UI.getText("feature_disabled_temporarily", "Функция временно отключена"))
+            const imageUploadInputElement = document.getElementById("img-upload")
+            if (!imageUploadInputElement) return
+            imageUploadInputElement.value = ""
+            imageUploadInputElement.click()
         }},
         { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
             inputHandlers.storeSelection()
             if (typeof EditorDrawing !== "undefined") EditorDrawing.toggleDrawingMode()
         }},
-        { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => mediaHandlers.toggleAlignMenu(btn) },
+        { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => { inputHandlers.storeSelection(); mediaHandlers.toggleAlignMenu(btn) } },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => editorCommands.clearFormatting() }
     ]
 
     const getEnabledTools = () => StateStore.read().config.editorTools || {}
 
     const setToolEnabled = (id, enabled) => {
-        const current = getEnabledTools()
-        current[id] = !!enabled
-        StateStore.updateConfig({ editorTools: { ...current } })
-        SafeStorage.local.setJson("editor-tools", current)
+        const currentEnabledTools = getEnabledTools()
+        const nextEnabledTools = { ...currentEnabledTools, [id]: !!enabled }
+        StateStore.updateConfig({ editorTools: nextEnabledTools })
+        SafeStorage.local.setJson("editor-tools", nextEnabledTools)
         buildToolbar()
     }
 
@@ -765,12 +770,14 @@ export const EditorAPI = (() => {
         StateStore.update("currentNote", prepared)
         StateStore.update("isEditing", true)
         StateStore.update("isTyping", false)
+        StateStore.update("editorDirty", false)
         state.pageIndex = 0
         state.titleTouched = !!prepared.title
 
         state.history = []
         state.future = []
         resolvedElements.wrapper.classList.add("active")
+        buildToolbar()
         renderState()
         focusActivePage()
 
@@ -826,6 +833,7 @@ export const EditorAPI = (() => {
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
+        StateStore.update("editorDirty", false)
         mediaHandlers.deselectMedia()
         mediaHandlers.cleanupPointerInteractions()
         state.pageIndex = 0
@@ -888,11 +896,41 @@ export const EditorAPI = (() => {
 
     const toggleToolbar = () => document.getElementById("editor-toolbar")?.classList.toggle("is-hidden")
 
+    const pushCurrentSnapshotToHistory = () => {
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const currentSnapshot = captureSnapshot()
+        const latestSnapshot = state.history[state.history.length - 1]
+        const currentSnapshotState = serializeEditorStateSnapshot({
+            ...currentNote,
+            title: currentSnapshot.title,
+            content: currentSnapshot.content,
+            tags: Array.isArray(currentSnapshot.tags) ? [...currentSnapshot.tags] : [],
+            pageDrawings: Array.isArray(currentSnapshot.pageDrawings) ? [...currentSnapshot.pageDrawings] : [],
+            pageDrawingsRevision: currentSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(currentSnapshot.pageDrawings)
+        })
+        const latestSnapshotState = latestSnapshot
+            ? serializeEditorStateSnapshot({
+                ...currentNote,
+                title: latestSnapshot.title,
+                content: latestSnapshot.content,
+                tags: Array.isArray(latestSnapshot.tags) ? [...latestSnapshot.tags] : [],
+                pageDrawings: Array.isArray(latestSnapshot.pageDrawings) ? [...latestSnapshot.pageDrawings] : [],
+                pageDrawingsRevision: latestSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(latestSnapshot.pageDrawings)
+            })
+            : ""
+        if (currentSnapshotState === latestSnapshotState) return
+        state.history.push(currentSnapshot)
+        if (state.history.length > CONFIG.MAX_HISTORY) state.history.shift()
+        state.future = []
+    }
+
     const undo = () => {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
             EditorDrawing.undo?.()
             return
         }
+        pushCurrentSnapshotToHistory()
         historyHandlers.undo()
     }
 

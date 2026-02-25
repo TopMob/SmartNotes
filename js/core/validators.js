@@ -4,8 +4,8 @@ export const validateFolderName = (name) => {
     return trimmedName
 }
 
-export const FOLDER_DESCRIPTION_SOFT_LIMIT = 1024
-export const FOLDER_DESCRIPTION_HARD_LIMIT = 1124
+export const FOLDER_DESCRIPTION_SOFT_LIMIT = 300
+export const FOLDER_DESCRIPTION_HARD_LIMIT = 300
 
 export const validateFolderDescription = (description) => {
     const trimmedDescription = String(description || "").trim()

@@ -150,7 +150,7 @@ Object.assign(UI, {
             const validatedDescription = window.Validators.validateFolderDescription(description)
             if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
             if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
-            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 1124 characters"))
+            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 300 characters"))
             if (StateStore.read().folders.some(f => f.name && f.name.toLowerCase() === validatedName.toLowerCase())) {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
@@ -188,7 +188,7 @@ Object.assign(UI, {
             const validatedDescription = window.Validators.validateFolderDescription(description)
             if (!String(name || "").trim()) return this.showToast(this.getText("folder_empty", "Enter a folder name"))
             if (!validatedName) return this.showToast(window.AppMessages.getAppMessage(this, window.AppMessages.APP_MESSAGES.folderNameTooLong))
-            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 1124 characters"))
+            if (validatedDescription == null) return this.showToast(this.getText("folder_description_too_long", "Folder description must be up to 300 characters"))
             const sameName = validatedName.toLowerCase() === String(folder.name || "").toLowerCase()
             const sameDescription = validatedDescription === String(folder.description || "").trim()
             if (sameName && sameDescription) return
@@ -324,17 +324,30 @@ Object.assign(UI, {
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
-    async requestAnalysis({ secretToken = "", mode = "all" } = {}) {
+    async requestAnalysis({ secretToken = "", requestVariant = "pending" } = {}) {
         const requestHeaders = {
             "Content-Type": "application/json"
         }
         if (secretToken) {
             requestHeaders["x-secret"] = secretToken
         }
-        const response = await fetch(this.getAnalysisApiEndpoint(), {
+
+        let endpoint = this.getAnalysisApiEndpoint()
+        let requestBody = {}
+
+        if (requestVariant === "reindex_query") {
+            endpoint = `${endpoint}?reindexAll=true`
+            requestBody = null
+        } else if (requestVariant === "reindex_body") {
+            requestBody = { reindexAll: true }
+        } else if (requestVariant === "reindex_force") {
+            requestBody = { forceReindex: true }
+        }
+
+        const response = await fetch(endpoint, {
             method: "POST",
             headers: requestHeaders,
-            body: JSON.stringify({ mode })
+            body: requestBody === null ? null : JSON.stringify(requestBody)
         })
         if (!response.ok) {
             throw new Error(`Analysis request failed with status ${response.status}`)
@@ -371,15 +384,32 @@ Object.assign(UI, {
         window.DomSecurity.setText(title, this.getText("admin_tools", "Админ-меню"))
 
         const description = document.createElement("p")
-        window.DomSecurity.setText(description, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
+        window.DomSecurity.setText(description, this.getText("analysis_admin_description", "Запуск серверного анализа заметок"))
 
-        const triggerButton = document.createElement("button")
-        triggerButton.type = "button"
-        triggerButton.className = "btn-primary"
-        triggerButton.dataset.action = "trigger-admin-full-analysis"
-        window.DomSecurity.setText(triggerButton, this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
+        const actions = [
+            { key: "pending", className: "btn-primary", action: "trigger-admin-analysis-pending", labelKey: "analysis_pending_reindex_button", fallback: "Проиндексировать непроиндексированные" },
+            { key: "reindex_query", className: "btn-secondary", action: "trigger-admin-analysis-reindex-query", labelKey: "analysis_reindex_query_button", fallback: "Полная переиндексация через query-параметр" },
+            { key: "reindex_body", className: "btn-secondary", action: "trigger-admin-analysis-reindex-body", labelKey: "analysis_reindex_body_button", fallback: "Полная переиндексация через body reindexAll" },
+            { key: "reindex_force", className: "btn-secondary", action: "trigger-admin-analysis-reindex-force", labelKey: "analysis_force_reindex_button", fallback: "Полная переиндексация через body forceReindex" }
+        ]
 
-        actionCard.append(title, description, triggerButton)
+        const buttonsContainer = document.createElement("div")
+        buttonsContainer.style.display = "grid"
+        buttonsContainer.style.gridTemplateColumns = "1fr"
+        buttonsContainer.style.gap = "10px"
+        buttonsContainer.style.marginTop = "10px"
+
+        actions.forEach(actionConfig => {
+            const actionButton = document.createElement("button")
+            actionButton.type = "button"
+            actionButton.className = actionConfig.className
+            actionButton.dataset.action = actionConfig.action
+            actionButton.dataset.analysisVariant = actionConfig.key
+            window.DomSecurity.setText(actionButton, this.getText(actionConfig.labelKey, actionConfig.fallback))
+            buttonsContainer.append(actionButton)
+        })
+
+        actionCard.append(title, description, buttonsContainer)
         root.replaceChildren(actionCard)
     },
 
@@ -410,11 +440,11 @@ Object.assign(UI, {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         }
     },
-
-    async triggerFullAnalysisForAllUsers() {
+    async triggerAnalysisRequest(analysisVariant = "pending", actionName = "") {
         const secretToken = window.prompt(this.getText("analysis_admin_secret_prompt", "Введите admin secret"), "")
         if (!secretToken) return
-        const triggerButton = document.querySelector("[data-action=\"trigger-admin-full-analysis\"]")
+        const normalizedActionName = String(actionName || "")
+        const triggerButton = normalizedActionName ? document.querySelector(`[data-action="${normalizedActionName}"]`) : null
         const initialLabel = triggerButton ? triggerButton.textContent : ""
         if (triggerButton) {
             triggerButton.disabled = true
@@ -422,7 +452,7 @@ Object.assign(UI, {
             window.DomSecurity.setText(triggerButton, this.getText("loading", "Loading..."))
         }
         try {
-            await this.requestAnalysis({ secretToken, mode: "all" })
+            await this.requestAnalysis({ secretToken, requestVariant: analysisVariant })
             this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))

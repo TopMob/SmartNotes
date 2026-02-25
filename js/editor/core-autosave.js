@@ -120,20 +120,21 @@ export const createAutosaveHandlers = (context) => {
 
     const queueSnapshot = Utils.debounce(() => {
         syncAutoTitle()
+        const previousSnapshot = state.history[state.history.length - 1]
+        const currentSnapshot = captureSnapshot()
+
+        if (isSnapshotEmpty(currentSnapshot)) return
+        if (previousSnapshot && snapshotsEqual(previousSnapshot, currentSnapshot)) return
+
         StateStore.update("editorDirty", true)
         StateStore.update("isTyping", true)
         resetTypingState()
-        const prev = state.history[state.history.length - 1]
-        const current = captureSnapshot()
 
-        if (isSnapshotEmpty(current)) return
-        if (prev && snapshotsEqual(prev, current)) return
-
-        state.history.push(current)
+        state.history.push(currentSnapshot)
         if (state.history.length > CONFIG.MAX_HISTORY) state.history.shift()
         state.future = []
 
-        persistSnapshot(current)
+        persistSnapshot(currentSnapshot)
         scheduleAutoSave()
     }, CONFIG.SNAPSHOT_DELAY)
 
