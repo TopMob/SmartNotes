@@ -133,7 +133,7 @@
     }
 
     .editor-page-item {
-        grid-template-columns: minmax(0, 1fr) repeat(3, 34px);
+        grid-template-columns: 44px minmax(0, 1fr) 34px;
         gap: 6px;
     }
 }

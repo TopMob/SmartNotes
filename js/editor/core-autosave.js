@@ -26,6 +26,7 @@ export const createAutosaveHandlers = (context) => {
                 title: String(currentNote?.title || ""),
                 content: String(currentNote?.content || ""),
                 tags: [...(currentNote?.tags || [])],
+                pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
                 pageDrawings: fallbackPageDrawings,
                 pageDrawingsRevision: currentNote?.pageDrawingsRevision || ""
             }
@@ -48,6 +49,7 @@ export const createAutosaveHandlers = (context) => {
             title: titleElement.value || "",
             content: contentElement.innerHTML || "",
             tags: [...(currentNote?.tags || [])],
+            pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
             pageDrawings: drawings,
             pageDrawingsRevision
         }
@@ -96,6 +98,7 @@ export const createAutosaveHandlers = (context) => {
         if (firstSnapshot.title !== secondSnapshot.title) return false
         if (firstSnapshot.content !== secondSnapshot.content) return false
         if (!areStringArraysEqual(firstSnapshot.tags, secondSnapshot.tags)) return false
+        if (!areStringArraysEqual(firstSnapshot.pageTitles, secondSnapshot.pageTitles)) return false
         const firstRevision = firstSnapshot.pageDrawingsRevision || ""
         const secondRevision = secondSnapshot.pageDrawingsRevision || ""
         if (firstRevision && secondRevision) return firstRevision === secondRevision
@@ -113,6 +116,7 @@ export const createAutosaveHandlers = (context) => {
             ...note,
             title: snapshot.title,
             content: snapshot.content,
+            pageTitles: Array.isArray(snapshot.pageTitles) ? [...snapshot.pageTitles] : [],
             pageDrawings: snapshot.pageDrawings,
             pageDrawingsRevision: snapshot.pageDrawingsRevision || buildPageDrawingsRevision(snapshot.pageDrawings)
         })

@@ -454,15 +454,6 @@ Object.assign(UI, {
             case "editor-add-page":
                 window.SmartNotesEditor?.addPage()
                 break
-            case "editor-delete-page":
-                window.SmartNotesEditor?.deleteActivePage()
-                break
-            case "editor-move-page-left":
-                window.SmartNotesEditor?.moveActivePage("left")
-                break
-            case "editor-move-page-right":
-                window.SmartNotesEditor?.moveActivePage("right")
-                break
             case "editor-calc":
                 window.SmartNotesEditor?.confirmEquation()
                 break

@@ -446,7 +446,7 @@ body.platform-ios .editor-container {
 
 .editor-page-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) repeat(3, var(--hit-size));
+    grid-template-columns: 56px minmax(0, 1fr) var(--hit-size);
     gap: 8px;
     align-items: center;
 }
@@ -467,6 +467,21 @@ body.platform-ios .editor-container {
     border-color: rgba(var(--primary-rgb), 0.52);
     background: rgba(var(--primary-rgb), 0.2);
 }
+
+.editor-page-title-input {
+    height: var(--hit-size);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    padding: 0 10px;
+    font-size: 0.92rem;
+}
+
+.editor-page-title-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
 
 .editor-pages-add-row {
     display: flex;
