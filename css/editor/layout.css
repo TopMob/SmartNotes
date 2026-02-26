@@ -482,6 +482,21 @@ body.platform-ios .editor-container {
     color: rgba(255, 255, 255, 0.5);
 }
 
+.editor-page-title-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.editor-page-title-counter {
+    width: 24px;
+    text-align: right;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.65);
+    flex: 0 0 auto;
+}
+
 
 .editor-pages-add-row {
     display: flex;

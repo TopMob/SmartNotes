@@ -443,6 +443,8 @@ export const EditorAPI = (() => {
                 const pageIndex = Number(inputElement.dataset.pageIndex)
                 const normalizedValue = String(inputElement.value || "").slice(0, 15)
                 if (inputElement.value !== normalizedValue) inputElement.value = normalizedValue
+                const counterElement = pagesListElement.querySelector(`.editor-page-title-counter[data-page-index="${pageIndex}"]`)
+                if (counterElement) counterElement.textContent = String(15 - normalizedValue.length)
                 setPageTitle(pageIndex, normalizedValue)
             }, { signal })
         }
@@ -646,9 +648,13 @@ export const EditorAPI = (() => {
             const activeClass = pageIndex === state.pageIndex ? " is-active" : ""
             const disableDelete = total <= 1 ? " disabled" : ""
             const safeTitle = Utils.escapeHtml(pageTitles[pageIndex] || "")
+            const remainingCharacters = 15 - String(pageTitles[pageIndex] || "").length
             items.push(`<div class="editor-page-item">
                 <button type="button" class="editor-page-item-label${activeClass}" data-action="editor-select-page" data-page-index="${pageIndex}">${pageNumber}</button>
-                <input type="text" class="editor-page-title-input" data-page-index="${pageIndex}" maxlength="15" value="${safeTitle}" placeholder="${UI.getText("page_title_placeholder", "Название страницы")}">
+                <div class="editor-page-title-field">
+                    <input type="text" class="editor-page-title-input" data-page-index="${pageIndex}" maxlength="15" value="${safeTitle}" placeholder="${UI.getText("page_title_placeholder", "Название страницы")}">
+                    <span class="editor-page-title-counter" data-page-index="${pageIndex}">${remainingCharacters}</span>
+                </div>
                 <button type="button" class="btn-icon" data-action="editor-pages-delete" data-page-index="${pageIndex}"${disableDelete} aria-label="${UI.getText("page_delete", "Delete page")}">
                     <i class="material-icons-round" aria-hidden="true">delete</i>
                 </button>

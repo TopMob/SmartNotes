@@ -96,6 +96,8 @@ const NoteIO = {
         if (!pageDrawings.length && typeof safe.drawing === "string" && safe.drawing) {
             pageDrawings.push(safe.drawing)
         }
+        const rawPageTitles = Array.isArray(safe.pageTitles) ? safe.pageTitles : []
+        const pageTitles = rawPageTitles.map(value => typeof value === "string" ? value.slice(0, 15) : "")
         const normalizedCreatedAt = this.normalizeDateInput(safe.createdAt) || Utils.serverTimestamp()
         const normalizedUpdatedAt = this.normalizeDateInput(safe.updatedAt) || normalizedCreatedAt
         const createdAtMillis = this.toTimestampMillis(normalizedCreatedAt)
@@ -142,6 +144,7 @@ const NoteIO = {
             title: safe.title ? String(safe.title).trim() : "",
             content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
             pageDrawings,
+            pageTitles,
             pageDrawingsRevision: typeof safe.pageDrawingsRevision === "string" && safe.pageDrawingsRevision
                 ? safe.pageDrawingsRevision
                 : buildPageDrawingsRevision(pageDrawings),
@@ -184,6 +187,7 @@ const NoteIO = {
             title: safe.title,
             content: safe.content,
             tags: safe.tags,
+            pageTitles: safe.pageTitles,
             pageDrawings: safe.pageDrawings
         }
         return JSON.stringify({ version: 2, note: exportNote }, null, 2)
@@ -194,7 +198,7 @@ const NoteIO = {
         if (parsed.note) return [this.normalizeNote(parsed.note)]
         if (Array.isArray(parsed.notes)) return parsed.notes.map(n => this.normalizeNote(n))
         if (Array.isArray(parsed)) return parsed.map(n => this.normalizeNote(n))
-        if (typeof parsed === "object" && (parsed.title || parsed.content || parsed.tags || parsed.pageDrawings)) {
+        if (typeof parsed === "object" && (parsed.title || parsed.content || parsed.tags || parsed.pageTitles || parsed.pageDrawings)) {
             return [this.normalizeNote(parsed)]
         }
         return []
