@@ -342,12 +342,22 @@
                         <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
                             <i class="material-icons-round" aria-hidden="true">chevron_left</i>
                         </button>
+                        <select id="editor-page-select" class="editor-page-select" aria-label="Выбор страницы" data-lang-aria="page_select"></select>
                         <span id="editor-page-indicator" class="page-indicator" aria-live="polite">1/1</span>
                         <button type="button" class="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
                             <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                         </button>
+                        <button type="button" class="btn-icon" data-action="editor-move-page-left" aria-label="Переместить страницу влево" data-lang-aria="page_move_left">
+                            <i class="material-icons-round" aria-hidden="true">keyboard_double_arrow_left</i>
+                        </button>
+                        <button type="button" class="btn-icon" data-action="editor-move-page-right" aria-label="Переместить страницу вправо" data-lang-aria="page_move_right">
+                            <i class="material-icons-round" aria-hidden="true">keyboard_double_arrow_right</i>
+                        </button>
                         <button type="button" class="btn-icon" id="editor-page-add" data-action="editor-add-page" aria-label="Добавить страницу" data-lang-aria="page_add">
                             <i class="material-icons-round" aria-hidden="true">note_add</i>
+                        </button>
+                        <button type="button" class="btn-icon" data-action="editor-delete-page" aria-label="Удалить страницу" data-lang-aria="page_delete">
+                            <i class="material-icons-round" aria-hidden="true">delete</i>
                         </button>
                     </div>
 

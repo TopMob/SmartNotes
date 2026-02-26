@@ -22,6 +22,10 @@ export const EditorAPI = (() => {
         pagePrev: document.querySelector('[data-action="editor-prev-page"]'),
         pageNext: document.querySelector('[data-action="editor-next-page"]'),
         pageAdd: document.querySelector('[data-action="editor-add-page"]'),
+        pageSelect: document.getElementById("editor-page-select"),
+        pageDelete: document.querySelector('[data-action="editor-delete-page"]'),
+        pageMoveLeft: document.querySelector('[data-action="editor-move-page-left"]'),
+        pageMoveRight: document.querySelector('[data-action="editor-move-page-right"]'),
         tagsInput: document.getElementById("note-tags-input"),
         tagsContainer: document.getElementById("note-tags-container"),
         ctxMenu: document.getElementById("media-context-menu"),
@@ -274,7 +278,7 @@ export const EditorAPI = (() => {
         }
 
         if (!noteHasEditableContent(note)) {
-            if (!isAutoSave) {
+            if (!isAutoSave && !isExitSave && !options.silent) {
                 UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
             }
             return
@@ -402,6 +406,13 @@ export const EditorAPI = (() => {
                 state.titleTouched = !!titleElement.value.trim()
                 inputHandlers.syncAutoTitle()
                 queueSnapshot()
+            }, { signal })
+        }
+
+        if (boundElements.pageSelect) {
+            boundElements.pageSelect.addEventListener("change", (event) => {
+                const pageSelectElement = event.currentTarget
+                selectPage(pageSelectElement.value)
             }, { signal })
         }
 
@@ -594,10 +605,20 @@ export const EditorAPI = (() => {
 
     const updatePageIndicator = () => {
         const pageIndicatorElement = document.getElementById("editor-page-indicator")
-        if (!pageIndicatorElement) return
+        const pageSelectElement = document.getElementById("editor-page-select")
         const pages = getPages()
         const total = pages.length || 1
-        pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
+        if (pageIndicatorElement) pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
+        if (pageSelectElement) {
+            const options = []
+            for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+                const selectedMarker = pageNumber - 1 === state.pageIndex ? ' selected' : ''
+                options.push(`<option value="${pageNumber - 1}"${selectedMarker}>${pageNumber}/${total}</option>`)
+            }
+            pageSelectElement.innerHTML = options.join("")
+            pageSelectElement.value = String(state.pageIndex)
+            pageSelectElement.disabled = total <= 1
+        }
     }
 
     const setActivePage = (index) => {
@@ -643,37 +664,90 @@ export const EditorAPI = (() => {
     }
 
     const addPage = () => {
-    const contentElement = document.getElementById("note-content-editable")
-    if (!contentElement) return
-
-    const pages = getPages()
-    if (pages.length >= 99) {
-        UI?.showToast?.("Maximum 99 pages per note")
-        return
-    }
-
-    const previousCount = pages.length || 1
-    const page = createPageElement("")
-    const current = pages[state.pageIndex]
-    if (current) current.after(page)
-    else contentElement.appendChild(page)
-    ensurePages()
-
-    const currentNote = StateStore.read().currentNote
-    if (currentNote) {
-        const drawings = normalizePageDrawings(currentNote, previousCount)
-        drawings.splice(state.pageIndex + 1, 0, "")
-        const nextNote = updateNotePageDrawings(currentNote, drawings, true)
-        if (nextNote !== currentNote) {
-            StateStore.update("currentNote", nextNote)
-            StateStore.update("editorDirty", true)
+        const contentElement = document.getElementById("note-content-editable")
+        if (!contentElement) return
+        const pages = getPages()
+        if (pages.length >= 99) {
+            UI?.showToast?.("Maximum 99 pages per note")
+            return
         }
+        const previousCount = pages.length || 1
+        const page = createPageElement("")
+        const currentPage = pages[state.pageIndex]
+        if (currentPage) currentPage.after(page)
+        else contentElement.appendChild(page)
+        ensurePages()
+        const currentNote = StateStore.read().currentNote
+        if (currentNote) {
+            const drawings = normalizePageDrawings(currentNote, previousCount)
+            drawings.splice(state.pageIndex + 1, 0, "")
+            const nextNote = updateNotePageDrawings(currentNote, drawings, false)
+            if (nextNote !== currentNote) {
+                StateStore.update("currentNote", nextNote)
+                StateStore.update("editorDirty", true)
+            }
+        }
+        setActivePage(state.pageIndex + 1)
+        queueSnapshot()
     }
 
-    setActivePage(state.pageIndex + 1)
-    queueSnapshot()
-}
+    const deleteActivePage = () => {
+        const pages = getPages()
+        if (pages.length <= 1) {
+            UI.showToast(UI.getText("page_delete_forbidden", "Нельзя удалить единственную страницу"))
+            return
+        }
+        UI.confirm("delete_page", () => {
+            const refreshedPages = getPages()
+            if (refreshedPages.length <= 1) return
+            const removeIndex = state.pageIndex
+            const targetPage = refreshedPages[removeIndex]
+            if (!targetPage) return
+            targetPage.remove()
+            const currentNote = StateStore.read().currentNote
+            if (currentNote) {
+                const drawings = normalizePageDrawings(currentNote, refreshedPages.length)
+                drawings.splice(removeIndex, 1)
+                const nextNote = updateNotePageDrawings(currentNote, drawings, false)
+                if (nextNote !== currentNote) StateStore.update("currentNote", nextNote)
+            }
+            if (state.pageIndex >= getPages().length) state.pageIndex = getPages().length - 1
+            ensurePages()
+            StateStore.update("editorDirty", true)
+            queueSnapshot()
+        })
+    }
 
+    const moveActivePage = (direction) => {
+        const pages = getPages()
+        if (pages.length < 2) return
+        const offset = direction === "left" ? -1 : 1
+        const fromIndex = state.pageIndex
+        const toIndex = fromIndex + offset
+        if (toIndex < 0 || toIndex >= pages.length) return
+        const movingPage = pages[fromIndex]
+        const anchorPage = pages[toIndex]
+        if (!movingPage || !anchorPage) return
+        if (offset < 0) anchorPage.before(movingPage)
+        else anchorPage.after(movingPage)
+        const currentNote = StateStore.read().currentNote
+        if (currentNote) {
+            const drawings = normalizePageDrawings(currentNote, pages.length)
+            const movedDrawing = drawings.splice(fromIndex, 1)[0] || ""
+            drawings.splice(toIndex, 0, movedDrawing)
+            const nextNote = updateNotePageDrawings(currentNote, drawings, false)
+            if (nextNote !== currentNote) StateStore.update("currentNote", nextNote)
+        }
+        setActivePage(toIndex)
+        StateStore.update("editorDirty", true)
+        queueSnapshot()
+    }
+
+    const selectPage = (index) => {
+        const nextIndex = Number(index)
+        if (!Number.isFinite(nextIndex)) return
+        setActivePage(nextIndex)
+    }
 
     const nextPage = () => {
         const pages = getPages()
@@ -822,10 +896,20 @@ export const EditorAPI = (() => {
         open(note)
     }
 
+    const hasSnapshotChanged = () => {
+        const baselineSnapshot = state.autoSaveSnapshot
+        if (!baselineSnapshot) return !!StateStore.read().editorDirty
+        const currentSnapshot = captureSnapshot()
+        const currentSnapshotState = JSON.stringify(currentSnapshot)
+        const baselineSnapshotState = JSON.stringify(baselineSnapshot)
+        return currentSnapshotState !== baselineSnapshotState
+    }
+
     const close = async (options = {}) => {
         const shouldPersistChanges = options.persistChanges !== false
         const shouldStaySilent = options.silent !== false
-        if (shouldPersistChanges && StateStore.read().editorDirty) {
+        const hasUnsavedChanges = StateStore.read().editorDirty && hasSnapshotChanged()
+        if (shouldPersistChanges && hasUnsavedChanges) {
             await save({ silent: shouldStaySilent, persistOnExit: true })
         }
         const wrapperElement = document.getElementById("note-editor")
@@ -980,6 +1064,9 @@ export const EditorAPI = (() => {
         deleteSelectedMedia: mediaHandlers.deleteSelectedMedia,
         confirmEquation: mathHandlers.confirmEquation,
         addPage,
+        deleteActivePage,
+        moveActivePage,
+        selectPage,
         nextPage,
         prevPage,
         applyLink: linkHandlers.applyLink,

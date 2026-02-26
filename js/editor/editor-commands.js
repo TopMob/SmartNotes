@@ -52,7 +52,6 @@ const isEditableTextBlock = (element, root) => {
     if (!element || !root || element === root) return false
     if (!root.contains(element)) return false
     if (!isElementNode(element)) return false
-    if (element.classList.contains("note-page")) return false
     if (element.closest("[contenteditable='false']")) return false
     const name = normalizeTagName(element.tagName)
     if (!["div", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"].includes(name)) return false

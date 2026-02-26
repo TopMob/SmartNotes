@@ -119,15 +119,33 @@ const NotesQueryService = (() => {
         if (!normalizedQuery) return { notes, scores: null }
         try {
             const normalizedNeedle = normalizedQuery.toLocaleLowerCase()
-            const scoredNotes = notes.map(note => ({
-                note,
-                score: SmartSearch.score(normalizedQuery, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
-            })).map(item => {
+            const scoredNotes = notes.map(note => {
+                const titleScore = SmartSearch.score(normalizedQuery, note.title, "", note.tags, [], note.hiddenTags)
+                const contentScore = SmartSearch.score(normalizedQuery, "", note.content, [], [], [])
+                const tagsScore = SmartSearch.score(normalizedQuery, "", "", note.tags, [], [])
+                const hiddenTagsScore = SmartSearch.score(normalizedQuery, "", "", [], [], note.hiddenTags)
+                const combinedScore = (titleScore * 4.6) + (contentScore * 2.4) + (tagsScore * 1.4) + (hiddenTagsScore * 1.1)
+                const highestFieldScore = Math.max(titleScore, contentScore, tagsScore, hiddenTagsScore)
+                return {
+                    note,
+                    score: combinedScore,
+                    highestFieldScore,
+                    titleScore,
+                    contentScore,
+                    tagsScore,
+                    hiddenTagsScore
+                }
+            }).map(item => {
                 const normalizedTitle = String(item.note?.title || "").toLocaleLowerCase()
-                if (normalizedTitle === normalizedNeedle) return { ...item, score: item.score + 2 }
-                if (normalizedTitle.startsWith(normalizedNeedle)) return { ...item, score: item.score + 1 }
+                if (normalizedTitle === normalizedNeedle) return { ...item, score: item.score + 3 }
+                if (normalizedTitle.startsWith(normalizedNeedle)) return { ...item, score: item.score + 1.8 }
+                if (normalizedTitle.includes(normalizedNeedle)) return { ...item, score: item.score + 0.9 }
                 return item
-            }).filter(item => item.score >= 0.35)
+            }).filter(item => {
+                if (item.titleScore >= 0.23) return true
+                if (item.tagsScore >= 0.31 || item.hiddenTagsScore >= 0.34) return true
+                return item.contentScore >= 0.42 && item.highestFieldScore >= 0.42
+            })
             return {
                 notes: scoredNotes.map(item => item.note),
                 scores: new Map(scoredNotes.map(item => [item.note.id, item.score]))
