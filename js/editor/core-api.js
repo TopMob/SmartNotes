@@ -22,10 +22,7 @@ export const EditorAPI = (() => {
         pagePrev: document.querySelector('[data-action="editor-prev-page"]'),
         pageNext: document.querySelector('[data-action="editor-next-page"]'),
         pageAdd: document.querySelector('[data-action="editor-add-page"]'),
-        pageSelect: document.getElementById("editor-page-select"),
-        pageDelete: document.querySelector('[data-action="editor-delete-page"]'),
-        pageMoveLeft: document.querySelector('[data-action="editor-move-page-left"]'),
-        pageMoveRight: document.querySelector('[data-action="editor-move-page-right"]'),
+        pagesList: document.getElementById("editor-pages-list"),
         tagsInput: document.getElementById("note-tags-input"),
         tagsContainer: document.getElementById("note-tags-container"),
         ctxMenu: document.getElementById("media-context-menu"),
@@ -409,10 +406,29 @@ export const EditorAPI = (() => {
             }, { signal })
         }
 
-        if (boundElements.pageSelect) {
-            boundElements.pageSelect.addEventListener("change", (event) => {
-                const pageSelectElement = event.currentTarget
-                selectPage(pageSelectElement.value)
+        const pagesListElement = boundElements.pagesList
+        if (pagesListElement) {
+            pagesListElement.addEventListener("click", (event) => {
+                const actionElement = event.target.closest("[data-action]")
+                if (!actionElement) return
+                const pageIndex = Number(actionElement.dataset.pageIndex)
+                const action = actionElement.dataset.action
+                if (action === "editor-select-page") {
+                    selectPage(pageIndex)
+                    UI.closeModal("editor-pages-modal")
+                    return
+                }
+                if (action === "editor-pages-move-left") {
+                    moveActivePage("left", pageIndex)
+                    return
+                }
+                if (action === "editor-pages-move-right") {
+                    moveActivePage("right", pageIndex)
+                    return
+                }
+                if (action === "editor-pages-delete") {
+                    deleteActivePage(pageIndex)
+                }
             }, { signal })
         }
 
@@ -603,22 +619,40 @@ export const EditorAPI = (() => {
         return page
     }
 
+    const renderPagesManagerList = () => {
+        const pagesListElement = document.getElementById("editor-pages-list")
+        if (!pagesListElement) return
+        const pages = getPages()
+        const total = pages.length || 1
+        const items = []
+        for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+            const pageIndex = pageNumber - 1
+            const activeClass = pageIndex === state.pageIndex ? " is-active" : ""
+            const disableLeft = pageIndex === 0 ? " disabled" : ""
+            const disableRight = pageIndex === total - 1 ? " disabled" : ""
+            const disableDelete = total <= 1 ? " disabled" : ""
+            items.push(`<div class="editor-page-item">
+                <button type="button" class="editor-page-item-label${activeClass}" data-action="editor-select-page" data-page-index="${pageIndex}">${pageNumber}</button>
+                <button type="button" class="btn-icon" data-action="editor-pages-move-left" data-page-index="${pageIndex}"${disableLeft} aria-label="${UI.getText("page_move_left", "Move page left")}">
+                    <i class="material-icons-round" aria-hidden="true">keyboard_double_arrow_left</i>
+                </button>
+                <button type="button" class="btn-icon" data-action="editor-pages-move-right" data-page-index="${pageIndex}"${disableRight} aria-label="${UI.getText("page_move_right", "Move page right")}">
+                    <i class="material-icons-round" aria-hidden="true">keyboard_double_arrow_right</i>
+                </button>
+                <button type="button" class="btn-icon" data-action="editor-pages-delete" data-page-index="${pageIndex}"${disableDelete} aria-label="${UI.getText("page_delete", "Delete page")}">
+                    <i class="material-icons-round" aria-hidden="true">delete</i>
+                </button>
+            </div>`)
+        }
+        pagesListElement.innerHTML = items.join("")
+    }
+
     const updatePageIndicator = () => {
         const pageIndicatorElement = document.getElementById("editor-page-indicator")
-        const pageSelectElement = document.getElementById("editor-page-select")
         const pages = getPages()
         const total = pages.length || 1
         if (pageIndicatorElement) pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
-        if (pageSelectElement) {
-            const options = []
-            for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
-                const selectedMarker = pageNumber - 1 === state.pageIndex ? ' selected' : ''
-                options.push(`<option value="${pageNumber - 1}"${selectedMarker}>${pageNumber}/${total}</option>`)
-            }
-            pageSelectElement.innerHTML = options.join("")
-            pageSelectElement.value = String(state.pageIndex)
-            pageSelectElement.disabled = total <= 1
-        }
+        renderPagesManagerList()
     }
 
     const setActivePage = (index) => {
@@ -691,7 +725,7 @@ export const EditorAPI = (() => {
         queueSnapshot()
     }
 
-    const deleteActivePage = () => {
+    const deleteActivePage = (targetIndex = state.pageIndex) => {
         const pages = getPages()
         if (pages.length <= 1) {
             UI.showToast(UI.getText("page_delete_forbidden", "Нельзя удалить единственную страницу"))
@@ -700,7 +734,7 @@ export const EditorAPI = (() => {
         UI.confirm("delete_page", () => {
             const refreshedPages = getPages()
             if (refreshedPages.length <= 1) return
-            const removeIndex = state.pageIndex
+            const removeIndex = Utils.clamp(Number(targetIndex), 0, refreshedPages.length - 1)
             const targetPage = refreshedPages[removeIndex]
             if (!targetPage) return
             targetPage.remove()
@@ -718,11 +752,11 @@ export const EditorAPI = (() => {
         })
     }
 
-    const moveActivePage = (direction) => {
+    const moveActivePage = (direction, targetIndex = state.pageIndex) => {
         const pages = getPages()
         if (pages.length < 2) return
         const offset = direction === "left" ? -1 : 1
-        const fromIndex = state.pageIndex
+        const fromIndex = Utils.clamp(Number(targetIndex), 0, pages.length - 1)
         const toIndex = fromIndex + offset
         if (toIndex < 0 || toIndex >= pages.length) return
         const movingPage = pages[fromIndex]
