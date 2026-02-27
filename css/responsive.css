@@ -122,6 +122,20 @@
         max-height: none;
         min-height: 38vh;
     }
+
+    .editor-page-controls-header {
+        gap: 2px;
+    }
+
+    .page-indicator {
+        min-width: 38px;
+        font-size: 0.82rem;
+    }
+
+    .editor-page-item {
+        grid-template-columns: 44px minmax(0, 1fr) 34px;
+        gap: 6px;
+    }
 }
 
 @media (min-width: 1024px) {

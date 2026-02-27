@@ -346,8 +346,8 @@
                         <button type="button" class="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
                             <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                         </button>
-                        <button type="button" class="btn-icon" id="editor-page-add" data-action="editor-add-page" aria-label="Добавить страницу" data-lang-aria="page_add">
-                            <i class="material-icons-round" aria-hidden="true">note_add</i>
+                        <button type="button" class="btn-icon" data-action="open-modal" data-modal="editor-pages-modal" aria-label="Управление страницами" data-lang-aria="editor_pages_manage">
+                            <i class="material-icons-round" aria-hidden="true">menu_book</i>
                         </button>
                     </div>
 
@@ -436,6 +436,28 @@
                             <span data-lang="save">Сохранить</span>
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="editor-pages-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Управление страницами" data-lang-aria="editor_pages_manage">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 data-lang="editor_pages">Страницы</h2>
+                <button type="button" class="btn-icon" data-action="close-modal" data-modal="editor-pages-modal" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </div>
+            <div class="modal-body editor-pages-modal-body">
+                <div id="editor-pages-list" class="editor-pages-list"></div>
+                <div class="editor-pages-add-row">
+                    <button type="button" class="btn-primary" data-action="editor-add-page" aria-label="Добавить страницу" data-lang-aria="page_add">
+                        <i class="material-icons-round" aria-hidden="true">note_add</i>
+                        <span data-lang="page_add">Добавить страницу</span>
+                    </button>
                 </div>
             </div>
         </div>

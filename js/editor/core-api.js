@@ -22,6 +22,7 @@ export const EditorAPI = (() => {
         pagePrev: document.querySelector('[data-action="editor-prev-page"]'),
         pageNext: document.querySelector('[data-action="editor-next-page"]'),
         pageAdd: document.querySelector('[data-action="editor-add-page"]'),
+        pagesList: document.getElementById("editor-pages-list"),
         tagsInput: document.getElementById("note-tags-input"),
         tagsContainer: document.getElementById("note-tags-container"),
         ctxMenu: document.getElementById("media-context-menu"),
@@ -71,6 +72,17 @@ export const EditorAPI = (() => {
         return drawings[state.pageIndex] || ""
     }
 
+    const normalizePageTitles = (note, pageCount) => {
+        const totalPages = Math.max(1, Number(pageCount) || 1)
+        const sourceTitles = Array.isArray(note?.pageTitles) ? note.pageTitles : []
+        const normalizedTitles = []
+        for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+            const sourceValue = sourceTitles[pageIndex]
+            normalizedTitles.push(typeof sourceValue === "string" ? sourceValue.slice(0, 15) : "")
+        }
+        return normalizedTitles
+    }
+
     const loadToolSettings = () => {
         const defaults = getToolList().reduce((acc, t) => ({ ...acc, [t.id]: true }), {})
         let stored
@@ -90,6 +102,7 @@ export const EditorAPI = (() => {
         title: "",
         content: "",
         tags: [],
+        pageTitles: [],
         pageDrawings: [],
         pageDrawingsRevision: ""
     })
@@ -226,6 +239,7 @@ export const EditorAPI = (() => {
         title: String(note?.title || ""),
         content: normalizeEditorHtml(note?.content),
         tags: Array.isArray(note?.tags) ? note.tags.map(tag => String(tag || "")) : [],
+        pageTitles: Array.isArray(note?.pageTitles) ? note.pageTitles.map(value => String(value || "")) : [],
         pageDrawings: Array.isArray(note?.pageDrawings) ? note.pageDrawings.map(value => String(value || "")) : [],
         pageDrawingsRevision: String(note?.pageDrawingsRevision || ""),
         folderId: String(note?.folderId || "")
@@ -247,6 +261,7 @@ export const EditorAPI = (() => {
             title: snapshot.title,
             content: snapshot.content,
             tags: Array.isArray(snapshot.tags) ? [...snapshot.tags] : [],
+            pageTitles: Array.isArray(snapshot.pageTitles) ? [...snapshot.pageTitles] : [],
             pageDrawings: Array.isArray(snapshot.pageDrawings) ? [...snapshot.pageDrawings] : [],
             pageDrawingsRevision: snapshot.pageDrawingsRevision || buildPageDrawingsRevision(snapshot.pageDrawings)
         }
@@ -274,7 +289,7 @@ export const EditorAPI = (() => {
         }
 
         if (!noteHasEditableContent(note)) {
-            if (!isAutoSave) {
+            if (!isAutoSave && !isExitSave && !options.silent) {
                 UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
             }
             return
@@ -356,6 +371,7 @@ export const EditorAPI = (() => {
             title: snap.title,
             content: snap.content,
             tags: snap.tags,
+            pageTitles: snap.pageTitles,
             pageDrawings: snap.pageDrawings,
             pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
         })
@@ -402,6 +418,34 @@ export const EditorAPI = (() => {
                 state.titleTouched = !!titleElement.value.trim()
                 inputHandlers.syncAutoTitle()
                 queueSnapshot()
+            }, { signal })
+        }
+
+        const pagesListElement = boundElements.pagesList
+        if (pagesListElement) {
+            pagesListElement.addEventListener("click", (event) => {
+                const actionElement = event.target.closest("[data-action]")
+                if (!actionElement) return
+                const pageIndex = Number(actionElement.dataset.pageIndex)
+                const action = actionElement.dataset.action
+                if (action === "editor-select-page") {
+                    selectPage(pageIndex)
+                    UI.closeModal("editor-pages-modal")
+                    return
+                }
+                if (action === "editor-pages-delete") {
+                    deleteActivePage(pageIndex)
+                }
+            }, { signal })
+            pagesListElement.addEventListener("input", (event) => {
+                const inputElement = event.target.closest(".editor-page-title-input")
+                if (!inputElement) return
+                const pageIndex = Number(inputElement.dataset.pageIndex)
+                const normalizedValue = String(inputElement.value || "").slice(0, 15)
+                if (inputElement.value !== normalizedValue) inputElement.value = normalizedValue
+                const counterElement = pagesListElement.querySelector(`.editor-page-title-counter[data-page-index="${pageIndex}"]`)
+                if (counterElement) counterElement.textContent = String(15 - normalizedValue.length)
+                setPageTitle(pageIndex, normalizedValue)
             }, { signal })
         }
 
@@ -592,12 +636,39 @@ export const EditorAPI = (() => {
         return page
     }
 
-    const updatePageIndicator = () => {
-        const pageIndicatorElement = document.getElementById("editor-page-indicator")
-        if (!pageIndicatorElement) return
+    const renderPagesManagerList = () => {
+        const pagesListElement = document.getElementById("editor-pages-list")
+        if (!pagesListElement) return
         const pages = getPages()
         const total = pages.length || 1
-        pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
+        const pageTitles = normalizePageTitles(StateStore.read().currentNote, total)
+        const items = []
+        for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+            const pageIndex = pageNumber - 1
+            const activeClass = pageIndex === state.pageIndex ? " is-active" : ""
+            const disableDelete = total <= 1 ? " disabled" : ""
+            const safeTitle = Utils.escapeHtml(pageTitles[pageIndex] || "")
+            const remainingCharacters = 15 - String(pageTitles[pageIndex] || "").length
+            items.push(`<div class="editor-page-item">
+                <button type="button" class="editor-page-item-label${activeClass}" data-action="editor-select-page" data-page-index="${pageIndex}">${pageNumber}</button>
+                <div class="editor-page-title-field">
+                    <input type="text" class="editor-page-title-input" data-page-index="${pageIndex}" maxlength="15" value="${safeTitle}" placeholder="${UI.getText("page_title_placeholder", "Название страницы")}">
+                    <span class="editor-page-title-counter" data-page-index="${pageIndex}">${remainingCharacters}</span>
+                </div>
+                <button type="button" class="btn-icon" data-action="editor-pages-delete" data-page-index="${pageIndex}"${disableDelete} aria-label="${UI.getText("page_delete", "Delete page")}">
+                    <i class="material-icons-round" aria-hidden="true">delete</i>
+                </button>
+            </div>`)
+        }
+        pagesListElement.innerHTML = items.join("")
+    }
+
+    const updatePageIndicator = () => {
+        const pageIndicatorElement = document.getElementById("editor-page-indicator")
+        const pages = getPages()
+        const total = pages.length || 1
+        if (pageIndicatorElement) pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
+        renderPagesManagerList()
     }
 
     const setActivePage = (index) => {
@@ -643,37 +714,84 @@ export const EditorAPI = (() => {
     }
 
     const addPage = () => {
-    const contentElement = document.getElementById("note-content-editable")
-    if (!contentElement) return
-
-    const pages = getPages()
-    if (pages.length >= 99) {
-        UI?.showToast?.("Maximum 99 pages per note")
-        return
-    }
-
-    const previousCount = pages.length || 1
-    const page = createPageElement("")
-    const current = pages[state.pageIndex]
-    if (current) current.after(page)
-    else contentElement.appendChild(page)
-    ensurePages()
-
-    const currentNote = StateStore.read().currentNote
-    if (currentNote) {
-        const drawings = normalizePageDrawings(currentNote, previousCount)
-        drawings.splice(state.pageIndex + 1, 0, "")
-        const nextNote = updateNotePageDrawings(currentNote, drawings, true)
-        if (nextNote !== currentNote) {
-            StateStore.update("currentNote", nextNote)
-            StateStore.update("editorDirty", true)
+        const contentElement = document.getElementById("note-content-editable")
+        if (!contentElement) return
+        const pages = getPages()
+        if (pages.length >= 99) {
+            UI?.showToast?.("Maximum 99 pages per note")
+            return
         }
+        const previousCount = pages.length || 1
+        const page = createPageElement("")
+        const currentPage = pages[state.pageIndex]
+        if (currentPage) currentPage.after(page)
+        else contentElement.appendChild(page)
+        ensurePages()
+        const currentNote = StateStore.read().currentNote
+        if (currentNote) {
+            const drawings = normalizePageDrawings(currentNote, previousCount)
+            drawings.splice(state.pageIndex + 1, 0, "")
+            const pageTitles = normalizePageTitles(currentNote, previousCount)
+            pageTitles.splice(state.pageIndex + 1, 0, "")
+            const nextNote = updateNotePageDrawings(currentNote, drawings, false)
+            if (nextNote !== currentNote) {
+                StateStore.update("currentNote", { ...nextNote, pageTitles })
+                StateStore.update("editorDirty", true)
+            }
+        }
+        setActivePage(state.pageIndex + 1)
+        queueSnapshot()
     }
 
-    setActivePage(state.pageIndex + 1)
-    queueSnapshot()
-}
+    const deleteActivePage = (targetIndex = state.pageIndex) => {
+        const pages = getPages()
+        if (pages.length <= 1) {
+            UI.showToast(UI.getText("page_delete_forbidden", "Нельзя удалить единственную страницу"))
+            return
+        }
+        UI.confirm("delete_page", () => {
+            const refreshedPages = getPages()
+            if (refreshedPages.length <= 1) return
+            const removeIndex = Utils.clamp(Number(targetIndex), 0, refreshedPages.length - 1)
+            const targetPage = refreshedPages[removeIndex]
+            if (!targetPage) return
+            targetPage.remove()
+            const currentNote = StateStore.read().currentNote
+            if (currentNote) {
+                const drawings = normalizePageDrawings(currentNote, refreshedPages.length)
+                drawings.splice(removeIndex, 1)
+                const pageTitles = normalizePageTitles(currentNote, refreshedPages.length)
+                pageTitles.splice(removeIndex, 1)
+                const nextNote = updateNotePageDrawings(currentNote, drawings, false)
+                if (nextNote !== currentNote) StateStore.update("currentNote", { ...nextNote, pageTitles })
+            }
+            if (state.pageIndex >= getPages().length) state.pageIndex = getPages().length - 1
+            ensurePages()
+            StateStore.update("editorDirty", true)
+            queueSnapshot()
+        })
+    }
 
+    const setPageTitle = (pageIndex, titleValue) => {
+        const currentNote = StateStore.read().currentNote
+        if (!currentNote) return
+        const pages = getPages()
+        if (!pages.length) return
+        const normalizedPageIndex = Utils.clamp(Number(pageIndex), 0, pages.length - 1)
+        const normalizedTitleValue = String(titleValue || "").slice(0, 15)
+        const pageTitles = normalizePageTitles(currentNote, pages.length)
+        if (pageTitles[normalizedPageIndex] === normalizedTitleValue) return
+        pageTitles[normalizedPageIndex] = normalizedTitleValue
+        StateStore.update("currentNote", { ...currentNote, pageTitles })
+        StateStore.update("editorDirty", true)
+        queueSnapshot()
+    }
+
+    const selectPage = (index) => {
+        const nextIndex = Number(index)
+        if (!Number.isFinite(nextIndex)) return
+        setActivePage(nextIndex)
+    }
 
     const nextPage = () => {
         const pages = getPages()
@@ -822,10 +940,20 @@ export const EditorAPI = (() => {
         open(note)
     }
 
+    const hasSnapshotChanged = () => {
+        const baselineSnapshot = state.autoSaveSnapshot
+        if (!baselineSnapshot) return !!StateStore.read().editorDirty
+        const currentSnapshot = captureSnapshot()
+        const currentSnapshotState = JSON.stringify(currentSnapshot)
+        const baselineSnapshotState = JSON.stringify(baselineSnapshot)
+        return currentSnapshotState !== baselineSnapshotState
+    }
+
     const close = async (options = {}) => {
         const shouldPersistChanges = options.persistChanges !== false
         const shouldStaySilent = options.silent !== false
-        if (shouldPersistChanges && StateStore.read().editorDirty) {
+        const hasUnsavedChanges = StateStore.read().editorDirty && hasSnapshotChanged()
+        if (shouldPersistChanges && hasUnsavedChanges) {
             await save({ silent: shouldStaySilent, persistOnExit: true })
         }
         const wrapperElement = document.getElementById("note-editor")
@@ -906,6 +1034,7 @@ export const EditorAPI = (() => {
             title: currentSnapshot.title,
             content: currentSnapshot.content,
             tags: Array.isArray(currentSnapshot.tags) ? [...currentSnapshot.tags] : [],
+            pageTitles: Array.isArray(currentSnapshot.pageTitles) ? [...currentSnapshot.pageTitles] : [],
             pageDrawings: Array.isArray(currentSnapshot.pageDrawings) ? [...currentSnapshot.pageDrawings] : [],
             pageDrawingsRevision: currentSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(currentSnapshot.pageDrawings)
         })
@@ -915,6 +1044,7 @@ export const EditorAPI = (() => {
                 title: latestSnapshot.title,
                 content: latestSnapshot.content,
                 tags: Array.isArray(latestSnapshot.tags) ? [...latestSnapshot.tags] : [],
+                pageTitles: Array.isArray(latestSnapshot.pageTitles) ? [...latestSnapshot.pageTitles] : [],
                 pageDrawings: Array.isArray(latestSnapshot.pageDrawings) ? [...latestSnapshot.pageDrawings] : [],
                 pageDrawingsRevision: latestSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(latestSnapshot.pageDrawings)
             })
@@ -980,6 +1110,8 @@ export const EditorAPI = (() => {
         deleteSelectedMedia: mediaHandlers.deleteSelectedMedia,
         confirmEquation: mathHandlers.confirmEquation,
         addPage,
+        deleteActivePage,
+        selectPage,
         nextPage,
         prevPage,
         applyLink: linkHandlers.applyLink,

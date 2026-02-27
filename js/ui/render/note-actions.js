@@ -154,19 +154,19 @@ Object.assign(UI, {
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
-                    ${archiveLabel}
+                    <i class="material-icons-round" aria-hidden="true">inventory_2</i>${archiveLabel}
                 </button>
                 <button type="button" class="btn-secondary" data-action="note-lock-toggle" data-note-id="${encodeURIComponent(note.id)}">
-                    ${note.lock?.hash ? (dict.unlock_note || "Unlock") : (dict.lock_note || "Lock")}
+                    <i class="material-icons-round" aria-hidden="true">lock</i>${note.lock?.hash ? (dict.unlock_note || "Unlock") : (dict.lock_note || "Lock")}
                 </button>
                 <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.copy_text || "Copy text"}
+                    <i class="material-icons-round" aria-hidden="true">content_copy</i>${dict.copy_text || "Copy text"}
                 </button>
                 <button type="button" class="btn-secondary" data-action="note-mark-for-reanalysis" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.note_mark_for_reanalysis || "Отметить для повторного анализа"}
+                    <i class="material-icons-round" aria-hidden="true">psychology</i>${dict.note_mark_for_reanalysis || "Отметить для повторного анализа"}
                 </button>
                 <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
-                    ${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
+                    <i class="material-icons-round" aria-hidden="true">delete</i>${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
                 </button>
                 ${note.trashedAt ? `<button type="button" class="btn-secondary" data-action="note-restore" data-note-id="${encodeURIComponent(note.id)}">${dict.restore_note || "Restore"}</button>` : ""}
             </div>
@@ -175,25 +175,25 @@ Object.assign(UI, {
                     ${folderOptions.join("")}
                 </select>
                 <button type="button" class="btn-primary" data-action="note-move-folder" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.move_to_folder || "Move"}
+                    <i class="material-icons-round" aria-hidden="true">drive_file_move</i>${dict.move_to_folder || "Move"}
                 </button>
             </div>
             <div class="lock-center-folder" style="margin-top:12px;">
                 <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.reminder_note || "Reminder"}">
                 <button type="button" class="btn-primary" data-action="note-reminder-set" data-note-id="${encodeURIComponent(note.id)}">
-                    ${dict.reminder_note || "Reminder"}
+                    <i class="material-icons-round" aria-hidden="true">notifications</i>${dict.reminder_note || "Reminder"}
                 </button>
                 ${reminderClearButton}
             </div>
             <div class="modal-actions-grid" style="margin-top:12px;">
                 <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">
-                    ${dict.download_note || "Download"}
+                    <i class="material-icons-round" aria-hidden="true">download</i>${dict.download_note || "Download"}
                 </button>
                 <button type="button" class="btn-secondary" data-action="export-note-txt" data-lang="export_txt">
-                    ${dict.export_txt || "Export TXT"}
+                    <i class="material-icons-round" aria-hidden="true">description</i>${dict.export_txt || "Export TXT"}
                 </button>
                 <button type="button" class="btn-secondary" data-action="export-note-pdf" data-lang="export_pdf">
-                    ${dict.export_pdf || "Export PDF"}
+                    <i class="material-icons-round" aria-hidden="true">picture_as_pdf</i>${dict.export_pdf || "Export PDF"}
                 </button>
             </div>
         `
