@@ -325,7 +325,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        padding-bottom: calc(148px + var(--safe-bottom));
+        padding-bottom: calc(184px + var(--safe-bottom));
     }
 
     .note-content {
@@ -333,18 +333,19 @@
         max-height: none;
     }
 
-    .editor-bottom-panel {
-        position: sticky;
+    .editor-overlay.active .editor-bottom-panel {
+        position: fixed;
+        left: 0;
+        right: 0;
         bottom: 0;
-        z-index: 20;
-        margin-left: 0;
-        margin-right: 0;
-        margin-top: 8px;
+        z-index: calc(var(--z-editor) + 2);
+        margin: 0;
         width: 100%;
         box-sizing: border-box;
         background: var(--surface);
-        padding-left: 0;
-        padding-right: 0;
+        padding-top: 10px;
+        padding-left: 16px;
+        padding-right: 16px;
         padding-bottom: calc(12px + var(--safe-bottom));
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.32);
