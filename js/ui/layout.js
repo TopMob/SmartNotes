@@ -125,8 +125,14 @@ Object.assign(UI, {
         reader.readAsText(file, "utf-8")
     },
 
+    canShowPrimaryAction(view = StateStore.read().view) {
+        return new Set(["notes", "folder", "folders"]).has(String(view || "notes"))
+    },
+
     primaryAction() {
-        if (StateStore.read().view === "folders") {
+        const currentView = StateStore.read().view
+        if (!this.canShowPrimaryAction(currentView)) return
+        if (currentView === "folders") {
             this.createFolder()
             return
         }
@@ -254,11 +260,40 @@ Object.assign(UI, {
 
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
-        const label = StateStore.read().view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
+        const view = StateStore.read().view
+        const label = view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
+        this.els.fab.classList.toggle("hidden", !this.canShowPrimaryAction(view))
         this.updateActiveFolderMenu()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
+    },
+
+    handleMobileBackNavigation() {
+        const editorOverlay = document.getElementById("note-editor")
+        if (editorOverlay?.classList.contains("active")) {
+            window.SmartNotesEditor?.close?.()
+            return true
+        }
+        const activeModal = Array.from(document.querySelectorAll(".modal-overlay.active")).pop()
+        if (activeModal) {
+            if (activeModal.id === "settings-modal") {
+                this.requestCloseSettingsModal()
+            } else {
+                this.closeModal(activeModal.id)
+            }
+            return true
+        }
+        if (this.els.sidebar?.classList.contains("active")) {
+            this.toggleSidebar(false)
+            return true
+        }
+        const currentView = StateStore.read().view
+        if (currentView !== "notes") {
+            switchView("notes")
+            return true
+        }
+        return false
     },
 
     updateNotesLoadMoreButton(loadMoreState) {

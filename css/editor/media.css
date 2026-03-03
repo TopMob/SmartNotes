@@ -325,7 +325,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        padding-bottom: 0;
+        padding-bottom: calc(184px + var(--safe-bottom));
     }
 
     .note-content {
@@ -333,14 +333,22 @@
         max-height: none;
     }
 
-    .editor-bottom-panel {
-        position: sticky;
+    .editor-overlay.active .editor-bottom-panel {
+        position: fixed;
+        left: 0;
+        right: 0;
         bottom: 0;
-        margin-left: calc(var(--editor-padding) * -1);
-        margin-right: calc(var(--editor-padding) * -1);
-        padding-left: var(--editor-padding);
-        padding-right: var(--editor-padding);
+        z-index: calc(var(--z-editor) + 2);
+        margin: 0;
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--surface);
+        padding-top: 10px;
+        padding-left: 16px;
+        padding-right: 16px;
         padding-bottom: calc(12px + var(--safe-bottom));
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.32);
     }
 
     .editor-bottom-actions {

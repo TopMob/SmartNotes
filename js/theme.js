@@ -146,7 +146,8 @@ export const ThemeManager = {
         deep_purple: createPreset("#2E1065", "#F5F3FF", "#A855F7"),
         silver: createPreset("#F3F4F6", "#111827", "#4B5563"),
         graphite: createPreset("#27272A", "#F4F4F5", "#71717A"),
-        terminal: createPreset("#000000", "#4ADE80", "#166534")
+        terminal: createPreset("#000000", "#4ADE80", "#166534"),
+        amber_accent: createPreset("#110114", "#FFAA00", "#07AC0A")
     },
     storageKey: "app-theme",
     customPresetStorageKey: "app-theme-custom-presets",
@@ -418,7 +419,7 @@ export const ThemeManager = {
         const customPresetKeys = this.getCustomPresets().map(item => `custom:${item.key}`)
         const customThemesLeft = Math.max(0, this.maxCustomPresets - customPresetKeys.length)
         const groups = [
-            { title: "Тёмные темы", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal"] },
+            { title: "Тёмные темы", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal", "amber_accent"] },
             { title: "Светлые темы", items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
             { title: "Пользовательские", items: customPresetKeys }
         ]
