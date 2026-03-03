@@ -325,7 +325,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        padding-bottom: 0;
+        padding-bottom: calc(172px + var(--safe-bottom));
     }
 
     .note-content {
@@ -338,9 +338,11 @@
         bottom: 0;
         margin-left: calc(var(--editor-padding) * -1);
         margin-right: calc(var(--editor-padding) * -1);
+        background: var(--surface);
         padding-left: var(--editor-padding);
         padding-right: var(--editor-padding);
         padding-bottom: calc(12px + var(--safe-bottom));
+        box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.35);
     }
 
     .editor-bottom-actions {
