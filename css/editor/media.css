@@ -325,7 +325,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        padding-bottom: calc(172px + var(--safe-bottom));
+        padding-bottom: calc(16px + var(--safe-bottom));
     }
 
     .note-content {
@@ -334,15 +334,18 @@
     }
 
     .editor-bottom-panel {
-        position: sticky;
-        bottom: 0;
-        margin-left: calc(var(--editor-padding) * -1);
-        margin-right: calc(var(--editor-padding) * -1);
+        position: static;
+        bottom: auto;
+        margin-left: 0;
+        margin-right: 0;
+        margin-top: 8px;
+        width: 100%;
+        box-sizing: border-box;
         background: var(--surface);
-        padding-left: var(--editor-padding);
-        padding-right: var(--editor-padding);
+        padding-left: 0;
+        padding-right: 0;
         padding-bottom: calc(12px + var(--safe-bottom));
-        box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 -10px 20px rgba(0, 0, 0, 0.28);
     }
 
     .editor-bottom-actions {
