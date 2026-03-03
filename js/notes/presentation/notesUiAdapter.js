@@ -1,5 +1,11 @@
 const NotesUIAdapter = (() => {
+    function syncViewMeta() {
+        UI.updateViewTitle()
+        UI.updatePrimaryActionLabel()
+    }
+
     function render(viewModel) {
+        syncViewMeta()
         if (viewModel.view === "folders") {
             UI.renderFolderGrid()
             return
@@ -18,8 +24,6 @@ const NotesUIAdapter = (() => {
         }
         UI.updateEmptyState(viewModel.emptyState.icon, viewModel.emptyState.text)
         NotesRenderer.render(viewModel.visibleNotes)
-        UI.updateViewTitle()
-        UI.updatePrimaryActionLabel()
         UI.updateNotesLoadMoreButton(viewModel.loadMoreState)
     }
     return { render }

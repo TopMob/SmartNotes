@@ -68,6 +68,18 @@ Object.assign(UI, {
             }
         }, { signal: listenersSignal })
 
+        if (window.history?.pushState) {
+            window.history.pushState({ appNavigationGuard: true }, "")
+            window.addEventListener("popstate", () => {
+                const isMobileViewport = window.matchMedia("(max-width: 1023px)").matches
+                if (!isMobileViewport) return
+                const handled = this.handleMobileBackNavigation()
+                if (handled) {
+                    window.history.pushState({ appNavigationGuard: true }, "")
+                }
+            }, { signal: listenersSignal })
+        }
+
         document.querySelectorAll(".star").forEach(starElement => {
             starElement.addEventListener("click", () => {
                 const selectedRating = parseInt(starElement.dataset.val, 10)
