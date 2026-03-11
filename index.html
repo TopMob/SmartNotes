@@ -336,45 +336,21 @@
                 <button type="button" class="btn-icon" data-action="close-editor" aria-label="Назад" data-lang-aria="back">
                     <i class="material-icons-round" aria-hidden="true">arrow_back</i>
                 </button>
+                <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
 
                 <div class="editor-tools" aria-label="Действия редактора" data-lang-aria="editor_actions">
-                    <div class="editor-page-controls editor-page-controls-header" aria-label="Страницы" data-lang-aria="editor_pages">
-                        <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
-                            <i class="material-icons-round" aria-hidden="true">chevron_left</i>
-                        </button>
-                        <span id="editor-page-indicator" class="page-indicator" aria-live="polite">1/1</span>
-                        <button type="button" class="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
-                            <i class="material-icons-round" aria-hidden="true">chevron_right</i>
-                        </button>
-                        <button type="button" class="btn-icon" data-action="open-modal" data-modal="editor-pages-modal" aria-label="Управление страницами" data-lang-aria="editor_pages_manage">
-                            <i class="material-icons-round" aria-hidden="true">menu_book</i>
-                        </button>
-                    </div>
-
-                    <div class="divider-vertical" aria-hidden="true"></div>
-
-                    <button type="button" class="btn-icon" data-action="editor-undo" aria-label="Отменить" data-lang-aria="undo">
-                        <i class="material-icons-round" aria-hidden="true">undo</i>
+                    <button type="button" class="btn-icon hidden" id="editor-save-header" data-action="editor-save" aria-label="Сохранить" data-lang-aria="save_note">
+                        <i class="material-icons-round" aria-hidden="true">check</i>
                     </button>
-                    <button type="button" class="btn-icon" data-action="editor-redo" aria-label="Повторить" data-lang-aria="redo">
-                        <i class="material-icons-round" aria-hidden="true">redo</i>
-                    </button>
-
-                    <div class="divider-vertical" aria-hidden="true"></div>
+                    <button type="button" class="btn-secondary editor-done-button hidden" data-action="editor-finish">Готово</button>
 
                     <button type="button" class="btn-icon" data-action="editor-note-actions" aria-label="Действия с заметкой" data-lang-aria="folder_actions">
                         <i class="material-icons-round" aria-hidden="true">more_vert</i>
-                    </button>
-
-                    <button type="button" class="btn-icon" id="toolbar-toggle" data-action="toggle-toolbar" aria-label="Скрыть панель инструментов" data-lang-aria="toolbar_hide">
-                        <i class="material-icons-round" aria-hidden="true">expand_less</i>
                     </button>
                 </div>
             </header>
 
             <div class="editor-scroll-area scrollable">
-                <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
-
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
                 <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования">
                     <div class="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
@@ -423,19 +399,9 @@
                 <div class="note-content-wrapper">
                     <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
                 </div>
-
-                <div class="editor-bottom-panel">
-                    <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
-                        <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
-                        <div id="note-tags-container" class="tags-container" aria-live="polite"></div>
-                    </div>
-
-                    <div class="editor-bottom-actions">
-                        <button type="button" class="btn-primary" data-action="editor-save" aria-label="Сохранить" data-lang-aria="save_note">
-                            <i class="material-icons-round" aria-hidden="true">save</i>
-                            <span data-lang="save">Сохранить</span>
-                        </button>
-                    </div>
+                <div class="editor-status-bar" id="editor-status-bar">
+                    <span id="editor-page-indicator" class="page-indicator" aria-live="polite">Страница 1 из 1</span>
+                    <span id="editor-text-stats">0 слов • 0 символов</span>
                 </div>
             </div>
         </div>
@@ -446,7 +412,7 @@
     <div id="editor-pages-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Управление страницами" data-lang-aria="editor_pages_manage">
         <div class="modal-card">
             <div class="modal-header">
-                <h2 data-lang="editor_pages">Страницы</h2>
+                <h2 id="editor-pages-modal-title" data-lang="editor_pages">Страницы</h2>
                 <button type="button" class="btn-icon" data-action="close-modal" data-modal="editor-pages-modal" aria-label="Закрыть" data-lang-aria="close">
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
@@ -458,6 +424,23 @@
                         <i class="material-icons-round" aria-hidden="true">note_add</i>
                         <span data-lang="page_add">Добавить страницу</span>
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="editor-tags-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Теги" data-lang-aria="tags_aria">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2># Теги</h2>
+                <button type="button" class="btn-icon" data-action="close-modal" data-modal="editor-tags-modal" aria-label="Закрыть" data-lang-aria="close">
+                    <i class="material-icons-round" aria-hidden="true">close</i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
+                    <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
+                    <div id="note-tags-container" class="tags-container" aria-live="polite"></div>
                 </div>
             </div>
         </div>

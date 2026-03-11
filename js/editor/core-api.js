@@ -270,6 +270,7 @@ export const EditorAPI = (() => {
         const isExitSave = !!options.persistOnExit
         if (state.isSaving) return
         if (isAutoSave && state.manualSaveInProgress) return
+        if (!isAutoSave) setInteractionMode("view")
         const editorHasUnsavedChanges = !!StateStore.read().editorDirty
         if (!isAutoSave && !isExitSave && editorHasUnsavedChanges) {
             if (!state.titleTouched && !String(note.title || "").trim()) {
@@ -300,6 +301,7 @@ export const EditorAPI = (() => {
         if (noteAlreadyPersisted && state.initialEditorState && currentEditorState === state.initialEditorState) {
             SaveStateService?.markSaved?.()
             StateStore.update("editorDirty", false)
+            updateHeaderSaveState()
             if (!options.silent && !isExitSave) {
                 UI.showToast(UI.getText("saved", "Saved"))
                 await close({ persistChanges: false, silent: true })
@@ -331,6 +333,8 @@ export const EditorAPI = (() => {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             upsertSavedNoteIntoState(note)
             StateStore.update("editorDirty", false)
+            updateHeaderSaveState()
+            updateTextStats()
             state.autoSaveSnapshot = captureSnapshot()
             state.initialEditorState = serializeEditorStateSnapshot(note)
             SaveStateService?.markSaved?.()
@@ -418,6 +422,8 @@ export const EditorAPI = (() => {
                 state.titleTouched = !!titleElement.value.trim()
                 inputHandlers.syncAutoTitle()
                 queueSnapshot()
+                updateHeaderSaveState()
+                updateTextStats()
             }, { signal })
         }
 
@@ -459,8 +465,13 @@ export const EditorAPI = (() => {
             boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
+            boundElements.content.addEventListener("input", () => {
+                updateHeaderSaveState()
+                updateTextStats()
+            }, { signal })
 
             boundElements.content.addEventListener("click", (event) => {
+                if (state.interactionMode !== "edit") setInteractionMode("edit")
                 const link = event.target.closest("a")
                 if (link && boundElements.content.contains(link)) {
                     const noteId = link.dataset.noteId
@@ -501,7 +512,7 @@ export const EditorAPI = (() => {
             if (event.key !== "Escape") return
             if (!document.getElementById("note-editor")?.classList.contains("active")) return
             event.preventDefault()
-            await close({ persistChanges: true, silent: true })
+            setInteractionMode("view")
         }, { signal })
         document.addEventListener("click", (event) => {
             const alignMenuElement = document.getElementById("editor-align-menu")
@@ -578,7 +589,7 @@ export const EditorAPI = (() => {
     }
 
     const updateEditableState = () => {
-        const editable = !state.drawingState?.active && canEditNote(StateStore.read().currentNote)
+        const editable = state.interactionMode === "edit" && !state.drawingState?.active && canEditNote(StateStore.read().currentNote)
         const contentElement = document.getElementById("note-content-editable")
         getPages().forEach(page => {
             page.contentEditable = editable ? "true" : "false"
@@ -589,6 +600,36 @@ export const EditorAPI = (() => {
         mediaHandlers.makeMediaDraggable()
     }
 
+
+
+    const updateHeaderSaveState = () => {
+        const saveHeaderButton = document.getElementById("editor-save-header")
+        if (!saveHeaderButton) return
+        const hasUnsavedChanges = !!StateStore.read().editorDirty
+        saveHeaderButton.classList.toggle("hidden", !hasUnsavedChanges)
+    }
+
+    const updateTextStats = () => {
+        const statsElement = document.getElementById("editor-text-stats")
+        if (!statsElement) return
+        const snapshot = captureSnapshot()
+        const text = Utils.stripHtml(String(snapshot.content || "")).replace(/\s+/g, " ").trim()
+        const words = text ? text.split(" ").filter(Boolean).length : 0
+        const symbols = text.length
+        statsElement.textContent = `${words} слов • ${symbols} символов`
+    }
+
+    const setInteractionMode = (mode = "view") => {
+        const normalizedMode = mode === "edit" ? "edit" : "view"
+        state.interactionMode = normalizedMode
+        const wrapperElement = document.getElementById("note-editor")
+        const toolbarElement = document.getElementById("editor-toolbar")
+        const doneButton = document.querySelector('[data-action="editor-finish"]')
+        if (wrapperElement) wrapperElement.dataset.mode = normalizedMode
+        if (toolbarElement) toolbarElement.classList.toggle("is-hidden", normalizedMode !== "edit")
+        if (doneButton) doneButton.classList.toggle("hidden", normalizedMode !== "edit")
+        updateEditableState()
+    }
     const buildToolbar = () => {
         const root = document.getElementById("editor-toolbar")
         if (!root) return
@@ -667,7 +708,9 @@ export const EditorAPI = (() => {
         const pageIndicatorElement = document.getElementById("editor-page-indicator")
         const pages = getPages()
         const total = pages.length || 1
-        if (pageIndicatorElement) pageIndicatorElement.textContent = `${state.pageIndex + 1}/${total}`
+        const pagesModalTitleElement = document.getElementById("editor-pages-modal-title")
+        if (pageIndicatorElement) pageIndicatorElement.textContent = `Страница ${state.pageIndex + 1} из ${total}`
+        if (pagesModalTitleElement) pagesModalTitleElement.textContent = `Страница ${state.pageIndex + 1} из ${total}`
         renderPagesManagerList()
     }
 
@@ -737,6 +780,7 @@ export const EditorAPI = (() => {
             if (nextNote !== currentNote) {
                 StateStore.update("currentNote", { ...nextNote, pageTitles })
                 StateStore.update("editorDirty", true)
+                updateHeaderSaveState()
             }
         }
         setActivePage(state.pageIndex + 1)
@@ -768,7 +812,9 @@ export const EditorAPI = (() => {
             if (state.pageIndex >= getPages().length) state.pageIndex = getPages().length - 1
             ensurePages()
             StateStore.update("editorDirty", true)
+            updateHeaderSaveState()
             queueSnapshot()
+            updateTextStats()
         })
     }
 
@@ -784,7 +830,9 @@ export const EditorAPI = (() => {
         pageTitles[normalizedPageIndex] = normalizedTitleValue
         StateStore.update("currentNote", { ...currentNote, pageTitles })
         StateStore.update("editorDirty", true)
+        updateHeaderSaveState()
         queueSnapshot()
+        updateTextStats()
     }
 
     const selectPage = (index) => {
@@ -851,6 +899,7 @@ export const EditorAPI = (() => {
         if (nextNote !== currentNote) {
             StateStore.update("currentNote", nextNote)
             StateStore.update("editorDirty", true)
+            updateHeaderSaveState()
             if (options.queueSnapshot) queueSnapshot()
         }
     }
@@ -889,6 +938,7 @@ export const EditorAPI = (() => {
         StateStore.update("isEditing", true)
         StateStore.update("isTyping", false)
         StateStore.update("editorDirty", false)
+        updateHeaderSaveState()
         state.pageIndex = 0
         state.titleTouched = !!prepared.title
 
@@ -896,6 +946,7 @@ export const EditorAPI = (() => {
         state.future = []
         resolvedElements.wrapper.classList.add("active")
         buildToolbar()
+        setInteractionMode("view")
         renderState()
         focusActivePage()
 
@@ -953,6 +1004,7 @@ export const EditorAPI = (() => {
         const shouldPersistChanges = options.persistChanges !== false
         const shouldStaySilent = options.silent !== false
         const hasUnsavedChanges = StateStore.read().editorDirty && hasSnapshotChanged()
+        setInteractionMode("view")
         if (shouldPersistChanges && hasUnsavedChanges) {
             await save({ silent: shouldStaySilent, persistOnExit: true })
         }
@@ -1013,6 +1065,8 @@ export const EditorAPI = (() => {
             mediaHandlers.syncMediaSizes()
             syncDrawingForActivePage()
             syncAccessState(note)
+            updateHeaderSaveState()
+            updateTextStats()
             if (state.observer) {
                 state.observer.disconnect()
                 state.observer.observe(contentElement, { childList: true, subtree: true, characterData: true, attributes: true })
@@ -1022,7 +1076,7 @@ export const EditorAPI = (() => {
         }
     }
 
-    const toggleToolbar = () => document.getElementById("editor-toolbar")?.classList.toggle("is-hidden")
+    const toggleToolbar = () => setInteractionMode(state.interactionMode === "edit" ? "view" : "edit")
 
     const pushCurrentSnapshotToHistory = () => {
         const currentNote = StateStore.read().currentNote
@@ -1105,6 +1159,7 @@ export const EditorAPI = (() => {
         getToolList,
         getEnabledTools,
         setToolEnabled,
+        setInteractionMode,
         resetMediaTransform: mediaHandlers.resetMediaTransform,
         alignMediaOrText: mediaHandlers.alignMediaOrText,
         deleteSelectedMedia: mediaHandlers.deleteSelectedMedia,

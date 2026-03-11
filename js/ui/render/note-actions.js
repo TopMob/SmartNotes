@@ -152,25 +152,8 @@ Object.assign(UI, {
                 </button>`
             : ""
         root.innerHTML = `
-            <div class="modal-actions-grid">
-                <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
-                    <i class="material-icons-round" aria-hidden="true">inventory_2</i>${archiveLabel}
-                </button>
-                <button type="button" class="btn-secondary" data-action="note-lock-toggle" data-note-id="${encodeURIComponent(note.id)}">
-                    <i class="material-icons-round" aria-hidden="true">lock</i>${note.lock?.hash ? (dict.unlock_note || "Unlock") : (dict.lock_note || "Lock")}
-                </button>
-                <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
-                    <i class="material-icons-round" aria-hidden="true">content_copy</i>${dict.copy_text || "Copy text"}
-                </button>
-                <button type="button" class="btn-secondary" data-action="note-mark-for-reanalysis" data-note-id="${encodeURIComponent(note.id)}">
-                    <i class="material-icons-round" aria-hidden="true">psychology</i>${dict.note_mark_for_reanalysis || "Отметить для повторного анализа"}
-                </button>
-                <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
-                    <i class="material-icons-round" aria-hidden="true">delete</i>${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
-                </button>
-                ${note.trashedAt ? `<button type="button" class="btn-secondary" data-action="note-restore" data-note-id="${encodeURIComponent(note.id)}">${dict.restore_note || "Restore"}</button>` : ""}
-            </div>
-            <div class="lock-center-folder" style="margin-top:12px;">
+            <div class="modal-section-title">Организация</div>
+            <div class="lock-center-folder">
                 <select class="input-area lock-center-select note-actions-select" data-note-id="${encodeURIComponent(note.id)}" aria-label="${dict.folder_view_aria || "Folder"}">
                     ${folderOptions.join("")}
                 </select>
@@ -178,14 +161,31 @@ Object.assign(UI, {
                     <i class="material-icons-round" aria-hidden="true">drive_file_move</i>${dict.move_to_folder || "Move"}
                 </button>
             </div>
-            <div class="lock-center-folder" style="margin-top:12px;">
-                <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.reminder_note || "Reminder"}">
-                <button type="button" class="btn-primary" data-action="note-reminder-set" data-note-id="${encodeURIComponent(note.id)}">
-                    <i class="material-icons-round" aria-hidden="true">notifications</i>${dict.reminder_note || "Reminder"}
+            <div class="modal-actions-grid">
+                <button type="button" class="btn-secondary" data-action="open-modal" data-modal="editor-tags-modal">
+                    <i class="material-icons-round" aria-hidden="true">sell</i>Теги
                 </button>
-                ${reminderClearButton}
+                <button type="button" class="btn-secondary" data-action="open-modal" data-modal="editor-pages-modal">
+                    <i class="material-icons-round" aria-hidden="true">menu_book</i>Страницы
+                </button>
             </div>
-            <div class="modal-actions-grid" style="margin-top:12px;">
+
+            <div class="modal-section-title">Действия</div>
+            <div class="modal-actions-grid">
+                <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">inventory_2</i>${archiveLabel}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-lock-toggle" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">lock</i>${note.lock?.hash ? (dict.unlock_note || "Unlock") : (dict.lock_note || "Lock")}
+                </button>
+                <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">delete</i>${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
+                </button>
+                ${note.trashedAt ? `<button type="button" class="btn-secondary" data-action="note-restore" data-note-id="${encodeURIComponent(note.id)}">${dict.restore_note || "Restore"}</button>` : ""}
+            </div>
+
+            <div class="modal-section-title">Экспорт</div>
+            <div class="modal-actions-grid">
                 <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">
                     <i class="material-icons-round" aria-hidden="true">download</i>${dict.download_note || "Download"}
                 </button>
@@ -194,6 +194,23 @@ Object.assign(UI, {
                 </button>
                 <button type="button" class="btn-secondary" data-action="export-note-pdf" data-lang="export_pdf">
                     <i class="material-icons-round" aria-hidden="true">picture_as_pdf</i>${dict.export_pdf || "Export PDF"}
+                </button>
+            </div>
+
+            <div class="modal-section-title">Дополнительно</div>
+            <div class="lock-center-folder">
+                <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.reminder_note || "Reminder"}">
+                <button type="button" class="btn-primary" data-action="note-reminder-set" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">notifications</i>${dict.reminder_note || "Reminder"}
+                </button>
+                ${reminderClearButton}
+            </div>
+            <div class="modal-actions-grid">
+                <button type="button" class="btn-secondary" data-action="note-mark-for-reanalysis" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">psychology</i>${dict.note_mark_for_reanalysis || "Отметить для повторного анализа"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">content_copy</i>${dict.copy_text || "Copy text"}
                 </button>
             </div>
         `

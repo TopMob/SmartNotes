@@ -472,6 +472,9 @@ Object.assign(UI, {
             case "close-editor":
                 window.SmartNotesEditor?.close()
                 break
+            case "editor-finish":
+                window.SmartNotesEditor?.setInteractionMode?.("view")
+                break
             case "toggle-toolbar":
                 window.SmartNotesEditor?.toggleToolbar()
                 break
