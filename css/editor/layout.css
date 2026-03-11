@@ -18,6 +18,8 @@
     max-height: 100dvh;
     width: 100%;
     max-width: 920px;
+    min-width: 0;
+    min-height: 0;
     margin: 0 auto;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -32,6 +34,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding: 0 20px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -44,6 +47,9 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
 }
 
 .divider-vertical {
@@ -67,6 +73,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 0;
 }
 
 #note-title {
@@ -95,6 +102,7 @@
     max-width: 100%;
     max-height: 55vh;
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     box-sizing: border-box;
@@ -260,6 +268,8 @@
     left: 0;
     z-index: 3;
     touch-action: none;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 
