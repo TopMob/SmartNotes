@@ -54,6 +54,7 @@
 }
 
 .editor-scroll-area {
+    --editor-bottom-offset: 164px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -61,6 +62,8 @@
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     padding: var(--editor-padding);
+    padding-bottom: calc(var(--editor-padding) + var(--editor-bottom-offset));
+    scroll-padding-bottom: var(--editor-bottom-offset);
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -100,6 +103,7 @@
     flex-direction: column;
     gap: 16px;
     flex: 1 1 auto;
+    scroll-padding-bottom: var(--editor-bottom-offset);
 }
 
 .note-page {
@@ -331,6 +335,7 @@
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(var(--blur-strength));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: auto;
     padding-top: 10px;
     padding-bottom: calc(10px + var(--safe-bottom));
 }
