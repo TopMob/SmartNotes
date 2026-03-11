@@ -62,6 +62,7 @@
 
     .modal-overlay {
         align-items: flex-end;
+        padding: 0;
     }
 
     .btn-fab {
@@ -106,8 +107,9 @@
     }
 
     .editor-scroll-area {
+        --editor-bottom-offset: calc(80px + var(--safe-bottom));
         padding: 16px;
-        padding-bottom: calc(var(--editor-padding) * 2);
+        padding-bottom: var(--editor-bottom-offset);
     }
 
     .editor-toolbar {
@@ -115,12 +117,19 @@
         padding: 6px;
         margin-bottom: 12px;
         position: static;
+        min-height: 50px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-behavior: smooth;
+        scrollbar-gutter: stable;
+        -webkit-overflow-scrolling: touch;
     }
 
     .note-content {
-        padding: 10px;
+        padding: 8px;
         max-height: none;
-        min-height: 38vh;
+        min-height: clamp(190px, 34vh, 300px);
     }
 
     .editor-page-controls-header {

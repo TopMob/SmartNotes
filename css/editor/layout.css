@@ -18,6 +18,8 @@
     max-height: 100dvh;
     width: 100%;
     max-width: 920px;
+    min-width: 0;
+    min-height: 0;
     margin: 0 auto;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -32,6 +34,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding: 0 20px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -44,6 +47,12 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 .divider-vertical {
@@ -54,7 +63,7 @@
 }
 
 .editor-scroll-area {
-    --editor-bottom-offset: 164px;
+    --editor-bottom-offset: 76px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -62,15 +71,17 @@
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     padding: var(--editor-padding);
-    padding-bottom: calc(var(--editor-padding) + var(--editor-bottom-offset));
+    padding-bottom: var(--editor-bottom-offset);
     scroll-padding-bottom: var(--editor-bottom-offset);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
+    min-width: 0;
 }
 
 #note-title {
     background: transparent;
+    min-width: 0;
     border: none;
     color: var(--text);
     font-size: 1.8rem;
@@ -81,9 +92,9 @@
 }
 
 .note-content {
-    min-height: min(46vh, 360px);
+    min-height: clamp(220px, 38vh, 340px);
     height: auto;
-    padding: 10px;
+    padding: 8px;
     border-radius: var(--radius-lg);
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
@@ -93,22 +104,24 @@
     outline: none;
     width: 100%;
     max-width: 100%;
-    max-height: 55vh;
+    max-height: none;
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     box-sizing: border-box;
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     flex: 1 1 auto;
     scroll-padding-bottom: var(--editor-bottom-offset);
 }
 
 .note-page {
-    min-height: 42vh;
-    padding: 14px 12px;
+    min-height: 100%;
+    min-width: 0;
+    padding: 10px 10px;
     border-radius: var(--radius-md);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -166,9 +179,11 @@
 
 .editor-toolbar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: center;
     gap: calc(10px * var(--density));
     padding: calc(10px * var(--density));
+    min-height: calc(var(--hit-size) + (20px * var(--density)));
     background: var(--editor-toolbar-bg);
     border-radius: var(--radius-md);
     border: 1px solid var(--editor-toolbar-border);
@@ -177,6 +192,11 @@
     position: sticky;
     top: 0;
     z-index: 10;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
     backdrop-filter: blur(var(--blur-strength));
 }
 
@@ -260,6 +280,8 @@
     left: 0;
     z-index: 3;
     touch-action: none;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 
@@ -335,15 +357,15 @@
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(var(--blur-strength));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: auto;
-    padding-top: 10px;
-    padding-bottom: calc(10px + var(--safe-bottom));
+    margin-top: 2px;
+    padding-top: 4px;
+    padding-bottom: calc(4px + var(--safe-bottom));
 }
 
 .tags-row {
-    margin-top: 14px;
+    margin-top: 4px;
     display: grid;
-    gap: 10px;
+    gap: 6px;
     min-width: 0;
     clear: both;
 }
@@ -351,7 +373,7 @@
 .tags-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     width: 100%;
 }
@@ -400,11 +422,11 @@
 }
 
 .editor-bottom-actions {
-    margin-top: 10px;
+    margin-top: 2px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 8px;
     clear: both;
     flex-wrap: wrap;
 }
@@ -510,4 +532,14 @@ body.platform-ios .editor-container {
 
 .editor-pages-add-row .btn-primary {
     width: 100%;
+}
+
+.editor-toolbar > * {
+    flex: 0 0 auto;
+}
+
+
+.editor-bottom-actions .btn-primary {
+    height: 40px;
+    padding: 0 12px;
 }
