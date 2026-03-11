@@ -63,7 +63,7 @@
 }
 
 .editor-scroll-area {
-    --editor-bottom-offset: 164px;
+    --editor-bottom-offset: 96px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -75,7 +75,7 @@
     scroll-padding-bottom: var(--editor-bottom-offset);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     min-width: 0;
 }
 
@@ -92,9 +92,9 @@
 }
 
 .note-content {
-    min-height: min(46vh, 360px);
+    min-height: clamp(220px, 38vh, 340px);
     height: auto;
-    padding: 10px;
+    padding: 8px;
     border-radius: var(--radius-lg);
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
@@ -113,15 +113,15 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     flex: 1 1 auto;
     scroll-padding-bottom: var(--editor-bottom-offset);
 }
 
 .note-page {
-    min-height: 42vh;
+    min-height: 100%;
     min-width: 0;
-    padding: 14px 12px;
+    padding: 10px 10px;
     border-radius: var(--radius-md);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -357,15 +357,15 @@
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(var(--blur-strength));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: auto;
-    padding-top: 10px;
-    padding-bottom: calc(10px + var(--safe-bottom));
+    margin-top: 6px;
+    padding-top: 6px;
+    padding-bottom: calc(6px + var(--safe-bottom));
 }
 
 .tags-row {
-    margin-top: 14px;
+    margin-top: 4px;
     display: grid;
-    gap: 10px;
+    gap: 6px;
     min-width: 0;
     clear: both;
 }
@@ -373,7 +373,7 @@
 .tags-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     width: 100%;
 }
@@ -422,11 +422,11 @@
 }
 
 .editor-bottom-actions {
-    margin-top: 10px;
+    margin-top: 6px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 8px;
     clear: both;
     flex-wrap: wrap;
 }
@@ -536,4 +536,10 @@ body.platform-ios .editor-container {
 
 .editor-toolbar > * {
     flex: 0 0 auto;
+}
+
+
+.editor-bottom-actions .btn-primary {
+    height: 40px;
+    padding: 0 12px;
 }

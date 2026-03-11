@@ -107,8 +107,9 @@
     }
 
     .editor-scroll-area {
+        --editor-bottom-offset: 108px;
         padding: 16px;
-        padding-bottom: calc(var(--editor-padding) * 2);
+        padding-bottom: calc(12px + var(--editor-bottom-offset));
     }
 
     .editor-toolbar {
@@ -126,9 +127,9 @@
     }
 
     .note-content {
-        padding: 10px;
+        padding: 8px;
         max-height: none;
-        min-height: 38vh;
+        min-height: clamp(190px, 34vh, 300px);
     }
 
     .editor-page-controls-header {
