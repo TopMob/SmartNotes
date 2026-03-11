@@ -116,6 +116,13 @@
         padding: 6px;
         margin-bottom: 12px;
         position: static;
+        min-height: 50px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-behavior: smooth;
+        scrollbar-gutter: stable;
+        -webkit-overflow-scrolling: touch;
     }
 
     .note-content {

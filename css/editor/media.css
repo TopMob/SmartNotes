@@ -24,7 +24,8 @@
 
 .media-wrapper img,
 .media-wrapper video,
-.media-wrapper audio {
+.media-wrapper audio,
+.media-wrapper canvas {
     max-width: 100% !important;
     border-radius: var(--radius-md);
     display: block;
@@ -359,4 +360,12 @@
     .editor-bottom-actions .btn-primary {
         width: 100%;
     }
+}
+
+.note-page a,
+.note-page p,
+.note-page li,
+.note-page span {
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }

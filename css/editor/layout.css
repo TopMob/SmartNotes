@@ -50,6 +50,9 @@
     overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 .divider-vertical {
@@ -78,6 +81,7 @@
 
 #note-title {
     background: transparent;
+    min-width: 0;
     border: none;
     color: var(--text);
     font-size: 1.8rem;
@@ -100,7 +104,7 @@
     outline: none;
     width: 100%;
     max-width: 100%;
-    max-height: 55vh;
+    max-height: none;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
@@ -116,6 +120,7 @@
 
 .note-page {
     min-height: 42vh;
+    min-width: 0;
     padding: 14px 12px;
     border-radius: var(--radius-md);
     white-space: pre-wrap;
@@ -174,9 +179,11 @@
 
 .editor-toolbar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: center;
     gap: calc(10px * var(--density));
     padding: calc(10px * var(--density));
+    min-height: calc(var(--hit-size) + (20px * var(--density)));
     background: var(--editor-toolbar-bg);
     border-radius: var(--radius-md);
     border: 1px solid var(--editor-toolbar-border);
@@ -185,6 +192,11 @@
     position: sticky;
     top: 0;
     z-index: 10;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
     backdrop-filter: blur(var(--blur-strength));
 }
 
@@ -520,4 +532,8 @@ body.platform-ios .editor-container {
 
 .editor-pages-add-row .btn-primary {
     width: 100%;
+}
+
+.editor-toolbar > * {
+    flex: 0 0 auto;
 }
