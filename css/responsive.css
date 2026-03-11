@@ -107,9 +107,9 @@
     }
 
     .editor-scroll-area {
-        --editor-bottom-offset: 108px;
+        --editor-bottom-offset: calc(80px + var(--safe-bottom));
         padding: 16px;
-        padding-bottom: calc(12px + var(--editor-bottom-offset));
+        padding-bottom: var(--editor-bottom-offset);
     }
 
     .editor-toolbar {

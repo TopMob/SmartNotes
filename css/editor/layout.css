@@ -63,7 +63,7 @@
 }
 
 .editor-scroll-area {
-    --editor-bottom-offset: 96px;
+    --editor-bottom-offset: 76px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -71,7 +71,7 @@
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     padding: var(--editor-padding);
-    padding-bottom: calc(var(--editor-padding) + var(--editor-bottom-offset));
+    padding-bottom: var(--editor-bottom-offset);
     scroll-padding-bottom: var(--editor-bottom-offset);
     display: flex;
     flex-direction: column;
@@ -357,9 +357,9 @@
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(var(--blur-strength));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: 6px;
-    padding-top: 6px;
-    padding-bottom: calc(6px + var(--safe-bottom));
+    margin-top: 2px;
+    padding-top: 4px;
+    padding-bottom: calc(4px + var(--safe-bottom));
 }
 
 .tags-row {
@@ -422,7 +422,7 @@
 }
 
 .editor-bottom-actions {
-    margin-top: 6px;
+    margin-top: 2px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
