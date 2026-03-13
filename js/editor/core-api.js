@@ -5,6 +5,7 @@ import { createLinkHandlers } from "./core-links.js"
 import { createMathHandlers } from "./core-math.js"
 import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"
+import { createCollaborationHandlers } from "./core-collaboration.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
 
@@ -329,6 +330,7 @@ export const EditorAPI = (() => {
         SaveStateService?.markSaving?.()
         try {
             await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            state.remoteSync.lastPushedSignature = serializeEditorStateSnapshot(payload)
             upsertSavedNoteIntoState(note)
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
@@ -351,13 +353,45 @@ export const EditorAPI = (() => {
         }
     }
 
+    const applyRemoteNote = (remoteNote) => {
+        const current = StateStore.read().currentNote
+        if (!current) return
+        const mergedNote = NoteIO.normalizeNote({
+            ...current,
+            ...remoteNote,
+            id: current.id,
+            access: remoteNote.access || current.access
+        })
+        StateStore.update("currentNote", mergedNote)
+        StateStore.update("editorDirty", false)
+        renderState()
+        const remoteSnapshot = captureSnapshot()
+        state.autoSaveSnapshot = remoteSnapshot
+        state.initialEditorState = serializeEditorStateSnapshot({
+            ...mergedNote,
+            title: remoteSnapshot.title,
+            content: remoteSnapshot.content,
+            tags: Array.isArray(remoteSnapshot.tags) ? [...remoteSnapshot.tags] : [],
+            pageDrawings: Array.isArray(remoteSnapshot.pageDrawings) ? [...remoteSnapshot.pageDrawings] : [],
+            pageDrawingsRevision: remoteSnapshot.pageDrawingsRevision || buildPageDrawingsRevision(remoteSnapshot.pageDrawings)
+        })
+    }
+
+    const collaborationHandlers = createCollaborationHandlers({
+        state,
+        serializeEditorStateSnapshot,
+        applyRemoteNote,
+        canEditNote: (note) => canEditNote(note)
+    })
+
     const autosaveHandlers = createAutosaveHandlers({
         elements,
         state,
         getPages,
         updateNotePageDrawings,
         syncAutoTitle: inputHandlers.syncAutoTitle,
-        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn }
+        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
+        syncLocalNote: () => collaborationHandlers.syncLocalNote()
     })
 
     captureSnapshot = autosaveHandlers.captureSnapshot
@@ -913,6 +947,7 @@ export const EditorAPI = (() => {
 
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         if (!isDesktop) UI.toggleSidebar(false)
+        collaborationHandlers.startRemoteSync(prepared)
     }
 
     openFromList = async (note) => {
@@ -956,6 +991,7 @@ export const EditorAPI = (() => {
         if (shouldPersistChanges && hasUnsavedChanges) {
             await save({ silent: shouldStaySilent, persistOnExit: true })
         }
+        collaborationHandlers.stopRemoteSync()
         const wrapperElement = document.getElementById("note-editor")
         if (wrapperElement) wrapperElement.classList.remove("active")
         StateStore.update("currentNote", null)

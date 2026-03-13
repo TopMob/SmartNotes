@@ -7,7 +7,8 @@ export const createAutosaveHandlers = (context) => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle,
-        updateSnapshotFrame
+        updateSnapshotFrame,
+        syncLocalNote
     } = context
 
     const captureSnapshot = () => {
@@ -150,7 +151,8 @@ export const createAutosaveHandlers = (context) => {
         if (state.autoSaveSnapshot && snapshotsEqual(state.autoSaveSnapshot, currentSnapshot)) return
         state.autoSaveSnapshot = currentSnapshot
         persistSnapshot(currentSnapshot)
-    }, 1600)
+        if (typeof syncLocalNote === "function") syncLocalNote()
+    }, 900)
 
     const scheduleSnapshotFrame = () => {
         if (state.isRenderingState) return

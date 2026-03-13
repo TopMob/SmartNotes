@@ -25,6 +25,11 @@ export const createEditorState = () => ({
     snapshotFrame: null,
     manualSaveInProgress: false,
     isSaving: false,
+    remoteSync: {
+        unsubscribe: null,
+        lastPushedSignature: "",
+        lastRemoteSignature: ""
+    },
     drawingState: typeof EditorDrawing === "undefined"
         ? { active: false, isDrawing: false }
         : EditorDrawing.state
