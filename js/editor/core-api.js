@@ -5,6 +5,7 @@ import { createLinkHandlers } from "./core-links.js"
 import { createMathHandlers } from "./core-math.js"
 import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"
+import { createEditorLayoutHandlers } from "./core-layout.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
 
@@ -106,6 +107,8 @@ export const EditorAPI = (() => {
         pageDrawings: [],
         pageDrawingsRevision: ""
     })
+
+    const layoutHandlers = createEditorLayoutHandlers({ elements, state })
 
     const inputHandlers = createInputHandlers({
         elements,
@@ -896,6 +899,7 @@ export const EditorAPI = (() => {
         state.future = []
         resolvedElements.wrapper.classList.add("active")
         buildToolbar()
+        layoutHandlers.activate()
         renderState()
         focusActivePage()
 
@@ -958,6 +962,7 @@ export const EditorAPI = (() => {
         }
         const wrapperElement = document.getElementById("note-editor")
         if (wrapperElement) wrapperElement.classList.remove("active")
+        layoutHandlers.deactivate()
         StateStore.update("currentNote", null)
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
@@ -1013,6 +1018,8 @@ export const EditorAPI = (() => {
             mediaHandlers.syncMediaSizes()
             syncDrawingForActivePage()
             syncAccessState(note)
+            layoutHandlers.syncToolbarToggleState()
+            layoutHandlers.syncBottomOffset()
             if (state.observer) {
                 state.observer.disconnect()
                 state.observer.observe(contentElement, { childList: true, subtree: true, characterData: true, attributes: true })
@@ -1022,7 +1029,7 @@ export const EditorAPI = (() => {
         }
     }
 
-    const toggleToolbar = () => document.getElementById("editor-toolbar")?.classList.toggle("is-hidden")
+    const toggleToolbar = () => layoutHandlers.toggleToolbar()
 
     const pushCurrentSnapshotToHistory = () => {
         const currentNote = StateStore.read().currentNote

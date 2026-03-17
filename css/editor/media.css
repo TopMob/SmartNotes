@@ -130,7 +130,7 @@
     font-weight: 600;
     font-size: 14px;
     white-space: nowrap;
-    overflow: hidden;
+    overflow: visible;
     text-overflow: ellipsis;
     min-width: 0;
 }
@@ -322,7 +322,7 @@
 
 .note-content-wrapper {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     min-width: 0;
     min-height: 0;
     flex: 1 1 auto;
@@ -331,7 +331,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        --editor-bottom-offset: calc(80px + var(--safe-bottom));
+        --editor-bottom-offset: calc(116px + var(--safe-bottom));
         padding-bottom: var(--editor-bottom-offset);
     }
 
