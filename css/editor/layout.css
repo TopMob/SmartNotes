@@ -105,21 +105,19 @@
     width: 100%;
     max-width: 100%;
     max-height: none;
-    overflow-y: auto;
+    overflow-y: visible;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     box-sizing: border-box;
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    display: block;
     flex: 1 1 auto;
     scroll-padding-bottom: var(--editor-bottom-offset);
 }
 
 .note-page {
-    min-height: 100%;
+    min-height: clamp(220px, 38vh, 340px);
     min-width: 0;
     padding: 10px 10px;
     border-radius: var(--radius-md);
