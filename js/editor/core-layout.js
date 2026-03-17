@@ -1,4 +1,6 @@
 const MOBILE_QUERY = "(max-width: 760px)"
+const DESKTOP_BOTTOM_EXTRA = 20
+const MOBILE_BOTTOM_EXTRA = 44
 
 export const createEditorLayoutHandlers = ({ elements }) => {
     let bottomPanelObserver = null
@@ -47,8 +49,8 @@ export const createEditorLayoutHandlers = ({ elements }) => {
         const computedPanelStyles = window.getComputedStyle(bottomPanelElement)
         const panelMarginTop = getSafeNumber(computedPanelStyles.marginTop)
         const panelMarginBottom = getSafeNumber(computedPanelStyles.marginBottom)
-        const baseOffset = panelRect.height + panelMarginTop + panelMarginBottom + 16
-        const mobileOffset = panelRect.height + panelMarginTop + panelMarginBottom + 24
+        const baseOffset = panelRect.height + panelMarginTop + panelMarginBottom + DESKTOP_BOTTOM_EXTRA
+        const mobileOffset = panelRect.height + panelMarginTop + panelMarginBottom + MOBILE_BOTTOM_EXTRA
         const isMobile = window.matchMedia(MOBILE_QUERY).matches
         const nextOffset = Math.ceil(isMobile ? mobileOffset : baseOffset)
         scrollAreaElement.style.setProperty("--editor-bottom-offset", `${nextOffset}px`)

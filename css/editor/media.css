@@ -331,7 +331,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        --editor-bottom-offset: calc(80px + var(--safe-bottom));
+        --editor-bottom-offset: calc(116px + var(--safe-bottom));
         padding-bottom: var(--editor-bottom-offset);
     }
 
