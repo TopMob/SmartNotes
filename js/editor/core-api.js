@@ -259,7 +259,7 @@ export const EditorAPI = (() => {
             return
         }
         const snapshot = captureSnapshot()
-        const note = {
+        let note = {
             ...currentNote,
             title: snapshot.title,
             content: snapshot.content,
@@ -308,6 +308,34 @@ export const EditorAPI = (() => {
                 await close({ persistChanges: false, silent: true })
             }
             return
+        }
+
+        if (window.GoogleDriveMediaService?.getInlineMediaSummary?.(note)?.hasInlineMedia) {
+            try {
+                const mediaResult = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
+                    fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note", "note") || "note"
+                })
+                note = NoteIO.normalizeNote({
+                    ...note,
+                    ...mediaResult.note,
+                    pageTitles: note.pageTitles
+                })
+                if (mediaResult.changed) {
+                    StateStore.update("currentNote", note)
+                    renderState()
+                }
+            } catch (error) {
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode === "drive-offline") {
+                    UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
+                    return
+                }
+                if (errorCode.startsWith("drive-")) {
+                    UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                    return
+                }
+                throw error
+            }
         }
 
         if (hasAiRelevantChanges(currentNote, note)) {

@@ -52,10 +52,15 @@ function openNoteActions(noteId) {
     const note = UI.resolveNoteById(noteId)
     const currentNoteId = StateStore.read().currentNote?.id || ""
     const allowHiddenCurrentNote = !!note && isHiddenLocked(note) && currentNoteId === note.id
-    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote)) return
+    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote)) return false
+    const modalElement = document.getElementById("note-actions-modal")
+    const contentElement = document.getElementById("note-actions-content")
+    if (!modalElement || !contentElement) return false
     UI.currentNoteActionId = note.id
     UI.renderNoteActions(note.id)
-    UI.openModal("note-actions-modal")
+    const opened = UI.openModal("note-actions-modal")
+    const hasRenderedContent = String(contentElement.innerHTML || "").trim().length > 0
+    return !!opened && hasRenderedContent && modalElement.classList.contains("active")
 }
 
 async function deleteNoteById(noteId) {

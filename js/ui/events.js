@@ -120,7 +120,7 @@ Object.assign(UI, {
         }, { signal: listenersSignal })
 
         this.els.grid?.addEventListener("click", async event => {
-            const actionElement = event.target.closest(".action-btn")
+            const actionElement = event.target.closest("[data-action], button, a, input, select, textarea, label")
             if (actionElement) return
             if (this.els.userMenu?.classList.contains("active")) return
             const noteCardElement = event.target.closest(".note-card")
@@ -483,8 +483,10 @@ Object.assign(UI, {
                 window.SmartNotesEditor?.toggleToolbar()
                 break
             case "editor-note-actions": {
+                e.preventDefault()
+                e.stopPropagation()
                 const noteId = StateStore.read().currentNote?.id
-                if (noteId) window.openNoteActions?.(noteId)
+                if (noteId) this.openNoteActionsFlow(noteId)
                 break
             }
             case "open-feedback-modal":
@@ -498,7 +500,9 @@ Object.assign(UI, {
                 toggleFavorite(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-menu":
-                window.openNoteActions?.(decodeURIComponent(el.dataset.noteId || ""))
+                e.preventDefault()
+                e.stopPropagation()
+                this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-pin-toggle":
                 this.toggleSelectedPin(decodeURIComponent(el.dataset.noteId || ""))

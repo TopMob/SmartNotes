@@ -5,6 +5,7 @@ const DRIVE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/drive.file"
 const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType"
 const DRIVE_PERMISSION_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
 const INLINE_MEDIA_PATTERN = /^data:(image|audio)\//i
+const INLINE_MEDIA_URL_PATTERN = /data:(image|audio)\//i
 
 const tokenState = {
     accessToken: "",
@@ -45,6 +46,10 @@ const buildFileName = ({ fileNameBase = "attachment", mimeType = "" } = {}) => {
     return `${safeBase}.${inferFileExtension(mimeType)}`
 }
 
+const isInlineMediaSource = (value) => INLINE_MEDIA_PATTERN.test(String(value || "").trim())
+
+const containsInlineMedia = (value) => INLINE_MEDIA_URL_PATTERN.test(String(value || ""))
+
 const dataUrlToBlob = (dataUrl) => {
     const source = String(dataUrl || "")
     const match = source.match(/^data:([^;,]+)?(;base64)?,(.*)$/i)
@@ -60,7 +65,19 @@ const dataUrlToBlob = (dataUrl) => {
     return new Blob([bytes], { type: mimeType })
 }
 
+const buildBlobCacheKey = (blob) => {
+    if (!blob || typeof blob !== "object") return ""
+    const blobName = typeof blob.name === "string" ? blob.name : ""
+    const blobType = typeof blob.type === "string" ? blob.type : ""
+    const blobSize = Number.isFinite(blob.size) ? blob.size : 0
+    const lastModified = Number.isFinite(blob.lastModified) ? blob.lastModified : 0
+    return [blobName, blobType, blobSize, lastModified].join(":")
+}
+
 const getAccessToken = async (forceRefresh = false) => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        throw new Error("drive-offline")
+    }
     const now = Date.now()
     if (!forceRefresh && tokenState.accessToken && tokenState.expiresAt - now > 60_000) {
         return tokenState.accessToken
@@ -147,7 +164,7 @@ const uploadBlobCached = async (cacheKey, blob, options = {}) => {
 
 const uploadDataUrl = async (dataUrl, options = {}) => {
     const blob = dataUrlToBlob(dataUrl)
-    const result = await uploadBlobCached(dataUrl, blob, {
+    const result = await uploadBlobCached(String(dataUrl || ""), blob, {
         fileNameBase: options.fileNameBase || "attachment",
         mimeType: blob.type
     })
@@ -156,7 +173,8 @@ const uploadDataUrl = async (dataUrl, options = {}) => {
 
 const uploadFile = async (file, options = {}) => {
     if (!(file instanceof Blob)) throw new Error("drive-invalid-file")
-    const result = await uploadBlob(file, {
+    const cacheKey = buildBlobCacheKey(file)
+    const result = await uploadBlobCached(cacheKey, file, {
         fileName: options.fileName || "",
         fileNameBase: options.fileNameBase || String(file.name || "attachment"),
         mimeType: file.type || options.mimeType || "application/octet-stream"
@@ -164,52 +182,103 @@ const uploadFile = async (file, options = {}) => {
     return result.publicUrl
 }
 
+const buildAttachmentPlaceholder = ({ kind = "attachment", index = 0, errorCode = "" } = {}) => {
+    const safeKind = kind === "image" ? "image" : "attachment"
+    const safeErrorCode = String(errorCode || "").trim()
+    const message = safeErrorCode === "drive-offline"
+        ? "Attachment upload skipped while offline"
+        : "Attachment upload failed"
+    return `<p data-media-upload-error="${safeKind}" data-media-upload-index="${index + 1}">${message}</p>`
+}
+
+const removeFailedMediaElement = (element, index, error) => {
+    const tagName = String(element?.tagName || "").toLowerCase()
+    const kind = tagName === "img" ? "image" : "attachment"
+    const placeholder = document.createElement("div")
+    placeholder.innerHTML = buildAttachmentPlaceholder({ kind, index, errorCode: error?.message || "" })
+    const replacementNode = placeholder.firstElementChild
+    if (replacementNode) {
+        if (tagName === "source") {
+            const parent = element.parentElement
+            element.remove()
+            if (parent && parent.tagName.toLowerCase() === "audio" && !parent.querySelector("source[src], [src]")) {
+                parent.replaceWith(replacementNode)
+            }
+            return
+        }
+        element.replaceWith(replacementNode)
+        return
+    }
+    element.remove()
+}
+
 const externalizeHtmlMedia = async (html, options = {}) => {
     const wrapper = document.createElement("div")
     wrapper.innerHTML = String(html || "")
     const mediaElements = Array.from(wrapper.querySelectorAll("img[src], audio[src], audio source[src]"))
     let changed = false
+    const failures = []
+    const mode = options.mode === "best-effort" ? "best-effort" : "strict"
 
     for (let index = 0; index < mediaElements.length; index += 1) {
         const element = mediaElements[index]
         const source = String(element.getAttribute("src") || "").trim()
-        if (!INLINE_MEDIA_PATTERN.test(source)) continue
+        if (!isInlineMediaSource(source)) continue
         const fileNameBase = `${options.fileNameBase || "attachment"}_${index + 1}`
-        const publicUrl = await uploadDataUrl(source, { fileNameBase })
-        element.setAttribute("src", publicUrl)
-        if (element.tagName.toLowerCase() === "audio" && element instanceof HTMLMediaElement) {
-            element.src = publicUrl
+        try {
+            const publicUrl = await uploadDataUrl(source, { fileNameBase })
+            element.setAttribute("src", publicUrl)
+            if (element.tagName.toLowerCase() === "audio" && element instanceof HTMLMediaElement) {
+                element.src = publicUrl
+            }
+            changed = true
+        } catch (error) {
+            failures.push({ type: "html", source, error, tagName: String(element.tagName || "").toLowerCase() })
+            if (mode !== "best-effort") throw error
+            removeFailedMediaElement(element, index, error)
+            changed = true
         }
-        changed = true
     }
 
     return {
         html: wrapper.innerHTML,
-        changed
+        changed,
+        failures
     }
 }
 
 const externalizePageDrawings = async (pageDrawings, options = {}) => {
     const drawings = Array.isArray(pageDrawings) ? pageDrawings.slice() : []
     let changed = false
+    const failures = []
+    const mode = options.mode === "best-effort" ? "best-effort" : "strict"
     for (let index = 0; index < drawings.length; index += 1) {
         const source = String(drawings[index] || "").trim()
-        if (!INLINE_MEDIA_PATTERN.test(source)) continue
-        drawings[index] = await uploadDataUrl(source, {
-            fileNameBase: `${options.fileNameBase || "drawing"}_${index + 1}`
-        })
-        changed = true
+        if (!isInlineMediaSource(source)) continue
+        try {
+            drawings[index] = await uploadDataUrl(source, {
+                fileNameBase: `${options.fileNameBase || "drawing"}_${index + 1}`
+            })
+            changed = true
+        } catch (error) {
+            failures.push({ type: "drawing", source, index, error })
+            if (mode !== "best-effort") throw error
+            drawings[index] = ""
+            changed = true
+        }
     }
-    return { pageDrawings: drawings, changed }
+    return { pageDrawings: drawings, changed, failures }
 }
 
 const externalizeNoteMedia = async (note, options = {}) => {
     const normalizedNote = note && typeof note === "object" ? { ...note } : {}
     const htmlResult = await externalizeHtmlMedia(normalizedNote.content || "", {
-        fileNameBase: options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || "note_media", "note_media")
+        fileNameBase: options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || "note_media", "note_media"),
+        mode: options.mode
     })
     const drawingsResult = await externalizePageDrawings(normalizedNote.pageDrawings || [], {
-        fileNameBase: `${options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || "note_drawing", "note_drawing")}_drawing`
+        fileNameBase: `${options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || "note_drawing", "note_drawing")}_drawing`,
+        mode: options.mode
     })
     return {
         note: {
@@ -217,7 +286,20 @@ const externalizeNoteMedia = async (note, options = {}) => {
             content: htmlResult.html,
             pageDrawings: drawingsResult.pageDrawings
         },
-        changed: htmlResult.changed || drawingsResult.changed
+        changed: htmlResult.changed || drawingsResult.changed,
+        failures: [...htmlResult.failures, ...drawingsResult.failures]
+    }
+}
+
+const getInlineMediaSummary = (note) => {
+    const normalizedNote = note && typeof note === "object" ? note : {}
+    const content = String(normalizedNote.content || "")
+    const pageDrawings = Array.isArray(normalizedNote.pageDrawings) ? normalizedNote.pageDrawings : []
+    const htmlMatches = content.match(/data:(image|audio)\//gi) || []
+    const drawingMatches = pageDrawings.filter(item => isInlineMediaSource(item))
+    return {
+        count: htmlMatches.length + drawingMatches.length,
+        hasInlineMedia: containsInlineMedia(content) || drawingMatches.length > 0
     }
 }
 
@@ -227,5 +309,8 @@ export const GoogleDriveMediaService = {
     externalizeHtmlMedia,
     externalizePageDrawings,
     externalizeNoteMedia,
-    normalizeDrivePublicUrl
+    normalizeDrivePublicUrl,
+    containsInlineMedia,
+    isInlineMediaSource,
+    getInlineMediaSummary
 }

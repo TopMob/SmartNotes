@@ -87,11 +87,23 @@ Object.assign(UI, {
     },
 
     async normalizeImportedNoteMedia(note) {
-        if (!window.GoogleDriveMediaService) return note
+        if (!window.GoogleDriveMediaService) {
+            return {
+                note: NoteIO.normalizeNote(note),
+                hadInlineMedia: false,
+                failedMediaCount: 0
+            }
+        }
+        const inlineSummary = window.GoogleDriveMediaService.getInlineMediaSummary?.(note) || { hasInlineMedia: false }
         const normalizedResult = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
-            fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "imported_note", "imported_note") || "imported_note"
+            fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "imported_note", "imported_note") || "imported_note",
+            mode: "best-effort"
         })
-        return NoteIO.normalizeNote(normalizedResult.note)
+        return {
+            note: NoteIO.normalizeNote(normalizedResult.note),
+            hadInlineMedia: !!inlineSummary.hasInlineMedia,
+            failedMediaCount: Array.isArray(normalizedResult.failures) ? normalizedResult.failures.length : 0
+        }
     },
 
     async buildImportedNote(rawNote, ownerUid, folderIdMap = new Map()) {
@@ -136,6 +148,50 @@ Object.assign(UI, {
             order: Date.now()
         }
         return this.normalizeImportedNoteMedia(importedNote)
+    },
+
+    buildImportResultSummary(results = []) {
+        return results.reduce((summary, result) => {
+            if (!result) return summary
+            if (result.note) summary.savedNotes += 1
+            if (result.failedMediaCount) summary.failedMediaCount += Number(result.failedMediaCount) || 0
+            if (result.hadInlineMedia) summary.notesWithInlineMedia += 1
+            return summary
+        }, {
+            savedNotes: 0,
+            failedMediaCount: 0,
+            notesWithInlineMedia: 0
+        })
+    },
+
+    async importNotesWithRecovery(rawNotes, ownerUid, folderIdMap = new Map()) {
+        const importResults = []
+        for (const rawNote of Array.isArray(rawNotes) ? rawNotes : []) {
+            try {
+                const result = await this.buildImportedNote(rawNote, ownerUid, folderIdMap)
+                if (result?.note) importResults.push(result)
+            } catch (error) {
+                const errorCode = String(error?.message || "")
+                if (errorCode === "drive-offline") throw error
+                if (errorCode.startsWith("drive-")) {
+                    const fallbackNote = await this.buildImportedNote({
+                        ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
+                        content: Utils.sanitizeHtml(Utils.stripHtml(String(rawNote?.content || rawNote?.body || rawNote?.text || ""))),
+                        pageDrawings: []
+                    }, ownerUid, folderIdMap)
+                    if (fallbackNote?.note) {
+                        importResults.push({
+                            ...fallbackNote,
+                            failedMediaCount: (Number(fallbackNote.failedMediaCount) || 0) + 1,
+                            hadInlineMedia: true
+                        })
+                        continue
+                    }
+                }
+                throw error
+            }
+        }
+        return importResults
     },
 
     async saveImportedNotes(user, importedNotes) {
@@ -213,8 +269,18 @@ Object.assign(UI, {
                     .map((folder, index) => this.buildImportedFolder(folder, current.user.uid, index))
                     .filter(Boolean)
                 const folderIdMap = await this.saveImportedFolders(current.user, foldersToImport)
-                const notesToImport = await Promise.all(importBundle.notes.map(note => this.buildImportedNote(note, current.user.uid, folderIdMap)))
+                const importResults = await this.importNotesWithRecovery(importBundle.notes, current.user.uid, folderIdMap)
+                const notesToImport = importResults.map(result => result.note).filter(Boolean)
+                if (!notesToImport.length) {
+                    this.showToast(this.getText("import_failed", "Import failed"))
+                    return
+                }
                 await this.saveImportedNotes(current.user, notesToImport)
+                const importSummary = this.buildImportResultSummary(importResults)
+                if (importSummary.failedMediaCount > 0) {
+                    this.showToast(`${this.getText("import_success", "Imported")}. ${this.getText("drive_upload_failed", "Unable to upload attachment to Google Drive")}`)
+                    return
+                }
                 this.showToast(this.getText("import_success", "Imported"))
             } catch (error) {
                 console.error("Import failed", error)
@@ -258,7 +324,11 @@ Object.assign(UI, {
             const prepared = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
                 fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note_export", "note_export") || "note_export"
             })
-            return NoteIO.normalizeNote(prepared.note)
+            const normalizedNote = NoteIO.normalizeNote(prepared.note)
+            if (window.GoogleDriveMediaService.getInlineMediaSummary?.(normalizedNote)?.hasInlineMedia) {
+                throw new Error("drive-upload-failed:export-inline-media")
+            }
+            return normalizedNote
         }))
     },
 
@@ -316,6 +386,23 @@ Object.assign(UI, {
             this.showToast(this.getText(String(error?.message || "") === "drive-offline" ? "drive_upload_required" : "drive_upload_failed", String(error?.message || "") === "drive-offline" ? "Attachments are stored only through Google Drive" : "Unable to upload attachment to Google Drive"))
             return null
         }
+    },
+
+    openNoteActionsFlow(noteId, options = {}) {
+        const normalizedNoteId = String(noteId || "")
+        if (!normalizedNoteId) return false
+        const opener = typeof window.openNoteActions === "function" ? window.openNoteActions : null
+        if (!opener) return false
+        opener(normalizedNoteId)
+        const modalElement = document.getElementById("note-actions-modal")
+        const contentElement = document.getElementById("note-actions-content")
+        const isVisible = !!modalElement && modalElement.classList.contains("active") && !modalElement.classList.contains("hidden") && document.body.contains(modalElement)
+        const hasContent = !!contentElement && String(contentElement.innerHTML || "").trim().length > 0
+        const opened = isVisible && hasContent
+        if (!opened && options.showError !== false) {
+            this.showToast(this.getText("note_actions_unavailable", "Unable to open note actions"))
+        }
+        return opened
     },
 
     canShowPrimaryAction(view = StateStore.read().view) {

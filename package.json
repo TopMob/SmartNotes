@@ -1,5 +1,11 @@
 {
   "name": "smartnotes",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "jsdom": "^29.0.1"
+  },
+  "scripts": {
+    "test": "node --test tests/stability.test.mjs"
+  }
 }

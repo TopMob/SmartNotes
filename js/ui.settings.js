@@ -1,8 +1,10 @@
 Object.assign(UI, {
     openModal(id) {
         const el = document.getElementById(id)
-        if (!el) return
+        if (!el) return false
+        el.classList.remove("hidden")
         el.classList.add("active")
+        el.setAttribute("aria-hidden", "false")
         this.toggleSidebar(false)
         if (id === "poll-modal") {
             this.startSurvey()
@@ -10,12 +12,14 @@ Object.assign(UI, {
         if (id === "lock-center-modal") {
             this.renderLockCenter()
         }
+        return el.classList.contains("active")
     },
 
     closeModal(id) {
         const el = document.getElementById(id)
         if (!el) return
         el.classList.remove("active")
+        el.setAttribute("aria-hidden", "true")
         el.dispatchEvent(new CustomEvent("smartnotes:modal-closed", { detail: { id } }))
         if (id === "settings-modal") {
             const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
