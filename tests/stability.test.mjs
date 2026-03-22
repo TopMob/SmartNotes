@@ -10,6 +10,8 @@ const loadWindowScript = async (window, filePath, transform = source => source) 
     script.runInContext(window)
 }
 
+const loadUiBaseScript = async window => loadWindowScript(window, 'js/ui/base.js', source => source.replace('const UI = {', 'window.UI = {'))
+
 const createBaseWindow = () => {
     const dom = new JSDOM(`<!doctype html><html><body>
         <div id="note-actions-modal" class="modal-overlay"><div id="note-actions-content"></div></div>
@@ -202,6 +204,34 @@ const createBaseWindow = () => {
     window.getLockedNotes = () => window.StateStore.state.notes.filter(note => note?.lock?.hidden)
     return window
 }
+
+test('openNoteActions resolves notes even before note-actions renderer script loads', async () => {
+    const window = createBaseWindow()
+    const note = { id: 'note-base', title: 'Base note', content: '<p>Body</p>', lock: null }
+    window.StateStore.state.notes = [note]
+    window.StateStore.state.currentNote = null
+
+    await loadUiBaseScript(window)
+    window.UI.openModal = id => {
+        const element = window.document.getElementById(id)
+        element?.classList.add('active')
+        return !!element
+    }
+    window.UI.renderNoteActions = noteId => {
+        const root = window.document.getElementById('note-actions-content')
+        root.innerHTML = `<button data-note-id="${noteId}">ready</button>`
+    }
+    window.UI.showToast = message => {
+        window.__lastToast = message
+    }
+
+    await loadWindowScript(window, 'js/notes/actions.js')
+
+    const opened = window.openNoteActions('note-base')
+    assert.equal(opened, true)
+    assert.equal(window.UI.currentNoteActionId, 'note-base')
+    assert.match(window.document.getElementById('note-actions-content').innerHTML, /ready/)
+})
 
 test('note actions chain opens modal from card and editor entry points', async () => {
     const window = createBaseWindow()

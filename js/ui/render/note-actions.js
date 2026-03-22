@@ -124,13 +124,6 @@ const openPrintWindow = (printableDocument, dict) => {
 }
 
 Object.assign(UI, {
-    resolveNoteById(noteId) {
-        const current = StateStore.read().currentNote
-        if (current && (!noteId || current.id === noteId)) return current
-        if (noteId) return StateStore.read().notes.find(n => n.id === noteId)
-        return StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
-    },
-
     renderNoteActions(noteId) {
         const note = this.resolveNoteById(noteId)
         const root = document.getElementById("note-actions-content")

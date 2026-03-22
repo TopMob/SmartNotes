@@ -51,6 +51,15 @@ const UI = {
         return dict[key] || fallback || key
     },
 
+    resolveNoteById(noteId) {
+        const normalizedNoteId = String(noteId || "")
+        const { currentNote, notes } = StateStore.read()
+        if (currentNote && (!normalizedNoteId || currentNote.id === normalizedNoteId)) return currentNote
+        if (normalizedNoteId) return notes.find(note => note.id === normalizedNoteId) || null
+        if (this.currentNoteActionId) return notes.find(note => note.id === this.currentNoteActionId) || null
+        return null
+    },
+
     isAuthAutocompleteAllowed(element) {
         return !!element?.closest?.("#login-screen")
     },
