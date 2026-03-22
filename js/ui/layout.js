@@ -67,20 +67,57 @@ Object.assign(UI, {
     },
 
     buildImportedNote(rawNote, ownerUid) {
-        const sourceNote = rawNote && typeof rawNote === "object" ? rawNote : {}
-        return {
+        const normalizedNote = NoteIO.normalizeNote({
+            ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
             id: Utils.generateId(),
-            title: String(sourceNote.title || "").trim(),
-            content: String(sourceNote.content || ""),
-            tags: this.normalizeImportedTags(sourceNote.tags),
-            createdAt: this.normalizeImportedDate(sourceNote.createdAt),
-            updatedAt: this.normalizeImportedDate(sourceNote.updatedAt),
             ownerUid: String(ownerUid || ""),
+            folderId: null,
+            trashedAt: null,
+            access: null,
+            hiddenTags: []
+        })
+        return {
+            ...normalizedNote,
+            tags: this.normalizeImportedTags(normalizedNote.tags),
+            pageTitles: Array.isArray(normalizedNote.pageTitles) ? normalizedNote.pageTitles : [],
+            pageDrawings: Array.isArray(normalizedNote.pageDrawings) ? normalizedNote.pageDrawings : [],
+            pageDrawingsRevision: String(normalizedNote.pageDrawingsRevision || ""),
+            createdAt: this.normalizeImportedDate(normalizedNote.createdAt),
+            updatedAt: this.normalizeImportedDate(normalizedNote.updatedAt),
+            ownerUid: String(ownerUid || ""),
+            access: {
+                ownerUid: String(ownerUid || ""),
+                roles: String(ownerUid || "") ? { [String(ownerUid || "")]: "owner" } : {},
+                noteId: "",
+                shareId: "",
+                ownerCollection: ""
+            },
             analyzed: false,
             aiProcessed: false,
-            folderId: null,
+            aiFolder: "",
+            aiTags: [],
+            aiRelevance: 0,
+            aiVersion: 0,
+            aiLastAnalyzed: null,
             hiddenTags: [],
-            relevance: null
+            relevance: 0,
+            folderId: null,
+            trashedAt: null,
+            reminderAt: normalizedNote.reminderAt || null,
+            order: Date.now()
+        }
+    },
+
+    async saveImportedNotes(user, importedNotes) {
+        const notes = Array.isArray(importedNotes) ? importedNotes : []
+        const chunkSize = 450
+        for (let index = 0; index < notes.length; index += chunkSize) {
+            const batch = db.batch()
+            notes.slice(index, index + chunkSize).forEach(importedNote => {
+                const reference = DataPath.getUserNotesCollection(user).doc(importedNote.id)
+                batch.set(reference, importedNote, { merge: true })
+            })
+            await batch.commit()
         }
     },
 
@@ -103,19 +140,8 @@ Object.assign(UI, {
                     return
                 }
                 const current = StateStore.read()
-                const batch = db.batch()
-                importedNotes.forEach(note => {
-                    const importedNote = this.buildImportedNote({
-                        title: note?.title,
-                        content: note?.content,
-                        tags: note?.tags,
-                        createdAt: note?.createdAt,
-                        updatedAt: note?.updatedAt
-                    }, current.user.uid)
-                    const reference = DataPath.getUserNotesCollection(current.user).doc(importedNote.id)
-                    batch.set(reference, importedNote, { merge: true })
-                })
-                await batch.commit()
+                const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid))
+                await this.saveImportedNotes(current.user, notesToImport)
                 this.showToast(this.getText("import_success", "Imported"))
             } catch {
                 this.showToast(this.getText("import_failed", "Import failed"))
@@ -123,6 +149,55 @@ Object.assign(UI, {
         }
         reader.onerror = () => this.showToast(this.getText("import_failed", "Import failed"))
         reader.readAsText(file, "utf-8")
+    },
+
+    getExportableNotes(filterFn = null) {
+        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        return notes.filter(note => {
+            if (!note || note.trashedAt) return false
+            return typeof filterFn === "function" ? filterFn(note) : true
+        })
+    },
+
+    exportNotesBundle(notes, options = {}) {
+        const exportableNotes = Array.isArray(notes) ? notes : []
+        if (!exportableNotes.length) {
+            const emptyKey = options.emptyMessageKey || "export_empty"
+            const fallbackMessage = options.emptyFallback || "No notes available for export"
+            this.showToast(this.getText(emptyKey, fallbackMessage))
+            return null
+        }
+        const payload = window.NoteExportService.buildExportPayload({
+            notes: exportableNotes,
+            scope: options.scope || "all",
+            folder: options.folder || null
+        })
+        const fileName = window.NoteExportService.downloadExportPayload(payload, {
+            scope: options.scope || "all",
+            folderName: options.folder?.name || ""
+        })
+        this.showToast(this.getText("download_success", "File saved"))
+        return fileName
+    },
+
+    exportAllNotes() {
+        return this.exportNotesBundle(this.getExportableNotes(), {
+            scope: "all",
+            emptyMessageKey: "export_empty",
+            emptyFallback: "No notes available for export"
+        })
+    },
+
+    exportActiveFolderNotes() {
+        const { activeFolderId, folders } = StateStore.read()
+        if (!activeFolderId) return null
+        const folder = folders.find(item => item.id === activeFolderId)
+        return this.exportNotesBundle(this.getExportableNotes(note => note.folderId === activeFolderId), {
+            scope: "folder",
+            folder,
+            emptyMessageKey: "export_folder_empty",
+            emptyFallback: "This folder has no notes to export"
+        })
     },
 
     canShowPrimaryAction(view = StateStore.read().view) {
