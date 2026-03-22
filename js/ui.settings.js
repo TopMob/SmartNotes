@@ -85,6 +85,7 @@ Object.assign(UI, {
                     </button>
                 </div>
             `
+            this.applyInputAutocompletePolicy(root)
             return
         }
 
@@ -168,7 +169,7 @@ Object.assign(UI, {
                                         </div>
                                         <div class="color-picker-hex-row">
                                             <span class="color-picker-hex-label">#</span>
-                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="${dict.hex_color || "HEX code"}" autocomplete="off">
                                         </div>
                                     </div>
                                 </div>
@@ -194,7 +195,7 @@ Object.assign(UI, {
                                         </div>
                                         <div class="color-picker-hex-row">
                                             <span class="color-picker-hex-label">#</span>
-                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="${dict.hex_color || "HEX code"}" autocomplete="off">
                                         </div>
                                     </div>
                                 </div>
@@ -220,7 +221,7 @@ Object.assign(UI, {
                                         </div>
                                         <div class="color-picker-hex-row">
                                             <span class="color-picker-hex-label">#</span>
-                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                            <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="${dict.hex_color || "HEX code"}" autocomplete="off">
                                         </div>
                                     </div>
                                 </div>
@@ -247,7 +248,9 @@ Object.assign(UI, {
                                 <span class="field-label">${dict.settings_main_background || "Main screen background"}</span>
                                 <input type="text" class="input-area" data-appearance-bg-input="main" placeholder="${dict.settings_background_placeholder || "Image URL or data"}" aria-label="${dict.settings_main_background || "Main screen background"}" autocomplete="off">
                                 <div class="settings-background-actions">
-                                    <input type="file" class="input-area" data-appearance-bg-file="main" accept="image/*" aria-label="${dict.settings_background_upload || "Upload background image"}">
+                                    <label class="btn-secondary" for="settings-background-file-main">${dict.settings_background_upload || "Upload background"}</label>
+                                    <input type="file" id="settings-background-file-main" hidden data-appearance-bg-file="main" accept="image/*" aria-label="${dict.settings_background_upload || "Upload background"}">
+                                    <span class="folder-meta" data-appearance-bg-file-name="main">${dict.settings_background_file_empty || "No file selected"}</span>
                                     <button type="button" class="btn-secondary" data-appearance-bg-clear="main">${dict.clear || "Clear"}</button>
                                 </div>
                             </div>
@@ -255,7 +258,9 @@ Object.assign(UI, {
                                 <span class="field-label">${dict.settings_sidebar_background || "Sidebar background"}</span>
                                 <input type="text" class="input-area" data-appearance-bg-input="sidebar" placeholder="${dict.settings_background_placeholder || "Image URL or data"}" aria-label="${dict.settings_sidebar_background || "Sidebar background"}" autocomplete="off">
                                 <div class="settings-background-actions">
-                                    <input type="file" class="input-area" data-appearance-bg-file="sidebar" accept="image/*" aria-label="${dict.settings_background_upload || "Upload background image"}">
+                                    <label class="btn-secondary" for="settings-background-file-sidebar">${dict.settings_background_upload || "Upload background"}</label>
+                                    <input type="file" id="settings-background-file-sidebar" hidden data-appearance-bg-file="sidebar" accept="image/*" aria-label="${dict.settings_background_upload || "Upload background"}">
+                                    <span class="folder-meta" data-appearance-bg-file-name="sidebar">${dict.settings_background_file_empty || "No file selected"}</span>
                                     <button type="button" class="btn-secondary" data-appearance-bg-clear="sidebar">${dict.clear || "Clear"}</button>
                                 </div>
                             </div>
@@ -274,6 +279,7 @@ Object.assign(UI, {
             this.initAppearanceDraft()
             this.bindAppearanceBackgroundControls(root)
             this.renderAppearanceDraft()
+            this.applyInputAutocompletePolicy(root)
             return
         }
 
@@ -281,6 +287,7 @@ Object.assign(UI, {
             title.textContent = dict.settings_editor_tools || dict.editor_settings || "Editor tools"
             root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
             this.renderEditorSettings()
+            this.applyInputAutocompletePolicy(root)
         }
     },
 
@@ -451,7 +458,7 @@ Object.assign(UI, {
             const currentDraft = StateStore.read().appearanceDraft || draft
             const createResult = ThemeManager.addCustomPreset(currentDraft)
             if (!createResult?.ok) {
-                this.showToast("Максимум 5 пользовательских пресетов")
+                this.showToast(this.getText("appearance_preset_limit", "Maximum 5 custom presets"))
                 return
             }
             const createdPreset = ThemeManager.getCustomPresetByKey(createResult.key)
@@ -602,21 +609,21 @@ Object.assign(UI, {
                 return {
                     ok: false,
                     value: "",
-                    message: "Pinterest не позволяет использовать ссылку напрямую. Откройте изображение и скопируйте прямую ссылку на файл (.jpg/.png)"
+                    message: this.getText("background_link_pinterest_invalid", "Pinterest does not allow direct image links. Open the image and copy the direct file URL (.jpg/.png)")
                 }
             }
             if (!/^https?:\/\//i.test(source) || /^data:/i.test(source)) {
                 return {
                     ok: false,
                     value: "",
-                    message: "Нужно указать прямую ссылку на изображение (.jpg/.png/.webp)"
+                    message: this.getText("background_link_direct_only", "Provide a direct image URL (.jpg/.png/.webp)")
                 }
             }
             if (!/\.(jpg|jpeg|png|webp|avif)(\?.*)?$/i.test(source)) {
                 return {
                     ok: false,
                     value: "",
-                    message: "Нужно указать прямую ссылку на изображение (.jpg/.png/.webp)"
+                    message: this.getText("background_link_direct_only", "Provide a direct image URL (.jpg/.png/.webp)")
                 }
             }
             return { ok: true, value: source }
@@ -666,11 +673,20 @@ Object.assign(UI, {
                 this.updateAppearanceBackground(key, { mode: "url", value: validationResult.value })
             })
         }
+        const updateFileInputLabel = (key, fileName = "") => {
+            const label = root.querySelector(`[data-appearance-bg-file-name="${key}"]`)
+            if (!label) return
+            label.textContent = fileName || this.getText("settings_background_file_empty", "No file selected")
+        }
         const bindFileInput = (input, key) => {
             if (!input) return
             input.addEventListener("change", (event) => {
                 const file = event.target.files && event.target.files[0]
-                if (!file) return
+                if (!file) {
+                    updateFileInputLabel(key)
+                    return
+                }
+                updateFileInputLabel(key, file.name)
                 const reader = new FileReader()
                 reader.onload = async () => {
                     const result = typeof reader.result === "string" ? reader.result : ""
@@ -685,6 +701,7 @@ Object.assign(UI, {
             if (!button) return
             button.addEventListener("click", () => {
                 this.updateAppearanceBackground(key, { mode: "clear", value: "" })
+                updateFileInputLabel(key)
             })
         }
         bindTextInput(root.querySelector('[data-appearance-bg-input="main"]'), "main")
@@ -693,6 +710,8 @@ Object.assign(UI, {
         bindFileInput(root.querySelector('[data-appearance-bg-file="sidebar"]'), "sidebar")
         bindClearButton(root.querySelector('[data-appearance-bg-clear="main"]'), "main")
         bindClearButton(root.querySelector('[data-appearance-bg-clear="sidebar"]'), "sidebar")
+        updateFileInputLabel("main")
+        updateFileInputLabel("sidebar")
     },
     syncAppearanceBackgroundInputs(draft) {
         const mainInput = document.querySelector('[data-appearance-bg-input="main"]')

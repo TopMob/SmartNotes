@@ -49,10 +49,12 @@ const getNoteReference = (note, user) => {
 }
 
 function openNoteActions(noteId) {
-    const note = getNoteById(noteId)
-    if (!note || isHiddenLocked(note)) return
-    UI.currentNoteActionId = noteId
-    UI.renderNoteActions(noteId)
+    const note = UI.resolveNoteById(noteId)
+    const currentNoteId = StateStore.read().currentNote?.id || ""
+    const allowHiddenCurrentNote = !!note && isHiddenLocked(note) && currentNoteId === note.id
+    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote)) return
+    UI.currentNoteActionId = note.id
+    UI.renderNoteActions(note.id)
     UI.openModal("note-actions-modal")
 }
 

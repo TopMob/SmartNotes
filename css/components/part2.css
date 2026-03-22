@@ -484,3 +484,7 @@
 #lock-center-modal {
     z-index: 13000;
 }
+
+#note-actions-modal {
+    z-index: 13100;
+}

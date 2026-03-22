@@ -43,11 +43,41 @@ const UI = {
         this.applyAppearanceSettings()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
+        this.applyInputAutocompletePolicy()
     },
 
     getText(key, fallback = "") {
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
         return dict[key] || fallback || key
+    },
+
+    isAuthAutocompleteAllowed(element) {
+        return !!element?.closest?.("#login-screen")
+    },
+
+    applyInputAutocompletePolicy(root = document) {
+        const scope = root && typeof root.querySelectorAll === "function" ? root : document
+        scope.querySelectorAll("input, textarea").forEach(element => {
+            if (this.isAuthAutocompleteAllowed(element)) return
+            const tagName = element.tagName.toLowerCase()
+            const inputType = String(element.getAttribute("type") || "text").toLowerCase()
+            if (inputType === "hidden") return
+            element.setAttribute("data-lpignore", "true")
+            element.setAttribute("data-1p-ignore", "true")
+            element.setAttribute("autocapitalize", "off")
+            if (tagName === "textarea") {
+                element.setAttribute("autocomplete", "off")
+                return
+            }
+            if (inputType === "password") {
+                element.setAttribute("autocomplete", "one-time-code")
+                element.setAttribute("inputmode", "text")
+                return
+            }
+            if (!["checkbox", "radio", "range", "file", "button", "submit", "color"].includes(inputType)) {
+                element.setAttribute("autocomplete", "off")
+            }
+        })
     },
 
     setLang(lang) {
@@ -65,6 +95,7 @@ const UI = {
 
     applyLangToDom() {
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        document.documentElement.lang = StateStore.read().config.lang === "en" ? "en" : "ru"
         document.querySelectorAll("[data-lang]").forEach(el => {
             const k = el.getAttribute("data-lang")
             if (k && dict[k]) el.textContent = dict[k]

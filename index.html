@@ -93,7 +93,7 @@
         <div class="login-box">
             <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
             <p class="subtext" data-lang="login">Вход в систему</p>
-            <div class="auth-panel-switch" role="tablist" aria-label="Email authentication">
+            <div class="auth-panel-switch" role="tablist" aria-label="Email authentication" data-lang-aria="email_authentication">
                 <button type="button" class="btn-auth-tab active" id="email-signin-tab" data-auth-mode="signin" data-lang="email_signin_tab">Вход</button>
                 <button type="button" class="btn-auth-tab" id="email-signup-tab" data-auth-mode="signup" data-lang="email_signup_tab">Регистрация</button>
             </div>
@@ -376,7 +376,7 @@
                 <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
 
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
-                <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования">
+                <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования" data-lang-aria="drawing_settings">
                     <div class="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
                         <button type="button" class="drawing-tool-btn is-active" data-drawing-tool="pen" data-lang="drawing_tool_pen">Перо</button>
                                                 <button type="button" class="drawing-tool-btn" data-drawing-tool="eraser" data-lang="drawing_tool_eraser">Ластик</button>
@@ -384,8 +384,8 @@
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_color">Цвет</span>
                         <div class="color-picker" data-color-picker>
-                            <input id="drawing-color" type="text" class="color-picker-input" data-color-input value="#111111" aria-label="Цвет" autocomplete="off">
-                            <button type="button" class="color-picker-trigger" data-color-trigger aria-label="Цвет">
+                            <input id="drawing-color" type="text" class="color-picker-input" data-color-input value="#111111" aria-label="Цвет" data-lang-aria="drawing_color" autocomplete="off">
+                            <button type="button" class="color-picker-trigger" data-color-trigger aria-label="Цвет" data-lang-aria="drawing_color">
                                 <span class="color-picker-swatch" data-color-swatch></span>
                                 <span class="color-picker-icon" aria-hidden="true">
                                     <svg viewBox="0 0 24 24" focusable="false">
@@ -393,7 +393,7 @@
                                     </svg>
                                 </span>
                             </button>
-                            <div class="color-picker-panel" data-color-panel role="dialog" aria-label="Палитра">
+                            <div class="color-picker-panel" data-color-panel role="dialog" aria-label="Палитра" data-lang-aria="drawing_presets">
                                 <div class="color-picker-sv" data-color-sv>
                                     <span class="color-picker-sv-handle" data-color-sv-handle></span>
                                 </div>
@@ -402,21 +402,21 @@
                                 </div>
                                 <div class="color-picker-hex-row">
                                     <span class="color-picker-hex-label">#</span>
-                                    <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                    <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" data-lang-aria="hex_color" autocomplete="off">
                                 </div>
                             </div>
                         </div>
                     </label>
                     <div class="drawing-color-presets" role="group" aria-label="Палитра" data-lang-aria="drawing_presets">
-                        <button type="button" class="drawing-color-swatch is-active" data-drawing-color="#111111" style="--swatch-color:#111111;" aria-label="Черный"></button>
-                        <button type="button" class="drawing-color-swatch" data-drawing-color="#2563eb" style="--swatch-color:#2563eb;" aria-label="Синий"></button>
-                        <button type="button" class="drawing-color-swatch" data-drawing-color="#16a34a" style="--swatch-color:#16a34a;" aria-label="Зеленый"></button>
-                        <button type="button" class="drawing-color-swatch" data-drawing-color="#f97316" style="--swatch-color:#f97316;" aria-label="Оранжевый"></button>
-                        <button type="button" class="drawing-color-swatch" data-drawing-color="#dc2626" style="--swatch-color:#dc2626;" aria-label="Красный"></button>
+                        <button type="button" class="drawing-color-swatch is-active" data-drawing-color="#111111" style="--swatch-color:#111111;" aria-label="Черный" data-lang-aria="color_black"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#2563eb" style="--swatch-color:#2563eb;" aria-label="Синий" data-lang-aria="color_blue"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#16a34a" style="--swatch-color:#16a34a;" aria-label="Зеленый" data-lang-aria="color_green"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#f97316" style="--swatch-color:#f97316;" aria-label="Оранжевый" data-lang-aria="color_orange"></button>
+                        <button type="button" class="drawing-color-swatch" data-drawing-color="#dc2626" style="--swatch-color:#dc2626;" aria-label="Красный" data-lang-aria="color_red"></button>
                     </div>
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_size">Размер</span>
-                        <input id="drawing-size" type="range" class="drawing-range" min="1" max="16" value="3" aria-label="Размер">
+                        <input id="drawing-size" type="range" class="drawing-range" min="1" max="16" value="3" aria-label="Размер" data-lang-aria="drawing_size">
                     </label>
                 </div>
 
@@ -573,7 +573,7 @@
                     <h2 class="modal-title" data-lang="photo_editor">Редактор фото</h2>
                     <div class="color-picker" data-color-picker>
                         <input type="text" id="photo-color-picker" value="#00f2ff" class="color-picker-input" data-color-input aria-label="Цвет кисти" data-lang-aria="photo_color" autocomplete="off">
-                        <button type="button" class="color-picker-trigger" data-color-trigger aria-label="Цвет кисти">
+                        <button type="button" class="color-picker-trigger" data-color-trigger aria-label="Цвет кисти" data-lang-aria="photo_color">
                             <span class="color-picker-swatch" data-color-swatch></span>
                             <span class="color-picker-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" focusable="false">
@@ -581,7 +581,7 @@
                                 </svg>
                             </span>
                         </button>
-                        <div class="color-picker-panel" data-color-panel role="dialog" aria-label="Палитра">
+                        <div class="color-picker-panel" data-color-panel role="dialog" aria-label="Палитра" data-lang-aria="drawing_presets">
                             <div class="color-picker-sv" data-color-sv>
                                 <span class="color-picker-sv-handle" data-color-sv-handle></span>
                             </div>
@@ -590,7 +590,7 @@
                             </div>
                             <div class="color-picker-hex-row">
                                 <span class="color-picker-hex-label">#</span>
-                                <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" autocomplete="off">
+                                <input type="text" class="color-picker-hex" data-color-hex maxlength="7" aria-label="HEX" data-lang-aria="hex_color" autocomplete="off">
                             </div>
                         </div>
                     </div>
