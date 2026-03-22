@@ -484,7 +484,7 @@ Object.assign(UI, {
                 break
             case "editor-note-actions": {
                 const noteId = StateStore.read().currentNote?.id
-                if (noteId) openNoteActions(noteId)
+                if (noteId) window.openNoteActions?.(noteId)
                 break
             }
             case "open-feedback-modal":
@@ -498,7 +498,7 @@ Object.assign(UI, {
                 toggleFavorite(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-menu":
-                openNoteActions(decodeURIComponent(el.dataset.noteId || ""))
+                window.openNoteActions?.(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-pin-toggle":
                 this.toggleSelectedPin(decodeURIComponent(el.dataset.noteId || ""))

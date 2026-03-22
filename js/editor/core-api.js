@@ -551,7 +551,13 @@ export const EditorAPI = (() => {
                     targetElement.value = ""
                 } catch (error) {
                     const errorCode = error?.code || error?.message || "unknown"
-                    UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
+                    if (String(errorCode) === "drive-offline") {
+                        UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
+                    } else if (String(errorCode).startsWith("drive-")) {
+                        UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                    } else {
+                        UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
+                    }
                 }
             }, { signal })
         }

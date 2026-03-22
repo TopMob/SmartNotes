@@ -66,17 +66,46 @@ Object.assign(UI, {
         return uniqueTags
     },
 
-    buildImportedNote(rawNote, ownerUid) {
+    buildImportedFolder(rawFolder, ownerUid, index = 0) {
+        const safeFolder = rawFolder && typeof rawFolder === "object" ? rawFolder : {}
+        const nameSource = String(safeFolder.name || "").trim()
+        const descriptionSource = String(safeFolder.description || "").trim()
+        const validatedName = window.Validators.validateFolderName(nameSource) || nameSource.slice(0, 50).trim()
+        const validatedDescription = window.Validators.validateFolderDescription(descriptionSource)
+        if (!validatedName) return null
+        return {
+            sourceId: String(safeFolder.id || ""),
+            id: Utils.generateId(),
+            name: validatedName,
+            description: validatedDescription == null ? descriptionSource.slice(0, 300) : validatedDescription,
+            isHidden: false,
+            trashedAt: null,
+            folderOrder: Date.now() + index,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            ownerUid: String(ownerUid || "")
+        }
+    },
+
+    async normalizeImportedNoteMedia(note) {
+        if (!window.GoogleDriveMediaService) return note
+        const normalizedResult = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
+            fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "imported_note", "imported_note") || "imported_note"
+        })
+        return NoteIO.normalizeNote(normalizedResult.note)
+    },
+
+    async buildImportedNote(rawNote, ownerUid, folderIdMap = new Map()) {
         const normalizedNote = NoteIO.normalizeNote({
             ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
             id: Utils.generateId(),
             ownerUid: String(ownerUid || ""),
-            folderId: null,
             trashedAt: null,
             access: null,
             hiddenTags: []
         })
-        return {
+        const normalizedFolderId = String(normalizedNote.folderId || "")
+        const targetFolderId = normalizedFolderId ? (folderIdMap.get(normalizedFolderId) || null) : null
+        const importedNote = {
             ...normalizedNote,
             tags: this.normalizeImportedTags(normalizedNote.tags),
             pageTitles: Array.isArray(normalizedNote.pageTitles) ? normalizedNote.pageTitles : [],
@@ -101,11 +130,12 @@ Object.assign(UI, {
             aiLastAnalyzed: null,
             hiddenTags: [],
             relevance: 0,
-            folderId: null,
+            folderId: targetFolderId,
             trashedAt: null,
             reminderAt: normalizedNote.reminderAt || null,
             order: Date.now()
         }
+        return this.normalizeImportedNoteMedia(importedNote)
     },
 
     async saveImportedNotes(user, importedNotes) {
@@ -121,6 +151,45 @@ Object.assign(UI, {
         }
     },
 
+    async saveImportedFolders(user, importedFolders) {
+        const folders = Array.isArray(importedFolders) ? importedFolders : []
+        if (!folders.length) return new Map()
+        const existingFolders = StateStore.read().folders.filter(folder => !folder.trashedAt)
+        const existingByName = new Map(existingFolders.map(folder => [String(folder.name || "").trim().toLowerCase(), folder]))
+        const folderIdMap = new Map()
+        const foldersToCreate = []
+
+        folders.forEach((importedFolder, index) => {
+            if (!importedFolder) return
+            const normalizedName = String(importedFolder.name || "").trim().toLowerCase()
+            if (!normalizedName) return
+            const existingFolder = existingByName.get(normalizedName)
+            if (existingFolder) {
+                folderIdMap.set(String(importedFolder.sourceId || importedFolder.id || ""), existingFolder.id)
+                return
+            }
+            const nextFolder = {
+                ...importedFolder,
+                id: importedFolder.id || Utils.generateId(),
+                folderOrder: Date.now() + index
+            }
+            folderIdMap.set(String(importedFolder.sourceId || importedFolder.id || ""), nextFolder.id)
+            foldersToCreate.push(nextFolder)
+            existingByName.set(normalizedName, nextFolder)
+        })
+
+        if (!foldersToCreate.length) return folderIdMap
+
+        const batch = db.batch()
+        foldersToCreate.forEach(folder => {
+            const reference = DataPath.getUserFoldersCollection(user).doc(folder.id)
+            const { sourceId, ...folderPayload } = folder
+            batch.set(reference, folderPayload, { merge: true })
+        })
+        await batch.commit()
+        return folderIdMap
+    },
+
     async handleNoteImport(e) {
         if (!db || !StateStore.read().user) return
         const file = e.target.files && e.target.files[0] ? e.target.files[0] : null
@@ -134,16 +203,29 @@ Object.assign(UI, {
             try {
                 const text = String(reader.result || "").replace(/^﻿/, "")
                 const parsed = JSON.parse(text)
-                const importedNotes = NoteIO.parseImport(parsed)
-                if (!importedNotes.length) {
+                const importBundle = NoteIO.parseImportBundle(parsed)
+                if (!importBundle.notes.length) {
                     this.showToast(this.getText("import_empty", "No notes found"))
                     return
                 }
                 const current = StateStore.read()
-                const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid))
+                const foldersToImport = (Array.isArray(importBundle.folders) ? importBundle.folders : [])
+                    .map((folder, index) => this.buildImportedFolder(folder, current.user.uid, index))
+                    .filter(Boolean)
+                const folderIdMap = await this.saveImportedFolders(current.user, foldersToImport)
+                const notesToImport = await Promise.all(importBundle.notes.map(note => this.buildImportedNote(note, current.user.uid, folderIdMap)))
                 await this.saveImportedNotes(current.user, notesToImport)
                 this.showToast(this.getText("import_success", "Imported"))
-            } catch {
+            } catch (error) {
+                console.error("Import failed", error)
+                if (String(error?.message || "") === "drive-offline") {
+                    this.showToast(this.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
+                    return
+                }
+                if (String(error?.message || "").includes("drive-")) {
+                    this.showToast(this.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                    return
+                }
                 this.showToast(this.getText("import_failed", "Import failed"))
             }
         }
@@ -159,7 +241,28 @@ Object.assign(UI, {
         })
     },
 
-    exportNotesBundle(notes, options = {}) {
+    getExportFoldersForNotes(notes, options = {}) {
+        if (Array.isArray(options.folders)) return options.folders
+        const stateFolders = Array.isArray(StateStore.read().folders) ? StateStore.read().folders : []
+        const folderIds = new Set((Array.isArray(notes) ? notes : []).map(note => String(note?.folderId || "")).filter(Boolean))
+        if (options.folder && typeof options.folder === "object") {
+            folderIds.add(String(options.folder.id || ""))
+        }
+        return stateFolders.filter(folder => folderIds.has(String(folder.id || "")))
+    },
+
+    async prepareExportNotes(notes) {
+        const exportableNotes = Array.isArray(notes) ? notes : []
+        if (!window.GoogleDriveMediaService) return exportableNotes
+        return Promise.all(exportableNotes.map(async note => {
+            const prepared = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
+                fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note_export", "note_export") || "note_export"
+            })
+            return NoteIO.normalizeNote(prepared.note)
+        }))
+    },
+
+    async exportNotesBundle(notes, options = {}) {
         const exportableNotes = Array.isArray(notes) ? notes : []
         if (!exportableNotes.length) {
             const emptyKey = options.emptyMessageKey || "export_empty"
@@ -167,8 +270,10 @@ Object.assign(UI, {
             this.showToast(this.getText(emptyKey, fallbackMessage))
             return null
         }
+        const preparedNotes = await this.prepareExportNotes(exportableNotes)
         const payload = window.NoteExportService.buildExportPayload({
-            notes: exportableNotes,
+            notes: preparedNotes,
+            folders: this.getExportFoldersForNotes(preparedNotes, options),
             scope: options.scope || "all",
             folder: options.folder || null
         })
@@ -180,24 +285,37 @@ Object.assign(UI, {
         return fileName
     },
 
-    exportAllNotes() {
-        return this.exportNotesBundle(this.getExportableNotes(), {
-            scope: "all",
-            emptyMessageKey: "export_empty",
-            emptyFallback: "No notes available for export"
-        })
+    async exportAllNotes() {
+        try {
+            return await this.exportNotesBundle(this.getExportableNotes(), {
+                scope: "all",
+                emptyMessageKey: "export_empty",
+                emptyFallback: "No notes available for export"
+            })
+        } catch (error) {
+            console.error("Export failed", error)
+            this.showToast(this.getText(String(error?.message || "") === "drive-offline" ? "drive_upload_required" : "drive_upload_failed", String(error?.message || "") === "drive-offline" ? "Attachments are stored only through Google Drive" : "Unable to upload attachment to Google Drive"))
+            return null
+        }
     },
 
-    exportActiveFolderNotes() {
+    async exportActiveFolderNotes() {
         const { activeFolderId, folders } = StateStore.read()
         if (!activeFolderId) return null
         const folder = folders.find(item => item.id === activeFolderId)
-        return this.exportNotesBundle(this.getExportableNotes(note => note.folderId === activeFolderId), {
-            scope: "folder",
-            folder,
-            emptyMessageKey: "export_folder_empty",
-            emptyFallback: "This folder has no notes to export"
-        })
+        try {
+            return await this.exportNotesBundle(this.getExportableNotes(note => note.folderId === activeFolderId), {
+                scope: "folder",
+                folder,
+                folders: folder ? [folder] : [],
+                emptyMessageKey: "export_folder_empty",
+                emptyFallback: "This folder has no notes to export"
+            })
+        } catch (error) {
+            console.error("Export failed", error)
+            this.showToast(this.getText(String(error?.message || "") === "drive-offline" ? "drive_upload_required" : "drive_upload_failed", String(error?.message || "") === "drive-offline" ? "Attachments are stored only through Google Drive" : "Unable to upload attachment to Google Drive"))
+            return null
+        }
     },
 
     canShowPrimaryAction(view = StateStore.read().view) {

@@ -38,23 +38,26 @@ export const createMediaHandlers = (context) => {
         image.src = source
     })
 
-    const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = async () => {
-            const imageDataUrl = String(reader.result || "")
-            const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
-            if (!navigator.onLine) {
-                const pendingImages = await SafeStorage.local.getJsonAsync("pending-images", [], { allowIndexedDbFallback: true })
-                const nextPendingImages = Array.isArray(pendingImages) ? pendingImages : []
-                nextPendingImages.push({ id: Utils.generateId(), dataUrl: optimizedImageDataUrl, createdAt: Date.now() })
-                const pendingImagesResult = await SafeStorage.local.setJsonAsync("pending-images", nextPendingImages.slice(-20), { useIndexedDb: true, priority: "normal", ttlMs: 7 * 24 * 60 * 60 * 1000, allowIndexedDbFallback: true })
-                SaveStateService?.handleStorageWriteResult?.(pendingImagesResult)
-            }
-            resolve(optimizedImageDataUrl)
+    const uploadImageFile = async (file) => {
+        if (!navigator.onLine) {
+            throw new Error("drive-offline")
         }
-        reader.onerror = () => reject(new Error("file-read-failed"))
-        reader.readAsDataURL(file)
-    })
+        const reader = new FileReader()
+        const imageDataUrl = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(String(reader.result || ""))
+            reader.onerror = () => reject(new Error("file-read-failed"))
+            reader.readAsDataURL(file)
+        })
+        const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
+        if (!window.GoogleDriveMediaService) {
+            throw new Error("drive-unavailable")
+        }
+        return window.GoogleDriveMediaService.uploadDataUrl(optimizedImageDataUrl, {
+            fileNameBase: file?.name || "note_image"
+        })
+    }
+
+    const fileToDataUrl = async (file) => uploadImageFile(file)
 
     const handleResizeStart = (event) => {
         if (state.drawingState?.active) {

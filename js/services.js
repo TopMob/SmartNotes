@@ -36,6 +36,7 @@ const buildPageDrawingsRevision = (pageDrawings) => {
 }
 
 const IMPORT_NOTE_CONTAINER_KEYS = ["note", "notes", "items", "entries", "documents", "data", "payload", "result"]
+const IMPORT_FOLDER_CONTAINER_KEYS = ["folder", "folders"]
 
 const extractImportContent = (source) => {
     const contentCandidates = [source?.content, source?.body, source?.text, source?.html, source?.description]
@@ -80,11 +81,16 @@ const extractImportPageDrawings = (source) => {
 
 const looksLikeImportedNote = (source) => {
     if (!source || typeof source !== "object" || Array.isArray(source)) return false
-    if (typeof source.title === "string" || typeof source.name === "string") return true
-    if (typeof extractImportContent(source) === "string" && extractImportContent(source).length > 0) return true
-    if (extractImportTags(source).length > 0) return true
-    if (extractImportPageTitles(source).length > 0) return true
-    return extractImportPageDrawings(source).length > 0
+    const hasContent = typeof extractImportContent(source) === "string" && extractImportContent(source).length > 0
+    const hasTags = extractImportTags(source).length > 0
+    const hasPageTitles = extractImportPageTitles(source).length > 0
+    const hasPageDrawings = extractImportPageDrawings(source).length > 0
+    if (typeof source.title === "string") return true
+    if (typeof source.name === "string" && (hasContent || hasTags || hasPageTitles || hasPageDrawings)) return true
+    if (hasContent) return true
+    if (hasTags) return true
+    if (hasPageTitles) return true
+    return hasPageDrawings
 }
 
 const normalizeImportedRawNote = (source) => {
@@ -101,6 +107,30 @@ const normalizeImportedRawNote = (source) => {
     }
 }
 
+const looksLikeImportedFolder = (source) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return false
+    if (typeof source.name !== "string" || !source.name.trim()) return false
+    if (looksLikeImportedNote(source)) return false
+    return typeof source.description === "string"
+        || typeof source.folderOrder === "number"
+        || typeof source.isHidden === "boolean"
+        || "trashedAt" in source
+}
+
+const normalizeImportedRawFolder = (source) => {
+    const safe = source && typeof source === "object" ? source : {}
+    return {
+        id: safe.id ? String(safe.id) : "",
+        name: typeof safe.name === "string" ? safe.name : "",
+        description: typeof safe.description === "string" ? safe.description : "",
+        folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
+        isHidden: !!safe.isHidden,
+        trashedAt: safe.trashedAt ?? null,
+        createdAt: safe.createdAt ?? safe.created_at ?? safe.created ?? null,
+        updatedAt: safe.updatedAt ?? safe.updated_at ?? safe.updated ?? null
+    }
+}
+
 const collectImportedNotes = (payload, visited = new Set()) => {
     if (!payload || visited.has(payload)) return []
     if (typeof payload === "object") visited.add(payload)
@@ -114,6 +144,25 @@ const collectImportedNotes = (payload, visited = new Set()) => {
         for (const key of IMPORT_NOTE_CONTAINER_KEYS) {
             if (!(key in payload)) continue
             const nested = collectImportedNotes(payload[key], visited)
+            if (nested.length) return nested
+        }
+    }
+    return []
+}
+
+const collectImportedFolders = (payload, visited = new Set()) => {
+    if (!payload || visited.has(payload)) return []
+    if (typeof payload === "object") visited.add(payload)
+    if (Array.isArray(payload)) {
+        return payload.flatMap(item => collectImportedFolders(item, visited))
+    }
+    if (looksLikeImportedFolder(payload)) {
+        return [normalizeImportedRawFolder(payload)]
+    }
+    if (payload && typeof payload === "object") {
+        for (const key of IMPORT_FOLDER_CONTAINER_KEYS) {
+            if (!(key in payload)) continue
+            const nested = collectImportedFolders(payload[key], visited)
             if (nested.length) return nested
         }
     }
@@ -279,7 +328,14 @@ const NoteIO = {
     },
 
     parseImport(parsed) {
-        return collectImportedNotes(parsed).map(note => this.normalizeNote(note))
+        return this.parseImportBundle(parsed).notes
+    },
+
+    parseImportBundle(parsed) {
+        return {
+            notes: collectImportedNotes(parsed).map(note => this.normalizeNote(note)),
+            folders: collectImportedFolders(parsed)
+        }
     },
 
     fileNameFor(note) {

@@ -96,8 +96,20 @@ export const createInputHandlers = (context) => {
             event.preventDefault()
             const file = imageItem.getAsFile()
             if (!file) return
-            const url = await fileToDataUrl(file)
-            insertMedia(url, "image")
+            try {
+                const url = await fileToDataUrl(file)
+                insertMedia(url, "image")
+            } catch (error) {
+                if (String(error?.message || "") === "drive-offline") {
+                    UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
+                    return
+                }
+                if (String(error?.message || "").startsWith("drive-")) {
+                    UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                    return
+                }
+                throw error
+            }
             return
         }
 
@@ -106,8 +118,25 @@ export const createInputHandlers = (context) => {
         const plainText = event.clipboardData?.getData("text/plain") || ""
         const normalizedHtml = html ? normalizePastedHtml(html) : ""
         const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
-        const hasInsertedContent = sanitizedHtml
-            ? insertFragmentAtSelection(createFragmentFromHtml(sanitizedHtml))
+        let preparedHtml = sanitizedHtml
+        if (preparedHtml && window.GoogleDriveMediaService) {
+            try {
+                const externalizedResult = await window.GoogleDriveMediaService.externalizeHtmlMedia(preparedHtml, { fileNameBase: "pasted_media" })
+                preparedHtml = externalizedResult.html
+            } catch (error) {
+                if (String(error?.message || "") === "drive-offline") {
+                    UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
+                    return
+                }
+                if (String(error?.message || "").startsWith("drive-")) {
+                    UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                    return
+                }
+                throw error
+            }
+        }
+        const hasInsertedContent = preparedHtml
+            ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
             : (plainText ? insertFragmentAtSelection(document.createTextNode(plainText)) : false)
         if (hasInsertedContent) queueSnapshot()
     }

@@ -125,3 +125,67 @@ export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds
         })
     })
 }
+
+export async function requestGoogleAccessToken({ clientId, scope, prompt = "consent", timeoutMilliseconds = 12000 }) {
+    if (!clientId) {
+        throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
+    }
+    if (!scope) {
+        throw createError("auth/google-oauth-scope-missing", "Google OAuth scope is missing")
+    }
+
+    await loadGoogleIdentityScript()
+
+    if (typeof window === "undefined" || !window.google?.accounts?.oauth2) {
+        throw createError("auth/google-oauth-unavailable", "Google OAuth API unavailable")
+    }
+
+    return new Promise((resolve, reject) => {
+        let settled = false
+
+        const finishWithResolve = response => {
+            if (settled) return
+            settled = true
+            clearTimeout(timeoutId)
+            resolve(response)
+        }
+
+        const finishWithReject = error => {
+            if (settled) return
+            settled = true
+            clearTimeout(timeoutId)
+            reject(error)
+        }
+
+        const timeoutId = setTimeout(() => {
+            finishWithReject(createError("auth/google-oauth-timeout", "Google OAuth timeout"))
+        }, timeoutMilliseconds)
+
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope,
+            prompt,
+            callback: response => {
+                const accessToken = String(response?.access_token || "")
+                if (!accessToken) {
+                    finishWithReject(createError("auth/google-oauth-empty-token", "Google OAuth access token is empty"))
+                    return
+                }
+                finishWithResolve({
+                    accessToken,
+                    expiresIn: Number(response?.expires_in || 0),
+                    scope: String(response?.scope || scope)
+                })
+            },
+            error_callback: error => {
+                finishWithReject(createError("auth/google-oauth-request-failed", String(error?.type || error?.message || "Google OAuth request failed")))
+            }
+        })
+
+        try {
+            tokenClient.requestAccessToken({ prompt })
+        } catch (error) {
+            finishWithReject(createError("auth/google-oauth-request-failed", error?.message || "Google OAuth request failed"))
+        }
+    })
+}

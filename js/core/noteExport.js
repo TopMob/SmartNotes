@@ -30,6 +30,18 @@ const EXPORTABLE_NOTE_FIELDS = [
     "access"
 ]
 
+const EXPORTABLE_FOLDER_FIELDS = [
+    "id",
+    "name",
+    "description",
+    "folderOrder",
+    "isHidden",
+    "trashedAt",
+    "createdAt",
+    "updatedAt",
+    "ownerUid"
+]
+
 const serializeExportDate = (value) => {
     if (value === null || value === undefined || value === "") return null
     if (typeof value?.toDate === "function") {
@@ -84,10 +96,25 @@ const serializeNoteForExport = (note) => {
     return exportedNote
 }
 
-const buildExportPayload = ({ notes, scope = "all", folder = null } = {}) => {
+const serializeFolderForExport = (folder) => {
+    const safeFolder = folder && typeof folder === "object" ? folder : {}
+    const exportedFolder = {}
+    EXPORTABLE_FOLDER_FIELDS.forEach(fieldName => {
+        const fieldValue = safeFolder[fieldName]
+        if (["createdAt", "updatedAt", "trashedAt"].includes(fieldName)) {
+            exportedFolder[fieldName] = serializeExportDate(fieldValue)
+            return
+        }
+        exportedFolder[fieldName] = fieldValue
+    })
+    return exportedFolder
+}
+
+const buildExportPayload = ({ notes, folders = [], scope = "all", folder = null } = {}) => {
     const exportedNotes = Array.isArray(notes) ? notes.map(serializeNoteForExport) : []
+    const exportedFolders = Array.isArray(folders) ? folders.map(serializeFolderForExport) : []
     return {
-        version: 3,
+        version: 4,
         app: "SmartNotes",
         exportedAt: new Date().toISOString(),
         scope,
@@ -98,6 +125,7 @@ const buildExportPayload = ({ notes, scope = "all", folder = null } = {}) => {
                 description: String(folder.description || "")
             }
             : null,
+        folders: exportedFolders,
         notes: exportedNotes
     }
 }
@@ -128,5 +156,6 @@ window.NoteExportService = {
     downloadExportPayload,
     sanitizeExportFileName,
     serializeNoteForExport,
+    serializeFolderForExport,
     serializeExportDate
 }
