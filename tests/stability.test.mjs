@@ -443,11 +443,12 @@ test('html paste with inline media is blocked when external storage is unavailab
     assert.match(window.__lastToast, /attachment unavailable|вложение недоступно/i)
 })
 
-test('google drive media service externalizes inline media and caches repeated uploads', async () => {
+test('google drive media service requires explicit connect and externalizes inline media with browser-safe links', async () => {
     const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
     const { window } = dom
     let uploadCalls = 0
     let permissionCalls = 0
+    let tokenCalls = 0
 
     window.console = console
     window.Blob = globalThis.Blob
@@ -458,17 +459,36 @@ test('google drive media service externalizes inline media and caches repeated u
             return { ok: true, status: 200, json: async () => ({}) }
         }
         uploadCalls += 1
-        return { ok: true, status: 200, json: async () => ({ id: 'file-1', name: 'file-1', mimeType: 'image/png' }) }
+        return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+                id: 'file-1',
+                name: 'file-1',
+                mimeType: 'image/png',
+                webContentLink: 'https://drive.google.com/uc?id=file-1&export=download'
+            })
+        }
     }
     Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
     window.HTMLMediaElement = dom.window.HTMLMediaElement
     window.firebaseConfig = { clientId: 'client-id' }
-    window.requestGoogleAccessToken = async () => ({ accessToken: 'token', expiresIn: 3600 })
+    window.requestGoogleAccessToken = async () => {
+        tokenCalls += 1
+        return { accessToken: 'token', expiresIn: 3600 }
+    }
 
     await loadWindowScript(window, 'js/core/googleDriveMedia.js', source => source
         .replace('import { firebaseConfig } from "./firebase.js"\n', '')
         .replace('import { requestGoogleAccessToken } from "./googleIdentityAuth.js"\n', '')
         .replace('export const GoogleDriveMediaService = {', 'window.GoogleDriveMediaService = {'))
+
+    await assert.rejects(() => window.GoogleDriveMediaService.uploadDataUrl('data:image/png;base64,AAA'), /external-storage-unlinked/)
+    assert.equal(window.GoogleDriveMediaService.getStatus().connected, false)
+
+    const connectedStatus = await window.GoogleDriveMediaService.connect()
+    assert.equal(connectedStatus.connected, true)
+    assert.equal(tokenCalls, 1)
 
     const note = {
         title: 'Cache',
@@ -479,6 +499,7 @@ test('google drive media service externalizes inline media and caches repeated u
     const result = await window.GoogleDriveMediaService.externalizeNoteMedia(note)
     assert.equal(/data:image\//.test(result.note.content), false)
     assert.equal(/data:image\//.test(result.note.pageDrawings[0]), false)
+    assert.match(result.note.content, /https:\/\/drive\.google\.com\/uc\?id=file-1(?:&|&amp;)export=download/)
     assert.equal(uploadCalls, 1)
     assert.equal(permissionCalls, 1)
 })

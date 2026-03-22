@@ -2,7 +2,7 @@ import { firebaseConfig } from "./firebase.js"
 import { requestGoogleAccessToken } from "./googleIdentityAuth.js"
 
 const DRIVE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/drive.file"
-const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType"
+const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webContentLink"
 const DRIVE_PERMISSION_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
 const INLINE_MEDIA_PATTERN = /^data:(image|audio)\//i
 const INLINE_MEDIA_URL_PATTERN = /data:(image|audio)\//i
@@ -16,14 +16,22 @@ const ERROR_CODES = {
 
 const tokenState = {
     accessToken: "",
-    expiresAt: 0
+    expiresAt: 0,
+    pendingPromise: null,
+    lastErrorCode: ""
 }
 
 const uploadCache = new Map()
 
 const getGoogleClientId = () => String(window.auth?.app?.options?.clientId || firebaseConfig.clientId || "").trim()
 
-const normalizeDrivePublicUrl = (fileId) => `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`
+const normalizeDrivePublicUrl = (file) => {
+    const fileId = typeof file === "string" ? file : String(file?.id || "").trim()
+    const webContentLink = typeof file?.webContentLink === "string" ? file.webContentLink.trim() : ""
+    if (/^https:\/\//i.test(webContentLink)) return webContentLink
+    if (!fileId) return ""
+    return `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download`
+}
 
 const sanitizeFileNamePart = (value, fallback) => {
     const normalizedValue = String(value || "").trim().toLowerCase()
@@ -134,28 +142,45 @@ const createMultipartBody = (metadata, blob, boundary) => {
 
 const getAccessToken = async (forceRefresh = false) => {
     if (!getGoogleClientId()) {
+        tokenState.lastErrorCode = ERROR_CODES.UNLINKED
         throw createExternalMediaError(ERROR_CODES.UNLINKED)
     }
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        tokenState.lastErrorCode = ERROR_CODES.OFFLINE
         throw createExternalMediaError(ERROR_CODES.OFFLINE)
     }
     const now = Date.now()
     if (!forceRefresh && tokenState.accessToken && tokenState.expiresAt - now > 60_000) {
+        tokenState.lastErrorCode = ""
         return tokenState.accessToken
     }
-    try {
-        const tokenResponse = await requestGoogleAccessToken({
-            clientId: getGoogleClientId(),
-            scope: DRIVE_UPLOAD_SCOPE,
-            prompt: forceRefresh ? "consent" : (tokenState.accessToken ? "" : "consent")
-        })
-        if (!tokenResponse?.accessToken) throw createExternalMediaError(ERROR_CODES.UNLINKED)
-        tokenState.accessToken = tokenResponse.accessToken
-        tokenState.expiresAt = now + (Math.max(1, Number(tokenResponse.expiresIn || 3600)) * 1000)
-        return tokenState.accessToken
-    } catch (error) {
-        throw createExternalMediaError(normalizeExternalMediaErrorCode(error), error)
+    if (!forceRefresh) {
+        tokenState.lastErrorCode = ERROR_CODES.UNLINKED
+        throw createExternalMediaError(ERROR_CODES.UNLINKED)
     }
+    if (tokenState.pendingPromise) return tokenState.pendingPromise
+    tokenState.pendingPromise = (async () => {
+        try {
+            const tokenResponse = await requestGoogleAccessToken({
+                clientId: getGoogleClientId(),
+                scope: DRIVE_UPLOAD_SCOPE,
+                prompt: tokenState.accessToken ? "" : "consent"
+            })
+            if (!tokenResponse?.accessToken) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+            tokenState.accessToken = tokenResponse.accessToken
+            tokenState.expiresAt = Date.now() + (Math.max(1, Number(tokenResponse.expiresIn || 3600)) * 1000)
+            tokenState.lastErrorCode = ""
+            return tokenState.accessToken
+        } catch (error) {
+            const normalizedErrorCode = normalizeExternalMediaErrorCode(error)
+            tokenState.expiresAt = 0
+            tokenState.lastErrorCode = normalizedErrorCode
+            throw createExternalMediaError(normalizedErrorCode, error)
+        } finally {
+            tokenState.pendingPromise = null
+        }
+    })()
+    return tokenState.pendingPromise
 }
 
 const ensureDrivePermission = async (fileId, accessToken) => {
@@ -189,24 +214,34 @@ const uploadBlob = async (blob, options = {}, attempt = 0) => {
     })
 
     if (response.status === 401 && attempt === 0) {
-        tokenState.accessToken = ""
         tokenState.expiresAt = 0
         return uploadBlob(blob, options, 1)
     }
 
     if (response.status === 401) {
+        tokenState.lastErrorCode = ERROR_CODES.UNLINKED
         throw createExternalMediaError(ERROR_CODES.UNLINKED)
     }
 
     if (!response.ok) {
+        tokenState.lastErrorCode = ERROR_CODES.SAVE_FAILED
         throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
     }
 
     const file = await response.json()
+    if (!file?.id) {
+        tokenState.lastErrorCode = ERROR_CODES.SAVE_FAILED
+        throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+    }
     await ensureDrivePermission(file.id, accessToken)
+    const publicUrl = normalizeDrivePublicUrl(file)
+    if (!/^https:\/\//i.test(publicUrl)) {
+        tokenState.lastErrorCode = ERROR_CODES.SAVE_FAILED
+        throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+    }
     return {
         ...file,
-        publicUrl: normalizeDrivePublicUrl(file.id)
+        publicUrl
     }
 }
 
@@ -397,6 +432,10 @@ const getInlineMediaSummary = (note) => {
 
 export const GoogleDriveMediaService = {
     providerId: "google-drive",
+    connect: async () => {
+        await getAccessToken(true)
+        return GoogleDriveMediaService.getStatus()
+    },
     uploadFile,
     uploadDataUrl,
     externalizeHtmlMedia,
@@ -409,9 +448,13 @@ export const GoogleDriveMediaService = {
     normalizeExternalMediaErrorCode,
     resolveUserFacingError,
     getStatus() {
+        const now = Date.now()
         return {
             providerId: "google-drive",
-            connected: !!getGoogleClientId()
+            configured: !!getGoogleClientId(),
+            connected: !!tokenState.accessToken && tokenState.expiresAt - now > 60_000,
+            pending: !!tokenState.pendingPromise,
+            errorCode: tokenState.lastErrorCode || ""
         }
     }
 }

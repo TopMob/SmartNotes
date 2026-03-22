@@ -123,6 +123,16 @@ Object.assign(UI, {
                                 <option value="50">50</option>
                             </select>
                         </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_external_storage || "Google Drive"}</span>
+                            <div class="settings-toggle-item" style="padding:0; background:none; border:0; gap:12px; align-items:center;">
+                                <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
+                                    <span id="settings-drive-status">${dict.drive_not_connected || "Not connected"}</span>
+                                    <span class="folder-meta">${dict.settings_external_storage_desc || "Connect Google Drive before inserting images"}</span>
+                                </div>
+                                <button type="button" id="settings-drive-connect" class="btn-secondary">${dict.drive_connect || "Connect"}</button>
+                            </div>
+                        </div>
                         <div class="settings-toggle-item">
                             <span>${dict.reduce_motion || "Reduce motion"}</span>
                             <label class="switch">
@@ -604,6 +614,32 @@ Object.assign(UI, {
                 this.syncSettingsUI()
             })
         }
+
+        const driveConnectButton = document.getElementById("settings-drive-connect")
+        if (driveConnectButton && !driveConnectButton.dataset.bound) {
+            driveConnectButton.dataset.bound = "1"
+            driveConnectButton.addEventListener("click", async () => {
+                const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+                const driveStatus = mediaService?.getStatus?.() || null
+                if (!mediaService?.connect || !driveStatus?.configured) {
+                    this.showToast(this.getText("external_storage_unavailable", "External disk is temporarily unavailable"))
+                    this.syncSettingsUI()
+                    return
+                }
+                this.syncSettingsUI()
+                try {
+                    await mediaService.connect()
+                    this.showToast(this.getText("drive_connected", "Google Drive connected"))
+                } catch (error) {
+                    const message = typeof this.resolveExternalMediaMessage === "function"
+                        ? this.resolveExternalMediaMessage(error, { attachmentOnly: true })
+                        : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
+                    this.showToast(message)
+                } finally {
+                    this.syncSettingsUI()
+                }
+            })
+        }
     },
     bindAppearanceBackgroundControls(root) {
         if (!root) return
@@ -1045,6 +1081,31 @@ Object.assign(UI, {
         if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
         const notesPerPageSelect = document.getElementById("settings-notes-per-page")
         if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 20)
+        const driveStatusElement = document.getElementById("settings-drive-status")
+        const driveConnectButton = document.getElementById("settings-drive-connect")
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const driveStatus = mediaService?.getStatus?.() || null
+        if (driveStatusElement) {
+            if (!driveStatus?.configured) {
+                driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")
+            } else if (driveStatus.pending) {
+                driveStatusElement.textContent = this.getText("drive_connecting", "Connecting...")
+            } else if (driveStatus.connected) {
+                driveStatusElement.textContent = this.getText("drive_connected", "Google Drive connected")
+            } else if (driveStatus.errorCode) {
+                driveStatusElement.textContent = typeof this.resolveExternalMediaMessage === "function"
+                    ? this.resolveExternalMediaMessage({ code: driveStatus.errorCode }, { attachmentOnly: true })
+                    : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
+            } else {
+                driveStatusElement.textContent = this.getText("drive_not_connected", "Not connected")
+            }
+        }
+        if (driveConnectButton) {
+            driveConnectButton.disabled = !driveStatus?.configured || !!driveStatus?.pending
+            driveConnectButton.textContent = driveStatus?.pending
+                ? this.getText("drive_connecting", "Connecting...")
+                : this.getText(driveStatus?.connected ? "drive_reconnect" : "drive_connect", driveStatus?.connected ? "Reconnect" : "Connect")
+        }
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },

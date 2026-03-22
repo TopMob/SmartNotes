@@ -173,11 +173,12 @@ export const createMediaHandlers = (context) => {
     }
 
     const insertMedia = (src, type) => {
-        if (type !== "image") return
+        const normalizedSource = String(src || "").trim()
+        if (type !== "image" || !/^https:\/\//i.test(normalizedSource) && !/^data:image\//i.test(normalizedSource)) return
         const id = Utils.generateId()
         const html = `
         <div class="media-wrapper media-draggable-item" id="${id}" contenteditable="false" draggable="true">
-            <img src="${Utils.escapeHtml(src)}" alt="">
+            <img src="${Utils.escapeHtml(normalizedSource)}" alt="">
             <span class="media-resize-handle" aria-hidden="true"></span>
         </div><br>
     `
