@@ -65,6 +65,7 @@ const UI = {
 
     applyLangToDom() {
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        document.documentElement.lang = StateStore.read().config.lang === "en" ? "en" : "ru"
         document.querySelectorAll("[data-lang]").forEach(el => {
             const k = el.getAttribute("data-lang")
             if (k && dict[k]) el.textContent = dict[k]

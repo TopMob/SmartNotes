@@ -44,7 +44,14 @@ const pickRuntimeBackgroundValue = (urlValue, localImageValue) => {
 }
 
 const getThemeDictionary = () => {
-    const currentLang = window.StateStore?.read?.().config?.lang
+    const stateLang = window.StateStore?.read?.().config?.lang
+    const persistedLang = window.SafeStorage?.local?.get?.("app-lang")
+    const documentLang = document.documentElement?.lang
+    const currentLang = stateLang === "en" || stateLang === "ru"
+        ? stateLang
+        : (persistedLang === "en" || persistedLang === "ru"
+            ? persistedLang
+            : (documentLang === "en" || documentLang === "ru" ? documentLang : "ru"))
     if (window.LANG?.[currentLang]) return window.LANG[currentLang]
     return window.LANG?.ru || {}
 }

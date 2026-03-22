@@ -342,6 +342,118 @@ export const createInputHandlers = (context) => {
         return block
     }
 
+
+    const getActiveListItem = (range) => {
+        const targetRange = range || getActiveRangeInContent()
+        if (!targetRange || !targetRange.collapsed) return null
+        let node = targetRange.startContainer
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+        const listItem = node?.closest("li")
+        if (!listItem || !elements.content?.contains(listItem)) return null
+        return listItem
+    }
+
+    const placeCaretAtStart = (node) => {
+        if (!node) return
+        const selection = window.getSelection()
+        if (!selection) return
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+        storeSelection()
+    }
+
+    const ensureEditableListItemContent = (listItem) => {
+        if (!listItem) return
+        const textContent = (listItem.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+        const hasMedia = !!listItem.querySelector("img,audio,video,table,hr")
+        if (!textContent && !hasMedia && !listItem.querySelector("br")) {
+            listItem.appendChild(document.createElement("br"))
+        }
+    }
+
+    const isListItemVisuallyEmpty = (listItem) => {
+        if (!listItem) return false
+        if (listItem.querySelector("img,audio,video,table,hr")) return false
+        const nestedList = listItem.querySelector("ul,ol")
+        if (nestedList && nestedList.parentElement === listItem) return false
+        return !(listItem.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+    }
+
+    const createEmptyParagraph = () => {
+        const paragraph = document.createElement("p")
+        paragraph.appendChild(document.createElement("br"))
+        return paragraph
+    }
+
+    const splitListForExit = (listItem) => {
+        const list = listItem?.parentElement
+        if (!list || !/^(UL|OL)$/.test(list.tagName)) return null
+        const trailingList = list.cloneNode(false)
+        let sibling = listItem.nextElementSibling
+        while (sibling) {
+            const nextSibling = sibling.nextElementSibling
+            trailingList.appendChild(sibling)
+            sibling = nextSibling
+        }
+        listItem.remove()
+        return {
+            list,
+            trailingList,
+            hasLeadingItems: list.children.length > 0,
+            hasTrailingItems: trailingList.children.length > 0
+        }
+    }
+
+    const exitCurrentListItem = (listItem) => {
+        const splitResult = splitListForExit(listItem)
+        if (!splitResult) return false
+        const paragraph = createEmptyParagraph()
+        if (splitResult.hasLeadingItems) {
+            splitResult.list.after(paragraph)
+            if (splitResult.hasTrailingItems) paragraph.after(splitResult.trailingList)
+        } else if (splitResult.hasTrailingItems) {
+            splitResult.list.replaceWith(paragraph)
+            paragraph.after(splitResult.trailingList)
+        } else {
+            splitResult.list.replaceWith(paragraph)
+        }
+        placeCaretAtStart(paragraph)
+        return true
+    }
+
+    const insertListItemBreak = (listItem, range) => {
+        if (!listItem || !range) return false
+        const splitRange = range.cloneRange()
+        splitRange.setEndAfter(listItem.lastChild || listItem)
+        const trailingContent = splitRange.extractContents()
+        const nextItem = document.createElement("li")
+        if (trailingContent.childNodes.length) {
+            nextItem.appendChild(trailingContent)
+        }
+        ensureEditableListItemContent(listItem)
+        ensureEditableListItemContent(nextItem)
+        listItem.after(nextItem)
+        placeCaretAtStart(nextItem)
+        return true
+    }
+
+    const handleListEnter = (event) => {
+        if (event.key !== "Enter") return
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+        const range = getActiveRangeInContent()
+        const listItem = getActiveListItem(range)
+        if (!listItem) return
+        event.preventDefault()
+        const handled = isListItemVisuallyEmpty(listItem)
+            ? exitCurrentListItem(listItem)
+            : insertListItemBreak(listItem, range)
+        if (!handled) return
+        queueSnapshot()
+    }
+
     const handleTagLineEnter = (event) => {
         if (event.key !== "Enter") return
         const block = getActiveBlock()
@@ -373,6 +485,7 @@ export const createInputHandlers = (context) => {
         addTag,
         removeTag,
         renderTags,
-        handleTagLineEnter
+        handleTagLineEnter,
+        handleListEnter
     }
 }
