@@ -427,7 +427,7 @@
 .splash {
     position: fixed;
     inset: 0;
-    z-index: 12000;
+    z-index: var(--z-splash);
     display: none;
     flex-direction: column;
     align-items: center;
@@ -465,6 +465,10 @@
     animation: spin 1s linear infinite;
 }
 
+.modal-overlay:is(#prompt-modal, #settings-modal, #feedback-menu-modal, #rate-modal, #poll-modal) {
+    z-index: var(--z-modal-elevated);
+}
+
 .load-more-notes {
     margin: 14px auto calc(14px + var(--safe-bottom));
     min-width: 180px;
@@ -477,14 +481,17 @@
 }
 
 #confirm-modal {
-    z-index: 14000;
+    z-index: var(--z-confirm);
 }
 
-#lock-modal,
 #lock-center-modal {
-    z-index: 13000;
+    z-index: var(--z-lock-center);
+}
+
+#lock-modal {
+    z-index: var(--z-lock-modal);
 }
 
 #note-actions-modal {
-    z-index: 13100;
+    z-index: var(--z-note-actions);
 }

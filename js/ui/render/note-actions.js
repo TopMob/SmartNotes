@@ -206,11 +206,9 @@ Object.assign(UI, {
         const note = this.resolveNoteById(noteId)
         if (!note) return
         if (note.lock?.hash) {
-            const verified = await new Promise(resolve => {
-                this.showPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"), async (value) => {
-                    resolve(await LockService.verify(note, value))
-                })
-            })
+            const password = await this.showPasswordPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"))
+            if (password == null) return
+            const verified = await LockService.verify(note, password)
             if (!verified) {
                 this.showToast(this.getText("lock_invalid_password", "Invalid password"))
                 return
@@ -226,21 +224,21 @@ Object.assign(UI, {
             this.closeModal("note-actions-modal")
             return
         }
-        this.showPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"), async (value) => {
-            const password = String(value || "").trim()
-            if (!password) {
-                this.showToast(this.getText("lock_password_empty", "Password is empty"))
-                return
-            }
-            const user = StateStore.read().user
-            if (!user || !db) return
-            const lockedNote = await LockService.setLock(note, password)
-            const ref = DataPath.getUserNotesCollection(user).doc(note.id)
-            await ref.update({ lock: lockedNote.lock || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-            StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: lockedNote.lock } : item))
-            this.showToast(this.getText("lock_hidden", "Note hidden"))
-            this.closeModal("note-actions-modal")
-        })
+        const password = await this.showPasswordPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"))
+        if (password == null) return
+        const normalizedPassword = String(password || "").trim()
+        if (!normalizedPassword) {
+            this.showToast(this.getText("lock_password_empty", "Password is empty"))
+            return
+        }
+        const user = StateStore.read().user
+        if (!user || !db) return
+        const lockedNote = await LockService.setLock(note, normalizedPassword)
+        const ref = DataPath.getUserNotesCollection(user).doc(note.id)
+        await ref.update({ lock: lockedNote.lock || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: lockedNote.lock } : item))
+        this.showToast(this.getText("lock_hidden", "Note hidden"))
+        this.closeModal("note-actions-modal")
     },
     async toggleSelectedPin(noteId) {
         if (!noteId) return

@@ -58,7 +58,7 @@ body.platform-android .sidebar-glass {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 1900;
+    z-index: var(--z-sidebar-overlay);
     display: none;
 }
 
@@ -276,7 +276,7 @@ body.platform-android .top-bar {
     box-shadow: var(--shadow-lg);
     padding: 10px;
     display: none;
-    z-index: 1200;
+    z-index: var(--z-dropdown);
     backdrop-filter: blur(var(--blur-strength));
 }
 

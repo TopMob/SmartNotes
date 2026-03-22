@@ -932,11 +932,9 @@ export const EditorAPI = (() => {
             }
         }
         if (note.lock && note.lock.hash) {
-            const verified = await new Promise(resolve => {
-                UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
-                    resolve(await LockService.verify(note, val))
-                })
-            })
+            const password = await UI.showPasswordPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"))
+            if (password == null) return
+            const verified = await LockService.verify(note, password)
             if (!verified) {
                 UI.showToast(UI.getText("lock_invalid_password", "Invalid password"))
                 return

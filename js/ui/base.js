@@ -55,6 +55,25 @@ const UI = {
         return !!element?.closest?.("#login-screen")
     },
 
+    prepareProtectedInput(element, mode = "text") {
+        if (!element) return null
+        const normalizedMode = mode === "password" ? "password" : "text"
+        element.setAttribute("data-lpignore", "true")
+        element.setAttribute("data-1p-ignore", "true")
+        element.setAttribute("data-form-type", "other")
+        element.setAttribute("autocapitalize", "off")
+        element.setAttribute("autocorrect", "off")
+        element.setAttribute("spellcheck", "false")
+        element.setAttribute("inputmode", "text")
+        element.setAttribute("autocomplete", normalizedMode === "password" ? "new-password" : "off")
+        element.setAttribute("name", `smartnotes_${normalizedMode}_${Date.now()}`)
+        element.readOnly = true
+        requestAnimationFrame(() => {
+            element.readOnly = false
+        })
+        return element
+    },
+
     applyInputAutocompletePolicy(root = document) {
         const scope = root && typeof root.querySelectorAll === "function" ? root : document
         scope.querySelectorAll("input, textarea").forEach(element => {
@@ -62,19 +81,17 @@ const UI = {
             const tagName = element.tagName.toLowerCase()
             const inputType = String(element.getAttribute("type") || "text").toLowerCase()
             if (inputType === "hidden") return
-            element.setAttribute("data-lpignore", "true")
-            element.setAttribute("data-1p-ignore", "true")
-            element.setAttribute("autocapitalize", "off")
             if (tagName === "textarea") {
+                this.prepareProtectedInput(element, "text")
                 element.setAttribute("autocomplete", "off")
                 return
             }
             if (inputType === "password") {
-                element.setAttribute("autocomplete", "one-time-code")
-                element.setAttribute("inputmode", "text")
+                this.prepareProtectedInput(element, "password")
                 return
             }
             if (!["checkbox", "radio", "range", "file", "button", "submit", "color"].includes(inputType)) {
+                this.prepareProtectedInput(element, "text")
                 element.setAttribute("autocomplete", "off")
             }
         })

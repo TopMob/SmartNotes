@@ -16,6 +16,7 @@ Object.assign(UI, {
         const el = document.getElementById(id)
         if (!el) return
         el.classList.remove("active")
+        el.dispatchEvent(new CustomEvent("smartnotes:modal-closed", { detail: { id } }))
         if (id === "settings-modal") {
             const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
             if (pendingTimerId) {
@@ -980,6 +981,53 @@ Object.assign(UI, {
 
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)
+    },
+
+    showPasswordPrompt(title, placeholder) {
+        const modal = document.getElementById("lock-modal")
+        const input = document.getElementById("lock-password")
+        const ok = document.getElementById("lock-apply")
+        const titleEl = modal?.querySelector("[data-lang='lock_title']")
+        if (!modal || !input || !ok || !titleEl) return Promise.resolve(null)
+
+        titleEl.textContent = title
+        input.value = ""
+        input.placeholder = placeholder
+        this.prepareProtectedInput(input, "password")
+
+        return new Promise(resolve => {
+            const handleModalClosed = () => finish(null)
+            const finish = (value) => {
+                modal.classList.remove("active")
+                modal.removeEventListener("smartnotes:modal-closed", handleModalClosed)
+                input.onkeydown = null
+                ok.onclick = null
+                resolve(value)
+            }
+
+            const submit = () => {
+                finish(String(input.value || ""))
+            }
+
+            ok.onclick = submit
+            input.onkeydown = event => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                submit()
+            }
+            modal.addEventListener("smartnotes:modal-closed", handleModalClosed)
+
+            modal.classList.add("active")
+            setTimeout(() => {
+                this.prepareProtectedInput(input, "password")
+                input.focus()
+            }, 80)
+
+            const cancelButtons = modal.querySelectorAll('[data-action="close-modal"][data-modal="lock-modal"]')
+            cancelButtons.forEach(button => {
+                button.onclick = () => finish(null)
+            })
+        })
     },
 
     syncSettingsUI() {

@@ -89,11 +89,9 @@ Object.assign(UI, {
         if (!id) return
         const note = StateStore.read().notes.find(n => n.id === id)
         if (!note || !note.lock?.hash) return
-        const verified = await new Promise(resolve => {
-            this.showPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"), async (val) => {
-                resolve(await LockService.verify(note, val))
-            })
-        })
+        const password = await this.showPasswordPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"))
+        if (password == null) return
+        const verified = await LockService.verify(note, password)
         if (!verified) {
             this.showToast(this.getText("lock_invalid_password", "Invalid password"))
             return
@@ -118,11 +116,9 @@ Object.assign(UI, {
         if (!id) return
         const note = StateStore.read().notes.find(n => n.id === id)
         if (!note || !note.lock?.hash) return
-        const verified = await new Promise(resolve => {
-            this.showPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"), async (val) => {
-                resolve(await LockService.verify(note, val))
-            })
-        })
+        const password = await this.showPasswordPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"))
+        if (password == null) return
+        const verified = await LockService.verify(note, password)
         if (!verified) {
             this.showToast(this.getText("lock_invalid_password", "Invalid password"))
             return

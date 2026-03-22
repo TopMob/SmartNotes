@@ -31,12 +31,22 @@
     --motion-enabled: 1;
     --animation-duration: 0.3s;
 
-    --z-sidebar: 2000;
+    --z-floating: 900;
     --z-header: 1500;
+    --z-sidebar-overlay: 1900;
+    --z-sidebar: 2000;
+    --z-dropdown: 2200;
     --z-editor: 2500;
+    --z-editor-floating: 2600;
     --z-modal: 3000;
+    --z-modal-elevated: 3200;
+    --z-splash: 12000;
+    --z-note-actions: 13100;
+    --z-lock-center: 13200;
+    --z-lock-modal: 13300;
+    --z-confirm: 14000;
     --z-voice: 5000;
-    --z-toast: 10000;
+    --z-toast: 15000;
 
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 20px);

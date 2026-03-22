@@ -45,7 +45,7 @@
     align-items: center;
     justify-content: center;
     box-shadow: var(--shadow-lg);
-    z-index: 900;
+    z-index: var(--z-floating);
     transition: transform var(--animation-duration) var(--ease-out);
 }
 
