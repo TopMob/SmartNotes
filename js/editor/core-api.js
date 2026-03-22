@@ -164,6 +164,12 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+    const resolveExternalMediaMessage = (error, options = {}) => {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
+    }
+
     const AI_ANALYSIS_VERSION = 1
 
     const hasAiRelevantChanges = (previousNote, nextNote) => {
@@ -310,9 +316,15 @@ export const EditorAPI = (() => {
             return
         }
 
-        if (window.GoogleDriveMediaService?.getInlineMediaSummary?.(note)?.hasInlineMedia) {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const hasInlineMedia = mediaService?.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || "")) || (Array.isArray(note.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || ""))))
+        if (hasInlineMedia) {
+            if (!mediaService) {
+                UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
+                return
+            }
             try {
-                const mediaResult = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
+                const mediaResult = await mediaService.externalizeNoteMedia(note, {
                     fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note", "note") || "note"
                 })
                 note = NoteIO.normalizeNote({
@@ -324,14 +336,13 @@ export const EditorAPI = (() => {
                     StateStore.update("currentNote", note)
                     renderState()
                 }
+                if (mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || "")) || (Array.isArray(note.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || ""))))) {
+                    throw new Error("external-inline-media-blocked")
+                }
             } catch (error) {
                 const errorCode = String(error?.message || error?.code || "")
-                if (errorCode === "drive-offline") {
-                    UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
-                    return
-                }
-                if (errorCode.startsWith("drive-")) {
-                    UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
+                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
                     return
                 }
                 throw error
@@ -579,10 +590,8 @@ export const EditorAPI = (() => {
                     targetElement.value = ""
                 } catch (error) {
                     const errorCode = error?.code || error?.message || "unknown"
-                    if (String(errorCode) === "drive-offline") {
-                        UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
-                    } else if (String(errorCode).startsWith("drive-")) {
-                        UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                    if (String(errorCode).includes("external-") || String(errorCode).startsWith("drive-")) {
+                        UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
                     } else {
                         UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
                     }

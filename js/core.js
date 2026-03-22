@@ -45,6 +45,7 @@ window.Validators = {
 }
 window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
 window.GoogleDriveMediaService = GoogleDriveMediaService
+window.ExternalMediaService = GoogleDriveMediaService
 
 const firebaseRuntimeSources = [
     {

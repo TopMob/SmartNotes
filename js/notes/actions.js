@@ -48,11 +48,12 @@ const getNoteReference = (note, user) => {
     return DataPath.getUserNotesCollection(user).doc(note.id)
 }
 
-function openNoteActions(noteId) {
+function openNoteActions(noteId, options = {}) {
     const note = UI.resolveNoteById(noteId)
     const currentNoteId = StateStore.read().currentNote?.id || ""
     const allowHiddenCurrentNote = !!note && isHiddenLocked(note) && currentNoteId === note.id
-    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote)) return false
+    const allowHiddenFromActionMenu = !!note && isHiddenLocked(note) && options.allowLocked === true
+    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote && !allowHiddenFromActionMenu)) return false
     const modalElement = document.getElementById("note-actions-modal")
     const contentElement = document.getElementById("note-actions-content")
     if (!modalElement || !contentElement) return false

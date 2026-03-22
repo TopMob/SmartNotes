@@ -27,8 +27,13 @@ Object.assign(UI, {
             return `
                 <div class="lock-center-card" data-note-id="${id}">
                     <div class="lock-center-header">
-                        <div class="lock-center-title">${dict.lock_center_masked_title || "Protected note"}</div>
-                        <div class="lock-center-meta">${Utils.formatDate(note.updatedAt || note.createdAt || Date.now())}</div>
+                        <div>
+                            <div class="lock-center-title">${dict.lock_center_masked_title || "Protected note"}</div>
+                            <div class="lock-center-meta">${Utils.formatDate(note.updatedAt || note.createdAt || Date.now())}</div>
+                        </div>
+                        <button type="button" class="btn-icon" data-action="lock-note-menu" data-note-id="${id}" aria-label="${dict.note_actions || "Actions"}">
+                            <i class="material-icons-round" aria-hidden="true">more_horiz</i>
+                        </button>
                     </div>
                     <div class="lock-center-preview">${randomText()}</div>
                     <div class="lock-center-actions">

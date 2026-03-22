@@ -16,6 +16,8 @@ const createBaseWindow = () => {
         <div id="active-folder-menu-wrapper"></div>
         <div id="note-editor"><button id="editor-actions" data-action="editor-note-actions"></button></div>
         <div id="grid"></div>
+        <div id="lock-center-list"></div>
+        <div id="lock-center-empty"></div>
     </body></html>`, { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
     const { window } = dom
     window.console = console
@@ -197,6 +199,7 @@ const createBaseWindow = () => {
     window.Auth = { login() {}, loginWithEmail() {}, logout() {}, switchAccount() {} }
     window.LANG = { en: {}, ru: {} }
     window.isHiddenLocked = note => !!note?.lock?.hidden
+    window.getLockedNotes = () => window.StateStore.state.notes.filter(note => note?.lock?.hidden)
     return window
 }
 
@@ -327,6 +330,87 @@ test('prepareExportNotes removes inline media and NoteExport payload keeps notes
     assert.equal(Array.isArray(payload.folders), true)
     assert.equal(payload.notes.length, 1)
     assert.equal(payload.folders.length, 1)
+})
+
+test('lock center three dots opens shared note actions modal for hidden notes', async () => {
+    const window = createBaseWindow()
+    const hiddenNote = { id: 'hidden-2', title: 'Secret', content: '<p>Body</p>', lock: { hidden: true } }
+    window.StateStore.state.notes = [hiddenNote]
+    window.StateStore.state.currentNote = null
+
+    await loadWindowScript(window, 'js/ui.settings.js')
+    await loadWindowScript(window, 'js/ui/layout.js')
+    await loadWindowScript(window, 'js/notes/actions.js')
+    await loadWindowScript(window, 'js/ui/render/lock.js')
+    await loadWindowScript(window, 'js/ui/events.js')
+
+    window.UI.bindEvents()
+    window.UI.renderLockCenter()
+    window.document.querySelector('[data-action="lock-note-menu"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+
+    assert.equal(window.document.getElementById('note-actions-modal').classList.contains('active'), true)
+    assert.match(window.document.getElementById('note-actions-content').innerHTML, /ready/)
+})
+
+test('import strips inline media when external storage service is unavailable', async () => {
+    const window = createBaseWindow()
+    await loadWindowScript(window, 'js/ui/layout.js')
+
+    const result = await window.UI.normalizeImportedNoteMedia({
+        id: 'legacy-note',
+        content: '<p>Text before</p><img src="data:image/png;base64,AAA">',
+        pageDrawings: ['data:image/png;base64,AAA']
+    })
+
+    assert.equal(/data:image\//.test(result.note.content), false)
+    assert.equal(result.note.pageDrawings.length, 0)
+    assert.equal(result.failedMediaCount > 0, true)
+})
+
+test('html paste with inline media is blocked when external storage is unavailable', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="editor" contenteditable="true"></div></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    window.UI = {
+        getText(_key, fallback) {
+            return fallback
+        },
+        showToast(message) {
+            window.__lastToast = message
+        }
+    }
+    window.Utils = {
+        sanitizeHtml(value) {
+            return String(value || '')
+        }
+    }
+    window.document.getSelection = () => ({ removeAllRanges() {}, addRange() {} })
+
+    await loadWindowScript(window, 'js/editor/core-input.js', source => source.replace('export const createInputHandlers =', 'window.createInputHandlers ='))
+
+    const handlers = window.createInputHandlers({
+        elements: { content: window.document.getElementById('editor') },
+        state: {},
+        queueSnapshot() {},
+        fileToDataUrl: async () => 'https://drive.test/file',
+        insertMedia() {},
+        restoreSelection() { return null },
+        confirmEquationAtCaret() { return false }
+    })
+
+    await handlers.handlePaste({
+        preventDefault() {},
+        clipboardData: {
+            items: [],
+            getData(type) {
+                if (type === 'text/html') return '<p><img src="data:image/png;base64,AAA"></p>'
+                return ''
+            }
+        }
+    })
+
+    assert.equal(window.document.getElementById('editor').innerHTML, '')
+    assert.match(window.__lastToast, /attachment unavailable|вложение недоступно/i)
 })
 
 test('google drive media service externalizes inline media and caches repeated uploads', async () => {

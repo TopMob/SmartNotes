@@ -49,10 +49,11 @@ export const createMediaHandlers = (context) => {
             reader.readAsDataURL(file)
         })
         const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
-        if (!window.GoogleDriveMediaService) {
-            throw new Error("drive-unavailable")
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        if (!mediaService) {
+            throw new Error("external-storage-unlinked")
         }
-        return window.GoogleDriveMediaService.uploadDataUrl(optimizedImageDataUrl, {
+        return mediaService.uploadDataUrl(optimizedImageDataUrl, {
             fileNameBase: file?.name || "note_image"
         })
     }

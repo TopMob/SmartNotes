@@ -58,6 +58,12 @@ export const createInputHandlers = (context) => {
         return container.innerHTML
     }
 
+    const resolveExternalMediaMessage = (error, options = {}) => {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
+    }
+
     const createFragmentFromHtml = (html) => {
         const template = document.createElement("template")
         template.innerHTML = html
@@ -100,12 +106,9 @@ export const createInputHandlers = (context) => {
                 const url = await fileToDataUrl(file)
                 insertMedia(url, "image")
             } catch (error) {
-                if (String(error?.message || "") === "drive-offline") {
-                    UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
-                    return
-                }
-                if (String(error?.message || "").startsWith("drive-")) {
-                    UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
+                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
                     return
                 }
                 throw error
@@ -119,17 +122,23 @@ export const createInputHandlers = (context) => {
         const normalizedHtml = html ? normalizePastedHtml(html) : ""
         const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
         let preparedHtml = sanitizedHtml
-        if (preparedHtml && window.GoogleDriveMediaService) {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const hasInlineMedia = /data:(image|audio)\//i.test(preparedHtml)
+        if (preparedHtml && hasInlineMedia && !mediaService) {
+            UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
+            return
+        }
+        if (preparedHtml && mediaService) {
             try {
-                const externalizedResult = await window.GoogleDriveMediaService.externalizeHtmlMedia(preparedHtml, { fileNameBase: "pasted_media" })
+                const externalizedResult = await mediaService.externalizeHtmlMedia(preparedHtml, { fileNameBase: "pasted_media" })
                 preparedHtml = externalizedResult.html
-            } catch (error) {
-                if (String(error?.message || "") === "drive-offline") {
-                    UI.showToast(UI.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
-                    return
+                if (mediaService.containsInlineMedia?.(preparedHtml)) {
+                    throw new Error("external-inline-media-blocked")
                 }
-                if (String(error?.message || "").startsWith("drive-")) {
-                    UI.showToast(UI.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+            } catch (error) {
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
+                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
                     return
                 }
                 throw error

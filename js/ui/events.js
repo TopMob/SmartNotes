@@ -504,6 +504,11 @@ Object.assign(UI, {
                 e.stopPropagation()
                 this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""))
                 break
+            case "lock-note-menu":
+                e.preventDefault()
+                e.stopPropagation()
+                this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""), { allowLocked: true })
+                break
             case "note-pin-toggle":
                 this.toggleSelectedPin(decodeURIComponent(el.dataset.noteId || ""))
                 break

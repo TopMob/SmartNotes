@@ -29,6 +29,12 @@ Object.assign(UI, {
         input.click()
     },
 
+    resolveExternalMediaMessage(error, options = {}) {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        return this.getText(descriptor.messageKey, descriptor.fallbackMessage)
+    },
+
     normalizeImportedDate(inputValue) {
         const timestampType = firebase?.firestore?.Timestamp
         if (timestampType && typeof inputValue?.toDate === "function") return inputValue
@@ -87,15 +93,20 @@ Object.assign(UI, {
     },
 
     async normalizeImportedNoteMedia(note) {
-        if (!window.GoogleDriveMediaService) {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const inlineSummary = mediaService?.getInlineMediaSummary?.(note) || {
+            hasInlineMedia: /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))),
+            count: (String(note?.content || "").match(/data:(image|audio)\//gi) || []).length + ((Array.isArray(note?.pageDrawings) ? note.pageDrawings : []).filter(item => /data:(image|audio)\//i.test(String(item || ""))).length)
+        }
+        if (!mediaService) {
+            const sanitizedContent = String(note?.content || "").replace(/<img[^>]+src=["']data:(?:image|audio)[^>]*>/gi, "").replace(/<audio[^>]*>[\s\S]*?<\/audio>/gi, "")
             return {
-                note: NoteIO.normalizeNote(note),
-                hadInlineMedia: false,
-                failedMediaCount: 0
+                note: NoteIO.normalizeNote({ ...note, content: sanitizedContent, pageDrawings: [] }),
+                hadInlineMedia: !!inlineSummary.hasInlineMedia,
+                failedMediaCount: inlineSummary.hasInlineMedia ? Math.max(1, Number(inlineSummary.count || 0)) : 0
             }
         }
-        const inlineSummary = window.GoogleDriveMediaService.getInlineMediaSummary?.(note) || { hasInlineMedia: false }
-        const normalizedResult = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
+        const normalizedResult = await mediaService.externalizeNoteMedia(note, {
             fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "imported_note", "imported_note") || "imported_note",
             mode: "best-effort"
         })
@@ -171,9 +182,8 @@ Object.assign(UI, {
                 const result = await this.buildImportedNote(rawNote, ownerUid, folderIdMap)
                 if (result?.note) importResults.push(result)
             } catch (error) {
-                const errorCode = String(error?.message || "")
-                if (errorCode === "drive-offline") throw error
-                if (errorCode.startsWith("drive-")) {
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
                     const fallbackNote = await this.buildImportedNote({
                         ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
                         content: Utils.sanitizeHtml(Utils.stripHtml(String(rawNote?.content || rawNote?.body || rawNote?.text || ""))),
@@ -196,6 +206,13 @@ Object.assign(UI, {
 
     async saveImportedNotes(user, importedNotes) {
         const notes = Array.isArray(importedNotes) ? importedNotes : []
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const hasInlineMedia = mediaService
+            ? notes.some(note => mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia)
+            : notes.some(note => /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))))
+        if (hasInlineMedia) {
+            throw new Error(mediaService ? "external-inline-media-blocked" : "external-storage-unlinked")
+        }
         const chunkSize = 450
         for (let index = 0; index < notes.length; index += chunkSize) {
             const batch = db.batch()
@@ -278,18 +295,15 @@ Object.assign(UI, {
                 await this.saveImportedNotes(current.user, notesToImport)
                 const importSummary = this.buildImportResultSummary(importResults)
                 if (importSummary.failedMediaCount > 0) {
-                    this.showToast(`${this.getText("import_success", "Imported")}. ${this.getText("drive_upload_failed", "Unable to upload attachment to Google Drive")}`)
+                    this.showToast(`${this.getText("import_success", "Imported")}. ${this.resolveExternalMediaMessage(new Error("external-attachment-save-failed"), { attachmentOnly: true })}`)
                     return
                 }
                 this.showToast(this.getText("import_success", "Imported"))
             } catch (error) {
                 console.error("Import failed", error)
-                if (String(error?.message || "") === "drive-offline") {
-                    this.showToast(this.getText("drive_upload_required", "Attachments are stored only through Google Drive"))
-                    return
-                }
-                if (String(error?.message || "").includes("drive-")) {
-                    this.showToast(this.getText("drive_upload_failed", "Unable to upload attachment to Google Drive"))
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.includes("drive-")) {
+                    this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
                     return
                 }
                 this.showToast(this.getText("import_failed", "Import failed"))
@@ -319,13 +333,19 @@ Object.assign(UI, {
 
     async prepareExportNotes(notes) {
         const exportableNotes = Array.isArray(notes) ? notes : []
-        if (!window.GoogleDriveMediaService) return exportableNotes
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        if (!mediaService) {
+            if (exportableNotes.some(note => /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))))) {
+                throw new Error("external-storage-unlinked")
+            }
+            return exportableNotes
+        }
         return Promise.all(exportableNotes.map(async note => {
-            const prepared = await window.GoogleDriveMediaService.externalizeNoteMedia(note, {
+            const prepared = await mediaService.externalizeNoteMedia(note, {
                 fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note_export", "note_export") || "note_export"
             })
             const normalizedNote = NoteIO.normalizeNote(prepared.note)
-            if (window.GoogleDriveMediaService.getInlineMediaSummary?.(normalizedNote)?.hasInlineMedia) {
+            if (mediaService.getInlineMediaSummary?.(normalizedNote)?.hasInlineMedia) {
                 throw new Error("drive-upload-failed:export-inline-media")
             }
             return normalizedNote
@@ -364,7 +384,7 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
-            this.showToast(this.getText(String(error?.message || "") === "drive-offline" ? "drive_upload_required" : "drive_upload_failed", String(error?.message || "") === "drive-offline" ? "Attachments are stored only through Google Drive" : "Unable to upload attachment to Google Drive"))
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }
     },
@@ -383,7 +403,7 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
-            this.showToast(this.getText(String(error?.message || "") === "drive-offline" ? "drive_upload_required" : "drive_upload_failed", String(error?.message || "") === "drive-offline" ? "Attachments are stored only through Google Drive" : "Unable to upload attachment to Google Drive"))
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }
     },
@@ -393,7 +413,7 @@ Object.assign(UI, {
         if (!normalizedNoteId) return false
         const opener = typeof window.openNoteActions === "function" ? window.openNoteActions : null
         if (!opener) return false
-        opener(normalizedNoteId)
+        opener(normalizedNoteId, options)
         const modalElement = document.getElementById("note-actions-modal")
         const contentElement = document.getElementById("note-actions-content")
         const isVisible = !!modalElement && modalElement.classList.contains("active") && !modalElement.classList.contains("hidden") && document.body.contains(modalElement)
