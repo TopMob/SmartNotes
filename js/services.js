@@ -35,6 +35,91 @@ const buildPageDrawingsRevision = (pageDrawings) => {
     return `pdr:${drawings.length}:${hash >>> 0}`
 }
 
+const IMPORT_NOTE_CONTAINER_KEYS = ["note", "notes", "items", "entries", "documents", "data", "payload", "result"]
+
+const extractImportContent = (source) => {
+    const contentCandidates = [source?.content, source?.body, source?.text, source?.html, source?.description]
+    for (const candidate of contentCandidates) {
+        if (typeof candidate === "string") return candidate
+    }
+    return ""
+}
+
+const extractImportTags = (source) => {
+    const tagCandidates = [source?.tags, source?.labels, source?.keywords]
+    for (const candidate of tagCandidates) {
+        if (Array.isArray(candidate)) return candidate
+        if (typeof candidate === "string") {
+            return candidate.split(",").map(value => value.trim()).filter(Boolean)
+        }
+    }
+    return []
+}
+
+const extractImportPageTitles = (source) => {
+    if (Array.isArray(source?.pageTitles)) return source.pageTitles
+    if (!Array.isArray(source?.pages)) return []
+    return source.pages.map(page => {
+        if (!page || typeof page !== "object") return ""
+        return typeof page.title === "string" ? page.title : ""
+    })
+}
+
+const extractImportPageDrawings = (source) => {
+    if (Array.isArray(source?.pageDrawings)) return source.pageDrawings
+    if (!Array.isArray(source?.pages)) return []
+    return source.pages.map(page => {
+        if (!page || typeof page !== "object") return ""
+        const drawingCandidates = [page.drawing, page.canvas, page.image, page.pageDrawing]
+        for (const candidate of drawingCandidates) {
+            if (typeof candidate === "string") return candidate
+        }
+        return ""
+    })
+}
+
+const looksLikeImportedNote = (source) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return false
+    if (typeof source.title === "string" || typeof source.name === "string") return true
+    if (typeof extractImportContent(source) === "string" && extractImportContent(source).length > 0) return true
+    if (extractImportTags(source).length > 0) return true
+    if (extractImportPageTitles(source).length > 0) return true
+    return extractImportPageDrawings(source).length > 0
+}
+
+const normalizeImportedRawNote = (source) => {
+    const safe = source && typeof source === "object" ? source : {}
+    return {
+        ...safe,
+        title: typeof safe.title === "string" ? safe.title : (typeof safe.name === "string" ? safe.name : ""),
+        content: extractImportContent(safe),
+        tags: extractImportTags(safe),
+        pageTitles: extractImportPageTitles(safe),
+        pageDrawings: extractImportPageDrawings(safe),
+        createdAt: safe.createdAt ?? safe.created_at ?? safe.created ?? null,
+        updatedAt: safe.updatedAt ?? safe.updated_at ?? safe.updated ?? safe.modifiedAt ?? safe.modified_at ?? null
+    }
+}
+
+const collectImportedNotes = (payload, visited = new Set()) => {
+    if (!payload || visited.has(payload)) return []
+    if (typeof payload === "object") visited.add(payload)
+    if (Array.isArray(payload)) {
+        return payload.flatMap(item => collectImportedNotes(item, visited))
+    }
+    if (looksLikeImportedNote(payload)) {
+        return [normalizeImportedRawNote(payload)]
+    }
+    if (payload && typeof payload === "object") {
+        for (const key of IMPORT_NOTE_CONTAINER_KEYS) {
+            if (!(key in payload)) continue
+            const nested = collectImportedNotes(payload[key], visited)
+            if (nested.length) return nested
+        }
+    }
+    return []
+}
+
 const NoteIO = {
     toTimestampMillis(dateValue) {
         if (dateValue === null || dateValue === undefined || dateValue === "") return 0
@@ -84,7 +169,7 @@ const NoteIO = {
     },
 
     normalizeNote(raw) {
-        const safe = raw && typeof raw === "object" ? raw : {}
+        const safe = normalizeImportedRawNote(raw)
         const tags = Array.isArray(safe.tags)
             ? [...new Set(safe.tags.filter(value => value && typeof value === "string").map(value => value.trim()))]
             : []
@@ -194,14 +279,7 @@ const NoteIO = {
     },
 
     parseImport(parsed) {
-        if (!parsed) return []
-        if (parsed.note) return [this.normalizeNote(parsed.note)]
-        if (Array.isArray(parsed.notes)) return parsed.notes.map(n => this.normalizeNote(n))
-        if (Array.isArray(parsed)) return parsed.map(n => this.normalizeNote(n))
-        if (typeof parsed === "object" && (parsed.title || parsed.content || parsed.tags || parsed.pageTitles || parsed.pageDrawings)) {
-            return [this.normalizeNote(parsed)]
-        }
-        return []
+        return collectImportedNotes(parsed).map(note => this.normalizeNote(note))
     },
 
     fileNameFor(note) {
