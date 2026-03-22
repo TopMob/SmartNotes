@@ -28,6 +28,9 @@ const getGoogleClientId = () => String(window.auth?.app?.options?.clientId || fi
 const normalizeDrivePublicUrl = (file) => {
     const fileId = typeof file === "string" ? file : String(file?.id || "").trim()
     const webContentLink = typeof file?.webContentLink === "string" ? file.webContentLink.trim() : ""
+    if (String(file?.mimeType || "").toLowerCase().startsWith("image/") && fileId) {
+        return `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}`
+    }
     if (/^https:\/\//i.test(webContentLink)) return webContentLink
     if (!fileId) return ""
     return `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download`

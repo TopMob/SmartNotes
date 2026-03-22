@@ -24,6 +24,8 @@ const createBaseWindow = () => {
     const { window } = dom
     window.console = console
     window.matchMedia = () => ({ matches: true, addListener() {}, removeListener() {} })
+    window.requestAnimationFrame = callback => setTimeout(() => callback(Date.now()), 0)
+    window.cancelAnimationFrame = timerId => clearTimeout(timerId)
     window.UI = {
         els: {
             grid: window.document.getElementById('grid'),
@@ -50,10 +52,6 @@ const createBaseWindow = () => {
         },
         showToast(message) {
             window.__lastToast = message
-        },
-        renderNoteActions(noteId) {
-            const root = window.document.getElementById('note-actions-content')
-            root.innerHTML = `<button data-note-id="${noteId}">ready</button>`
         },
         resolveNoteById(noteId) {
             const state = window.StateStore.read()
@@ -212,14 +210,11 @@ test('openNoteActions resolves notes even before note-actions renderer script lo
     window.StateStore.state.currentNote = null
 
     await loadUiBaseScript(window)
+    await loadWindowScript(window, 'js/ui/layout.js')
     window.UI.openModal = id => {
         const element = window.document.getElementById(id)
         element?.classList.add('active')
         return !!element
-    }
-    window.UI.renderNoteActions = noteId => {
-        const root = window.document.getElementById('note-actions-content')
-        root.innerHTML = `<button data-note-id="${noteId}">ready</button>`
     }
     window.UI.showToast = message => {
         window.__lastToast = message
@@ -230,7 +225,8 @@ test('openNoteActions resolves notes even before note-actions renderer script lo
     const opened = window.openNoteActions('note-base')
     assert.equal(opened, true)
     assert.equal(window.UI.currentNoteActionId, 'note-base')
-    assert.match(window.document.getElementById('note-actions-content').innerHTML, /ready/)
+    assert.equal(typeof window.UI.renderNoteActions, 'function')
+    assert.match(window.document.getElementById('note-actions-content').innerHTML, /note-copy-text/)
 })
 
 test('note actions chain opens modal from card and editor entry points', async () => {
@@ -250,7 +246,7 @@ test('note actions chain opens modal from card and editor entry points', async (
 
     grid.querySelector('[data-action="note-menu"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     assert.equal(window.document.getElementById('note-actions-modal').classList.contains('active'), true)
-    assert.match(window.document.getElementById('note-actions-content').innerHTML, /ready/)
+    assert.match(window.document.getElementById('note-actions-content').innerHTML, /note-copy-text/)
     assert.equal(window.UI.currentNoteActionId, 'note-1')
 
     window.UI.closeModal('note-actions-modal')
@@ -379,7 +375,7 @@ test('lock center three dots opens shared note actions modal for hidden notes', 
     window.document.querySelector('[data-action="lock-note-menu"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
 
     assert.equal(window.document.getElementById('note-actions-modal').classList.contains('active'), true)
-    assert.match(window.document.getElementById('note-actions-content').innerHTML, /ready/)
+    assert.match(window.document.getElementById('note-actions-content').innerHTML, /note-copy-text/)
 })
 
 test('import strips inline media when external storage service is unavailable', async () => {
@@ -499,7 +495,7 @@ test('google drive media service requires explicit connect and externalizes inli
     const result = await window.GoogleDriveMediaService.externalizeNoteMedia(note)
     assert.equal(/data:image\//.test(result.note.content), false)
     assert.equal(/data:image\//.test(result.note.pageDrawings[0]), false)
-    assert.match(result.note.content, /https:\/\/drive\.google\.com\/uc\?id=file-1(?:&|&amp;)export=download/)
+    assert.match(result.note.content, /https:\/\/lh3\.googleusercontent\.com\/d\/file-1/)
     assert.equal(uploadCalls, 1)
     assert.equal(permissionCalls, 1)
 })
