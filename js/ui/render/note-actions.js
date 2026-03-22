@@ -132,7 +132,7 @@ Object.assign(UI, {
     },
 
     renderNoteActions(noteId) {
-        const note = StateStore.read().notes.find(n => n.id === noteId)
+        const note = this.resolveNoteById(noteId)
         const root = document.getElementById("note-actions-content")
         if (!note || !root) return
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
@@ -197,12 +197,13 @@ Object.assign(UI, {
                 </button>
             </div>
         `
+        this.applyInputAutocompletePolicy(root)
     },
 
 
     async toggleSelectedLock(noteId) {
         if (!noteId) return
-        const note = StateStore.read().notes.find(item => item.id === noteId)
+        const note = this.resolveNoteById(noteId)
         if (!note) return
         if (note.lock?.hash) {
             const verified = await new Promise(resolve => {
@@ -249,7 +250,7 @@ Object.assign(UI, {
 
     async toggleSelectedArchive(noteId) {
         if (!noteId) return
-        const note = StateStore.read().notes.find(n => n.id === noteId)
+        const note = this.resolveNoteById(noteId)
         if (!note) return
         await toggleArchive(noteId, !note.isArchived)
         this.closeModal("note-actions-modal")
@@ -265,7 +266,7 @@ Object.assign(UI, {
     },
 
     downloadSelectedNote() {
-        const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
+        const note = this.resolveNoteById(this.currentNoteActionId)
         if (!note) return
         if (note.lock?.hash) {
             this.showToast(this.getText("lock_download_blocked", "Note is locked"))
@@ -283,7 +284,7 @@ Object.assign(UI, {
     },
 
     exportSelectedNoteAsText() {
-        const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
+        const note = this.resolveNoteById(this.currentNoteActionId)
         if (!note) return
         if (note.lock?.hash) {
             this.showToast(this.getText("lock_download_blocked", "Note is locked"))
@@ -301,7 +302,7 @@ Object.assign(UI, {
     },
 
     exportSelectedNoteAsPdf() {
-        const note = StateStore.read().notes.find(n => n.id === this.currentNoteActionId)
+        const note = this.resolveNoteById(this.currentNoteActionId)
         if (!note) return
         if (note.lock?.hash) {
             this.showToast(this.getText("lock_download_blocked", "Note is locked"))

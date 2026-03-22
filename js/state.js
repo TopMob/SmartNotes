@@ -99,3 +99,5 @@ const StateStore = (() => {
         initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus }, pagination: { ...initialState.pagination } })
     }
 })()
+
+window.StateStore = StateStore

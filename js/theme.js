@@ -43,6 +43,28 @@ const pickRuntimeBackgroundValue = (urlValue, localImageValue) => {
     return normalizeLocalImageValue(localImageValue)
 }
 
+const getThemeDictionary = () => {
+    const stateLang = window.StateStore?.read?.().config?.lang
+    const persistedLang = window.SafeStorage?.local?.get?.("app-lang")
+    const documentLang = document.documentElement?.lang
+    const currentLang = stateLang === "en" || stateLang === "ru"
+        ? stateLang
+        : (persistedLang === "en" || persistedLang === "ru"
+            ? persistedLang
+            : (documentLang === "en" || documentLang === "ru" ? documentLang : "ru"))
+    if (window.LANG?.[currentLang]) return window.LANG[currentLang]
+    return window.LANG?.ru || {}
+}
+
+const getThemeText = (key, fallback = "") => {
+    const dictionary = getThemeDictionary()
+    return dictionary[key] || fallback || key
+}
+
+const formatThemeText = (key, fallback, values = {}) => {
+    return Object.entries(values).reduce((output, [token, value]) => output.replaceAll(`{${token}}`, String(value)), getThemeText(key, fallback))
+}
+
 const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
     const safeLocalSettings = localSettings && typeof localSettings === "object" ? localSettings : {}
     const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
@@ -419,9 +441,9 @@ export const ThemeManager = {
         const customPresetKeys = this.getCustomPresets().map(item => `custom:${item.key}`)
         const customThemesLeft = Math.max(0, this.maxCustomPresets - customPresetKeys.length)
         const groups = [
-            { title: "Тёмные темы", items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal", "amber_accent"] },
-            { title: "Светлые темы", items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
-            { title: "Пользовательские", items: customPresetKeys }
+            { id: "dark", title: getThemeText("theme_group_dark", "Dark themes"), items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal", "amber_accent"] },
+            { id: "light", title: getThemeText("theme_group_light", "Light themes"), items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
+            { id: "custom", title: getThemeText("theme_group_custom", "Custom"), items: customPresetKeys }
         ]
         root.innerHTML = ""
         groups.forEach(group => {
@@ -453,7 +475,7 @@ export const ThemeManager = {
                 presetsGrid.appendChild(buttonElement)
             })
 
-            if (group.title === "Пользовательские") {
+            if (group.id === "custom") {
                 const addButton = document.createElement("button")
                 addButton.type = "button"
                 addButton.className = "theme-custom-add"
@@ -465,7 +487,7 @@ export const ThemeManager = {
 
                 const leftLabel = document.createElement("div")
                 leftLabel.className = "theme-custom-limit-label"
-                leftLabel.textContent = `${customThemesLeft} of ${this.maxCustomPresets} custom themes left`
+                leftLabel.textContent = formatThemeText("theme_custom_limit", "Custom themes left: {count} of {max}", { count: customThemesLeft, max: this.maxCustomPresets })
                 sectionElement.appendChild(leftLabel)
             }
 
