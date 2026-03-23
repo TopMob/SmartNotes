@@ -882,6 +882,7 @@ Object.assign(UI, {
             exit: this.getText("confirm_exit", "Sign out?"),
             account: this.getText("confirm_account", "Switch account?"),
             delete_f: this.getText("confirm_delete_folder", "Delete folder?"),
+            clear_trash: this.getText("clear_trash_confirm", "Clear trash?"),
             hide_f: this.getText("confirm_hide_folder", "Do you want to hide this folder?"),
             delete_page: this.getText("page_delete_confirm", "Are you sure you want to delete this page?")
         }

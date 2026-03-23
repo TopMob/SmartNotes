@@ -458,6 +458,150 @@ test('html paste with inline media is blocked when external storage is unavailab
     assert.match(window.__lastToast, /attachment unavailable|вложение недоступно/i)
 })
 
+test('clearTrashPermanently uses double confirmation and removes trashed notes and folders', async () => {
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    const batchCommits = []
+    let confirmType = ''
+    let promptTitle = ''
+    let promptPlaceholder = ''
+    let lastToast = ''
+    let editorClosed = false
+    let visibilityUpdates = 0
+    let lastSearchQuery = ''
+
+    window.UI = {
+        confirm(type, callback) {
+            confirmType = type
+            callback()
+        },
+        showPrompt(title, placeholder, callback) {
+            promptTitle = title
+            promptPlaceholder = placeholder
+            callback('удалить')
+        },
+        getText(key, fallback) {
+            const dict = {
+                clear_trash_keyword: 'УДАЛИТЬ',
+                clear_trash_prompt_title: 'Введите УДАЛИТЬ, чтобы очистить корзину',
+                clear_trash_prompt_placeholder: 'Введите УДАЛИТЬ',
+                trash_cleared: 'Корзина очищена'
+            }
+            return dict[key] || fallback || key
+        },
+        showToast(message) {
+            lastToast = message
+        },
+        updateTrashActionVisibility() {
+            visibilityUpdates += 1
+        },
+        closeModal() {},
+        resolveNoteById() {
+            return null
+        }
+    }
+    window.StateStore = {
+        state: {
+            user: { uid: 'user-1' },
+            currentNote: { id: 'note-trash-1' },
+            notes: [
+                { id: 'note-trash-1', trashedAt: '2026-03-23T00:00:00.000Z' },
+                { id: 'note-trash-2', trashedAt: '2026-03-23T00:00:00.000Z' },
+                { id: 'note-active', trashedAt: null }
+            ],
+            folders: [
+                { id: 'folder-trash-1', trashedAt: '2026-03-23T00:00:00.000Z' },
+                { id: 'folder-active', trashedAt: null }
+            ]
+        },
+        read() {
+            return this.state
+        },
+        update(key, value) {
+            this.state[key] = value
+        }
+    }
+    window.StateActions = {
+        setNotes(notes) {
+            window.StateStore.state.notes = notes
+        }
+    }
+    window.DataPath = {
+        getUserNotesCollection() {
+            return {
+                doc(id) {
+                    return { id: `note:${id}` }
+                }
+            }
+        },
+        getUserFoldersCollection() {
+            return {
+                doc(id) {
+                    return { id: `folder:${id}` }
+                }
+            }
+        }
+    }
+    window.db = {
+        batch() {
+            const deleted = []
+            return {
+                delete(reference) {
+                    deleted.push(reference.id)
+                },
+                async commit() {
+                    batchCommits.push(deleted.slice())
+                }
+            }
+        }
+    }
+    window.firebase = {
+        firestore: {
+            FieldValue: {
+                serverTimestamp() {
+                    return { serverTimestamp: true }
+                }
+            }
+        }
+    }
+    window.SmartNotesEditor = {
+        close() {
+            editorClosed = true
+        }
+    }
+    window.NoteHelpers = {
+        buildNoteUpdatePayload(payload) {
+            return payload
+        }
+    }
+    window.AppMessages = { getAppMessage() { return '' }, APP_MESSAGES: { restored: {} } }
+    window.updateSearchQuery = value => {
+        lastSearchQuery = value
+    }
+    window.switchView = () => {}
+
+    await loadWindowScript(window, 'js/notes/actions.js')
+
+    await window.clearTrashPermanently()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    assert.equal(confirmType, 'clear_trash')
+    assert.equal(promptTitle, 'Введите УДАЛИТЬ, чтобы очистить корзину')
+    assert.equal(promptPlaceholder, 'Введите УДАЛИТЬ')
+    assert.deepEqual(batchCommits, [[
+        'note:note-trash-1',
+        'note:note-trash-2',
+        'folder:folder-trash-1'
+    ]])
+    assert.deepEqual(window.StateStore.read().notes.map(note => note.id), ['note-active'])
+    assert.deepEqual(window.StateStore.read().folders.map(folder => folder.id), ['folder-active'])
+    assert.equal(editorClosed, true)
+    assert.equal(lastToast, 'Корзина очищена')
+    assert.equal(visibilityUpdates, 1)
+    assert.equal(lastSearchQuery, '')
+})
+
 test('google drive media service keeps linked and connected separate, restores silently, and uploads into SmartNotes/Attachments', async () => {
     const remoteSettingsState = {}
     const buildSettingsReference = userKey => ({

@@ -866,8 +866,31 @@ Object.assign(UI, {
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
+        this.updateTrashActionVisibility()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
+    },
+
+    getTrashSummary() {
+        const state = StateStore.read()
+        const trashedNotes = Array.isArray(state.notes) ? state.notes.filter(note => !!note?.trashedAt) : []
+        const trashedFolders = Array.isArray(state.folders) ? state.folders.filter(folder => !!folder?.trashedAt) : []
+        return {
+            notes: trashedNotes,
+            folders: trashedFolders,
+            totalCount: trashedNotes.length + trashedFolders.length
+        }
+    },
+
+    updateTrashActionVisibility() {
+        const clearTrashButton = this.els.clearTrashButton
+        if (!clearTrashButton) return
+        const isTrashView = StateStore.read().view === "trash"
+        const trashSummary = this.getTrashSummary()
+        clearTrashButton.classList.toggle("hidden", !isTrashView)
+        clearTrashButton.disabled = trashSummary.totalCount === 0
+        clearTrashButton.title = this.getText("clear_trash", "Clear trash")
+        clearTrashButton.setAttribute("aria-label", this.getText("clear_trash", "Clear trash"))
     },
 
     updatePrimaryActionLabel() {

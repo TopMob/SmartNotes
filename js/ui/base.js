@@ -24,6 +24,7 @@ const UI = {
             sidebarOverlay: document.getElementById("sidebar-overlay"),
             filterMenu: document.getElementById("notes-filter-menu"),
             filterButton: document.getElementById("notes-filter-toggle"),
+            clearTrashButton: document.getElementById("clear-trash-button"),
             filterFolders: document.getElementById("notes-folder-filters"),
             filterSort: document.getElementById("notes-sort-select"),
             activeFolderMenu: document.getElementById("active-folder-menu"),

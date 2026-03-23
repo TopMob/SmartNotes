@@ -36,7 +36,7 @@
 
 ## Note management
 - [ ] Bulk actions for notes
-- [ ] Clear trash with double confirmation
+- [x] Clear trash with double confirmation
 - [ ] Saved filters
 - [ ] Advanced filters
 
