@@ -386,10 +386,13 @@ export function createAuthManager({ auth }) {
                 await this._startSessionWhenReady(normalizedUser)
                 if (typeof CollaborationService !== "undefined") {
                     const acceptedShare = await CollaborationService.acceptPendingShare(normalizedUser)
-                    if (acceptedShare && typeof UI !== "undefined") {
-                        const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
-                        const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
-                        UI.showToast(UI.getText(messageKey, fallback))
+                    if (acceptedShare) {
+                        await SessionService.startUserSession(normalizedUser, { forceResubscribe: true })
+                        if (typeof UI !== "undefined") {
+                            const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
+                            const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
+                            UI.showToast(UI.getText(messageKey, fallback))
+                        }
                     }
                 }
                 if (window.ExternalMediaService?.handleSignedInUser) {

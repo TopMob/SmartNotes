@@ -256,6 +256,7 @@ Object.assign(UI, {
                 this.showToast(this.getText("accept_shared_link_failed", "Unable to connect shared link"))
                 return
             }
+            await SessionService.startUserSession(user, { forceResubscribe: true })
             const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
             const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
             this.showToast(this.getText(messageKey, fallback))
@@ -1293,7 +1294,7 @@ Object.assign(UI, {
         }
         const folder = folders.find(item => item.id === activeFolderId)
         if (!folder) return
-        const canManageFolder = typeof CollaborationService === "undefined" ? true : CollaborationService.canManage(folder)
+        const canManageFolder = typeof CollaborationService === "undefined" ? true : !CollaborationService.isSharedFolder(folder)
         wrapper.querySelectorAll("[data-action='rename-active-folder'], [data-action='toggle-active-folder-hidden'], [data-action='backup-active-folder'], [data-action='delete-active-folder'], [data-action='share-active-folder-view'], [data-action='share-active-folder-edit']").forEach(button => {
             button.classList.toggle("hidden", !canManageFolder)
         })

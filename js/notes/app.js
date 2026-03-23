@@ -151,6 +151,7 @@ const NotesApplication = (() => {
             if ((capturedShareToken || typeof CollaborationService !== "undefined") && typeof CollaborationService !== "undefined") {
                 const acceptedShare = await CollaborationService.acceptPendingShare(user)
                 if (acceptedShare) {
+                    await SessionService.startUserSession(user, { forceResubscribe: true })
                     const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
                     const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
                     UI.showToast(UI.getText(messageKey, fallback))

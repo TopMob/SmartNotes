@@ -30,7 +30,7 @@ Object.assign(UI, {
         if (isActive) folderButton.classList.add("active")
         folderButton.dataset.action = "open-folder"
         folderButton.dataset.folderId = safeFolderId
-        const canManageFolder = typeof CollaborationService === "undefined" ? true : CollaborationService.canManage(folder)
+        const canManageFolder = typeof CollaborationService === "undefined" ? true : !CollaborationService.isSharedFolder(folder)
         folderButton.draggable = canManageFolder
         if (canManageFolder) folderButton.dataset.folderDraggable = "true"
 

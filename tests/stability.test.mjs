@@ -1294,7 +1294,8 @@ test('app init accepts captured share tokens for an already signed-in user', asy
     window.NotesUIAdapter = { render() {} }
     window.PaginationService = { getLoadMoreState() { return { hasMoreItems: false, isLoading: false } } }
     window.EventBus = { subscribe() { return () => {} } }
-    window.SessionService = { async startUserSession() {} }
+    const sessionCalls = []
+    window.SessionService = { async startUserSession(user, options = {}) { sessionCalls.push({ user, options }) } }
     window.navigator.serviceWorker = { getRegistrations: async () => [] }
     window.caches = { keys: async () => [], delete: async () => true }
     window.CollaborationService = {
@@ -1309,6 +1310,8 @@ test('app init accepts captured share tokens for an already signed-in user', asy
     await window.initApp()
 
     assert.equal(acceptedWithUser, 'user-1')
+    assert.equal(sessionCalls.length >= 2, true)
+    assert.equal(sessionCalls.at(-1)?.options?.forceResubscribe, true)
     assert.match(window.__lastToast, /Shared note added/i)
 })
 
@@ -1366,3 +1369,4 @@ test('shared notes subscription ignores local pending share entries until server
     assert.equal(Array.isArray(eventPayloads.at(-1)?.payload), true)
     assert.equal(eventPayloads.at(-1)?.payload.length, 0)
 })
+
