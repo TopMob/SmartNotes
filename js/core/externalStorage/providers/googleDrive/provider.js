@@ -196,17 +196,7 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
             const userKey = getCurrentUserKey(user)
             const storedState = applyStoredState(userKey)
             const isGoogleUser = !!user?.providerData?.some?.(provider => String(provider?.providerId || '') === 'google.com')
-            if (storedState?.granted) {
-                try {
-                    await connectDrive({ interactive: false, userKey })
-                    return this.getStatus()
-                } catch (error) {
-                    const errorCode = normalizeExternalMediaErrorCode(error)
-                    if (!options.interactiveAllowed || !isGoogleUser || state.interactivePromptedForUser === userKey || errorCode !== ERROR_CODES.UNLINKED) {
-                        throw error
-                    }
-                }
-            }
+            if (storedState?.granted) return this.getStatus()
             if (!options.interactiveAllowed || !isGoogleUser || state.interactivePromptedForUser === userKey) return this.getStatus()
             state.interactivePromptedForUser = userKey
             await connectDrive({ interactive: true, userKey })

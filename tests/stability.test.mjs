@@ -580,10 +580,11 @@ test('google drive media service persists link state, restores silently, and upl
     await loadExternalStorageScripts(secondWindow)
 
     const restoredStatus = await secondWindow.GoogleDriveMediaService.handleSignedInUser(secondWindow.auth.currentUser, { interactiveAllowed: false })
-    assert.equal(restoredStatus.connected, true)
+    assert.equal(restoredStatus.connected, false)
+    assert.equal(restoredStatus.linked, true)
     assert.equal(restoredStatus.attachmentsId, 'folder-attachments')
     assert.equal(restoredStatus.exportsId, 'folder-exports')
-    assert.equal(tokenPrompts[1], '')
+    assert.equal(tokenPrompts.length, 1)
 
     const note = {
         title: 'Cache',
@@ -596,6 +597,7 @@ test('google drive media service persists link state, restores silently, and upl
     assert.equal(/data:image\//.test(result.note.pageDrawings[0]), false)
     assert.match(result.note.content, /https:\/\/lh3\.googleusercontent\.com\/d\/file-1/)
     assert.match(uploadedBody, /"parents":\["folder-attachments"\]/)
+    assert.equal(tokenPrompts[1], '')
     assert.equal(uploadCalls, 1)
     assert.equal(permissionCalls, 1)
 })

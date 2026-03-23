@@ -1090,7 +1090,7 @@ Object.assign(UI, {
                 driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")
             } else if (driveStatus.pending) {
                 driveStatusElement.textContent = this.getText("drive_connecting", "Connecting...")
-            } else if (driveStatus.connected) {
+            } else if (driveStatus.connected || driveStatus.linked) {
                 driveStatusElement.textContent = this.getText("drive_connected", "Google Drive connected")
             } else if (driveStatus.errorCode) {
                 driveStatusElement.textContent = typeof this.resolveExternalMediaMessage === "function"
