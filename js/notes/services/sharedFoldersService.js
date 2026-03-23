@@ -163,6 +163,7 @@ const SharedFoldersService = (() => {
         state.unsubscribeEntries = FoldersRepository.subscribeSharedEntries(user, snapshot => {
             const entries = new Map()
             snapshot.forEach(documentEntry => {
+                if (documentEntry.metadata?.hasPendingWrites) return
                 const entry = documentEntry.data() || {}
                 entries.set(documentEntry.id, {
                     id: documentEntry.id,

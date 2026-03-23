@@ -721,6 +721,7 @@ const CollaborationService = {
         if (!currentUserUid) return "viewer"
         const resourceOwnerUid = String(resource?.ownerUid || "")
         if ((access?.ownerUid && access.ownerUid === currentUserUid) || (resourceOwnerUid && resourceOwnerUid === currentUserUid)) return "owner"
+        if (!access && !resourceOwnerUid) return "owner"
         const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"

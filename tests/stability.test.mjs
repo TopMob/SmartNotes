@@ -1261,6 +1261,7 @@ test('collaboration ownership falls back to resource ownerUid when access roles 
 
     assert.equal(window.CollaborationService.canManage({ id: 'folder-1', ownerUid: 'user-1' }), true)
     assert.equal(window.CollaborationService.canEdit({ id: 'folder-1', ownerUid: 'user-1' }), true)
+    assert.equal(window.CollaborationService.canManage({ id: 'legacy-folder-1' }), true)
 })
 
 test('app init accepts captured share tokens for an already signed-in user', async () => {
@@ -1309,4 +1310,59 @@ test('app init accepts captured share tokens for an already signed-in user', asy
 
     assert.equal(acceptedWithUser, 'user-1')
     assert.match(window.__lastToast, /Shared note added/i)
+})
+
+
+test('shared notes subscription ignores local pending share entries until server confirmation', async () => {
+    const window = createBaseWindow()
+    const subscribeCalls = []
+    const eventPayloads = []
+    window.EventBus = {
+        publish(name, payload) {
+            eventPayloads.push({ name, payload })
+        },
+        subscribe() { return () => {} }
+    }
+    window.NoteIO = {
+        normalizeNote(note) {
+            return note
+        }
+    }
+    window.CollaborationService = {
+        sharedNoteId(ownerUid, noteId) {
+            return `shared_${ownerUid}_${noteId}`
+        },
+        resolveSharedFolderId() {
+            return ''
+        }
+    }
+    window.NotesRepository = {
+        subscribeSharedEntries(_user, next) {
+            next({
+                forEach(callback) {
+                    callback({
+                        id: 'owner-1_note-1',
+                        metadata: { hasPendingWrites: true },
+                        data() {
+                            return { ownerUid: 'owner-1', noteId: 'note-1', permission: 'viewer' }
+                        }
+                    })
+                }
+            })
+            return () => {}
+        },
+        subscribeSharedNote(ownerUid, noteId) {
+            subscribeCalls.push({ ownerUid, noteId })
+            return () => {}
+        }
+    }
+
+    await loadWindowScript(window, 'js/notes/services/sharedNotesService.js', source => source.replace('const SharedNotesService = (() => {', 'window.SharedNotesService = (() => {'))
+
+    window.SharedNotesService.subscribe({ uid: 'user-1' })
+
+    assert.equal(subscribeCalls.length, 0)
+    assert.equal(eventPayloads.at(-1)?.name, 'sharedNotesUpdated')
+    assert.equal(Array.isArray(eventPayloads.at(-1)?.payload), true)
+    assert.equal(eventPayloads.at(-1)?.payload.length, 0)
 })

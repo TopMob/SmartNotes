@@ -64,6 +64,7 @@ const SharedNotesService = (() => {
         state.unsubscribeEntries = NotesRepository.subscribeSharedEntries(user, snapshot => {
             const entries = new Map()
             snapshot.forEach(documentEntry => {
+                if (documentEntry.metadata?.hasPendingWrites) return
                 const entry = documentEntry.data() || {}
                 entries.set(documentEntry.id, { id: documentEntry.id, noteId: entry.noteId, ownerUid: entry.ownerUid, permission: entry.permission || "viewer" })
             })
