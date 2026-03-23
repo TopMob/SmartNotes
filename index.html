@@ -326,6 +326,20 @@
                     </select>
                 </div>
                 <div class="filter-section">
+                    <label for="notes-tag-filter-input" data-lang="filter_tags">Теги</label>
+                    <input type="text" id="notes-tag-filter-input" class="input-area filter-select" placeholder="design, work" data-lang-placeholder="filter_tags_placeholder" aria-label="Теги" data-lang-aria="filter_tags">
+                </div>
+                <div class="filter-section">
+                    <label for="notes-date-filter-select" data-lang="filter_updated_period">Период обновления</label>
+                    <select id="notes-date-filter-select" class="input-area filter-select" aria-label="Период обновления" data-lang-aria="filter_updated_period">
+                        <option value="0" data-lang="filter_updated_any">За всё время</option>
+                        <option value="1" data-lang="filter_updated_day">За 24 часа</option>
+                        <option value="7" data-lang="filter_updated_week">За 7 дней</option>
+                        <option value="30" data-lang="filter_updated_month">За 30 дней</option>
+                        <option value="365" data-lang="filter_updated_year">За год</option>
+                    </select>
+                </div>
+                <div class="filter-section">
                     <div class="filter-title" data-lang="filter_folders">Папки</div>
                     <div id="notes-folder-filters" class="filter-options"></div>
                 </div>

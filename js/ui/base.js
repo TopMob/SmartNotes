@@ -28,6 +28,8 @@ const UI = {
             savedFilterSelect: document.getElementById("notes-saved-filter-select"),
             saveFilterButton: document.getElementById("notes-save-filter-button"),
             deleteFilterButton: document.getElementById("notes-delete-filter-button"),
+            tagFilterInput: document.getElementById("notes-tag-filter-input"),
+            dateFilterSelect: document.getElementById("notes-date-filter-select"),
             filterFolders: document.getElementById("notes-folder-filters"),
             filterSort: document.getElementById("notes-sort-select"),
             activeFolderMenu: document.getElementById("active-folder-menu"),

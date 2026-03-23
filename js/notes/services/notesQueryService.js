@@ -71,6 +71,30 @@ const NotesQueryService = (() => {
         return getTimestampValue(note?.reminderAt) > Date.now()
     }
 
+    function matchesTagFilters(note, selectedTags) {
+        const normalizedSelectedTags = Array.isArray(selectedTags)
+            ? selectedTags.map(tag => String(tag || "").trim().toLocaleLowerCase()).filter(Boolean)
+            : []
+        if (!normalizedSelectedTags.length) return true
+        const noteTags = [
+            ...(Array.isArray(note?.tags) ? note.tags : []),
+            ...(Array.isArray(note?.hiddenTags) ? note.hiddenTags : [])
+        ]
+            .map(tag => String(tag || "").trim().toLocaleLowerCase())
+            .filter(Boolean)
+        if (!noteTags.length) return false
+        return normalizedSelectedTags.some(tag => noteTags.includes(tag))
+    }
+
+    function matchesUpdatedWindow(note, updatedWindowDays) {
+        const normalizedWindowDays = Number(updatedWindowDays || 0)
+        if (!normalizedWindowDays) return true
+        const noteTimestamp = getTimestampValue(note?.updatedAt || note?.createdAt)
+        if (!noteTimestamp) return false
+        const threshold = Date.now() - (normalizedWindowDays * 24 * 60 * 60 * 1000)
+        return noteTimestamp >= threshold
+    }
+
     function filterByView(notes, stateSnapshot) {
         const view = stateSnapshot.view
         const activeFolderId = stateSnapshot.activeFolderId
@@ -100,8 +124,10 @@ const NotesQueryService = (() => {
             filteredNotes = filteredNotes.filter(note => !note.folderId || !hiddenFolderIdentifiers.has(note.folderId))
         }
 
-        const configuredFilter = stateSnapshot.config?.notesFilter || { sort: "manual", folders: [] }
+        const configuredFilter = stateSnapshot.config?.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 }
         const selectedFolders = Array.isArray(configuredFilter.folders) ? configuredFilter.folders : []
+        const selectedTags = Array.isArray(configuredFilter.tags) ? configuredFilter.tags : []
+        const updatedWindowDays = Number(configuredFilter.updatedWindowDays || 0)
         const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash"
 
         if (canUseFolderFilters && selectedFolders.length) {
@@ -110,6 +136,9 @@ const NotesQueryService = (() => {
                 return selectedFolders.includes(note.folderId)
             })
         }
+
+        filteredNotes = filteredNotes.filter(note => matchesTagFilters(note, selectedTags))
+        filteredNotes = filteredNotes.filter(note => matchesUpdatedWindow(note, updatedWindowDays))
 
         return filteredNotes
     }

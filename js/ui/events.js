@@ -112,6 +112,15 @@ Object.assign(UI, {
             this.updateFilterConfig({ sort: safeSortValue })
         }, { signal: listenersSignal })
 
+        this.els.tagFilterInput?.addEventListener("change", event => {
+            const selectedTags = this.readTagFilterSelection(event.target?.value)
+            this.updateFilterConfig({ tags: selectedTags })
+        }, { signal: listenersSignal })
+
+        this.els.dateFilterSelect?.addEventListener("change", event => {
+            this.updateFilterConfig({ updatedWindowDays: Number(event.target?.value || 0) })
+        }, { signal: listenersSignal })
+
         this.els.filterFolders?.addEventListener("change", event => {
             const checkboxInput = event.target.closest("input[type='checkbox']")
             if (!checkboxInput) return
@@ -212,8 +221,15 @@ Object.assign(UI, {
         return selected
     },
 
+    readTagFilterSelection(rawValue = "") {
+        return String(rawValue || "")
+            .split(",")
+            .map(value => String(value || "").trim())
+            .filter(Boolean)
+    },
+
     updateFilterConfig(next) {
-        const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
+        const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 }
         const updated = window.NotesStorage?.normalizeNotesFilter
             ? window.NotesStorage.normalizeNotesFilter({ ...current, ...next })
             : { ...current, ...next }
@@ -267,6 +283,8 @@ Object.assign(UI, {
                     name: filterName,
                     sort: currentFilter.sort,
                     folders: currentFilter.folders,
+                    tags: currentFilter.tags,
+                    updatedWindowDays: currentFilter.updatedWindowDays,
                     createdAt: existingFilter?.createdAt || Date.now()
                 }
                 const nextSavedFilters = existingFilter
@@ -290,7 +308,9 @@ Object.assign(UI, {
         }
         this.updateFilterConfig({
             sort: savedFilter.sort,
-            folders: savedFilter.folders
+            folders: savedFilter.folders,
+            tags: savedFilter.tags,
+            updatedWindowDays: savedFilter.updatedWindowDays
         })
         if (this.els.savedFilterSelect) this.els.savedFilterSelect.value = savedFilter.id
         if (this.els.deleteFilterButton) this.els.deleteFilterButton.disabled = false
@@ -316,7 +336,7 @@ Object.assign(UI, {
         const { folders, config, view } = StateStore.read()
         const current = window.NotesStorage?.normalizeNotesFilter
             ? window.NotesStorage.normalizeNotesFilter(config.notesFilter || {})
-            : (config.notesFilter || { sort: "manual", folders: [] })
+            : (config.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 })
         const visibleFolders = folders.filter(folder => !folder.isHidden && !folder.trashedAt)
         const visibleFolderIds = new Set(
             visibleFolders
@@ -333,6 +353,8 @@ Object.assign(UI, {
         const folderFiltersBlocked = view === "archive" || view === "trash"
         const safeSortValue = window.DomSecurity.sanitizeInputValue(current.sort, "updated")
         this.els.filterSort.value = safeSortValue
+        if (this.els.tagFilterInput) this.els.tagFilterInput.value = Array.isArray(current.tags) ? current.tags.join(", ") : ""
+        if (this.els.dateFilterSelect) this.els.dateFilterSelect.value = String(Number(current.updatedWindowDays || 0))
 
         const folderFilterFragment = document.createDocumentFragment()
         const items = [{ id: "none", name: this.getText("folder_none", "No folder") }]

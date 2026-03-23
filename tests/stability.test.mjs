@@ -609,6 +609,11 @@ test('saved filters persist current note filters and can be applied or deleted',
         <button type="button" id="notes-save-filter-button"></button>
         <button type="button" id="notes-delete-filter-button"></button>
         <select id="notes-sort-select"></select>
+        <input type="text" id="notes-tag-filter-input">
+        <select id="notes-date-filter-select">
+            <option value="0">0</option>
+            <option value="7">7</option>
+        </select>
         <div id="notes-folder-filters"></div>
     </body></html>`, { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
     const { window } = dom
@@ -634,7 +639,9 @@ test('saved filters persist current note filters and can be applied or deleted',
                 lang: 'ru',
                 notesFilter: {
                     sort: 'updated',
-                    folders: ['folder-1']
+                    folders: ['folder-1'],
+                    tags: ['design'],
+                    updatedWindowDays: 7
                 }
             },
             folders: [
@@ -674,6 +681,8 @@ test('saved filters persist current note filters and can be applied or deleted',
             saveFilterButton: window.document.getElementById('notes-save-filter-button'),
             deleteFilterButton: window.document.getElementById('notes-delete-filter-button'),
             filterSort: window.document.getElementById('notes-sort-select'),
+            tagFilterInput: window.document.getElementById('notes-tag-filter-input'),
+            dateFilterSelect: window.document.getElementById('notes-date-filter-select'),
             filterFolders: window.document.getElementById('notes-folder-filters')
         },
         getText(key, fallback) {
@@ -710,13 +719,19 @@ test('saved filters persist current note filters and can be applied or deleted',
     assert.equal(savedFilters[0].name, 'Работа')
     assert.equal(savedFilters[0].sort, 'updated')
     assert.deepEqual(Array.from(savedFilters[0].folders), ['folder-1'])
+    assert.deepEqual(Array.from(savedFilters[0].tags), ['design'])
+    assert.equal(savedFilters[0].updatedWindowDays, 7)
     assert.equal(window.UI.els.savedFilterSelect.value, savedFilters[0].id)
     assert.equal(lastToast, 'Фильтр сохранён')
 
-    window.StateActions.updateConfig({ notesFilter: { sort: 'manual', folders: [] } })
+    window.StateActions.updateConfig({ notesFilter: { sort: 'manual', folders: [], tags: [], updatedWindowDays: 0 } })
     window.UI.applySavedFilter(savedFilters[0].id)
     assert.equal(window.StateStore.read().config.notesFilter.sort, 'updated')
     assert.deepEqual(Array.from(window.StateStore.read().config.notesFilter.folders), ['folder-1'])
+    assert.deepEqual(Array.from(window.StateStore.read().config.notesFilter.tags), ['design'])
+    assert.equal(window.StateStore.read().config.notesFilter.updatedWindowDays, 7)
+    assert.equal(window.UI.els.tagFilterInput.value, 'design')
+    assert.equal(window.UI.els.dateFilterSelect.value, '7')
     assert.equal(lastSearchQuery, '')
 
     window.UI.deleteSavedFilter(savedFilters[0].id)
@@ -724,6 +739,53 @@ test('saved filters persist current note filters and can be applied or deleted',
     assert.equal(window.UI.els.savedFilterSelect.value, '')
     assert.equal(window.UI.els.deleteFilterButton.disabled, true)
     assert.equal(lastToast, 'Фильтр удалён')
+})
+
+test('advanced filters limit notes by tags and updated period', async () => {
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    window.NoteIO = {
+        normalizeNote(note) {
+            return { ...note }
+        }
+    }
+    window.Utils = {
+        stripHtml(value) {
+            return String(value || '').replace(/<[^>]+>/g, ' ')
+        }
+    }
+    window.SmartSearch = {
+        score() {
+            return 0
+        }
+    }
+    window.EventBus = { publish() {} }
+
+    await loadWindowScript(window, 'js/notes/services/notesQueryService.js', source => source.replace('const NotesQueryService = (() => {', 'window.NotesQueryService = (() => {'))
+
+    const now = Date.now()
+    const result = window.NotesQueryService.execute({
+        view: 'notes',
+        activeFolderId: null,
+        folders: [],
+        notes: [
+            { id: 'recent-design', title: 'Recent', content: '', tags: ['design'], hiddenTags: [], updatedAt: new Date(now - (2 * 24 * 60 * 60 * 1000)).toISOString(), createdAt: new Date(now - (2 * 24 * 60 * 60 * 1000)).toISOString() },
+            { id: 'old-design', title: 'Old', content: '', tags: ['design'], hiddenTags: [], updatedAt: new Date(now - (20 * 24 * 60 * 60 * 1000)).toISOString(), createdAt: new Date(now - (20 * 24 * 60 * 60 * 1000)).toISOString() },
+            { id: 'recent-other', title: 'Other', content: '', tags: ['personal'], hiddenTags: [], updatedAt: new Date(now - (2 * 24 * 60 * 60 * 1000)).toISOString(), createdAt: new Date(now - (2 * 24 * 60 * 60 * 1000)).toISOString() }
+        ],
+        config: {
+            lang: 'ru',
+            notesFilter: {
+                sort: 'updated',
+                folders: [],
+                tags: ['design'],
+                updatedWindowDays: 7
+            }
+        }
+    }, '')
+
+    assert.deepEqual(Array.from(result.notes).map(note => note.id), ['recent-design'])
 })
 
 test('google drive media service keeps linked and connected separate, restores silently, and uploads into SmartNotes/Attachments', async () => {

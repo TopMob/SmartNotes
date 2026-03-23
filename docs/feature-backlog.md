@@ -38,8 +38,8 @@
 ## Note management
 - [ ] Bulk actions for notes
 - [x] Clear trash with double confirmation
-- [ ] Saved filters
-- [ ] Advanced filters
+- [x] Saved filters
+- [x] Advanced filters
 
 ## System and stability
 - [ ] Full offline mode
