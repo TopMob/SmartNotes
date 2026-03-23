@@ -257,7 +257,8 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
     }
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ folderId: folderId || null }, { updateTimestamp: false }))
+    const persistedFolderId = typeof CollaborationService !== "undefined" ? CollaborationService.getPersistedFolderId(folderId) : (folderId || null)
+    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ folderId: persistedFolderId || null }, { updateTimestamp: false }))
     StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, folderId: folderId || null } : item))
     refreshCurrentList()
 }

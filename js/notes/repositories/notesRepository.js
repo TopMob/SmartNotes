@@ -23,5 +23,8 @@ const NotesRepository = (() => {
     function subscribeSharedNote(ownerUid, noteId, next, error) {
         return db.collection("users").doc(ownerUid).collection("notes").doc(noteId).onSnapshot(next, error)
     }
-    return { subscribeOwnedNotes, loadMoreOwnedNotes, subscribeSharedEntries, subscribeSharedNote }
+    function subscribeSharedFolderNotes(ownerUid, folderId, next, error) {
+        return db.collection("users").doc(ownerUid).collection("notes").where("folderId", "==", folderId).onSnapshot(next, error)
+    }
+    return { subscribeOwnedNotes, loadMoreOwnedNotes, subscribeSharedEntries, subscribeSharedNote, subscribeSharedFolderNotes }
 })()

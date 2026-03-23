@@ -384,6 +384,14 @@ export function createAuthManager({ auth }) {
                     return
                 }
                 await this._startSessionWhenReady(normalizedUser)
+                if (typeof CollaborationService !== "undefined") {
+                    const acceptedShare = await CollaborationService.acceptPendingShare(normalizedUser)
+                    if (acceptedShare && typeof UI !== "undefined") {
+                        const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
+                        const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
+                        UI.showToast(UI.getText(messageKey, fallback))
+                    }
+                }
                 if (window.ExternalMediaService?.handleSignedInUser) {
                     try {
                         await window.ExternalMediaService.handleSignedInUser(normalizedUser, { interactiveAllowed: state.driveInteractiveAllowed })

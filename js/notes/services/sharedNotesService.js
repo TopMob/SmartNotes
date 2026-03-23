@@ -38,15 +38,11 @@ const SharedNotesService = (() => {
                 const normalizedNote = NoteIO.normalizeNote({ id: entry.noteId, ...noteSnapshot.data() })
                 const currentUserUid = state.user?.uid || ""
                 const roles = normalizedNote.access?.roles && typeof normalizedNote.access.roles === "object" ? normalizedNote.access.roles : {}
-                if (currentUserUid && !roles[currentUserUid]) {
-                    removeSharedEntry(sharedId)
-                    EventBus.publish("permissionRevoked", { sharedId, ownerUid: entry.ownerUid, noteId: entry.noteId })
-                    publishSharedNotes()
-                    return
-                }
+                const sharedFolderId = normalizedNote.folderId ? CollaborationService.resolveSharedFolderId(entry.ownerUid, normalizedNote.folderId) : ""
                 state.sharedNotes.set(sharedId, {
                     ...normalizedNote,
                     id: CollaborationService.sharedNoteId(entry.ownerUid, entry.noteId),
+                    folderId: sharedFolderId || normalizedNote.folderId,
                     access: { ownerUid: entry.ownerUid, ownerCollection: "users", noteId: entry.noteId, shareId: sharedId, roles: { ...roles, ...(currentUserUid ? { [currentUserUid]: entry.permission } : {}) } }
                 })
                 publishSharedNotes()

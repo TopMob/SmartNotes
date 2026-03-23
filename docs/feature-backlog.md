@@ -15,7 +15,7 @@
 - [x] Manual backup of a chosen folder to the connected drive
 - [x] Keep backups user-initiated only
 - [ ] Add storage-provider choice later for manual backups
-- [ ] Public read-only links
+- [x] Public read-only links
 - [ ] Local-only storage mode
 
 ## Editor / Markdown / content
@@ -29,7 +29,7 @@
 - [ ] Google Drive attachments
 
 ## Main
-- [ ] Shared folders
+- [x] Shared folders
 - [ ] Real-time collaborative editing
 - [ ] Revision history
 - [ ] Active participants presence

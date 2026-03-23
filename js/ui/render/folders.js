@@ -30,8 +30,9 @@ Object.assign(UI, {
         if (isActive) folderButton.classList.add("active")
         folderButton.dataset.action = "open-folder"
         folderButton.dataset.folderId = safeFolderId
-        folderButton.draggable = true
-        folderButton.dataset.folderDraggable = "true"
+        const canManageFolder = typeof CollaborationService === "undefined" ? true : CollaborationService.canManage(folder)
+        folderButton.draggable = canManageFolder
+        if (canManageFolder) folderButton.dataset.folderDraggable = "true"
 
         const iconElement = document.createElement("i")
         iconElement.className = "material-icons-round"
@@ -225,10 +226,13 @@ Object.assign(UI, {
 
         const noteCount = notes.filter(note => note.folderId === folder.id && !note.trashedAt).length
         const label = noteCount === 1 ? this.getText("note_single", "note") : this.getText("note_plural", "notes")
+        const sharedLabel = typeof CollaborationService !== "undefined" && CollaborationService.isSharedFolder(folder)
+            ? ` · ${this.getText("shared_label", "Shared")}`
+            : ""
 
         const metaElement = document.createElement("div")
         metaElement.className = "folder-meta"
-        window.DomSecurity.setText(metaElement, `${noteCount} ${label}`)
+        window.DomSecurity.setText(metaElement, `${noteCount} ${label}${sharedLabel}`)
 
         folderCard.append(titleElement, metaElement)
 

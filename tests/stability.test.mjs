@@ -1213,3 +1213,39 @@ test('google identity token requests use prompt none for silent restore and surf
     assert.equal(capturedOverride?.prompt, 'none')
     assert.equal(capturedOverride?.login_hint, 'user-1@example.com')
 })
+
+
+test('renderNoteActions adds share buttons for managed notes', async () => {
+    const window = createBaseWindow()
+    const note = { id: 'share-note', title: 'Shared', content: '<p>Body</p>', lock: null }
+    window.StateStore.state.notes = [note]
+    window.CollaborationService = {
+        canManage(resource) {
+            return resource?.id === 'share-note'
+        }
+    }
+
+    await loadUiBaseScript(window)
+    await loadWindowScript(window, 'js/ui/layout.js')
+
+    window.UI.renderNoteActions('share-note')
+
+    const html = window.document.getElementById('note-actions-content').innerHTML
+    assert.match(html, /note-share-view/)
+    assert.match(html, /note-share-edit/)
+})
+
+test('accept shared link action opens prompt flow from user menu', async () => {
+    const window = createBaseWindow()
+    const calls = []
+
+    await loadWindowScript(window, 'js/ui/events.js')
+
+    window.UI.promptAcceptSharedLink = () => {
+        calls.push('prompt')
+    }
+
+    window.UI.handleAction({ dataset: { action: 'accept-shared-link' } }, { stopPropagation() {} })
+
+    assert.deepEqual(calls, ['prompt'])
+})

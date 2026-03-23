@@ -136,6 +136,7 @@ const NotesApplication = (() => {
     }
 
     async function initializeRuntime() {
+        if (typeof CollaborationService !== "undefined") CollaborationService.captureShareToken()
         await disableServiceWorkerCaching()
         if (typeof UI.init === "function") UI.init()
         if (typeof window.SmartNotesEditor?.init === "function") {

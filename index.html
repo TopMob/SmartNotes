@@ -67,6 +67,7 @@
     <script src="js/notes/services/settingsSyncService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/ownedNotesService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sharedNotesService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/sharedFoldersService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sessionService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/notesQueryService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesPresenter.js?v=2026-02-22-1e1b181" defer></script>
@@ -255,6 +256,14 @@
                                     <i class="material-icons-round" aria-hidden="true">folder_zip</i>
                                     <span data-lang="export_active_folder">Экспорт папки</span>
                                 </button>
+                                <button type="button" class="dropdown-item" data-action="share-active-folder-view">
+                                    <i class="material-icons-round" aria-hidden="true">folder_shared</i>
+                                    <span data-lang="share_folder_view">Поделиться папкой для просмотра</span>
+                                </button>
+                                <button type="button" class="dropdown-item" data-action="share-active-folder-edit">
+                                    <i class="material-icons-round" aria-hidden="true">edit</i>
+                                    <span data-lang="share_folder_edit">Поделиться папкой для редактирования</span>
+                                </button>
                                 <button type="button" class="dropdown-item" data-action="backup-active-folder">
                                     <i class="material-icons-round" aria-hidden="true">cloud_upload</i>
                                     <span data-lang="backup_active_folder">Резервная копия папки</span>
@@ -293,6 +302,10 @@
                             <button type="button" class="dropdown-item" data-action="switch-account">
                                 <i class="material-icons-round" aria-hidden="true">switch_account</i>
                                 <span data-lang="switch_acc">Сменить</span>
+                            </button>
+                            <button type="button" class="dropdown-item" data-action="accept-shared-link">
+                                <i class="material-icons-round" aria-hidden="true">group_add</i>
+                                <span data-lang="accept_shared_link">Подключить общую ссылку</span>
                             </button>
                             <button type="button" class="dropdown-item" data-action="export-all-notes">
                                 <i class="material-icons-round" aria-hidden="true">download</i>

@@ -133,6 +133,15 @@ Object.assign(UI, {
         const folders = StateStore.read().folders
         const isArchived = !!note.isArchived
         const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
+        const canShare = typeof CollaborationService !== "undefined" && CollaborationService.canManage(note)
+        const shareButtons = canShare ? `
+                <button type="button" class="btn-secondary" data-action="note-share-view" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">visibility</i>${dict.share_view || "Share for view"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-share-edit" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">edit</i>${dict.share_edit || "Share for edit"}
+                </button>
+        ` : ""
         const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
         folders.forEach(f => {
             const selected = note.folderId === f.id ? "selected" : ""
@@ -180,6 +189,7 @@ Object.assign(UI, {
                 ${reminderClearButton}
             </div>
             <div class="modal-actions-grid" style="margin-top:12px;">
+                ${shareButtons}
                 <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">
                     <i class="material-icons-round" aria-hidden="true">download</i>${dict.download_note || "Download"}
                 </button>
@@ -194,6 +204,64 @@ Object.assign(UI, {
         this.applyInputAutocompletePolicy(root)
     },
 
+
+    async presentShareLink(url, options = {}) {
+        const normalizedUrl = String(url || "").trim()
+        if (!normalizedUrl) {
+            this.showToast(this.getText("share_link_failed", "Unable to create link"))
+            return false
+        }
+        const copied = typeof CollaborationService !== "undefined" ? await CollaborationService.copyToClipboard(normalizedUrl) : false
+        if (copied) {
+            this.showToast(this.getText("share_link_copied", "Link copied"))
+            return true
+        }
+        this.showPrompt(
+            this.getText(options.titleKey || "share_link_title", options.titleFallback || "Note link"),
+            this.getText("share_link_placeholder", "Copy the link"),
+            async value => {
+                if (typeof CollaborationService !== "undefined") await CollaborationService.copyToClipboard(value)
+            },
+            normalizedUrl
+        )
+        return true
+    },
+
+    async shareNote(noteId, permission = "viewer") {
+        const note = this.resolveNoteById(noteId)
+        if (!note || typeof CollaborationService === "undefined" || !CollaborationService.canManage(note)) {
+            this.showToast(this.getText("share_manage_denied", "Permission denied"))
+            return
+        }
+        const url = await CollaborationService.createNoteShareLink(note, permission)
+        await this.presentShareLink(url, { titleKey: "share_link_title", titleFallback: "Note link" })
+    },
+
+    async shareFolder(folderId, permission = "viewer") {
+        const folder = StateStore.read().folders.find(item => item.id === folderId)
+        if (!folder || typeof CollaborationService === "undefined" || CollaborationService.isSharedFolder(folder) || !CollaborationService.canManage(folder)) {
+            this.showToast(this.getText("share_manage_denied", "Permission denied"))
+            return
+        }
+        const url = await CollaborationService.createFolderShareLink(folder, permission)
+        await this.presentShareLink(url, { titleKey: "share_folder_link_title", titleFallback: "Folder link" })
+    },
+
+    async promptAcceptSharedLink() {
+        const user = StateStore.read().user
+        if (!user || typeof CollaborationService === "undefined") return
+        this.showPrompt(this.getText("accept_shared_link_title", "Connect shared link"), this.getText("accept_shared_link_placeholder", "Paste a link or token"), async value => {
+            const acceptedShare = await CollaborationService.acceptShareInput(value, user)
+            if (!acceptedShare) {
+                this.showToast(this.getText("accept_shared_link_failed", "Unable to connect shared link"))
+                return
+            }
+            const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
+            const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
+            this.showToast(this.getText(messageKey, fallback))
+            this.toggleUserMenu(false)
+        })
+    },
 
     async toggleSelectedLock(noteId) {
         if (!noteId) return
@@ -391,6 +459,7 @@ Object.assign(UI, {
         const validatedName = window.Validators.validateFolderName(nameSource) || nameSource.slice(0, 50).trim()
         const validatedDescription = window.Validators.validateFolderDescription(descriptionSource)
         if (!validatedName) return null
+        const normalizedOwnerUid = String(ownerUid || "")
         return {
             sourceId: String(safeFolder.id || ""),
             id: Utils.generateId(),
@@ -400,7 +469,11 @@ Object.assign(UI, {
             trashedAt: null,
             folderOrder: Date.now() + index,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            ownerUid: String(ownerUid || "")
+            ownerUid: normalizedOwnerUid,
+            access: {
+                ownerUid: normalizedOwnerUid,
+                roles: normalizedOwnerUid ? { [normalizedOwnerUid]: "owner" } : {}
+            }
         }
     },
 
@@ -847,7 +920,11 @@ Object.assign(UI, {
                 trashedAt: null,
                 folderOrder: Date.now(),
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                ownerUid: StateStore.read().user.uid
+                ownerUid: StateStore.read().user.uid,
+                access: {
+                    ownerUid: StateStore.read().user.uid,
+                    roles: { [StateStore.read().user.uid]: "owner" }
+                }
             })
         }, "", {
             maxLength: 50,
@@ -1216,6 +1293,10 @@ Object.assign(UI, {
         }
         const folder = folders.find(item => item.id === activeFolderId)
         if (!folder) return
+        const canManageFolder = typeof CollaborationService === "undefined" ? true : CollaborationService.canManage(folder)
+        wrapper.querySelectorAll("[data-action='rename-active-folder'], [data-action='toggle-active-folder-hidden'], [data-action='backup-active-folder'], [data-action='delete-active-folder'], [data-action='share-active-folder-view'], [data-action='share-active-folder-edit']").forEach(button => {
+            button.classList.toggle("hidden", !canManageFolder)
+        })
         if (hideLabel) hideLabel.textContent = folder.isHidden ? this.getText("show_folder", "Show folder") : this.getText("hide_folder", "Hide folder")
         if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"
     }

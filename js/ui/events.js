@@ -504,6 +504,9 @@ Object.assign(UI, {
                 this.backupAllNotesToDrive()
                 this.toggleUserMenu(false)
                 break
+            case "accept-shared-link":
+                this.promptAcceptSharedLink()
+                break
             case "clear-trash":
                 clearTrashPermanently()
                 break
@@ -519,6 +522,14 @@ Object.assign(UI, {
                 break
             case "rename-active-folder":
                 this.renameFolder(StateStore.read().activeFolderId)
+                this.toggleActiveFolderMenu(false)
+                break
+            case "share-active-folder-view":
+                this.shareFolder(StateStore.read().activeFolderId, "viewer")
+                this.toggleActiveFolderMenu(false)
+                break
+            case "share-active-folder-edit":
+                this.shareFolder(StateStore.read().activeFolderId, "editor")
                 this.toggleActiveFolderMenu(false)
                 break
             case "open-modal":
@@ -672,6 +683,12 @@ Object.assign(UI, {
                 break
             case "note-reminder-clear":
                 clearReminder(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "note-share-view":
+                this.shareNote(decodeURIComponent(el.dataset.noteId || ""), "viewer")
+                break
+            case "note-share-edit":
+                this.shareNote(decodeURIComponent(el.dataset.noteId || ""), "editor")
                 break
             case "note-restore":
                 restoreNoteById(decodeURIComponent(el.dataset.noteId || ""))

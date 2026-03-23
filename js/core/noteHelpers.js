@@ -21,7 +21,8 @@ export const buildNotePayload = ({ note, user, access } = {}) => {
     const ownerUid = access?.ownerUid || user?.uid || note?.ownerUid || ""
     const roleMap = access?.roles && typeof access.roles === "object" ? access.roles : {}
     const targetIdentifier = access?.noteId || note?.id || Utils.generateId()
-    const normalizedNote = NoteIO.normalizeNote({ ...note, id: targetIdentifier, ownerUid })
+    const normalizedFolderId = typeof CollaborationService !== "undefined" ? CollaborationService.getPersistedFolderId(note?.folderId) : (note?.folderId || null)
+    const normalizedNote = NoteIO.normalizeNote({ ...note, id: targetIdentifier, ownerUid, folderId: normalizedFolderId })
     return {
         ...normalizedNote,
         ownerUid,

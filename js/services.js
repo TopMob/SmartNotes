@@ -707,15 +707,16 @@ const LockService = {
 }
 
 const CollaborationService = {
-    shareCollection: "noteShares",
-    sharedNotesCollection: "sharedNotes",
+    shareCollections: { note: "noteShares", folder: "folderShares" },
+    sharedCollections: { note: "sharedNotes", folder: "sharedFolders" },
     pendingTokenKey: "pending-share-token",
-    getAccess(note) {
-        const access = note && typeof note === "object" ? note.access : null
+    sharedFolderRegistry: new Map(),
+    getAccess(resource) {
+        const access = resource && typeof resource === "object" ? resource.access : null
         return access && typeof access === "object" ? access : null
     },
-    getRole(note) {
-        const access = this.getAccess(note)
+    getRole(resource) {
+        const access = this.getAccess(resource)
         const currentUserUid = StateStore.read().user?.uid || ""
         if (!currentUserUid) return "viewer"
         if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
@@ -723,23 +724,65 @@ const CollaborationService = {
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"
     },
-    canEdit(note) {
-        const role = this.getRole(note)
+    canEdit(resource) {
+        const role = this.getRole(resource)
         return role === "owner" || role === "editor"
     },
-    canManage(note) {
-        return this.getRole(note) === "owner"
+    canManage(resource) {
+        return this.getRole(resource) === "owner"
     },
     isSharedNote(note) {
         const access = this.getAccess(note)
         const userUid = StateStore.read().user?.uid
         return !!(access && access.ownerUid && access.ownerUid !== userUid)
     },
+    isSharedFolder(folder) {
+        const access = this.getAccess(folder)
+        const userUid = StateStore.read().user?.uid
+        return !!(access && access.ownerUid && access.ownerUid !== userUid)
+    },
     sharedNoteId(ownerUid, noteId) {
         return `shared_${ownerUid}_${noteId}`
     },
+    sharedFolderId(ownerUid, folderId) {
+        return `shared_folder_${ownerUid}_${folderId}`
+    },
+    folderRegistryKey(ownerUid, folderId) {
+        return `${String(ownerUid || "").trim()}::${String(folderId || "").trim()}`
+    },
+    registerSharedFolder(ownerUid, folderId, sharedFolderId) {
+        const key = this.folderRegistryKey(ownerUid, folderId)
+        if (!key || !sharedFolderId) return
+        this.sharedFolderRegistry.set(key, String(sharedFolderId))
+    },
+    unregisterSharedFolder(ownerUid, folderId) {
+        const key = this.folderRegistryKey(ownerUid, folderId)
+        if (!key) return
+        this.sharedFolderRegistry.delete(key)
+    },
+    resolveSharedFolderId(ownerUid, folderId) {
+        const key = this.folderRegistryKey(ownerUid, folderId)
+        return key ? (this.sharedFolderRegistry.get(key) || "") : ""
+    },
+    getPersistedFolderId(folderId) {
+        const normalizedFolderId = String(folderId || "").trim()
+        if (!normalizedFolderId) return null
+        const folder = StateStore.read().folders.find(item => String(item?.id || "") === normalizedFolderId)
+        if (!folder) return normalizedFolderId
+        if (this.isSharedFolder(folder) && folder.sourceFolderId) return String(folder.sourceFolderId)
+        return normalizedFolderId
+    },
     normalizePermission(value) {
         return value === "editor" || value === "edit" ? "editor" : "viewer"
+    },
+    normalizeResourceType(value) {
+        return value === "folder" ? "folder" : "note"
+    },
+    getShareCollectionName(resourceType) {
+        return this.shareCollections[this.normalizeResourceType(resourceType)]
+    },
+    getSharedCollectionName(resourceType) {
+        return this.sharedCollections[this.normalizeResourceType(resourceType)]
     },
     async generateToken() {
         if (window.crypto?.getRandomValues) {
@@ -760,6 +803,16 @@ const CollaborationService = {
         const token = url.searchParams.get("share")
         return token ? token.trim() : ""
     },
+    parseShareInput(value) {
+        const raw = String(value || "").trim()
+        if (!raw) return ""
+        try {
+            const url = new URL(raw)
+            return String(url.searchParams.get("share") || "").trim()
+        } catch {
+            return raw
+        }
+    },
     captureShareToken() {
         const token = this.getShareTokenFromUrl()
         if (!token) return ""
@@ -775,45 +828,83 @@ const CollaborationService = {
         SafeStorage.session.remove(this.pendingTokenKey)
         return this.acceptShareToken(token, user)
     },
-    async createShareLink(note, permission) {
-        const user = StateStore.read().user
-        if (!db || !user || !note) return ""
-        const access = this.getAccess(note)
-        const ownerUid = access?.ownerUid || user.uid
-        if (ownerUid !== user.uid) return ""
-        const noteId = access?.noteId || note.id
-        const token = await this.generateToken()
-        const ownerCollection = "users"
+    buildSharePayload(resourceType, resource, permission, user) {
+        const normalizedResourceType = this.normalizeResourceType(resourceType)
+        const access = this.getAccess(resource)
+        const ownerUid = access?.ownerUid || resource?.ownerUid || user?.uid || ""
+        if (!ownerUid || ownerUid !== user?.uid) return null
         const payload = {
             ownerUid,
-            ownerCollection,
-            noteId,
+            ownerCollection: "users",
             permission: this.normalizePermission(permission),
+            resourceType: normalizedResourceType,
             createdAt: Utils.serverTimestamp()
         }
-        await db.collection(this.shareCollection).doc(token).set(payload)
+        if (normalizedResourceType === "folder") {
+            const folderId = access?.folderId || resource?.sourceFolderId || resource?.id
+            if (!folderId) return null
+            payload.folderId = String(folderId)
+        } else {
+            const noteId = access?.noteId || resource?.id
+            if (!noteId) return null
+            payload.noteId = String(noteId)
+        }
+        return payload
+    },
+    async createShareLink(resourceOrType, maybeResource, maybePermission) {
+        const user = StateStore.read().user
+        if (!db || !user) return ""
+        const resourceType = typeof resourceOrType === "string" ? resourceOrType : "note"
+        const resource = typeof resourceOrType === "string" ? maybeResource : resourceOrType
+        const permission = typeof resourceOrType === "string" ? maybePermission : maybeResource
+        const payload = this.buildSharePayload(resourceType, resource, permission, user)
+        if (!payload) return ""
+        const token = await this.generateToken()
+        await db.collection(this.getShareCollectionName(payload.resourceType)).doc(token).set(payload)
         return this.buildShareUrl(token)
+    },
+    async createNoteShareLink(note, permission) {
+        return this.createShareLink("note", note, permission)
+    },
+    async createFolderShareLink(folder, permission) {
+        return this.createShareLink("folder", folder, permission)
+    },
+    buildSharedEntry(data, token) {
+        const resourceType = this.normalizeResourceType(data?.resourceType)
+        const permission = this.normalizePermission(data?.permission)
+        const entry = {
+            ownerUid: String(data?.ownerUid || ""),
+            ownerCollection: "users",
+            permission,
+            shareToken: String(token || "").trim(),
+            updatedAt: Utils.serverTimestamp()
+        }
+        const entryId = resourceType === "folder"
+            ? `${entry.ownerUid}_${String(data?.folderId || "")}`
+            : `${entry.ownerUid}_${String(data?.noteId || "")}`
+        if (resourceType === "folder") entry.folderId = String(data?.folderId || "")
+        else entry.noteId = String(data?.noteId || "")
+        return { resourceType, entryId, entry }
     },
     async acceptShareToken(token, user) {
         if (!db || !user) return null
-        const trimmed = String(token || "").trim()
+        const trimmed = this.parseShareInput(token)
         if (!trimmed) return null
-        const doc = await db.collection(this.shareCollection).doc(trimmed).get()
-        if (!doc.exists) return null
-        const data = doc.data() || {}
-        if (!data.ownerUid || !data.noteId) return null
-        const permission = this.normalizePermission(data.permission)
-        const entryId = `${data.ownerUid}_${data.noteId}`
-        const entry = {
-            ownerUid: data.ownerUid,
-            ownerCollection: "users",
-            noteId: data.noteId,
-            permission,
-            shareToken: trimmed,
-            updatedAt: Utils.serverTimestamp()
+        const collections = Object.entries(this.shareCollections)
+        for (const [resourceType, collectionName] of collections) {
+            const doc = await db.collection(collectionName).doc(trimmed).get()
+            if (!doc.exists) continue
+            const data = doc.data() || {}
+            const resourceIdentifier = resourceType === "folder" ? data.folderId : data.noteId
+            if (!data.ownerUid || !resourceIdentifier) return null
+            const { entryId, entry } = this.buildSharedEntry({ ...data, resourceType }, trimmed)
+            await DataPath.getUserSharedCollection(user, this.getSharedCollectionName(resourceType)).doc(entryId).set(entry, { merge: true })
+            return { id: entryId, resourceType, ...entry }
         }
-        await DataPath.getUserSharedCollection(user, this.sharedNotesCollection).doc(entryId).set(entry, { merge: true })
-        return { id: entryId, ...entry }
+        return null
+    },
+    async acceptShareInput(value, user) {
+        return this.acceptShareToken(this.parseShareInput(value), user)
     },
     getNoteReference(note, user) {
         if (!db || !user || !note) return null
