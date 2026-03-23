@@ -1,8 +1,31 @@
 # SmartNotes backlog
 
-## Done in this iteration
-- Export all notes to local JSON
-- Export current folder to local JSON
+## Current priority
+- [ ] Finish reliable import/export flow for notes and folders
+- [ ] Finish manual backup flow to the connected external drive
+- [ ] Finish Markdown support as a complete working mode
+
+## Import / export / backup
+- [ ] Export all notes locally
+- [ ] Export folder locally
+- [ ] Export selected notes locally
+- [ ] Import notes and folders from other services/formats
+- [ ] Normalize import/export payloads, media handling, and restore flow
+- [ ] Manual backup of all notes to the connected drive
+- [ ] Manual backup of a chosen folder to the connected drive
+- [ ] Keep backups user-initiated only
+- [ ] Add storage-provider choice later for manual backups
+- [ ] Public read-only links
+- [ ] Local-only storage mode
+
+## Editor / Markdown / content
+- [ ] Markdown mode with toggle
+- [ ] Reliable Markdown import/export
+- [ ] Checklists
+- [ ] Tables
+- [ ] Note templates
+- [ ] Note links and graph view
+- [ ] Google Drive attachments
 
 ## Main
 - [ ] Shared folders
@@ -16,20 +39,6 @@
 - [ ] Clear trash with double confirmation
 - [ ] Saved filters
 - [ ] Advanced filters
-- [ ] Note templates
-- [ ] Note links and graph view
-- [ ] Checklists
-- [ ] Tables
-- [ ] Markdown mode with toggle
-- [ ] Google Drive attachments
-
-## Import / export / storage
-- [x] Export all notes
-- [x] Export folder locally
-- [ ] Import from other services
-- [ ] Local-only storage mode
-- [ ] Backup to personal Google Drive
-- [ ] Public read-only links
 
 ## System and stability
 - [ ] Full offline mode
