@@ -31,7 +31,6 @@ export const createGoogleDriveAuthFlow = ({ stateController, errors, folderManag
     }
 
     const getAccessToken = async (forceRefresh = false, options = {}) => {
-        const interactive = options.interactive === true
         const userKey = String(options.userKey || getCurrentUserKey()).trim()
         applyStoredState(userKey)
         if (!getGoogleClientId()) {
@@ -52,7 +51,7 @@ export const createGoogleDriveAuthFlow = ({ stateController, errors, folderManag
             throw createExternalMediaError(ERROR_CODES.UNLINKED)
         }
         if (state.pendingPromise) return state.pendingPromise
-        state.pendingPromise = requestAccessToken({ interactive: forceRefresh ? interactive : false, userKey })
+        state.pendingPromise = requestAccessToken({ interactive: options.interactive === true, userKey })
         return state.pendingPromise
     }
 

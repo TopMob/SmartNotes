@@ -458,7 +458,7 @@ test('html paste with inline media is blocked when external storage is unavailab
     assert.match(window.__lastToast, /attachment unavailable|вложение недоступно/i)
 })
 
-test('google drive media service persists link state, restores silently, and uploads into SmartNotes/Attachments', async () => {
+test('google drive media service keeps linked and connected separate, restores silently, and uploads into SmartNotes/Attachments', async () => {
     const remoteSettingsState = {}
     const buildSettingsReference = userKey => ({
         async get() {
@@ -577,8 +577,13 @@ test('google drive media service persists link state, restores silently, and upl
     await loadExternalStorageScripts(firstWindow)
 
     const firstStatus = await firstWindow.GoogleDriveMediaService.handleSignedInUser(firstWindow.auth.currentUser, { interactiveAllowed: true })
-    assert.equal(firstStatus.connected, true)
-    assert.equal(firstStatus.linked, true)
+    assert.equal(firstStatus.connected, false)
+    assert.equal(firstStatus.linked, false)
+    assert.equal(tokenPrompts.length, 0)
+
+    const linkedStatus = await firstWindow.GoogleDriveMediaService.connect()
+    assert.equal(linkedStatus.connected, true)
+    assert.equal(linkedStatus.linked, true)
     assert.deepEqual(createdFolders, [
         { name: 'SmartNotes', parents: [] },
         { name: 'Attachments', parents: ['folder-root'] },
@@ -661,4 +666,115 @@ test('google drive media service persists link state, restores silently, and upl
     const unlinkedStatus = thirdWindow.GoogleDriveMediaService.getStatus()
     assert.equal(unlinkedStatus.linked, false)
     assert.equal(remoteSettingsState['user-1']?.externalStorage?.googleDrive, null)
+})
+
+test('settings sync uploads local appearance backgrounds to linked Google Drive storage', async () => {
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    window.ThemeManager = {
+        themes: { oled: { p: '#ffffff', bg: '#000000', t: '#ffffff' } },
+        getSavedSettings() {
+            return {
+                preset: 'oled',
+                p: '#ffffff',
+                bg: '#000000',
+                t: '#ffffff',
+                mainBackgroundUrl: '',
+                sidebarBackgroundUrl: '',
+                mainBackgroundImage: '',
+                sidebarBackgroundImage: '',
+                uiOpacity: 0.78,
+                cardsOpacity: 0.9
+            }
+        },
+        getCustomPresets() {
+            return []
+        },
+        normalizeHex(value) {
+            return String(value || '#000000')
+        },
+        pickRuntimeBackgroundValue(urlValue, imageValue) {
+            return String(urlValue || imageValue || '')
+        },
+        applySettings() {},
+        mergeCloudPresetsWithLocalPresets(_local, cloud) {
+            return cloud
+        },
+        setCustomPresets() {}
+    }
+    window.StateStore = {
+        state: {
+            user: { uid: 'user-1' },
+            config: { lang: 'ru', folderViewMode: 'compact', reduceMotion: false }
+        },
+        read() {
+            return this.state
+        },
+        update(key, value) {
+            this.state[key] = value
+        }
+    }
+    window.StateActions = { updateConfig() {} }
+    window.PaginationService = { configureFromSettings() {}, resetVisibleLimit() {} }
+    window.EventBus = { publish() {} }
+    window.SafeStorage = { local: { setJson() {}, getJson(_key, fallback = null) { return fallback } } }
+    const writes = []
+    window.SettingsRepository = {
+        async resolveReference() {
+            return {
+                reference: { id: 'settings-ref' },
+                snapshot: { exists: false, data: () => ({}) }
+            }
+        },
+        async write(reference, payload) {
+            writes.push({ reference, payload })
+        },
+        subscribe() {
+            return () => {}
+        }
+    }
+    const uploaded = []
+    window.GoogleDriveMediaService = {
+        getStatus() {
+            return { linked: true, connected: false }
+        },
+        async uploadDataUrl(dataUrl, options = {}) {
+            uploaded.push({ dataUrl, options })
+            return `https://drive.test/${options.fileNameBase}.jpg`
+        }
+    }
+
+    await loadWindowScript(window, 'js/notes/services/settingsSyncService.js', source => source.replace('const SettingsSyncService = (() => {', 'window.SettingsSyncService = (() => {'))
+
+    const saved = await window.SettingsSyncService.saveUserSettings({
+        notesPerPage: 20,
+        themeId: 'oled',
+        customTheme: {
+            p: '#ffffff',
+            bg: '#000000',
+            t: '#ffffff',
+            mainBackgroundUrl: '',
+            sidebarBackgroundUrl: '',
+            mainBackgroundImage: 'data:image/png;base64,AAA',
+            sidebarBackgroundImage: 'data:image/png;base64,BBB',
+            uiOpacity: 0.78,
+            cardsOpacity: 0.9
+        },
+        backgroundType: 'image',
+        backgroundValue: 'data:image/png;base64,AAA',
+        lang: 'ru',
+        folderViewMode: 'compact',
+        reduceMotion: false,
+        customPresets: [],
+        schemaVersion: 1
+    })
+
+    assert.equal(uploaded.length, 2)
+    assert.deepEqual(uploaded.map(item => item.options.fileNameBase), ['main_background', 'sidebar_background'])
+    assert.equal(saved.customTheme.mainBackgroundUrl, 'https://drive.test/main_background.jpg')
+    assert.equal(saved.customTheme.sidebarBackgroundUrl, 'https://drive.test/sidebar_background.jpg')
+    assert.equal(saved.customTheme.mainBackgroundImage, '')
+    assert.equal(saved.customTheme.sidebarBackgroundImage, '')
+    assert.equal(writes.length, 1)
 })

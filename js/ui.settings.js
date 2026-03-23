@@ -128,7 +128,6 @@ Object.assign(UI, {
                             <div class="settings-toggle-item" style="padding:0; background:none; border:0; gap:12px; align-items:center;">
                                 <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
                                     <span id="settings-drive-status">${dict.drive_not_connected || "Not connected"}</span>
-                                    <span class="folder-meta">${dict.settings_external_storage_desc || "Manage SmartNotes external attachment storage"}</span>
                                 </div>
                                 <button type="button" id="settings-drive-connect" class="btn-secondary">${dict.drive_connect || "Connect"}</button>
                             </div>
@@ -388,7 +387,6 @@ Object.assign(UI, {
             this.showToast(this.getText("sync_error", "Sync error"))
         }
     },
-
     initAppearanceDraft() {
         const settingsDraft = this.getSettingsDraft()
         const sourceTheme = settingsDraft
@@ -621,7 +619,7 @@ Object.assign(UI, {
             driveConnectButton.addEventListener("click", async () => {
                 const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
                 const driveStatus = mediaService?.getStatus?.() || null
-                const canConnect = !driveStatus?.linked && !!mediaService?.connect
+                const canConnect = (!driveStatus?.linked || (!!driveStatus?.linked && !driveStatus?.connected && !!driveStatus?.errorCode)) && !!mediaService?.connect
                 const canUnlink = !!driveStatus?.linked && !!mediaService?.unlink
                 if ((!canConnect && !canUnlink) || !driveStatus?.configured) {
                     this.showToast(this.getText("external_storage_unavailable", "External disk is temporarily unavailable"))
@@ -630,7 +628,10 @@ Object.assign(UI, {
                 }
                 this.syncSettingsUI()
                 try {
-                    if (driveStatus?.linked) {
+                    if (driveStatus?.linked && !driveStatus?.connected && driveStatus?.errorCode) {
+                        await mediaService.connect()
+                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
+                    } else if (driveStatus?.linked) {
                         await mediaService.unlink()
                         this.showToast(this.getText("drive_disconnected", "Google Drive disconnected"))
                     } else {
@@ -1097,8 +1098,10 @@ Object.assign(UI, {
                 driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")
             } else if (driveStatus.pending) {
                 driveStatusElement.textContent = this.getText("drive_connecting", "Connecting...")
-            } else if (driveStatus.connected || driveStatus.linked) {
+            } else if (driveStatus.connected) {
                 driveStatusElement.textContent = this.getText("drive_connected", "Google Drive connected")
+            } else if (driveStatus.linked) {
+                driveStatusElement.textContent = this.getText("drive_linked", "Google Drive linked")
             } else if (driveStatus.errorCode) {
                 driveStatusElement.textContent = typeof this.resolveExternalMediaMessage === "function"
                     ? this.resolveExternalMediaMessage({ code: driveStatus.errorCode }, { attachmentOnly: true })
@@ -1108,10 +1111,13 @@ Object.assign(UI, {
             }
         }
         if (driveConnectButton) {
+            const needsReconnect = !!driveStatus?.linked && !driveStatus?.connected && !!driveStatus?.errorCode
             driveConnectButton.disabled = !driveStatus?.configured || !!driveStatus?.pending
             driveConnectButton.textContent = driveStatus?.pending
                 ? this.getText("drive_connecting", "Connecting...")
-                : this.getText(driveStatus?.linked ? "drive_disconnect" : "drive_connect", driveStatus?.linked ? "Disconnect" : "Connect")
+                : needsReconnect
+                    ? this.getText("drive_reconnect", "Reconnect")
+                    : this.getText(driveStatus?.linked ? "drive_disconnect" : "drive_connect", driveStatus?.linked ? "Disconnect" : "Connect")
         }
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()

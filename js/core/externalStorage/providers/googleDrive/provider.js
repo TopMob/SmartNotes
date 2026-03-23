@@ -208,13 +208,8 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         async handleSignedInUser(user, options = {}) {
             const userKey = getCurrentUserKey(user)
             const storedState = applyStoredState(userKey)
-            const hydratedState = await bindingStore.hydrateState(user, storedState)
-            const isGoogleUser = !!user?.providerData?.some?.(provider => String(provider?.providerId || '') === 'google.com')
-            if (hydratedState?.granted) return this.getStatus()
-            if (!options.interactiveAllowed || !isGoogleUser || state.interactivePromptedForUser === userKey) return this.getStatus()
-            state.interactivePromptedForUser = userKey
-            await connectDrive({ interactive: true, userKey })
-            await bindingStore.saveBinding(user, getPersistedBinding(userKey))
+            state.lastErrorCode = ''
+            await bindingStore.hydrateState(user, storedState)
             return this.getStatus()
         },
         handleSignedOutUser() {
