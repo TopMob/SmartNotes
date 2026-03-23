@@ -408,6 +408,28 @@ test('backupNotesBundleToDrive uploads export payload into backup storage folder
     assert.match(window.__lastToast, /Backup saved|Резервная копия сохранена/i)
 })
 
+test('user menu closes after export and backup actions from the user dropdown', async () => {
+    const window = createBaseWindow()
+    const calls = []
+
+    await loadWindowScript(window, 'js/ui/events.js')
+
+    window.UI.exportAllNotes = () => {
+        calls.push('export')
+    }
+    window.UI.backupAllNotesToDrive = () => {
+        calls.push('backup')
+    }
+    window.UI.toggleUserMenu = force => {
+        calls.push(`menu:${String(force)}`)
+    }
+
+    window.UI.handleAction({ dataset: { action: 'export-all-notes' } }, { stopPropagation() {} })
+    window.UI.handleAction({ dataset: { action: 'backup-all-notes' } }, { stopPropagation() {} })
+
+    assert.deepEqual(calls, ['export', 'menu:false', 'backup', 'menu:false'])
+})
+
 test('lock center three dots opens shared note actions modal for hidden notes', async () => {
     const window = createBaseWindow()
     const hiddenNote = { id: 'hidden-2', title: 'Secret', content: '<p>Body</p>', lock: { hidden: true } }

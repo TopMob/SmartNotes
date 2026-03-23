@@ -498,9 +498,11 @@ Object.assign(UI, {
                 break
             case "export-all-notes":
                 this.exportAllNotes()
+                this.toggleUserMenu(false)
                 break
             case "backup-all-notes":
                 this.backupAllNotesToDrive()
+                this.toggleUserMenu(false)
                 break
             case "clear-trash":
                 clearTrashPermanently()

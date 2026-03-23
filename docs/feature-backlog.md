@@ -2,12 +2,12 @@
 
 ## Current priority
 - [ ] Finish reliable import/export flow for notes and folders
-- [ ] Finish manual backup flow to the connected external drive
+- [ ] Add storage-provider choice for manual backups
 - [ ] Finish Markdown support as a complete working mode
 
 ## Import / export / backup
-- [ ] Export all notes locally
-- [ ] Export folder locally
+- [x] Export all notes locally
+- [x] Export folder locally
 - [ ] Export selected notes locally
 - [ ] Import notes and folders from other services/formats
 - [ ] Normalize import/export payloads, media handling, and restore flow
