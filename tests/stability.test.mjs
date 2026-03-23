@@ -1249,3 +1249,64 @@ test('accept shared link action opens prompt flow from user menu', async () => {
 
     assert.deepEqual(calls, ['prompt'])
 })
+
+
+test('collaboration ownership falls back to resource ownerUid when access roles are absent', async () => {
+    const window = createBaseWindow()
+    window.SafeStorage = { session: { get() { return '' }, set() {}, remove() {} } }
+    window.EventBus = { publish() {}, subscribe() { return () => {} } }
+    window.navigator.clipboard = { writeText: async () => {} }
+
+    await loadWindowScript(window, 'js/services.js')
+
+    assert.equal(window.CollaborationService.canManage({ id: 'folder-1', ownerUid: 'user-1' }), true)
+    assert.equal(window.CollaborationService.canEdit({ id: 'folder-1', ownerUid: 'user-1' }), true)
+})
+
+test('app init accepts captured share tokens for an already signed-in user', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="notes-content-area"></div></body></html>', { url: 'https://smartnotes.test/?share=token-1', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    let acceptedWithUser = ''
+    window.UI = {
+        init() {},
+        updateNavigationActiveState() {},
+        getText(_key, fallback) { return fallback },
+        showToast(message) { window.__lastToast = message }
+    }
+    window.StateStore = {
+        read() {
+            return {
+                user: { uid: 'user-1' },
+                config: { lang: 'en' },
+                folders: [],
+                notes: [],
+                pagination: { displayLimit: 20, loadingMoreOwnedNotes: false, hasMoreOwnedNotes: false, totalVisibleNotesCount: 0, renderedVisibleNotesCount: 0, searchActive: false },
+                view: 'notes',
+                activeFolderId: null,
+                searchQuery: ''
+            }
+        },
+        subscribe() { return () => {} }
+    }
+    window.NotesPresenter = { createViewModel() { return {} } }
+    window.NotesUIAdapter = { render() {} }
+    window.PaginationService = { getLoadMoreState() { return { hasMoreItems: false, isLoading: false } } }
+    window.EventBus = { subscribe() { return () => {} } }
+    window.SessionService = { async startUserSession() {} }
+    window.navigator.serviceWorker = { getRegistrations: async () => [] }
+    window.caches = { keys: async () => [], delete: async () => true }
+    window.CollaborationService = {
+        captureShareToken() { return 'token-1' },
+        async acceptPendingShare(user) {
+            acceptedWithUser = user.uid
+            return { resourceType: 'note' }
+        }
+    }
+
+    await loadWindowScript(window, 'js/notes/app.js')
+    await window.initApp()
+
+    assert.equal(acceptedWithUser, 'user-1')
+    assert.match(window.__lastToast, /Shared note added/i)
+})

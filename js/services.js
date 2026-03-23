@@ -719,7 +719,8 @@ const CollaborationService = {
         const access = this.getAccess(resource)
         const currentUserUid = StateStore.read().user?.uid || ""
         if (!currentUserUid) return "viewer"
-        if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
+        const resourceOwnerUid = String(resource?.ownerUid || "")
+        if ((access?.ownerUid && access.ownerUid === currentUserUid) || (resourceOwnerUid && resourceOwnerUid === currentUserUid)) return "owner"
         const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"

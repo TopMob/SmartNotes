@@ -136,7 +136,7 @@ const NotesApplication = (() => {
     }
 
     async function initializeRuntime() {
-        if (typeof CollaborationService !== "undefined") CollaborationService.captureShareToken()
+        const capturedShareToken = typeof CollaborationService !== "undefined" ? CollaborationService.captureShareToken() : ""
         await disableServiceWorkerCaching()
         if (typeof UI.init === "function") UI.init()
         if (typeof window.SmartNotesEditor?.init === "function") {
@@ -148,6 +148,14 @@ const NotesApplication = (() => {
         const user = StateStore.read().user
         if (user?.uid) {
             await SessionService.startUserSession(user)
+            if ((capturedShareToken || typeof CollaborationService !== "undefined") && typeof CollaborationService !== "undefined") {
+                const acceptedShare = await CollaborationService.acceptPendingShare(user)
+                if (acceptedShare) {
+                    const messageKey = acceptedShare.resourceType === "folder" ? "shared_folder_added" : "shared_note_added"
+                    const fallback = acceptedShare.resourceType === "folder" ? "Shared folder added" : "Shared note added"
+                    UI.showToast(UI.getText(messageKey, fallback))
+                }
+            }
         }
         renderFromState()
     }
