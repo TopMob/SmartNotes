@@ -1,13 +1,23 @@
 export const createGoogleDriveAuthFlow = ({ stateController, errors, folderManager, getGoogleClientId, requestGoogleAccessToken, uploadScope }) => {
     const { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode } = errors
-    const { state, applyStoredState, getCurrentUserKey, writeStoredState } = stateController
+    const { state, applyStoredState, getCurrentUser, getCurrentUserKey, writeStoredState } = stateController
+
+    const getLoginHint = () => {
+        const user = getCurrentUser()
+        return String(
+            user?.email
+            || user?.providerData?.find?.(provider => String(provider?.providerId || '') === 'google.com')?.email
+            || ''
+        ).trim()
+    }
 
     const requestAccessToken = async ({ interactive, userKey }) => {
         try {
             const tokenResponse = await requestGoogleAccessToken({
                 clientId: getGoogleClientId(),
                 scope: uploadScope,
-                prompt: interactive ? (state.granted ? '' : 'consent') : ''
+                prompt: interactive ? (state.granted ? '' : 'consent') : 'none',
+                loginHint: getLoginHint()
             })
             if (!tokenResponse?.accessToken) throw createExternalMediaError(ERROR_CODES.UNLINKED)
             state.accessToken = tokenResponse.accessToken

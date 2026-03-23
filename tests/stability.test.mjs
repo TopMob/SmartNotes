@@ -527,7 +527,6 @@ test('google drive media service keeps linked and connected separate, restores s
         return window
     }
 
-    const tokenPrompts = []
     const createdFolders = []
     let uploadCalls = 0
     let permissionCalls = 0
@@ -535,8 +534,9 @@ test('google drive media service keeps linked and connected separate, restores s
     const firstDeviceState = {}
 
     const firstWindow = buildWindow(firstDeviceState)
-    firstWindow.requestGoogleAccessToken = async ({ prompt }) => {
-        tokenPrompts.push(prompt)
+    const tokenRequests = []
+    firstWindow.requestGoogleAccessToken = async ({ prompt, loginHint }) => {
+        tokenRequests.push({ prompt, loginHint })
         return { accessToken: 'token-1', expiresIn: 3600 }
     }
     firstWindow.fetch = async (url, options = {}) => {
@@ -579,7 +579,7 @@ test('google drive media service keeps linked and connected separate, restores s
     const firstStatus = await firstWindow.GoogleDriveMediaService.handleSignedInUser(firstWindow.auth.currentUser, { interactiveAllowed: true })
     assert.equal(firstStatus.connected, false)
     assert.equal(firstStatus.linked, false)
-    assert.equal(tokenPrompts.length, 0)
+    assert.equal(tokenRequests.length, 0)
 
     const linkedStatus = await firstWindow.GoogleDriveMediaService.connect()
     assert.equal(linkedStatus.connected, true)
@@ -590,13 +590,14 @@ test('google drive media service keeps linked and connected separate, restores s
         { name: 'Backups', parents: ['folder-root'] },
         { name: 'Exports', parents: ['folder-root'] }
     ])
-    assert.equal(tokenPrompts[0], 'consent')
+    assert.equal(tokenRequests[0]?.prompt, 'consent')
+    assert.equal(tokenRequests[0]?.loginHint, 'user-1@example.com')
     assert.equal(remoteSettingsState['user-1']?.externalStorage?.googleDrive?.attachmentsId, 'folder-attachments')
     assert.equal(remoteSettingsState['user-1']?.externalStorage?.googleDrive?.exportsId, 'folder-exports')
 
     const secondWindow = buildWindow(firstDeviceState)
-    secondWindow.requestGoogleAccessToken = async ({ prompt }) => {
-        tokenPrompts.push(prompt)
+    secondWindow.requestGoogleAccessToken = async ({ prompt, loginHint }) => {
+        tokenRequests.push({ prompt, loginHint })
         return { accessToken: 'token-2', expiresIn: 3600 }
     }
     secondWindow.fetch = async (url, options = {}) => {
@@ -629,7 +630,7 @@ test('google drive media service keeps linked and connected separate, restores s
     assert.equal(restoredStatus.linked, true)
     assert.equal(restoredStatus.attachmentsId, 'folder-attachments')
     assert.equal(restoredStatus.exportsId, 'folder-exports')
-    assert.equal(tokenPrompts.length, 1)
+    assert.equal(tokenRequests.length, 1)
 
     const note = {
         title: 'Cache',
@@ -642,13 +643,14 @@ test('google drive media service keeps linked and connected separate, restores s
     assert.equal(/data:image\//.test(result.note.pageDrawings[0]), false)
     assert.match(result.note.content, /https:\/\/lh3\.googleusercontent\.com\/d\/file-1/)
     assert.match(uploadedBody, /"parents":\["folder-attachments"\]/)
-    assert.equal(tokenPrompts[1], '')
+    assert.equal(tokenRequests[1]?.prompt, 'none')
+    assert.equal(tokenRequests[1]?.loginHint, 'user-1@example.com')
     assert.equal(uploadCalls, 1)
     assert.equal(permissionCalls, 1)
 
     const thirdWindow = buildWindow({})
-    thirdWindow.requestGoogleAccessToken = async ({ prompt }) => {
-        tokenPrompts.push(prompt)
+    thirdWindow.requestGoogleAccessToken = async ({ prompt, loginHint }) => {
+        tokenRequests.push({ prompt, loginHint })
         return { accessToken: 'token-3', expiresIn: 3600 }
     }
     thirdWindow.fetch = async () => ({ ok: true, status: 200, json: async () => ({ files: [] }) })
@@ -659,7 +661,7 @@ test('google drive media service keeps linked and connected separate, restores s
     assert.equal(crossDeviceStatus.linked, true)
     assert.equal(crossDeviceStatus.connected, false)
     assert.equal(crossDeviceStatus.attachmentsId, 'folder-attachments')
-    assert.equal(tokenPrompts.length, 2)
+    assert.equal(tokenRequests.length, 2)
 
     await thirdWindow.GoogleDriveMediaService.unlink()
 
@@ -777,4 +779,54 @@ test('settings sync uploads local appearance backgrounds to linked Google Drive 
     assert.equal(saved.customTheme.mainBackgroundImage, '')
     assert.equal(saved.customTheme.sidebarBackgroundImage, '')
     assert.equal(writes.length, 1)
+})
+
+test('google identity token requests use prompt none for silent restore and surface oauth callback errors', async () => {
+    const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    let capturedConfig = null
+    let capturedOverride = null
+    window.google = {
+        accounts: {
+            id: {},
+            oauth2: {
+                initTokenClient(config) {
+                    capturedConfig = config
+                    return {
+                        requestAccessToken(overrideConfig = {}) {
+                            capturedOverride = overrideConfig
+                            config.callback({
+                                error: 'interaction_required',
+                                error_description: 'Needs user interaction'
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    await loadWindowScript(window, 'js/core/googleIdentityAuth.js', source => source
+        .replace('export async function requestGoogleIdentityToken', 'window.requestGoogleIdentityToken = async function requestGoogleIdentityToken')
+        .replace('export async function requestGoogleAccessToken', 'window.requestGoogleAccessToken = async function requestGoogleAccessToken'))
+
+    await assert.rejects(
+        window.requestGoogleAccessToken({
+            clientId: 'client-id',
+            scope: 'scope-1',
+            prompt: 'none',
+            loginHint: 'user-1@example.com'
+        }),
+        error => {
+            assert.equal(error.code, 'auth/google-oauth-interaction_required')
+            assert.match(String(error.message || ''), /needs user interaction/i)
+            return true
+        }
+    )
+
+    assert.equal(capturedConfig?.prompt, 'none')
+    assert.equal(capturedConfig?.login_hint, 'user-1@example.com')
+    assert.equal(capturedOverride?.prompt, 'none')
+    assert.equal(capturedOverride?.login_hint, 'user-1@example.com')
 })
