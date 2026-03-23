@@ -377,6 +377,37 @@ test('prepareExportNotes removes inline media and NoteExport payload keeps notes
     assert.equal(payload.folders.length, 1)
 })
 
+test('backupNotesBundleToDrive uploads export payload into backup storage folder', async () => {
+    const window = createBaseWindow()
+    window.StateStore.state.notes = [
+        { id: 'note-1', title: 'Backup note', content: '<p>Body</p>', folderId: null, trashedAt: null }
+    ]
+    window.ExternalMediaService = {
+        async externalizeNoteMedia(note) {
+            return { note }
+        },
+        async uploadFile(file, options = {}) {
+            window.__backupUpload = {
+                body: await file.text(),
+                options
+            }
+            return 'https://drive.test/backups/backup.json'
+        }
+    }
+
+    await loadWindowScript(window, 'js/ui/layout.js')
+    await loadWindowScript(window, 'js/core/noteExport.js')
+
+    const result = await window.UI.backupAllNotesToDrive()
+
+    assert.equal(result?.publicUrl, 'https://drive.test/backups/backup.json')
+    assert.equal(window.__backupUpload.options.targetFolder, 'backups')
+    assert.equal(window.__backupUpload.options.mimeType, 'application/json')
+    assert.match(window.__backupUpload.options.fileName, /^smartnotes_all_notes_.*\.json$/)
+    assert.match(window.__backupUpload.body, /"app": "SmartNotes"/)
+    assert.match(window.__lastToast, /Backup saved|Резервная копия сохранена/i)
+})
+
 test('lock center three dots opens shared note actions modal for hidden notes', async () => {
     const window = createBaseWindow()
     const hiddenNote = { id: 'hidden-2', title: 'Secret', content: '<p>Body</p>', lock: { hidden: true } }

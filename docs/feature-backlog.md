@@ -11,9 +11,9 @@
 - [ ] Export selected notes locally
 - [ ] Import notes and folders from other services/formats
 - [ ] Normalize import/export payloads, media handling, and restore flow
-- [ ] Manual backup of all notes to the connected drive
-- [ ] Manual backup of a chosen folder to the connected drive
-- [ ] Keep backups user-initiated only
+- [x] Manual backup of all notes to the connected drive
+- [x] Manual backup of a chosen folder to the connected drive
+- [x] Keep backups user-initiated only
 - [ ] Add storage-provider choice later for manual backups
 - [ ] Public read-only links
 - [ ] Local-only storage mode

@@ -444,7 +444,7 @@ Object.assign(UI, {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "export-active-folder", "export-all-notes", "delete-active-folder", "clear-trash"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "export-active-folder", "backup-active-folder", "export-all-notes", "backup-all-notes", "delete-active-folder", "clear-trash"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -492,8 +492,15 @@ Object.assign(UI, {
                 this.exportActiveFolderNotes()
                 this.toggleActiveFolderMenu(false)
                 break
+            case "backup-active-folder":
+                this.backupActiveFolderToDrive()
+                this.toggleActiveFolderMenu(false)
+                break
             case "export-all-notes":
                 this.exportAllNotes()
+                break
+            case "backup-all-notes":
+                this.backupAllNotesToDrive()
                 break
             case "clear-trash":
                 clearTrashPermanently()

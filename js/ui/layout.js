@@ -687,6 +687,40 @@ Object.assign(UI, {
         return fileName
     },
 
+    async backupNotesBundleToDrive(notes, options = {}) {
+        const exportableNotes = Array.isArray(notes) ? notes : []
+        if (!exportableNotes.length) {
+            const emptyKey = options.emptyMessageKey || "export_empty"
+            const fallbackMessage = options.emptyFallback || "No notes available for export"
+            this.showToast(this.getText(emptyKey, fallbackMessage))
+            return null
+        }
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        if (!mediaService?.uploadFile) {
+            this.showToast(this.getText("backup_connected_drive_required", "Connect external storage to create a backup"))
+            return null
+        }
+        const preparedNotes = await this.prepareExportNotes(exportableNotes)
+        const payload = window.NoteExportService.buildExportPayload({
+            notes: preparedNotes,
+            folders: this.getExportFoldersForNotes(preparedNotes, options),
+            scope: options.scope || "all",
+            folder: options.folder || null
+        })
+        const fileName = window.NoteExportService.buildExportFileName({
+            scope: options.scope || "all",
+            folderName: options.folder?.name || ""
+        })
+        const blob = window.NoteExportService.createExportBlob(payload)
+        const publicUrl = await mediaService.uploadFile(blob, {
+            fileName,
+            mimeType: "application/json",
+            targetFolder: "backups"
+        })
+        this.showToast(this.getText("backup_success", "Backup saved to external storage"))
+        return { fileName, publicUrl }
+    },
+
     async exportAllNotes() {
         try {
             return await this.exportNotesBundle(this.getExportableNotes(), {
@@ -696,6 +730,20 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async backupAllNotesToDrive() {
+        try {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(), {
+                scope: "all",
+                emptyMessageKey: "export_empty",
+                emptyFallback: "No notes available for export"
+            })
+        } catch (error) {
+            console.error("Backup failed", error)
             this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }
@@ -715,6 +763,25 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async backupActiveFolderToDrive() {
+        const { activeFolderId, folders } = StateStore.read()
+        if (!activeFolderId) return null
+        const folder = folders.find(item => item.id === activeFolderId)
+        try {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(note => note.folderId === activeFolderId), {
+                scope: "folder",
+                folder,
+                folders: folder ? [folder] : [],
+                emptyMessageKey: "export_folder_empty",
+                emptyFallback: "This folder has no notes to export"
+            })
+        } catch (error) {
+            console.error("Backup failed", error)
             this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }

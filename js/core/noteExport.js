@@ -138,9 +138,11 @@ const buildExportFileName = ({ scope = "all", folderName = "" } = {}) => {
     return `smartnotes_all_notes_${dateStamp}.json`
 }
 
+const createExportBlob = (payload) => new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" })
+
 const downloadExportPayload = (payload, options = {}) => {
     const fileName = buildExportFileName(options)
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" })
+    const blob = createExportBlob(payload)
     const link = document.createElement("a")
     const objectUrl = URL.createObjectURL(blob)
     link.href = objectUrl
@@ -153,6 +155,7 @@ const downloadExportPayload = (payload, options = {}) => {
 window.NoteExportService = {
     buildExportPayload,
     buildExportFileName,
+    createExportBlob,
     downloadExportPayload,
     sanitizeExportFileName,
     serializeNoteForExport,
