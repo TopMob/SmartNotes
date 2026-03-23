@@ -22,6 +22,7 @@ const loadExternalStorageScripts = async window => {
     await loadWindowScript(window, 'js/core/externalStorage/mediaPipeline.js', toWindowGlobal)
     await loadWindowScript(window, 'js/core/externalStorage/service.js', toWindowGlobal)
     await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/state.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/binding.js', toWindowGlobal)
     await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/folders.js', toWindowGlobal)
     await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/auth.js', toWindowGlobal)
     await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/provider.js', toWindowGlobal)
@@ -458,8 +459,33 @@ test('html paste with inline media is blocked when external storage is unavailab
 })
 
 test('google drive media service persists link state, restores silently, and uploads into SmartNotes/Attachments', async () => {
-    const persistedDriveState = {}
-    const buildWindow = () => {
+    const remoteSettingsState = {}
+    const buildSettingsReference = userKey => ({
+        async get() {
+            const payload = remoteSettingsState[userKey]
+            return {
+                exists: !!payload,
+                data: () => payload || {}
+            }
+        },
+        async set(payload, options = {}) {
+            const current = remoteSettingsState[userKey] || {}
+            if (options.merge) {
+                remoteSettingsState[userKey] = {
+                    ...current,
+                    ...payload,
+                    externalStorage: {
+                        ...(current.externalStorage || {}),
+                        ...(payload.externalStorage || {})
+                    }
+                }
+                return
+            }
+            remoteSettingsState[userKey] = payload
+        }
+    })
+
+    const buildWindow = (persistedDriveState = {}) => {
         const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
         const { window } = dom
         window.console = console
@@ -487,6 +513,17 @@ test('google drive media service persists link state, restores silently, and upl
                 }
             }
         }
+        window.DataPath = {
+            async ensureUserDocument() {
+                return true
+            },
+            getUserSettingsReference(user) {
+                return buildSettingsReference(String(user?.uid || ''))
+            },
+            getUserLegacySettingsReference() {
+                return null
+            }
+        }
         return window
     }
 
@@ -495,8 +532,9 @@ test('google drive media service persists link state, restores silently, and upl
     let uploadCalls = 0
     let permissionCalls = 0
     let uploadedBody = ''
+    const firstDeviceState = {}
 
-    const firstWindow = buildWindow()
+    const firstWindow = buildWindow(firstDeviceState)
     firstWindow.requestGoogleAccessToken = async ({ prompt }) => {
         tokenPrompts.push(prompt)
         return { accessToken: 'token-1', expiresIn: 3600 }
@@ -548,8 +586,10 @@ test('google drive media service persists link state, restores silently, and upl
         { name: 'Exports', parents: ['folder-root'] }
     ])
     assert.equal(tokenPrompts[0], 'consent')
+    assert.equal(remoteSettingsState['user-1']?.externalStorage?.googleDrive?.attachmentsId, 'folder-attachments')
+    assert.equal(remoteSettingsState['user-1']?.externalStorage?.googleDrive?.exportsId, 'folder-exports')
 
-    const secondWindow = buildWindow()
+    const secondWindow = buildWindow(firstDeviceState)
     secondWindow.requestGoogleAccessToken = async ({ prompt }) => {
         tokenPrompts.push(prompt)
         return { accessToken: 'token-2', expiresIn: 3600 }
@@ -600,4 +640,25 @@ test('google drive media service persists link state, restores silently, and upl
     assert.equal(tokenPrompts[1], '')
     assert.equal(uploadCalls, 1)
     assert.equal(permissionCalls, 1)
+
+    const thirdWindow = buildWindow({})
+    thirdWindow.requestGoogleAccessToken = async ({ prompt }) => {
+        tokenPrompts.push(prompt)
+        return { accessToken: 'token-3', expiresIn: 3600 }
+    }
+    thirdWindow.fetch = async () => ({ ok: true, status: 200, json: async () => ({ files: [] }) })
+
+    await loadExternalStorageScripts(thirdWindow)
+
+    const crossDeviceStatus = await thirdWindow.GoogleDriveMediaService.handleSignedInUser(thirdWindow.auth.currentUser, { interactiveAllowed: false })
+    assert.equal(crossDeviceStatus.linked, true)
+    assert.equal(crossDeviceStatus.connected, false)
+    assert.equal(crossDeviceStatus.attachmentsId, 'folder-attachments')
+    assert.equal(tokenPrompts.length, 2)
+
+    await thirdWindow.GoogleDriveMediaService.unlink()
+
+    const unlinkedStatus = thirdWindow.GoogleDriveMediaService.getStatus()
+    assert.equal(unlinkedStatus.linked, false)
+    assert.equal(remoteSettingsState['user-1']?.externalStorage?.googleDrive, null)
 })

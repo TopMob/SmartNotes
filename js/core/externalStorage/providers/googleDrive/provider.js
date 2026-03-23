@@ -1,5 +1,6 @@
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from '../../errors.js'
 import { createGoogleDriveAuthFlow } from './auth.js'
+import { createGoogleDriveBindingStore } from './binding.js'
 import { createGoogleDriveFolderManager } from './folders.js'
 import { createGoogleDriveState } from './state.js'
 
@@ -10,7 +11,8 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
     const filesEndpoint = 'https://www.googleapis.com/drive/v3/files'
     const folderMimeType = 'application/vnd.google-apps.folder'
     const stateController = createGoogleDriveState({ storageKey: 'google-drive-state' })
-    const { state, applyStoredState, persistState, resetRuntimeState, getCurrentUserKey } = stateController
+    const { state, applyStoredState, readStoredState, writeStoredState, resetRuntimeState, getCurrentUser, getCurrentUserKey } = stateController
+    const bindingStore = createGoogleDriveBindingStore({ stateController })
     const folderManager = createGoogleDriveFolderManager({
         stateController,
         errors: { ERROR_CODES, createExternalMediaError },
@@ -111,6 +113,14 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
     }
 
     const uploadCache = new Map()
+    const getPersistedBinding = userKey => readStoredState(userKey) || {
+        granted: !!state.granted,
+        linkedAt: Date.now(),
+        rootId: state.folders.rootId || '',
+        attachmentsId: state.folders.attachmentsId || '',
+        backupsId: state.folders.backupsId || '',
+        exportsId: state.folders.exportsId || ''
+    }
 
     const uploadBlob = async (blob, options = {}, attempt = 0) => {
         const mimeType = String(options.mimeType || blob.type || 'application/octet-stream')
@@ -189,21 +199,34 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         sanitizeFileNamePart,
         normalizePublicUrl,
         async connect(options = {}) {
-            await connectDrive({ interactive: options.interactive !== false, userKey: options.userKey })
+            const user = options.user || getCurrentUser()
+            const userKey = String(options.userKey || getCurrentUserKey(user)).trim()
+            await connectDrive({ interactive: options.interactive !== false, userKey })
+            await bindingStore.saveBinding(user, getPersistedBinding(userKey))
             return this.getStatus()
         },
         async handleSignedInUser(user, options = {}) {
             const userKey = getCurrentUserKey(user)
             const storedState = applyStoredState(userKey)
+            const hydratedState = await bindingStore.hydrateState(user, storedState)
             const isGoogleUser = !!user?.providerData?.some?.(provider => String(provider?.providerId || '') === 'google.com')
-            if (storedState?.granted) return this.getStatus()
+            if (hydratedState?.granted) return this.getStatus()
             if (!options.interactiveAllowed || !isGoogleUser || state.interactivePromptedForUser === userKey) return this.getStatus()
             state.interactivePromptedForUser = userKey
             await connectDrive({ interactive: true, userKey })
+            await bindingStore.saveBinding(user, getPersistedBinding(userKey))
             return this.getStatus()
         },
         handleSignedOutUser() {
             resetRuntimeState()
+        },
+        async unlink(options = {}) {
+            const user = options.user || getCurrentUser()
+            const userKey = String(options.userKey || getCurrentUserKey(user)).trim()
+            resetRuntimeState()
+            if (userKey) writeStoredState(null, userKey)
+            await bindingStore.clearBinding(user)
+            return this.getStatus()
         },
         uploadFile,
         uploadDataUrl,

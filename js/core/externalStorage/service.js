@@ -37,6 +37,9 @@ export const createExternalStorageService = ({ providers = [], defaultProviderId
         connect(options = {}) {
             return getProvider().connect(options)
         },
+        unlink(options = {}) {
+            return getProvider().unlink(options)
+        },
         handleSignedInUser(user, options = {}) {
             return getProvider().handleSignedInUser(user, options)
         },
