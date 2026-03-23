@@ -1104,7 +1104,7 @@ Object.assign(UI, {
             driveConnectButton.disabled = !driveStatus?.configured || !!driveStatus?.pending
             driveConnectButton.textContent = driveStatus?.pending
                 ? this.getText("drive_connecting", "Connecting...")
-                : this.getText(driveStatus?.connected ? "drive_reconnect" : "drive_connect", driveStatus?.connected ? "Reconnect" : "Connect")
+                : this.getText(driveStatus?.linked ? "drive_reconnect" : "drive_connect", driveStatus?.linked ? "Reconnect" : "Connect")
         }
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()

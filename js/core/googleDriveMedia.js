@@ -3,7 +3,13 @@ import { requestGoogleAccessToken } from "./googleIdentityAuth.js"
 
 const DRIVE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/drive.file"
 const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webContentLink"
-const DRIVE_PERMISSION_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
+const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
+const DRIVE_PERMISSION_ENDPOINT = DRIVE_FILES_ENDPOINT
+const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+const DRIVE_APP_FOLDER_NAME = "SmartNotes"
+const DRIVE_ATTACHMENTS_FOLDER_NAME = "Attachments"
+const DRIVE_BACKUPS_FOLDER_NAME = "Backups"
+const DRIVE_STATE_STORAGE_KEY = "google-drive-state"
 const INLINE_MEDIA_PATTERN = /^data:(image|audio)\//i
 const INLINE_MEDIA_URL_PATTERN = /data:(image|audio)\//i
 const ERROR_CODES = {
@@ -18,12 +24,84 @@ const tokenState = {
     accessToken: "",
     expiresAt: 0,
     pendingPromise: null,
-    lastErrorCode: ""
+    lastErrorCode: "",
+    currentUserKey: "",
+    granted: false,
+    folders: {
+        rootId: "",
+        attachmentsId: "",
+        backupsId: ""
+    },
+    interactivePromptedForUser: ""
 }
 
 const uploadCache = new Map()
 
 const getGoogleClientId = () => String(window.auth?.app?.options?.clientId || firebaseConfig.clientId || "").trim()
+const getCurrentUser = () => window.auth?.currentUser || (typeof StateStore !== "undefined" && typeof StateStore.read === "function" ? StateStore.read().user : null) || null
+const getCurrentUserKey = (user = getCurrentUser()) => String(user?.uid || user?.email || "").trim()
+
+const readStoredDriveState = (userKey = getCurrentUserKey()) => {
+    const normalizedUserKey = String(userKey || "").trim()
+    if (!normalizedUserKey || !window.SafeStorage?.local?.getJson) return null
+    const allStates = window.SafeStorage.local.getJson(DRIVE_STATE_STORAGE_KEY, {}) || {}
+    const storedState = allStates[normalizedUserKey]
+    return storedState && typeof storedState === "object" ? storedState : null
+}
+
+const writeStoredDriveState = (nextState, userKey = getCurrentUserKey()) => {
+    const normalizedUserKey = String(userKey || "").trim()
+    if (!normalizedUserKey || !window.SafeStorage?.local?.getJson || !window.SafeStorage?.local?.setJson) return
+    const allStates = window.SafeStorage.local.getJson(DRIVE_STATE_STORAGE_KEY, {}) || {}
+    if (!nextState) {
+        delete allStates[normalizedUserKey]
+        window.SafeStorage.local.setJson(DRIVE_STATE_STORAGE_KEY, allStates)
+        return
+    }
+    allStates[normalizedUserKey] = nextState
+    window.SafeStorage.local.setJson(DRIVE_STATE_STORAGE_KEY, allStates)
+}
+
+const applyStoredDriveState = (userKey = getCurrentUserKey()) => {
+    const normalizedUserKey = String(userKey || "").trim()
+    if (!normalizedUserKey) {
+        tokenState.currentUserKey = ""
+        tokenState.granted = false
+        tokenState.folders = { rootId: "", attachmentsId: "", backupsId: "" }
+        return null
+    }
+    if (tokenState.currentUserKey === normalizedUserKey) return readStoredDriveState(normalizedUserKey)
+    tokenState.currentUserKey = normalizedUserKey
+    const storedState = readStoredDriveState(normalizedUserKey)
+    tokenState.granted = !!storedState?.granted
+    tokenState.folders = {
+        rootId: String(storedState?.rootId || ""),
+        attachmentsId: String(storedState?.attachmentsId || ""),
+        backupsId: String(storedState?.backupsId || "")
+    }
+    return storedState
+}
+
+const persistDriveState = (updates = {}, userKey = getCurrentUserKey()) => {
+    const normalizedUserKey = String(userKey || "").trim()
+    if (!normalizedUserKey) return
+    const previousState = readStoredDriveState(normalizedUserKey) || {}
+    const nextState = {
+        granted: !!updates.granted,
+        linkedAt: Number(updates.linkedAt || previousState.linkedAt || Date.now()),
+        rootId: String(updates.rootId || ""),
+        attachmentsId: String(updates.attachmentsId || ""),
+        backupsId: String(updates.backupsId || "")
+    }
+    tokenState.currentUserKey = normalizedUserKey
+    tokenState.granted = nextState.granted
+    tokenState.folders = {
+        rootId: nextState.rootId,
+        attachmentsId: nextState.attachmentsId,
+        backupsId: nextState.backupsId
+    }
+    writeStoredDriveState(nextState, normalizedUserKey)
+}
 
 const normalizeDrivePublicUrl = (file) => {
     const fileId = typeof file === "string" ? file : String(file?.id || "").trim()
@@ -143,7 +221,88 @@ const createMultipartBody = (metadata, blob, boundary) => {
     ], { type: `multipart/related; boundary=${boundary}` })
 }
 
-const getAccessToken = async (forceRefresh = false) => {
+const escapeDriveQueryValue = (value) => String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'")
+
+const authorizedDriveRequest = async (accessToken, url, options = {}) => {
+    const response = await fetch(url, {
+        method: options.method || "GET",
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(options.headers || {})
+        },
+        body: options.body
+    })
+    if (response.status === 401) {
+        tokenState.expiresAt = 0
+        tokenState.lastErrorCode = ERROR_CODES.UNLINKED
+        throw createExternalMediaError(ERROR_CODES.UNLINKED)
+    }
+    if (!response.ok) {
+        tokenState.lastErrorCode = ERROR_CODES.SAVE_FAILED
+        throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+    }
+    return response
+}
+
+const findDriveFolder = async (name, parentId, accessToken) => {
+    const normalizedName = String(name || "").trim()
+    if (!normalizedName) return null
+    const parentClause = parentId ? `'${escapeDriveQueryValue(parentId)}' in parents` : "'root' in parents"
+    const query = [
+        `mimeType='${DRIVE_FOLDER_MIME_TYPE}'`,
+        "trashed=false",
+        `name='${escapeDriveQueryValue(normalizedName)}'`,
+        parentClause
+    ].join(" and ")
+    const response = await authorizedDriveRequest(accessToken, `${DRIVE_FILES_ENDPOINT}?q=${encodeURIComponent(query)}&spaces=drive&pageSize=1&fields=files(id,name,parents)`)
+    const payload = await response.json()
+    const folder = Array.isArray(payload?.files) ? payload.files[0] : null
+    return folder?.id ? { id: String(folder.id), name: String(folder.name || normalizedName) } : null
+}
+
+const createDriveFolder = async (name, parentId, accessToken) => {
+    const normalizedName = String(name || "").trim()
+    if (!normalizedName) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+    const payload = { name: normalizedName, mimeType: DRIVE_FOLDER_MIME_TYPE }
+    if (parentId) payload.parents = [parentId]
+    const response = await authorizedDriveRequest(accessToken, `${DRIVE_FILES_ENDPOINT}?fields=id,name,parents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    })
+    const folder = await response.json()
+    if (!folder?.id) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+    return { id: String(folder.id), name: normalizedName }
+}
+
+const ensureDriveFolders = async (accessToken, options = {}) => {
+    const userKey = String(options.userKey || getCurrentUserKey()).trim()
+    const storedState = applyStoredDriveState(userKey) || {}
+    let rootId = String(options.rootId || tokenState.folders.rootId || storedState.rootId || "")
+    let attachmentsId = String(options.attachmentsId || tokenState.folders.attachmentsId || storedState.attachmentsId || "")
+    let backupsId = String(options.backupsId || tokenState.folders.backupsId || storedState.backupsId || "")
+
+    if (!rootId) {
+        rootId = String((await findDriveFolder(DRIVE_APP_FOLDER_NAME, "", accessToken))?.id || "")
+        if (!rootId) rootId = String((await createDriveFolder(DRIVE_APP_FOLDER_NAME, "", accessToken))?.id || "")
+    }
+    if (!attachmentsId) {
+        attachmentsId = String((await findDriveFolder(DRIVE_ATTACHMENTS_FOLDER_NAME, rootId, accessToken))?.id || "")
+        if (!attachmentsId) attachmentsId = String((await createDriveFolder(DRIVE_ATTACHMENTS_FOLDER_NAME, rootId, accessToken))?.id || "")
+    }
+    if (!backupsId) {
+        backupsId = String((await findDriveFolder(DRIVE_BACKUPS_FOLDER_NAME, rootId, accessToken))?.id || "")
+        if (!backupsId) backupsId = String((await createDriveFolder(DRIVE_BACKUPS_FOLDER_NAME, rootId, accessToken))?.id || "")
+    }
+
+    persistDriveState({ granted: true, linkedAt: Date.now(), rootId, attachmentsId, backupsId }, userKey)
+    return { rootId, attachmentsId, backupsId }
+}
+
+const getAccessToken = async (forceRefresh = false, options = {}) => {
+    const interactive = options.interactive === true
+    const userKey = String(options.userKey || getCurrentUserKey()).trim()
+    applyStoredDriveState(userKey)
     if (!getGoogleClientId()) {
         tokenState.lastErrorCode = ERROR_CODES.UNLINKED
         throw createExternalMediaError(ERROR_CODES.UNLINKED)
@@ -157,6 +316,10 @@ const getAccessToken = async (forceRefresh = false) => {
         tokenState.lastErrorCode = ""
         return tokenState.accessToken
     }
+    if (!forceRefresh && tokenState.granted) {
+        await connectDrive({ interactive: false, userKey })
+        if (tokenState.accessToken && tokenState.expiresAt - Date.now() > 60_000) return tokenState.accessToken
+    }
     if (!forceRefresh) {
         tokenState.lastErrorCode = ERROR_CODES.UNLINKED
         throw createExternalMediaError(ERROR_CODES.UNLINKED)
@@ -167,23 +330,38 @@ const getAccessToken = async (forceRefresh = false) => {
             const tokenResponse = await requestGoogleAccessToken({
                 clientId: getGoogleClientId(),
                 scope: DRIVE_UPLOAD_SCOPE,
-                prompt: tokenState.accessToken ? "" : "consent"
+                prompt: interactive ? (tokenState.granted ? "" : "consent") : ""
             })
             if (!tokenResponse?.accessToken) throw createExternalMediaError(ERROR_CODES.UNLINKED)
             tokenState.accessToken = tokenResponse.accessToken
             tokenState.expiresAt = Date.now() + (Math.max(1, Number(tokenResponse.expiresIn || 3600)) * 1000)
             tokenState.lastErrorCode = ""
+            if (userKey) {
+                const folders = await ensureDriveFolders(tokenState.accessToken, { userKey })
+                persistDriveState({ granted: true, linkedAt: Date.now(), ...folders }, userKey)
+            }
             return tokenState.accessToken
         } catch (error) {
             const normalizedErrorCode = normalizeExternalMediaErrorCode(error)
+            tokenState.accessToken = ""
             tokenState.expiresAt = 0
             tokenState.lastErrorCode = normalizedErrorCode
+            if (normalizedErrorCode === ERROR_CODES.UNLINKED) {
+                tokenState.granted = false
+                if (userKey) writeStoredDriveState(null, userKey)
+            }
             throw createExternalMediaError(normalizedErrorCode, error)
         } finally {
             tokenState.pendingPromise = null
         }
     })()
     return tokenState.pendingPromise
+}
+
+const connectDrive = async (options = {}) => {
+    const userKey = String(options.userKey || getCurrentUserKey()).trim()
+    await getAccessToken(true, { interactive: options.interactive !== false, userKey })
+    return GoogleDriveMediaService.getStatus()
 }
 
 const ensureDrivePermission = async (fileId, accessToken) => {
@@ -205,15 +383,18 @@ const ensureDrivePermission = async (fileId, accessToken) => {
 const uploadBlob = async (blob, options = {}, attempt = 0) => {
     const mimeType = String(options.mimeType || blob.type || "application/octet-stream")
     const fileName = String(options.fileName || buildFileName({ fileNameBase: options.fileNameBase, mimeType }))
-    const accessToken = await getAccessToken(attempt > 0)
+    const accessToken = await getAccessToken(attempt > 0, { interactive: false })
+    const folders = await ensureDriveFolders(accessToken)
     const boundary = `smartnotes_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`
+    const metadata = { name: fileName, mimeType }
+    if (folders.attachmentsId) metadata.parents = [folders.attachmentsId]
     const response = await fetch(DRIVE_UPLOAD_ENDPOINT, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": `multipart/related; boundary=${boundary}`
         },
-        body: createMultipartBody({ name: fileName, mimeType }, blob, boundary)
+        body: createMultipartBody(metadata, blob, boundary)
     })
 
     if (response.status === 401 && attempt === 0) {
@@ -435,9 +616,38 @@ const getInlineMediaSummary = (note) => {
 
 export const GoogleDriveMediaService = {
     providerId: "google-drive",
-    connect: async () => {
-        await getAccessToken(true)
+    connect: async () => connectDrive({ interactive: true }),
+    handleSignedInUser: async (user, options = {}) => {
+        const userKey = getCurrentUserKey(user)
+        const storedState = applyStoredDriveState(userKey)
+        const isGoogleUser = !!user?.providerData?.some?.(provider => String(provider?.providerId || "") === "google.com")
+        if (storedState?.granted) {
+            try {
+                await connectDrive({ interactive: false, userKey })
+                return GoogleDriveMediaService.getStatus()
+            } catch (error) {
+                const errorCode = normalizeExternalMediaErrorCode(error)
+                if (!options.interactiveAllowed || !isGoogleUser || tokenState.interactivePromptedForUser === userKey || errorCode !== ERROR_CODES.UNLINKED) {
+                    throw error
+                }
+            }
+        }
+        if (!options.interactiveAllowed || !isGoogleUser || tokenState.interactivePromptedForUser === userKey) {
+            return GoogleDriveMediaService.getStatus()
+        }
+        tokenState.interactivePromptedForUser = userKey
+        await connectDrive({ interactive: true, userKey })
         return GoogleDriveMediaService.getStatus()
+    },
+    handleSignedOutUser() {
+        tokenState.accessToken = ""
+        tokenState.expiresAt = 0
+        tokenState.pendingPromise = null
+        tokenState.lastErrorCode = ""
+        tokenState.currentUserKey = ""
+        tokenState.granted = false
+        tokenState.folders = { rootId: "", attachmentsId: "", backupsId: "" }
+        tokenState.interactivePromptedForUser = ""
     },
     uploadFile,
     uploadDataUrl,
@@ -451,13 +661,18 @@ export const GoogleDriveMediaService = {
     normalizeExternalMediaErrorCode,
     resolveUserFacingError,
     getStatus() {
+        applyStoredDriveState()
         const now = Date.now()
         return {
             providerId: "google-drive",
             configured: !!getGoogleClientId(),
+            linked: !!tokenState.granted,
             connected: !!tokenState.accessToken && tokenState.expiresAt - now > 60_000,
             pending: !!tokenState.pendingPromise,
-            errorCode: tokenState.lastErrorCode || ""
+            errorCode: tokenState.lastErrorCode || "",
+            rootId: tokenState.folders.rootId || "",
+            attachmentsId: tokenState.folders.attachmentsId || "",
+            backupsId: tokenState.folders.backupsId || ""
         }
     }
 }

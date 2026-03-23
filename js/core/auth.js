@@ -12,7 +12,8 @@ export function createAuthManager({ auth }) {
         googleSignInPendingTimeoutId: null,
         localAuthManager: null,
         persistenceReady: false,
-        authStateResolved: false
+        authStateResolved: false,
+        driveInteractiveAllowed: false
     }
 
     const manager = {
@@ -191,6 +192,7 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(true)
             this._showGoogleSignInPendingFeedback()
+            state.driveInteractiveAllowed = true
 
             await this._ensureLocalPersistence()
             try {
@@ -210,6 +212,7 @@ export function createAuthManager({ auth }) {
                 ])
                 if (!googleIdentityRecoverableCodes.has(googleIdentityErrorCode)) {
                     this._setLoginBusy(false)
+                    state.driveInteractiveAllowed = false
                     this.handleAuthError(googleIdentityError)
                     return
                 }
@@ -230,6 +233,7 @@ export function createAuthManager({ auth }) {
                     lastError = error
                     if (errorCode === "auth/popup-closed-by-user") {
                         this._setLoginBusy(false)
+                        state.driveInteractiveAllowed = false
                         this.handleAuthError(error)
                         return
                     }
@@ -245,15 +249,18 @@ export function createAuthManager({ auth }) {
                     }
                 } catch (redirectRecoveryError) {
                     this._setLoginBusy(false)
+                    state.driveInteractiveAllowed = false
                     this.handleAuthError(redirectRecoveryError)
                     return
                 }
                 this._setLoginBusy(false)
+                state.driveInteractiveAllowed = false
                 this.handleAuthError(lastError)
                 return
             }
 
             this._setLoginBusy(false)
+            state.driveInteractiveAllowed = false
         },
         _ensureLocalAuthManager() {
             if (state.localAuthManager) return state.localAuthManager
@@ -266,12 +273,14 @@ export function createAuthManager({ auth }) {
             return state.localAuthManager
         },
         async loginWithEmail() {
+            state.driveInteractiveAllowed = false
             await this._ensureLocalPersistence()
             await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {
             if (!auth) return
             this._setLoginBusy(false)
+            state.driveInteractiveAllowed = false
             try {
                 await auth.signOut()
             } catch {
@@ -370,11 +379,25 @@ export function createAuthManager({ auth }) {
 
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
-                if (shouldSkipSessionRestart) return
+                if (shouldSkipSessionRestart) {
+                    state.driveInteractiveAllowed = false
+                    return
+                }
                 await this._startSessionWhenReady(normalizedUser)
+                if (window.ExternalMediaService?.handleSignedInUser) {
+                    try {
+                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, { interactiveAllowed: state.driveInteractiveAllowed })
+                    } catch (error) {
+                        if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
+                            UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                        }
+                    }
+                }
+                state.driveInteractiveAllowed = false
                 return
             }
 
+            window.ExternalMediaService?.handleSignedOutUser?.()
             this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()

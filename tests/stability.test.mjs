@@ -439,52 +439,135 @@ test('html paste with inline media is blocked when external storage is unavailab
     assert.match(window.__lastToast, /attachment unavailable|вложение недоступно/i)
 })
 
-test('google drive media service requires explicit connect and externalizes inline media with browser-safe links', async () => {
-    const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
-    const { window } = dom
+test('google drive media service persists link state, restores silently, and uploads into SmartNotes/Attachments', async () => {
+    const persistedDriveState = {}
+    const buildWindow = () => {
+        const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+        const { window } = dom
+        window.console = console
+        window.Blob = globalThis.Blob
+        window.atob = globalThis.atob
+        Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
+        window.HTMLMediaElement = dom.window.HTMLMediaElement
+        window.firebaseConfig = { clientId: 'client-id' }
+        window.auth = {
+            currentUser: {
+                uid: 'user-1',
+                email: 'user-1@example.com',
+                providerData: [{ providerId: 'google.com' }]
+            },
+            app: { options: { clientId: 'client-id' } }
+        }
+        window.SafeStorage = {
+            local: {
+                getJson(key, fallback = null) {
+                    return key in persistedDriveState ? persistedDriveState[key] : fallback
+                },
+                setJson(key, value) {
+                    persistedDriveState[key] = value
+                    return true
+                }
+            }
+        }
+        return window
+    }
+
+    const tokenPrompts = []
+    const createdFolders = []
     let uploadCalls = 0
     let permissionCalls = 0
-    let tokenCalls = 0
+    let uploadedBody = ''
 
-    window.console = console
-    window.Blob = globalThis.Blob
-    window.atob = globalThis.atob
-    window.fetch = async (url) => {
-        if (String(url).includes('/permissions')) {
+    const firstWindow = buildWindow()
+    firstWindow.requestGoogleAccessToken = async ({ prompt }) => {
+        tokenPrompts.push(prompt)
+        return { accessToken: 'token-1', expiresIn: 3600 }
+    }
+    firstWindow.fetch = async (url, options = {}) => {
+        const targetUrl = String(url)
+        if (targetUrl.includes('/permissions')) {
             permissionCalls += 1
             return { ok: true, status: 200, json: async () => ({}) }
         }
-        uploadCalls += 1
-        return {
-            ok: true,
-            status: 200,
-            json: async () => ({
-                id: 'file-1',
-                name: 'file-1',
-                mimeType: 'image/png',
-                webContentLink: 'https://drive.google.com/uc?id=file-1&export=download'
-            })
+        if (targetUrl.includes('upload/drive/v3/files')) {
+            uploadCalls += 1
+            uploadedBody = await options.body.text()
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    id: 'file-1',
+                    name: 'file-1',
+                    mimeType: 'image/png',
+                    webContentLink: 'https://drive.google.com/uc?id=file-1&export=download'
+                })
+            }
         }
-    }
-    Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
-    window.HTMLMediaElement = dom.window.HTMLMediaElement
-    window.firebaseConfig = { clientId: 'client-id' }
-    window.requestGoogleAccessToken = async () => {
-        tokenCalls += 1
-        return { accessToken: 'token', expiresIn: 3600 }
+        if ((options.method || 'GET') === 'POST') {
+            const payload = JSON.parse(String(options.body || '{}'))
+            const folderId = payload.name === 'SmartNotes'
+                ? 'folder-root'
+                : payload.name === 'Attachments'
+                    ? 'folder-attachments'
+                    : 'folder-backups'
+            createdFolders.push({ name: payload.name, parents: payload.parents || [] })
+            return { ok: true, status: 200, json: async () => ({ id: folderId, name: payload.name, parents: payload.parents || [] }) }
+        }
+        return { ok: true, status: 200, json: async () => ({ files: [] }) }
     }
 
-    await loadWindowScript(window, 'js/core/googleDriveMedia.js', source => source
+    await loadWindowScript(firstWindow, 'js/core/googleDriveMedia.js', source => source
         .replace('import { firebaseConfig } from "./firebase.js"\n', '')
         .replace('import { requestGoogleAccessToken } from "./googleIdentityAuth.js"\n', '')
         .replace('export const GoogleDriveMediaService = {', 'window.GoogleDriveMediaService = {'))
 
-    await assert.rejects(() => window.GoogleDriveMediaService.uploadDataUrl('data:image/png;base64,AAA'), /external-storage-unlinked/)
-    assert.equal(window.GoogleDriveMediaService.getStatus().connected, false)
+    const firstStatus = await firstWindow.GoogleDriveMediaService.handleSignedInUser(firstWindow.auth.currentUser, { interactiveAllowed: true })
+    assert.equal(firstStatus.connected, true)
+    assert.equal(firstStatus.linked, true)
+    assert.deepEqual(createdFolders, [
+        { name: 'SmartNotes', parents: [] },
+        { name: 'Attachments', parents: ['folder-root'] },
+        { name: 'Backups', parents: ['folder-root'] }
+    ])
+    assert.equal(tokenPrompts[0], 'consent')
 
-    const connectedStatus = await window.GoogleDriveMediaService.connect()
-    assert.equal(connectedStatus.connected, true)
-    assert.equal(tokenCalls, 1)
+    const secondWindow = buildWindow()
+    secondWindow.requestGoogleAccessToken = async ({ prompt }) => {
+        tokenPrompts.push(prompt)
+        return { accessToken: 'token-2', expiresIn: 3600 }
+    }
+    secondWindow.fetch = async (url, options = {}) => {
+        const targetUrl = String(url)
+        if (targetUrl.includes('/permissions')) {
+            permissionCalls += 1
+            return { ok: true, status: 200, json: async () => ({}) }
+        }
+        if (targetUrl.includes('upload/drive/v3/files')) {
+            uploadCalls += 1
+            uploadedBody = await options.body.text()
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    id: 'file-1',
+                    name: 'file-1',
+                    mimeType: 'image/png',
+                    webContentLink: 'https://drive.google.com/uc?id=file-1&export=download'
+                })
+            }
+        }
+        return { ok: true, status: 200, json: async () => ({ files: [] }) }
+    }
+
+    await loadWindowScript(secondWindow, 'js/core/googleDriveMedia.js', source => source
+        .replace('import { firebaseConfig } from "./firebase.js"\n', '')
+        .replace('import { requestGoogleAccessToken } from "./googleIdentityAuth.js"\n', '')
+        .replace('export const GoogleDriveMediaService = {', 'window.GoogleDriveMediaService = {'))
+
+    const restoredStatus = await secondWindow.GoogleDriveMediaService.handleSignedInUser(secondWindow.auth.currentUser, { interactiveAllowed: false })
+    assert.equal(restoredStatus.connected, true)
+    assert.equal(restoredStatus.attachmentsId, 'folder-attachments')
+    assert.equal(tokenPrompts[1], '')
 
     const note = {
         title: 'Cache',
@@ -492,10 +575,11 @@ test('google drive media service requires explicit connect and externalizes inli
         pageDrawings: ['data:image/png;base64,AAA']
     }
 
-    const result = await window.GoogleDriveMediaService.externalizeNoteMedia(note)
+    const result = await secondWindow.GoogleDriveMediaService.externalizeNoteMedia(note)
     assert.equal(/data:image\//.test(result.note.content), false)
     assert.equal(/data:image\//.test(result.note.pageDrawings[0]), false)
     assert.match(result.note.content, /https:\/\/lh3\.googleusercontent\.com\/d\/file-1/)
+    assert.match(uploadedBody, /"parents":\["folder-attachments"\]/)
     assert.equal(uploadCalls, 1)
     assert.equal(permissionCalls, 1)
 })
