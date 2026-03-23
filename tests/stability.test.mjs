@@ -12,6 +12,24 @@ const loadWindowScript = async (window, filePath, transform = source => source) 
 
 const loadUiBaseScript = async window => loadWindowScript(window, 'js/ui/base.js', source => source.replace('const UI = {', 'window.UI = {'))
 
+const loadExternalStorageScripts = async window => {
+    const toWindowGlobal = source => source
+        .replace(/^import .*$/gm, '')
+        .replace(/export const ([A-Za-z0-9_]+)\s*=/g, 'var $1 = window.$1 =')
+        .replace(/export function ([A-Za-z0-9_]+)\s*\(/g, 'window.$1 = function $1(')
+
+    await loadWindowScript(window, 'js/core/externalStorage/errors.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/mediaPipeline.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/service.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/state.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/folders.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/auth.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/externalStorage/providers/googleDrive/provider.js', toWindowGlobal)
+    await loadWindowScript(window, 'js/core/googleDriveMedia.js', source => source
+        .replace(/^import .*$/gm, '')
+        .replace('export const GoogleDriveMediaService = {', 'window.GoogleDriveMediaService = {'))
+}
+
 const createBaseWindow = () => {
     const dom = new JSDOM(`<!doctype html><html><body>
         <div id="note-actions-modal" class="modal-overlay"><div id="note-actions-content"></div></div>
@@ -509,17 +527,16 @@ test('google drive media service persists link state, restores silently, and upl
                 ? 'folder-root'
                 : payload.name === 'Attachments'
                     ? 'folder-attachments'
-                    : 'folder-backups'
+                    : payload.name === 'Backups'
+                        ? 'folder-backups'
+                        : 'folder-exports'
             createdFolders.push({ name: payload.name, parents: payload.parents || [] })
             return { ok: true, status: 200, json: async () => ({ id: folderId, name: payload.name, parents: payload.parents || [] }) }
         }
         return { ok: true, status: 200, json: async () => ({ files: [] }) }
     }
 
-    await loadWindowScript(firstWindow, 'js/core/googleDriveMedia.js', source => source
-        .replace('import { firebaseConfig } from "./firebase.js"\n', '')
-        .replace('import { requestGoogleAccessToken } from "./googleIdentityAuth.js"\n', '')
-        .replace('export const GoogleDriveMediaService = {', 'window.GoogleDriveMediaService = {'))
+    await loadExternalStorageScripts(firstWindow)
 
     const firstStatus = await firstWindow.GoogleDriveMediaService.handleSignedInUser(firstWindow.auth.currentUser, { interactiveAllowed: true })
     assert.equal(firstStatus.connected, true)
@@ -527,7 +544,8 @@ test('google drive media service persists link state, restores silently, and upl
     assert.deepEqual(createdFolders, [
         { name: 'SmartNotes', parents: [] },
         { name: 'Attachments', parents: ['folder-root'] },
-        { name: 'Backups', parents: ['folder-root'] }
+        { name: 'Backups', parents: ['folder-root'] },
+        { name: 'Exports', parents: ['folder-root'] }
     ])
     assert.equal(tokenPrompts[0], 'consent')
 
@@ -559,14 +577,12 @@ test('google drive media service persists link state, restores silently, and upl
         return { ok: true, status: 200, json: async () => ({ files: [] }) }
     }
 
-    await loadWindowScript(secondWindow, 'js/core/googleDriveMedia.js', source => source
-        .replace('import { firebaseConfig } from "./firebase.js"\n', '')
-        .replace('import { requestGoogleAccessToken } from "./googleIdentityAuth.js"\n', '')
-        .replace('export const GoogleDriveMediaService = {', 'window.GoogleDriveMediaService = {'))
+    await loadExternalStorageScripts(secondWindow)
 
     const restoredStatus = await secondWindow.GoogleDriveMediaService.handleSignedInUser(secondWindow.auth.currentUser, { interactiveAllowed: false })
     assert.equal(restoredStatus.connected, true)
     assert.equal(restoredStatus.attachmentsId, 'folder-attachments')
+    assert.equal(restoredStatus.exportsId, 'folder-exports')
     assert.equal(tokenPrompts[1], '')
 
     const note = {

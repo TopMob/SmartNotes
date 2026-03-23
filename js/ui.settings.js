@@ -128,7 +128,7 @@ Object.assign(UI, {
                             <div class="settings-toggle-item" style="padding:0; background:none; border:0; gap:12px; align-items:center;">
                                 <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
                                     <span id="settings-drive-status">${dict.drive_not_connected || "Not connected"}</span>
-                                    <span class="folder-meta">${dict.settings_external_storage_desc || "Connect Google Drive before inserting images"}</span>
+                                    <span class="folder-meta">${dict.settings_external_storage_desc || "Manage SmartNotes external attachment storage"}</span>
                                 </div>
                                 <button type="button" id="settings-drive-connect" class="btn-secondary">${dict.drive_connect || "Connect"}</button>
                             </div>
