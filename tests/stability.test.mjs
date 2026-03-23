@@ -602,6 +602,130 @@ test('clearTrashPermanently uses double confirmation and removes trashed notes a
     assert.equal(lastSearchQuery, '')
 })
 
+test('saved filters persist current note filters and can be applied or deleted', async () => {
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <div id="notes-filter-menu"></div>
+        <select id="notes-saved-filter-select"></select>
+        <button type="button" id="notes-save-filter-button"></button>
+        <button type="button" id="notes-delete-filter-button"></button>
+        <select id="notes-sort-select"></select>
+        <div id="notes-folder-filters"></div>
+    </body></html>`, { url: 'https://smartnotes.test/', runScripts: 'outside-only' })
+    const { window } = dom
+    window.console = console
+    const localStorageState = {}
+    let lastToast = ''
+    let lastSearchQuery = ''
+
+    window.SafeStorage = {
+        local: {
+            getJson(key, fallback = null) {
+                return key in localStorageState ? localStorageState[key] : fallback
+            },
+            setJson(key, value) {
+                localStorageState[key] = value
+                return { success: true }
+            }
+        }
+    }
+    window.StateStore = {
+        state: {
+            config: {
+                lang: 'ru',
+                notesFilter: {
+                    sort: 'updated',
+                    folders: ['folder-1']
+                }
+            },
+            folders: [
+                { id: 'folder-1', name: 'Работа', isHidden: false, trashedAt: null },
+                { id: 'folder-2', name: 'Дом', isHidden: false, trashedAt: null }
+            ],
+            view: 'notes'
+        },
+        read() {
+            return this.state
+        }
+    }
+    window.StateActions = {
+        updateConfig(nextConfig) {
+            window.StateStore.state.config = { ...window.StateStore.state.config, ...nextConfig }
+        }
+    }
+    window.DomSecurity = {
+        sanitizeIdentifier(value) {
+            return String(value || '')
+        },
+        sanitizeInputValue(value, fallback = '') {
+            return String(value || fallback || '')
+        },
+        setText(element, value) {
+            element.textContent = String(value || '')
+        }
+    }
+    window.updateSearchQuery = value => {
+        lastSearchQuery = value
+    }
+    window.matchMedia = () => ({ matches: true, addListener() {}, removeListener() {} })
+    window.UI = {
+        els: {
+            filterMenu: window.document.getElementById('notes-filter-menu'),
+            savedFilterSelect: window.document.getElementById('notes-saved-filter-select'),
+            saveFilterButton: window.document.getElementById('notes-save-filter-button'),
+            deleteFilterButton: window.document.getElementById('notes-delete-filter-button'),
+            filterSort: window.document.getElementById('notes-sort-select'),
+            filterFolders: window.document.getElementById('notes-folder-filters')
+        },
+        getText(key, fallback) {
+            const dict = {
+                saved_filters_none: 'Без сохранённого фильтра',
+                save_filter_prompt_title: 'Название фильтра',
+                save_filter_prompt_placeholder: 'Например: Работа',
+                saved_filter_saved: 'Фильтр сохранён',
+                saved_filter_deleted: 'Фильтр удалён',
+                saved_filter_missing: 'Сохранённый фильтр не найден',
+                folder_none: 'Без папки'
+            }
+            return dict[key] || fallback || key
+        },
+        showPrompt(_title, _placeholder, callback) {
+            callback('Работа')
+        },
+        showToast(message) {
+            lastToast = message
+        }
+    }
+
+    await loadWindowScript(window, 'js/notes/storage.js')
+    await loadWindowScript(window, 'js/ui/events.js')
+
+    window.UI.renderFilterMenu()
+    assert.equal(window.UI.els.savedFilterSelect.options.length, 1)
+    assert.equal(window.UI.els.deleteFilterButton.disabled, true)
+
+    window.UI.saveCurrentFilterPreset()
+
+    const savedFilters = window.NotesStorage.readSavedNotesFilters()
+    assert.equal(savedFilters.length, 1)
+    assert.equal(savedFilters[0].name, 'Работа')
+    assert.equal(savedFilters[0].sort, 'updated')
+    assert.deepEqual(Array.from(savedFilters[0].folders), ['folder-1'])
+    assert.equal(window.UI.els.savedFilterSelect.value, savedFilters[0].id)
+    assert.equal(lastToast, 'Фильтр сохранён')
+
+    window.StateActions.updateConfig({ notesFilter: { sort: 'manual', folders: [] } })
+    window.UI.applySavedFilter(savedFilters[0].id)
+    assert.equal(window.StateStore.read().config.notesFilter.sort, 'updated')
+    assert.deepEqual(Array.from(window.StateStore.read().config.notesFilter.folders), ['folder-1'])
+    assert.equal(lastSearchQuery, '')
+
+    window.UI.deleteSavedFilter(savedFilters[0].id)
+    assert.equal(window.NotesStorage.readSavedNotesFilters().length, 0)
+    assert.equal(window.UI.els.savedFilterSelect.value, '')
+    assert.equal(window.UI.els.deleteFilterButton.disabled, true)
+    assert.equal(lastToast, 'Фильтр удалён')
+})
+
 test('google drive media service keeps linked and connected separate, restores silently, and uploads into SmartNotes/Attachments', async () => {
     const remoteSettingsState = {}
     const buildSettingsReference = userKey => ({

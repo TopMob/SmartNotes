@@ -305,6 +305,16 @@
 
             <div id="notes-filter-menu" class="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
                 <div class="filter-section">
+                    <label for="notes-saved-filter-select" data-lang="saved_filters">Сохранённые фильтры</label>
+                    <select id="notes-saved-filter-select" class="input-area filter-select" aria-label="Сохранённые фильтры" data-lang-aria="saved_filters">
+                        <option value="" data-lang="saved_filters_none">Без сохранённого фильтра</option>
+                    </select>
+                    <div class="row-left" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+                        <button type="button" id="notes-save-filter-button" class="btn-secondary" data-lang="save_filter">Сохранить</button>
+                        <button type="button" id="notes-delete-filter-button" class="btn-secondary" data-lang="delete_saved_filter">Удалить</button>
+                    </div>
+                </div>
+                <div class="filter-section">
                     <label for="notes-sort-select" data-lang="sort_by">Сортировка</label>
                     <select id="notes-sort-select" class="input-area filter-select" aria-label="Сортировка" data-lang-aria="sort_by">
                         <option value="updated" data-lang="sort_updated">По времени изменения</option>

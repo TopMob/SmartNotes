@@ -119,6 +119,22 @@ Object.assign(UI, {
             this.updateFilterConfig({ folders: selectedFolders })
         }, { signal: listenersSignal })
 
+        this.els.savedFilterSelect?.addEventListener("change", event => {
+            const savedFilterId = String(event.target?.value || "")
+            if (!savedFilterId) return
+            this.applySavedFilter(savedFilterId)
+        }, { signal: listenersSignal })
+
+        this.els.saveFilterButton?.addEventListener("click", () => {
+            this.saveCurrentFilterPreset()
+        }, { signal: listenersSignal })
+
+        this.els.deleteFilterButton?.addEventListener("click", () => {
+            const savedFilterId = String(this.els.savedFilterSelect?.value || "")
+            if (!savedFilterId) return
+            this.deleteSavedFilter(savedFilterId)
+        }, { signal: listenersSignal })
+
         this.els.grid?.addEventListener("click", async event => {
             const actionElement = event.target.closest("[data-action], button, a, input, select, textarea, label")
             if (actionElement) return
@@ -198,17 +214,109 @@ Object.assign(UI, {
 
     updateFilterConfig(next) {
         const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
-        const updated = { ...current, ...next }
+        const updated = window.NotesStorage?.normalizeNotesFilter
+            ? window.NotesStorage.normalizeNotesFilter({ ...current, ...next })
+            : { ...current, ...next }
         StateActions.updateConfig({ notesFilter: updated })
         SafeStorage.local.setJson("notes-filter", updated)
         updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderFilterMenu()
     },
 
+    getSavedFilterOptions() {
+        return window.NotesStorage?.readSavedNotesFilters?.() || []
+    },
+
+    renderSavedFiltersMenu() {
+        const savedFilterSelect = this.els.savedFilterSelect
+        const deleteFilterButton = this.els.deleteFilterButton
+        if (!savedFilterSelect || !deleteFilterButton) return
+        const savedFilters = this.getSavedFilterOptions()
+        const currentValue = String(savedFilterSelect.value || "")
+        const fragment = document.createDocumentFragment()
+        const emptyOption = document.createElement("option")
+        emptyOption.value = ""
+        emptyOption.textContent = this.getText("saved_filters_none", "No saved filter")
+        fragment.append(emptyOption)
+        savedFilters.forEach(savedFilter => {
+            const option = document.createElement("option")
+            option.value = savedFilter.id
+            option.textContent = savedFilter.name
+            fragment.append(option)
+        })
+        savedFilterSelect.replaceChildren(fragment)
+        const hasCurrentValue = savedFilters.some(savedFilter => savedFilter.id === currentValue)
+        savedFilterSelect.value = hasCurrentValue ? currentValue : ""
+        deleteFilterButton.disabled = !savedFilterSelect.value
+    },
+
+    saveCurrentFilterPreset() {
+        const currentFilter = window.NotesStorage?.normalizeNotesFilter
+            ? window.NotesStorage.normalizeNotesFilter(StateStore.read().config.notesFilter || {})
+            : (StateStore.read().config.notesFilter || { sort: "manual", folders: [] })
+        this.showPrompt(
+            this.getText("save_filter_prompt_title", "Filter name"),
+            this.getText("save_filter_prompt_placeholder", "For example: Work"),
+            (value) => {
+                const filterName = String(value || "").trim()
+                if (!filterName) return
+                const savedFilters = this.getSavedFilterOptions()
+                const existingFilter = savedFilters.find(item => item.name.toLocaleLowerCase() === filterName.toLocaleLowerCase())
+                const nextFilter = {
+                    id: existingFilter?.id || `filter_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+                    name: filterName,
+                    sort: currentFilter.sort,
+                    folders: currentFilter.folders,
+                    createdAt: existingFilter?.createdAt || Date.now()
+                }
+                const nextSavedFilters = existingFilter
+                    ? savedFilters.map(item => item.id === existingFilter.id ? nextFilter : item)
+                    : [...savedFilters, nextFilter]
+                window.NotesStorage?.writeSavedNotesFilters?.(nextSavedFilters)
+                this.renderSavedFiltersMenu()
+                if (this.els.savedFilterSelect) this.els.savedFilterSelect.value = nextFilter.id
+                if (this.els.deleteFilterButton) this.els.deleteFilterButton.disabled = false
+                this.showToast(this.getText("saved_filter_saved", "Filter saved"))
+            }
+        )
+    },
+
+    applySavedFilter(savedFilterId) {
+        const savedFilter = this.getSavedFilterOptions().find(item => item.id === String(savedFilterId || ""))
+        if (!savedFilter) {
+            this.showToast(this.getText("saved_filter_missing", "Saved filter not found"))
+            this.renderSavedFiltersMenu()
+            return
+        }
+        this.updateFilterConfig({
+            sort: savedFilter.sort,
+            folders: savedFilter.folders
+        })
+        if (this.els.savedFilterSelect) this.els.savedFilterSelect.value = savedFilter.id
+        if (this.els.deleteFilterButton) this.els.deleteFilterButton.disabled = false
+    },
+
+    deleteSavedFilter(savedFilterId) {
+        const normalizedSavedFilterId = String(savedFilterId || "")
+        const savedFilters = this.getSavedFilterOptions()
+        const hasSavedFilter = savedFilters.some(item => item.id === normalizedSavedFilterId)
+        if (!hasSavedFilter) {
+            this.showToast(this.getText("saved_filter_missing", "Saved filter not found"))
+            this.renderSavedFiltersMenu()
+            return
+        }
+        const nextSavedFilters = savedFilters.filter(item => item.id !== normalizedSavedFilterId)
+        window.NotesStorage?.writeSavedNotesFilters?.(nextSavedFilters)
+        this.renderSavedFiltersMenu()
+        this.showToast(this.getText("saved_filter_deleted", "Filter deleted"))
+    },
+
     renderFilterMenu() {
         if (!this.els.filterFolders || !this.els.filterSort) return
         const { folders, config, view } = StateStore.read()
-        const current = config.notesFilter || { sort: "manual", folders: [] }
+        const current = window.NotesStorage?.normalizeNotesFilter
+            ? window.NotesStorage.normalizeNotesFilter(config.notesFilter || {})
+            : (config.notesFilter || { sort: "manual", folders: [] })
         const visibleFolders = folders.filter(folder => !folder.isHidden && !folder.trashedAt)
         const visibleFolderIds = new Set(
             visibleFolders
@@ -261,6 +369,7 @@ Object.assign(UI, {
         })
 
         this.els.filterFolders.replaceChildren(folderFilterFragment)
+        this.renderSavedFiltersMenu()
     },
 
     toggleFilterMenu(force) {

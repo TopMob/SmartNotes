@@ -1,5 +1,6 @@
 const FAVORITES_STORAGE_KEY = "favorite-notes"
 const NOTES_FILTER_KEY = "notes-filter"
+const SAVED_NOTES_FILTERS_KEY = "saved-notes-filters"
 const NOTES_CACHE_KEY = "notes-cache"
 
 const shrinkNoteForCache = (note) => {
@@ -57,6 +58,49 @@ const loadNotesFilter = () => {
     }
 }
 
+const normalizeNotesFilter = (filter) => {
+    const source = filter && typeof filter === "object" ? filter : {}
+    const allowedSortValues = new Set(["updated", "relevance", "importance", "title", "length", "manual"])
+    return {
+        sort: allowedSortValues.has(String(source.sort || "")) ? String(source.sort) : "manual",
+        folders: Array.isArray(source.folders)
+            ? [...new Set(source.folders.map(value => String(value || "").trim()).filter(Boolean))]
+            : []
+    }
+}
+
+const normalizeSavedNotesFilter = (savedFilter) => {
+    const source = savedFilter && typeof savedFilter === "object" ? savedFilter : {}
+    const normalizedConfig = normalizeNotesFilter(source)
+    const id = String(source.id || "").trim()
+    const name = String(source.name || "").trim()
+    if (!id || !name) return null
+    return {
+        id,
+        name,
+        sort: normalizedConfig.sort,
+        folders: normalizedConfig.folders,
+        createdAt: Number(source.createdAt || Date.now())
+    }
+}
+
+const readSavedNotesFilters = () => {
+    const stored = SafeStorage.local.getJson(SAVED_NOTES_FILTERS_KEY, [])
+    if (!Array.isArray(stored)) return []
+    return stored
+        .map(normalizeSavedNotesFilter)
+        .filter(Boolean)
+        .sort((firstItem, secondItem) => String(firstItem.name || "").localeCompare(String(secondItem.name || ""), StateStore.read().config.lang || "ru"))
+}
+
+const writeSavedNotesFilters = (savedFilters) => {
+    const normalized = (Array.isArray(savedFilters) ? savedFilters : [])
+        .map(normalizeSavedNotesFilter)
+        .filter(Boolean)
+    SafeStorage.local.setJson(SAVED_NOTES_FILTERS_KEY, normalized)
+    return normalized
+}
+
 const readCachedNotes = (uid) => {
     if (!uid) return []
     const allCaches = SafeStorage.local.getJson(NOTES_CACHE_KEY) || {}
@@ -92,6 +136,9 @@ window.NotesStorage = {
     applyStoredFavorites,
     syncFavoritesStorage,
     loadNotesFilter,
+    normalizeNotesFilter,
+    readSavedNotesFilters,
+    writeSavedNotesFilters,
     readCachedNotes,
     writeCachedNotes
 }

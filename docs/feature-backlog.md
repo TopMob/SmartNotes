@@ -21,6 +21,7 @@
 ## Editor / Markdown / content
 - [ ] Markdown mode with toggle
 - [ ] Reliable Markdown import/export
+- [ ] Custom note fonts with download/import support
 - [ ] Checklists
 - [ ] Tables
 - [ ] Note templates
