@@ -168,6 +168,7 @@ export const EditorAPI = (() => {
     const tableHandlers = createTableHandlers({
         insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
         getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+        getActivePage: () => getActivePage(),
         getRoot: () => document.getElementById("note-content-editable"),
         storeSelection: inputHandlers.storeSelection,
         queueSnapshot: (...args) => queueSnapshot(...args)

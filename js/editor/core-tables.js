@@ -28,6 +28,18 @@ const buildTableHtml = (rows, cols) => {
     return `<table><tbody>${bodyRows}</tbody></table><p><br></p>`
 }
 
+const createTableElement = (rows, cols) => {
+    const table = document.createElement("table")
+    const body = document.createElement("tbody")
+    const normalizedRows = clampTableSize(rows, 1, 20)
+    const normalizedCols = clampTableSize(cols, 1, 12)
+    for (let rowIndex = 0; rowIndex < normalizedRows; rowIndex += 1) {
+        body.appendChild(createTableRow(normalizedCols))
+    }
+    table.appendChild(body)
+    return table
+}
+
 const parseSizeInput = (rawValue, defaults = { rows: 2, cols: 3 }) => {
     const value = String(rawValue || "").trim().toLowerCase()
     const match = value.match(/^(?:new\s+)?(\d{1,2})\s*[xх]\s*(\d{1,2})$/i)
@@ -76,8 +88,24 @@ export const createTableHandlers = (context) => {
     const insertTable = (options = {}) => {
         const rows = clampTableSize(options.rows, 1, 20)
         const cols = clampTableSize(options.cols, 1, 12)
-        context.insertHtmlAtSelection(buildTableHtml(rows, cols))
+        const range = context.getActiveRangeInContent?.() || null
+        if (range && context.insertHtmlAtSelection(buildTableHtml(rows, cols))) {
+            context.storeSelection()
+            return true
+        }
+
+        const activePage = context.getActivePage?.() || null
+        if (!activePage) return false
+        const table = createTableElement(rows, cols)
+        const trailingParagraph = document.createElement("p")
+        trailingParagraph.appendChild(document.createElement("br"))
+        activePage.appendChild(table)
+        activePage.appendChild(trailingParagraph)
+        const firstCell = table.querySelector("td,th")
+        if (firstCell) placeCaretAtStart(firstCell, context.getRoot())
+        else placeCaretAtStart(trailingParagraph, context.getRoot())
         context.storeSelection()
+        context.queueSnapshot()
         return true
     }
 
