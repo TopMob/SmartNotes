@@ -81,10 +81,10 @@ Object.assign(UI, {
                         </div>
                         <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                     </button>
-                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="editor_tools">
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="interface">
                         <div class="settings-menu-meta">
-                            <span class="settings-menu-title">${dict.settings_editor_tools || "Editor Tools"}</span>
-                            <span class="settings-menu-desc">${dict.settings_category_editor_tools_desc || ""}</span>
+                            <span class="settings-menu-title">${dict.settings_interface || "Interface"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_interface_desc || ""}</span>
                         </div>
                         <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                     </button>
@@ -304,9 +304,37 @@ Object.assign(UI, {
             return
         }
 
-        if (page === "editor_tools") {
-            title.textContent = dict.settings_editor_tools || dict.editor_settings || "Editor tools"
-            root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
+        if (page === "interface") {
+            title.textContent = dict.settings_interface || dict.editor_settings || "Interface"
+            const interfaceSettings = this.getSettingsDraft()?.interface || {}
+            root.innerHTML = `
+                <div class="settings-group">
+                    <div class="settings-toggle-list">
+                        ${this.buildInterfaceSettingToggle("showFilterButton", dict.settings_show_filter_button || "Показывать кнопку фильтров", interfaceSettings.showFilterButton !== false)}
+                        ${this.buildInterfaceSettingToggle("showSavedFilters", dict.settings_show_saved_filters || "Показывать сохранённые фильтры", interfaceSettings.showSavedFilters !== false)}
+                        ${this.buildInterfaceSettingToggle("showSortFilter", dict.settings_show_sort_filter || "Показывать сортировку", interfaceSettings.showSortFilter !== false)}
+                        ${this.buildInterfaceSettingToggle("showTagFilter", dict.settings_show_tag_filter || "Показывать фильтр по тегам", interfaceSettings.showTagFilter !== false)}
+                        ${this.buildInterfaceSettingToggle("showUpdatedPeriodFilter", dict.settings_show_updated_period || "Показывать период обновления", interfaceSettings.showUpdatedPeriodFilter !== false)}
+                        ${this.buildInterfaceSettingToggle("showFolderFilter", dict.settings_show_folder_filter || "Показывать фильтр по папкам", interfaceSettings.showFolderFilter !== false)}
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.settings_editor_tools || "Editor Tools"}</div>
+                        <div id="editor-tools-list" class="settings-toggle-list"></div>
+                    </div>
+                </div>
+            `
+            root.querySelectorAll("[data-interface-key]").forEach(input => {
+                input.addEventListener("change", event => {
+                    const key = event.target.dataset.interfaceKey
+                    const nextInterface = {
+                        ...(this.getSettingsDraft()?.interface || {}),
+                        [key]: !!event.target.checked
+                    }
+                    this.updateSettingsDraft({ interface: nextInterface })
+                    this.applyDraftSettingsToRuntime()
+                    this.renderFilterMenu()
+                })
+            })
             this.renderEditorSettings()
             this.applyInputAutocompletePolicy(root)
             return
@@ -340,6 +368,18 @@ Object.assign(UI, {
             this.applyInputAutocompletePolicy(root)
             return
         }
+    },
+
+    buildInterfaceSettingToggle(key, label, checked) {
+        return `
+            <label class="settings-toggle-item">
+                <span>${label}</span>
+                <label class="switch">
+                    <input type="checkbox" data-interface-key="${key}" ${checked ? "checked" : ""}>
+                    <span class="slider"></span>
+                </label>
+            </label>
+        `
     },
 
     getSettingsDraft() {

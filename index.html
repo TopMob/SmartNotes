@@ -294,7 +294,7 @@
             </header>
 
             <div id="notes-filter-menu" class="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-saved">
                     <label for="notes-saved-filter-select" data-lang="saved_filters">Сохранённые фильтры</label>
                     <select id="notes-saved-filter-select" class="input-area filter-select" aria-label="Сохранённые фильтры" data-lang-aria="saved_filters">
                         <option value="" data-lang="saved_filters_none">Без сохранённого фильтра</option>
@@ -304,7 +304,7 @@
                         <button type="button" id="notes-delete-filter-button" class="btn-secondary" data-lang="delete_saved_filter">Удалить</button>
                     </div>
                 </div>
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-sort">
                     <label for="notes-sort-select" data-lang="sort_by">Сортировка</label>
                     <select id="notes-sort-select" class="input-area filter-select" aria-label="Сортировка" data-lang-aria="sort_by">
                         <option value="updated" data-lang="sort_updated">По времени изменения</option>
@@ -315,11 +315,11 @@
                         <option value="manual" data-lang="sort_manual">Вручную</option>
                     </select>
                 </div>
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-tags">
                     <label for="notes-tag-filter-input" data-lang="filter_tags">Теги</label>
                     <input type="text" id="notes-tag-filter-input" class="input-area filter-select" placeholder="design, work" data-lang-placeholder="filter_tags_placeholder" aria-label="Теги" data-lang-aria="filter_tags">
                 </div>
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-date">
                     <label for="notes-date-filter-select" data-lang="filter_updated_period">Период обновления</label>
                     <select id="notes-date-filter-select" class="input-area filter-select" aria-label="Период обновления" data-lang-aria="filter_updated_period">
                         <option value="0" data-lang="filter_updated_any">За всё время</option>
@@ -329,7 +329,7 @@
                         <option value="365" data-lang="filter_updated_year">За год</option>
                     </select>
                 </div>
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-folders">
                     <div class="filter-title" data-lang="filter_folders">Папки</div>
                     <div id="notes-folder-filters" class="filter-options"></div>
                 </div>

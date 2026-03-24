@@ -21,6 +21,14 @@ const SettingsSyncService = (() => {
             lang: StateStore.read().config.lang || "ru",
             folderViewMode: StateStore.read().config.folderViewMode || "compact",
             reduceMotion: !!StateStore.read().config.reduceMotion,
+            interface: {
+                showFilterButton: StateStore.read().config.interface?.showFilterButton !== false,
+                showSavedFilters: StateStore.read().config.interface?.showSavedFilters !== false,
+                showSortFilter: StateStore.read().config.interface?.showSortFilter !== false,
+                showTagFilter: StateStore.read().config.interface?.showTagFilter !== false,
+                showUpdatedPeriodFilter: StateStore.read().config.interface?.showUpdatedPeriodFilter !== false,
+                showFolderFilter: StateStore.read().config.interface?.showFolderFilter !== false
+            },
             customPresets: ThemeManager.getCustomPresets(),
             schemaVersion: 1
         }
@@ -47,6 +55,14 @@ const SettingsSyncService = (() => {
             lang: source.lang === "en" ? "en" : "ru",
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
+            interface: {
+                showFilterButton: source.interface?.showFilterButton !== false,
+                showSavedFilters: source.interface?.showSavedFilters !== false,
+                showSortFilter: source.interface?.showSortFilter !== false,
+                showTagFilter: source.interface?.showTagFilter !== false,
+                showUpdatedPeriodFilter: source.interface?.showUpdatedPeriodFilter !== false,
+                showFolderFilter: source.interface?.showFolderFilter !== false
+            },
             customPresets: Array.isArray(source.customPresets) ? source.customPresets : defaults.customPresets,
             schemaVersion: 1
         }
@@ -78,7 +94,7 @@ const SettingsSyncService = (() => {
         ThemeManager.applySettings({ preset: settings.themeId, ...settings.customTheme }, options.persistTheme !== false)
         const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(ThemeManager.getCustomPresets(), settings.customPresets)
         ThemeManager.setCustomPresets(mergedCustomPresets)
-        StateActions.updateConfig({ lang: settings.lang, folderViewMode: settings.folderViewMode, reduceMotion: settings.reduceMotion })
+        StateActions.updateConfig({ lang: settings.lang, folderViewMode: settings.folderViewMode, reduceMotion: settings.reduceMotion, interface: settings.interface })
         PaginationService.configureFromSettings(settings)
         if (options.resetVisibleLimit) PaginationService.resetVisibleLimit()
     }
