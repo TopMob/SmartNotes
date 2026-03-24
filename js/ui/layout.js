@@ -635,6 +635,13 @@ Object.assign(UI, {
         })
     },
 
+    getVisibleExportableNotes() {
+        const stateSnapshot = StateStore.read()
+        const query = document.getElementById("search-input")?.value || stateSnapshot.searchQuery || ""
+        const visible = NotesQueryService.execute(stateSnapshot, query).notes || []
+        return visible.filter(note => !!note && !note.trashedAt)
+    },
+
     getExportFoldersForNotes(notes, options = {}) {
         if (Array.isArray(options.folders)) return options.folders
         const stateFolders = Array.isArray(StateStore.read().folders) ? StateStore.read().folders : []
@@ -729,6 +736,20 @@ Object.assign(UI, {
                 scope: "all",
                 emptyMessageKey: "export_empty",
                 emptyFallback: "No notes available for export"
+            })
+        } catch (error) {
+            console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async exportVisibleNotes() {
+        try {
+            return await this.exportNotesBundle(this.getVisibleExportableNotes(), {
+                scope: "selection",
+                emptyMessageKey: "export_visible_empty",
+                emptyFallback: "No notes found for the current filters"
             })
         } catch (error) {
             console.error("Export failed", error)

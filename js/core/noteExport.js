@@ -135,6 +135,9 @@ const buildExportFileName = ({ scope = "all", folderName = "" } = {}) => {
     if (scope === "folder") {
         return `smartnotes_folder_${sanitizeExportFileName(folderName, "folder")}_${dateStamp}.json`
     }
+    if (scope === "selection") {
+        return `smartnotes_selected_notes_${dateStamp}.json`
+    }
     return `smartnotes_all_notes_${dateStamp}.json`
 }
 

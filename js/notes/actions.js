@@ -178,6 +178,10 @@ async function scheduleReminder(noteId) {
     const ref = getNoteReference(note, user)
     if (!ref) return
     await ref.update({ reminderAt: date.toISOString(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    const permissionResult = await window.NotificationService?.ensurePermission?.() || null
+    if (permissionResult?.supported && permissionResult.permission === "denied") {
+        UI.showToast(UI.getText("notification_permission_denied", "Browser notifications are blocked"))
+    }
     UI.showToast(UI.getText("reminder_saved", "Reminder saved"))
     UI.closeModal("note-actions-modal")
 }

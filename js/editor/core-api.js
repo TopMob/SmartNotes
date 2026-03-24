@@ -8,6 +8,7 @@ import { createAutosaveHandlers } from "./core-autosave.js"
 import { createEditorLayoutHandlers } from "./core-layout.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
+import { createTableHandlers } from "./core-tables.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -162,6 +163,11 @@ export const EditorAPI = (() => {
         getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
         getEditorCommands: () => editorCommands,
         openFromList: (...args) => openFromList(...args)
+    })
+
+    const tableHandlers = createTableHandlers({
+        insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
+        storeSelection: inputHandlers.storeSelection
     })
 
     const resolveExternalMediaMessage = (error, options = {}) => {
@@ -857,6 +863,7 @@ export const EditorAPI = (() => {
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => editorCommands.toggleBulletedList() },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => editorCommands.toggleNumberedList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => inputHandlers.insertHorizontalRule() },
+        { id: "table", i: "table_rows", label: "tool_table", cmd: () => tableHandlers.insertTable({ rows: 2, cols: 3 }) },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
             inputHandlers.storeSelection()
             UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {

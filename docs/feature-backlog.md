@@ -1,49 +1,53 @@
-# SmartNotes backlog
+# SmartNotes — актуализированный backlog (на 2026-03-24)
 
-## Current priority
-- [ ] Finish reliable import/export flow for notes and folders
-- [ ] Add storage-provider choice for manual backups
-- [ ] Finish Markdown support as a complete working mode
+## Почти завершено / требуется доработка
+- [~] Импорт/экспорт JSON для заметок и папок уже работает, но нужно довести отказоустойчивость медиа и единообразие восстановления контента (сейчас при сбоях медиа может импортироваться упрощённо).
+- [~] Поделиться заметкой можно (viewer/editor), но это пока не «публичная read-only ссылка» без пользовательской сессии.
+- [~] Внешнее хранилище и бэкапы реализованы через Google Drive, но требуется довести UX ошибок/переподключения и покрыть больше сценариев восстановления.
+- [~] Таблицы частично поддерживаются на уровне HTML/санитизации и редактора, но нет явного полноценного UX-режима «таблиц как отдельной функции».
+- [~] Уведомления о напоминаниях есть, но нужны доработки стабильности и сценариев разрешений/браузерных ограничений.
 
-## Import / export / backup
-- [x] Export all notes locally
-- [x] Export folder locally
-- [ ] Export selected notes locally
-- [ ] Import notes and folders from other services/formats
-- [ ] Normalize import/export payloads, media handling, and restore flow
-- [x] Manual backup of all notes to the connected drive
-- [x] Manual backup of a chosen folder to the connected drive
-- [x] Keep backups user-initiated only
-- [ ] Add storage-provider choice later for manual backups
-- [ ] Public read-only links
-- [ ] Local-only storage mode
+## Осталось закончить (высокий приоритет)
 
-## Editor / Markdown / content
-- [ ] Markdown mode with toggle
-- [ ] Reliable Markdown import/export
-- [ ] Custom note fonts with download/import support
-- [ ] Checklists
-- [ ] Tables
-- [ ] Note templates
-- [ ] Note links and graph view
-- [ ] Google Drive attachments
+### 1) Импорт / экспорт / backup
+- [ ] Экспорт выбранных заметок (не только «все» и «активная папка»).
+- [ ] Нормализовать поток import/export end-to-end: единый формат, проверка совместимости версий, предсказуемое восстановление медиа.
+- [ ] Добавить выбор провайдера хранилища для ручных бэкапов (сейчас фактически только Google Drive).
+- [ ] Полноценные «публичные ссылки только для чтения».
+- [ ] Режим local-only без обязательной облачной сессии.
 
-## Main
-- [ ] Shared folders
-- [ ] Real-time collaborative editing
-- [ ] Revision history
-- [ ] Active participants presence
-- [ ] Activity log (edit/view actions)
+### 2) Редактор / контент
+- [ ] Markdown-режим с переключателем (WYSIWYG ↔ Markdown) и корректной синхронизацией структуры.
+- [ ] Надёжный Markdown import/export.
+- [ ] Кастомные шрифты заметок (импорт/подключение/настройка).
+- [ ] Чеклисты как отдельная сущность (не только обычные списки).
+- [ ] Таблицы как полноценный инструмент редактирования (вставка/редактирование/удаление через UI).
+- [ ] Шаблоны заметок.
+- [ ] Ссылки между заметками + граф связей.
+- [ ] Вложения Google Drive как отдельный управляемый UX-сценарий (не только media pipeline).
+- [ ] Переписать редактор так, чтобы изображения можно было свободно перемещать внутри заметки; затем расширить этот же механизм на вложения.
 
-## Note management
-- [ ] Bulk actions for notes
-- [x] Clear trash with double confirmation
-- [x] Saved filters
-- [x] Advanced filters
+### 3) Совместная работа
+- [ ] Общие папки (сейчас шаринг реализован на уровне заметок).
+- [ ] Редактирование в реальном времени несколькими участниками.
+- [ ] История ревизий с откатом по версиям.
+- [ ] Presence (кто сейчас в заметке/онлайн).
+- [ ] Журнал активности (просмотры/изменения/действия).
 
-## System and stability
-- [ ] Full offline mode
-- [ ] Notification fixes
-- [ ] Page stability improvements
-- [ ] Better page navigation
-- [ ] More app settings toggles
+### 4) Управление заметками
+- [ ] Массовые операции (bulk actions: выбор нескольких заметок, массовый перенос/архив/удаление/теги).
+
+### 5) Система и стабильность
+- [ ] Полноценный offline-режим (кэширование, очередь синка, восстановление после reconnect).
+- [ ] Улучшение стабильности страниц и навигации в крайних сценариях.
+- [ ] Дополнительные системные тумблеры/настройки поведения приложения.
+
+## Уже завершено (подтверждено по коду)
+- [x] Экспорт всех заметок локально.
+- [x] Экспорт заметок активной папки локально.
+- [x] Импорт заметок/папок из JSON-бандла приложения.
+- [x] Резервная копия всех заметок в подключённый Drive.
+- [x] Резервная копия активной папки в подключённый Drive.
+- [x] Очистка корзины с двойным подтверждением.
+- [x] Сохранённые фильтры.
+- [x] Расширенные фильтры (папки/теги/период/сортировка).

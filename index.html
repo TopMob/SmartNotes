@@ -64,6 +64,7 @@
     <script src="js/notes/domain/notesSortingStrategy.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/domain/notesAggregationService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/remindersService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/notificationService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/settingsSyncService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/ownedNotesService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sharedNotesService.js?v=2026-02-22-1e1b181" defer></script>
@@ -297,6 +298,10 @@
                             <button type="button" class="dropdown-item" data-action="export-all-notes">
                                 <i class="material-icons-round" aria-hidden="true">download</i>
                                 <span data-lang="export_all_notes">Экспорт всех заметок</span>
+                            </button>
+                            <button type="button" class="dropdown-item" data-action="export-visible-notes">
+                                <i class="material-icons-round" aria-hidden="true">download_for_offline</i>
+                                <span data-lang="export_visible_notes">Экспорт текущего списка</span>
                             </button>
                             <button type="button" class="dropdown-item" data-action="backup-all-notes">
                                 <i class="material-icons-round" aria-hidden="true">backup</i>
