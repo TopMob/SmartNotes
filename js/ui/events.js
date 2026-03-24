@@ -336,20 +336,11 @@ Object.assign(UI, {
         const { folders, config, view } = StateStore.read()
         const interfaceConfig = config.interface || {}
         const sectionSaved = document.getElementById("notes-filter-section-saved")
-        const sectionSort = document.getElementById("notes-filter-section-sort")
         const sectionTags = document.getElementById("notes-filter-section-tags")
         const sectionDate = document.getElementById("notes-filter-section-date")
-        const sectionFolders = document.getElementById("notes-filter-section-folders")
         if (sectionSaved) sectionSaved.classList.toggle("hidden", interfaceConfig.showSavedFilters === false)
-        if (sectionSort) sectionSort.classList.toggle("hidden", interfaceConfig.showSortFilter === false)
         if (sectionTags) sectionTags.classList.toggle("hidden", interfaceConfig.showTagFilter === false)
         if (sectionDate) sectionDate.classList.toggle("hidden", interfaceConfig.showUpdatedPeriodFilter === false)
-        if (sectionFolders) sectionFolders.classList.toggle("hidden", interfaceConfig.showFolderFilter === false)
-        if (this.els.filterButton) {
-            const hideFilterButton = interfaceConfig.showFilterButton === false
-            this.els.filterButton.classList.toggle("hidden", hideFilterButton)
-            if (hideFilterButton) this.toggleFilterMenu(false)
-        }
         const current = window.NotesStorage?.normalizeNotesFilter
             ? window.NotesStorage.normalizeNotesFilter(config.notesFilter || {})
             : (config.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 })

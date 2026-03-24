@@ -39,6 +39,7 @@ Object.assign(UI, {
 
     openSettings() {
         this.settingsPage = null
+        this.interfaceSettingsPersistPending = false
         this.syncSettingsDraftFromOriginal()
         this.openModal("settings-modal")
         this.renderSettingsPage()
@@ -83,7 +84,7 @@ Object.assign(UI, {
                     </button>
                     <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="interface">
                         <div class="settings-menu-meta">
-                            <span class="settings-menu-title">${dict.settings_interface || "Interface"}</span>
+                            <span class="settings-menu-title">${dict.settings_interface || "Interface Elements"}</span>
                             <span class="settings-menu-desc">${dict.settings_category_interface_desc || ""}</span>
                         </div>
                         <i class="material-icons-round" aria-hidden="true">chevron_right</i>
@@ -305,22 +306,22 @@ Object.assign(UI, {
         }
 
         if (page === "interface") {
-            title.textContent = dict.settings_interface || dict.editor_settings || "Interface"
+            title.textContent = dict.settings_interface || dict.editor_settings || "Interface Elements"
             const interfaceSettings = this.getSettingsDraft()?.interface || {}
             root.innerHTML = `
                 <div class="settings-group">
-                    <div class="settings-toggle-list">
-                        ${this.buildInterfaceSettingToggle("showFilterButton", dict.settings_show_filter_button || "Показывать кнопку фильтров", interfaceSettings.showFilterButton !== false)}
-                        ${this.buildInterfaceSettingToggle("showSavedFilters", dict.settings_show_saved_filters || "Показывать сохранённые фильтры", interfaceSettings.showSavedFilters !== false)}
-                        ${this.buildInterfaceSettingToggle("showSortFilter", dict.settings_show_sort_filter || "Показывать сортировку", interfaceSettings.showSortFilter !== false)}
-                        ${this.buildInterfaceSettingToggle("showTagFilter", dict.settings_show_tag_filter || "Показывать фильтр по тегам", interfaceSettings.showTagFilter !== false)}
-                        ${this.buildInterfaceSettingToggle("showUpdatedPeriodFilter", dict.settings_show_updated_period || "Показывать период обновления", interfaceSettings.showUpdatedPeriodFilter !== false)}
-                        ${this.buildInterfaceSettingToggle("showFolderFilter", dict.settings_show_folder_filter || "Показывать фильтр по папкам", interfaceSettings.showFolderFilter !== false)}
-                    </div>
-                    <div class="settings-section">
-                        <div class="settings-section-title">${dict.settings_editor_tools || "Editor Tools"}</div>
+                    <details class="settings-section" open>
+                        <summary class="settings-section-title">${dict.settings_interface_filters || "Фильтры"}</summary>
+                        <div class="settings-toggle-list">
+                            ${this.buildInterfaceSettingToggle("showSavedFilters", dict.settings_show_saved_filters || "Показывать сохранённые фильтры", interfaceSettings.showSavedFilters !== false)}
+                            ${this.buildInterfaceSettingToggle("showTagFilter", dict.settings_show_tag_filter || "Показывать фильтр по тегам", interfaceSettings.showTagFilter !== false)}
+                            ${this.buildInterfaceSettingToggle("showUpdatedPeriodFilter", dict.settings_show_updated_period || "Показывать период обновления", interfaceSettings.showUpdatedPeriodFilter !== false)}
+                        </div>
+                    </details>
+                    <details class="settings-section">
+                        <summary class="settings-section-title">${dict.settings_editor_tools || "Editor Tools"}</summary>
                         <div id="editor-tools-list" class="settings-toggle-list"></div>
-                    </div>
+                    </details>
                 </div>
             `
             root.querySelectorAll("[data-interface-key]").forEach(input => {
@@ -333,6 +334,7 @@ Object.assign(UI, {
                     this.updateSettingsDraft({ interface: nextInterface })
                     this.applyDraftSettingsToRuntime()
                     this.renderFilterMenu()
+                    this.interfaceSettingsPersistPending = true
                 })
             })
             this.renderEditorSettings()
@@ -416,6 +418,10 @@ Object.assign(UI, {
     },
 
     requestCloseSettingsModal() {
+        if (this.interfaceSettingsPersistPending) {
+            this.saveSettingsDraft()
+            return
+        }
         if (!this.isSettingsDirty()) {
             this.closeModal("settings-modal")
             return
@@ -436,6 +442,7 @@ Object.assign(UI, {
         } else {
             this.syncSettingsUI()
         }
+        this.interfaceSettingsPersistPending = false
         this.closeModal("settings-modal")
     },
 
@@ -459,6 +466,7 @@ Object.assign(UI, {
             } else {
                 this.syncSettingsUI()
             }
+            this.interfaceSettingsPersistPending = false
             this.closeModal("settings-modal")
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
@@ -1222,6 +1230,7 @@ Object.assign(UI, {
             input.setAttribute("aria-label", label.textContent)
             input.addEventListener("change", () => {
                 window.SmartNotesEditor.setToolEnabled(tool.id, input.checked)
+                this.interfaceSettingsPersistPending = true
             })
             
             const slider = document.createElement("span")

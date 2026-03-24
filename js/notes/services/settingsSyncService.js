@@ -22,12 +22,9 @@ const SettingsSyncService = (() => {
             folderViewMode: StateStore.read().config.folderViewMode || "compact",
             reduceMotion: !!StateStore.read().config.reduceMotion,
             interface: {
-                showFilterButton: StateStore.read().config.interface?.showFilterButton !== false,
                 showSavedFilters: StateStore.read().config.interface?.showSavedFilters !== false,
-                showSortFilter: StateStore.read().config.interface?.showSortFilter !== false,
                 showTagFilter: StateStore.read().config.interface?.showTagFilter !== false,
-                showUpdatedPeriodFilter: StateStore.read().config.interface?.showUpdatedPeriodFilter !== false,
-                showFolderFilter: StateStore.read().config.interface?.showFolderFilter !== false
+                showUpdatedPeriodFilter: StateStore.read().config.interface?.showUpdatedPeriodFilter !== false
             },
             customPresets: ThemeManager.getCustomPresets(),
             schemaVersion: 1
@@ -56,12 +53,9 @@ const SettingsSyncService = (() => {
             folderViewMode: source.folderViewMode === "full" ? "full" : "compact",
             reduceMotion: !!source.reduceMotion,
             interface: {
-                showFilterButton: source.interface?.showFilterButton !== false,
                 showSavedFilters: source.interface?.showSavedFilters !== false,
-                showSortFilter: source.interface?.showSortFilter !== false,
                 showTagFilter: source.interface?.showTagFilter !== false,
-                showUpdatedPeriodFilter: source.interface?.showUpdatedPeriodFilter !== false,
-                showFolderFilter: source.interface?.showFolderFilter !== false
+                showUpdatedPeriodFilter: source.interface?.showUpdatedPeriodFilter !== false
             },
             customPresets: Array.isArray(source.customPresets) ? source.customPresets : defaults.customPresets,
             schemaVersion: 1
