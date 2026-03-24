@@ -167,7 +167,10 @@ export const EditorAPI = (() => {
 
     const tableHandlers = createTableHandlers({
         insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
-        storeSelection: inputHandlers.storeSelection
+        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+        getRoot: () => document.getElementById("note-content-editable"),
+        storeSelection: inputHandlers.storeSelection,
+        queueSnapshot: (...args) => queueSnapshot(...args)
     })
 
     const resolveExternalMediaMessage = (error, options = {}) => {
@@ -863,7 +866,29 @@ export const EditorAPI = (() => {
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => editorCommands.toggleBulletedList() },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => editorCommands.toggleNumberedList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => inputHandlers.insertHorizontalRule() },
-        { id: "table", i: "table_rows", label: "tool_table", cmd: () => tableHandlers.insertTable({ rows: 2, cols: 3 }) },
+        { id: "table", i: "table_rows", label: "tool_table", cmd: () => {
+            inputHandlers.storeSelection()
+            if (tableHandlers.isSelectionInsideTable()) {
+                UI.showPrompt(
+                    UI.getText("table_action_title", "Действие с таблицей"),
+                    UI.getText("table_action_placeholder", "+r | -r | +c | -c | del"),
+                    (value) => {
+                        if (!tableHandlers.applyAction(value)) {
+                            UI.showToast(UI.getText("table_action_invalid", "Неизвестная команда для таблицы"))
+                        }
+                    }
+                )
+                return
+            }
+            UI.showPrompt(
+                UI.getText("table_insert_title", "Размер таблицы"),
+                UI.getText("table_insert_placeholder", "Например: 3x4"),
+                (value) => {
+                    const parsed = tableHandlers.parseSizeInput(value, { rows: 2, cols: 3 })
+                    tableHandlers.insertTable({ rows: parsed.rows, cols: parsed.cols })
+                }
+            )
+        } },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
             inputHandlers.storeSelection()
             UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {
