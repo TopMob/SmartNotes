@@ -87,9 +87,11 @@ const UI = {
         element.setAttribute("data-bwignore", "true")
         element.setAttribute("name", `smartnotes_${normalizedMode}_${Date.now()}`)
         element.readOnly = true
-        requestAnimationFrame(() => {
+        const releaseReadOnly = () => {
             element.readOnly = false
-        })
+        }
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(releaseReadOnly)
+        else setTimeout(releaseReadOnly, 0)
         return element
     },
 
@@ -118,11 +120,13 @@ const UI = {
 
 
     startInputAutocompleteObserver() {
+        if (typeof MutationObserver !== "function") return
+        if (!document.body) return
         if (this.inputPolicyObserver) this.inputPolicyObserver.disconnect()
         this.inputPolicyObserver = new MutationObserver(mutations => {
             mutations.forEach(mutation => {
                 mutation.addedNodes.forEach(node => {
-                    if (!(node instanceof Element)) return
+                    if (!node || node.nodeType !== 1) return
                     this.applyInputAutocompletePolicy(node)
                 })
             })
