@@ -252,14 +252,6 @@
                                     <i class="material-icons-round" aria-hidden="true">visibility_off</i>
                                     <span data-lang="hide_folder">Скрыть папку</span>
                                 </button>
-                                <button type="button" class="dropdown-item" data-action="export-active-folder">
-                                    <i class="material-icons-round" aria-hidden="true">folder_zip</i>
-                                    <span data-lang="export_active_folder">Экспорт папки</span>
-                                </button>
-                                <button type="button" class="dropdown-item" data-action="backup-active-folder">
-                                    <i class="material-icons-round" aria-hidden="true">cloud_upload</i>
-                                    <span data-lang="backup_active_folder">Резервная копия папки</span>
-                                </button>
                                 <button type="button" class="dropdown-item danger" data-action="delete-active-folder">
                                     <i class="material-icons-round" aria-hidden="true">delete</i>
                                     <span data-lang="delete_folder">Удалить папку</span>
@@ -275,9 +267,6 @@
                 </div>
 
                 <div class="header-right">
-                    <button type="button" class="btn-icon" data-action="trigger-import" aria-label="Импортировать файл" data-lang-aria="import_file">
-                        <i class="material-icons-round" aria-hidden="true">upload_file</i>
-                    </button>
                     <button type="button" id="clear-trash-button" class="btn-icon hidden" data-action="clear-trash" aria-label="Очистить корзину" data-lang-aria="clear_trash">
                         <i class="material-icons-round" aria-hidden="true">delete_sweep</i>
                     </button>
@@ -294,18 +283,6 @@
                             <button type="button" class="dropdown-item" data-action="switch-account">
                                 <i class="material-icons-round" aria-hidden="true">switch_account</i>
                                 <span data-lang="switch_acc">Сменить</span>
-                            </button>
-                            <button type="button" class="dropdown-item" data-action="export-all-notes">
-                                <i class="material-icons-round" aria-hidden="true">download</i>
-                                <span data-lang="export_all_notes">Экспорт всех заметок</span>
-                            </button>
-                            <button type="button" class="dropdown-item" data-action="export-visible-notes">
-                                <i class="material-icons-round" aria-hidden="true">download_for_offline</i>
-                                <span data-lang="export_visible_notes">Экспорт текущего списка</span>
-                            </button>
-                            <button type="button" class="dropdown-item" data-action="backup-all-notes">
-                                <i class="material-icons-round" aria-hidden="true">backup</i>
-                                <span data-lang="backup_all_notes">Резервная копия всех заметок</span>
                             </button>
                             <button type="button" class="dropdown-item danger" data-action="logout">
                                 <i class="material-icons-round" aria-hidden="true">logout</i>

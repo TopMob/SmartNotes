@@ -444,7 +444,7 @@ Object.assign(UI, {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "export-active-folder", "backup-active-folder", "export-all-notes", "export-visible-notes", "backup-all-notes", "delete-active-folder", "clear-trash"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder", "clear-trash"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -488,26 +488,6 @@ Object.assign(UI, {
                 this.toggleFolderHidden(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
                 break
-            case "export-active-folder":
-                this.exportActiveFolderNotes()
-                this.toggleActiveFolderMenu(false)
-                break
-            case "backup-active-folder":
-                this.backupActiveFolderToDrive()
-                this.toggleActiveFolderMenu(false)
-                break
-            case "export-all-notes":
-                this.exportAllNotes()
-                this.toggleUserMenu(false)
-                break
-            case "export-visible-notes":
-                this.exportVisibleNotes()
-                this.toggleUserMenu(false)
-                break
-            case "backup-all-notes":
-                this.backupAllNotesToDrive()
-                this.toggleUserMenu(false)
-                break
             case "clear-trash":
                 clearTrashPermanently()
                 break
@@ -536,6 +516,24 @@ Object.assign(UI, {
                 break
             case "settings-save":
                 this.saveSettingsDraft()
+                break
+            case "settings-export-all-notes":
+                this.exportAllNotes()
+                break
+            case "settings-export-visible-notes":
+                this.exportVisibleNotes()
+                break
+            case "settings-export-active-folder":
+                this.exportActiveFolderNotes()
+                break
+            case "settings-backup-all-notes":
+                this.backupAllNotesToDrive()
+                break
+            case "settings-backup-active-folder":
+                this.backupActiveFolderToDrive()
+                break
+            case "settings-trigger-import":
+                this.triggerImport()
                 break
             case "settings-cancel":
                 this.cancelSettingsDraft()

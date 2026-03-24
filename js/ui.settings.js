@@ -91,6 +91,13 @@ Object.assign(UI, {
                         </div>
                         <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                     </button>
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="export_import">
+                        <div class="settings-menu-meta">
+                            <span class="settings-menu-title">${dict.settings_export_import || "Export / Import"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_export_import_desc || ""}</span>
+                        </div>
+                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                    </button>
                 </div>
             `
             this.applyInputAutocompletePolicy(root)
@@ -305,6 +312,37 @@ Object.assign(UI, {
             root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
             this.renderEditorSettings()
             this.applyInputAutocompletePolicy(root)
+            return
+        }
+
+        if (page === "export_import") {
+            title.textContent = dict.settings_export_import || "Export / Import"
+            const hasActiveFolder = !!StateStore.read().activeFolderId
+            root.innerHTML = `
+                <div class="settings-group">
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.export_all_notes || "Export all notes"}</div>
+                        <div class="settings-grid" style="gap:10px;">
+                            <button type="button" class="btn-secondary" data-action="settings-export-all-notes">${dict.export_all_notes || "Export all notes"}</button>
+                            <button type="button" class="btn-secondary" data-action="settings-export-visible-notes">${dict.export_visible_notes || "Export current list"}</button>
+                            <button type="button" class="btn-secondary" data-action="settings-export-active-folder" ${hasActiveFolder ? "" : "disabled"}>${dict.export_active_folder || "Export folder"}</button>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.backup_all_notes || "Back up all notes"}</div>
+                        <div class="settings-grid" style="gap:10px;">
+                            <button type="button" class="btn-secondary" data-action="settings-backup-all-notes">${dict.backup_all_notes || "Back up all notes"}</button>
+                            <button type="button" class="btn-secondary" data-action="settings-backup-active-folder" ${hasActiveFolder ? "" : "disabled"}>${dict.backup_active_folder || "Back up folder"}</button>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.import_file || "Import file"}</div>
+                        <button type="button" class="btn-primary" data-action="settings-trigger-import">${dict.import_file || "Import file"}</button>
+                    </div>
+                </div>
+            `
+            this.applyInputAutocompletePolicy(root)
+            return
         }
     },
 
