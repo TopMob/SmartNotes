@@ -1,4 +1,4 @@
-const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at"
+const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at";
 
 (() => {
 const buildExportFileName = (note, extension) => {
@@ -308,8 +308,8 @@ Object.assign(UI, {
         this.closeModal("note-actions-modal")
     },
 
-})
-})()
+});
+})();
 
 
 Object.assign(UI, {
