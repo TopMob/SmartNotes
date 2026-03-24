@@ -585,6 +585,7 @@ export const EditorAPI = (() => {
                 if (!(targetElement instanceof HTMLInputElement)) return
                 const file = targetElement.files?.[0]
                 if (!file) return
+                const loadingLock = UI.startLoading(UI.getText("loading_image", "Загрузка изображения..."))
                 try {
                     const imageUrl = await fileToDataUrl(file)
                     mediaHandlers.insertMedia(imageUrl, "image")
@@ -596,6 +597,8 @@ export const EditorAPI = (() => {
                     } else {
                         UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
                     }
+                } finally {
+                    UI.stopLoading(loadingLock)
                 }
             }, { signal })
         }

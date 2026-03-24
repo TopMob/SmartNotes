@@ -440,7 +440,7 @@ Object.assign(UI, {
 
 
 
-    handleAction(el, e) {
+    async handleAction(el, e) {
         const action = el.dataset.action
         if (!action) return
 
@@ -517,21 +517,41 @@ Object.assign(UI, {
             case "settings-save":
                 this.saveSettingsDraft()
                 break
-            case "settings-export-all-notes":
-                this.exportAllNotes()
+            case "settings-export-all-notes": {
+                if (el.disabled) break
+                el.disabled = true
+                const loadingLock = this.startLoading(this.getText("loading_export", "Подготовка экспорта..."))
+                try {
+                    await this.exportAllNotes()
+                } finally {
+                    this.stopLoading(loadingLock)
+                    el.disabled = false
+                }
                 break
-            case "settings-export-visible-notes":
-                this.exportVisibleNotes()
+            }
+            case "settings-export-folder": {
+                if (el.disabled) break
+                this.exportFolderBySelection()
                 break
-            case "settings-export-active-folder":
-                this.exportActiveFolderNotes()
+            }
+            case "settings-backup-all-notes": {
+                if (el.disabled) break
+                el.disabled = true
+                const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
+                try {
+                    await this.backupAllNotesToDrive()
+                } finally {
+                    this.stopLoading(loadingLock)
+                    el.disabled = false
+                    this.renderSettingsPage()
+                }
                 break
-            case "settings-backup-all-notes":
-                this.backupAllNotesToDrive()
+            }
+            case "settings-backup-folder": {
+                if (el.disabled) break
+                this.backupFolderBySelection()
                 break
-            case "settings-backup-active-folder":
-                this.backupActiveFolderToDrive()
-                break
+            }
             case "settings-trigger-import":
                 this.triggerImport()
                 break

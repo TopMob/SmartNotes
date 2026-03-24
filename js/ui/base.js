@@ -11,6 +11,7 @@ const UI = {
     resizeListenersController: null,
     inputPolicyObserver: null,
     toastDeduplication: { lastMessage: "", lastShownAt: 0 },
+    loadingLocks: new Set(),
 
     init() {
         this.els = {
@@ -127,6 +128,30 @@ const UI = {
             })
         })
         this.inputPolicyObserver.observe(document.body, { childList: true, subtree: true })
+    },
+
+
+    startLoading(message = "") {
+        const overlay = document.getElementById("global-loading-overlay")
+        const text = document.getElementById("global-loading-text")
+        const lockId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        this.loadingLocks.add(lockId)
+        if (text) text.textContent = message || this.getText("loading", "Loading...")
+        if (overlay) {
+            overlay.classList.remove("hidden")
+            overlay.setAttribute("aria-busy", "true")
+        }
+        return lockId
+    },
+
+    stopLoading(lockId = "") {
+        const normalizedLockId = String(lockId || "")
+        if (normalizedLockId) this.loadingLocks.delete(normalizedLockId)
+        if (this.loadingLocks.size) return
+        const overlay = document.getElementById("global-loading-overlay")
+        if (!overlay) return
+        overlay.classList.add("hidden")
+        overlay.setAttribute("aria-busy", "false")
     },
 
     setLang(lang) {

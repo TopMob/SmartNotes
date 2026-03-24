@@ -1,3 +1,5 @@
+const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at"
+
 (() => {
 const buildExportFileName = (note, extension) => {
     const baseName = NoteIO.fileNameFor(note).replace(/\.json$/i, "")
@@ -587,6 +589,7 @@ Object.assign(UI, {
         }
         const reader = new FileReader()
         reader.onload = async () => {
+            const loadingLock = this.startLoading(this.getText("loading_import", "Импорт данных..."))
             try {
                 const text = String(reader.result || "").replace(/^﻿/, "")
                 const parsed = JSON.parse(text)
@@ -621,6 +624,8 @@ Object.assign(UI, {
                     return
                 }
                 this.showToast(this.getText("import_failed", "Import failed"))
+            } finally {
+                this.stopLoading(loadingLock)
             }
         }
         reader.onerror = () => this.showToast(this.getText("import_failed", "Import failed"))
@@ -674,60 +679,72 @@ Object.assign(UI, {
     },
 
     async exportNotesBundle(notes, options = {}) {
-        const exportableNotes = Array.isArray(notes) ? notes : []
-        if (!exportableNotes.length) {
-            const emptyKey = options.emptyMessageKey || "export_empty"
-            const fallbackMessage = options.emptyFallback || "No notes available for export"
-            this.showToast(this.getText(emptyKey, fallbackMessage))
-            return null
+        const loadingLock = this.startLoading(this.getText("loading_export", "Подготовка экспорта..."))
+        try {
+            const exportableNotes = Array.isArray(notes) ? notes : []
+            if (!exportableNotes.length) {
+                const emptyKey = options.emptyMessageKey || "export_empty"
+                const fallbackMessage = options.emptyFallback || "No notes available for export"
+                this.showToast(this.getText(emptyKey, fallbackMessage))
+                return null
+            }
+            const preparedNotes = await this.prepareExportNotes(exportableNotes)
+            const payload = window.NoteExportService.buildExportPayload({
+                notes: preparedNotes,
+                folders: this.getExportFoldersForNotes(preparedNotes, options),
+                scope: options.scope || "all",
+                folder: options.folder || null
+            })
+            const fileName = window.NoteExportService.downloadExportPayload(payload, {
+                scope: options.scope || "all",
+                folderName: options.folder?.name || ""
+            })
+            this.showToast(this.getText("download_success", "File saved"))
+            return fileName
+        } finally {
+            this.stopLoading(loadingLock)
         }
-        const preparedNotes = await this.prepareExportNotes(exportableNotes)
-        const payload = window.NoteExportService.buildExportPayload({
-            notes: preparedNotes,
-            folders: this.getExportFoldersForNotes(preparedNotes, options),
-            scope: options.scope || "all",
-            folder: options.folder || null
-        })
-        const fileName = window.NoteExportService.downloadExportPayload(payload, {
-            scope: options.scope || "all",
-            folderName: options.folder?.name || ""
-        })
-        this.showToast(this.getText("download_success", "File saved"))
-        return fileName
     },
 
     async backupNotesBundleToDrive(notes, options = {}) {
-        const exportableNotes = Array.isArray(notes) ? notes : []
-        if (!exportableNotes.length) {
-            const emptyKey = options.emptyMessageKey || "export_empty"
-            const fallbackMessage = options.emptyFallback || "No notes available for export"
-            this.showToast(this.getText(emptyKey, fallbackMessage))
-            return null
+        const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
+        try {
+            const exportableNotes = Array.isArray(notes) ? notes : []
+            if (!exportableNotes.length) {
+                const emptyKey = options.emptyMessageKey || "export_empty"
+                const fallbackMessage = options.emptyFallback || "No notes available for export"
+                this.showToast(this.getText(emptyKey, fallbackMessage))
+                return null
+            }
+            const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+            if (!mediaService?.uploadFile) {
+                this.showToast(this.getText("backup_connected_drive_required", "Connect external storage to create a backup"))
+                return null
+            }
+            const preparedNotes = await this.prepareExportNotes(exportableNotes)
+            const payload = window.NoteExportService.buildExportPayload({
+                notes: preparedNotes,
+                folders: this.getExportFoldersForNotes(preparedNotes, options),
+                scope: options.scope || "all",
+                folder: options.folder || null
+            })
+            const fileName = window.NoteExportService.buildExportFileName({
+                scope: options.scope || "all",
+                folderName: options.folder?.name || ""
+            })
+            const blob = window.NoteExportService.createExportBlob(payload)
+            const publicUrl = await mediaService.uploadFile(blob, {
+                fileName,
+                mimeType: "application/json",
+                targetFolder: "backups"
+            })
+            const completedAt = new Date().toISOString()
+            SafeStorage.local.set(DRIVE_LAST_MANUAL_BACKUP_AT_KEY, completedAt)
+            this.showToast(this.getText("backup_success", "Backup saved to external storage"))
+            return { fileName, publicUrl, completedAt }
+        } finally {
+            this.stopLoading(loadingLock)
         }
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        if (!mediaService?.uploadFile) {
-            this.showToast(this.getText("backup_connected_drive_required", "Connect external storage to create a backup"))
-            return null
-        }
-        const preparedNotes = await this.prepareExportNotes(exportableNotes)
-        const payload = window.NoteExportService.buildExportPayload({
-            notes: preparedNotes,
-            folders: this.getExportFoldersForNotes(preparedNotes, options),
-            scope: options.scope || "all",
-            folder: options.folder || null
-        })
-        const fileName = window.NoteExportService.buildExportFileName({
-            scope: options.scope || "all",
-            folderName: options.folder?.name || ""
-        })
-        const blob = window.NoteExportService.createExportBlob(payload)
-        const publicUrl = await mediaService.uploadFile(blob, {
-            fileName,
-            mimeType: "application/json",
-            targetFolder: "backups"
-        })
-        this.showToast(this.getText("backup_success", "Backup saved to external storage"))
-        return { fileName, publicUrl }
     },
 
     async exportAllNotes() {
@@ -758,6 +775,50 @@ Object.assign(UI, {
         }
     },
 
+    getExportableFoldersList() {
+        const folders = Array.isArray(StateStore.read().folders) ? StateStore.read().folders : []
+        return folders.filter(folder => !folder?.trashedAt)
+    },
+
+    getLastDriveBackupAt() {
+        const rawValue = SafeStorage.local.get(DRIVE_LAST_MANUAL_BACKUP_AT_KEY)
+        if (!rawValue) return null
+        const date = new Date(rawValue)
+        return Number.isFinite(date.getTime()) ? date : null
+    },
+
+    getLastDriveBackupLabel() {
+        const date = this.getLastDriveBackupAt()
+        if (!date) return this.getText("backup_last_manual_none", "Пока не выполнялось")
+        return date.toLocaleString(StateStore.read().config.lang === "en" ? "en-US" : "ru-RU")
+    },
+
+    resolveFolderByName(folderName) {
+        const normalizedName = String(folderName || "").trim().toLocaleLowerCase()
+        if (!normalizedName) return null
+        return this.getExportableFoldersList().find(folder => String(folder.name || "").trim().toLocaleLowerCase() === normalizedName) || null
+    },
+
+    selectFolderForExport(callback) {
+        const folders = this.getExportableFoldersList()
+        if (!folders.length) {
+            this.showToast(this.getText("folder_not_found", "Folder not found"))
+            return
+        }
+        this.showPrompt(
+            this.getText("export_folder_prompt_title", "Выберите папку для экспорта/резервной копии"),
+            this.getText("export_folder_prompt_placeholder", "Введите точное название папки"),
+            (value) => {
+                const folder = this.resolveFolderByName(value)
+                if (!folder) {
+                    this.showToast(this.getText("export_folder_not_found", "Папка не найдена"))
+                    return
+                }
+                callback(folder)
+            }
+        )
+    },
+
     async backupAllNotesToDrive() {
         try {
             return await this.backupNotesBundleToDrive(this.getExportableNotes(), {
@@ -772,12 +833,13 @@ Object.assign(UI, {
         }
     },
 
-    async exportActiveFolderNotes() {
+    async exportActiveFolderNotes(folderId = null) {
         const { activeFolderId, folders } = StateStore.read()
-        if (!activeFolderId) return null
-        const folder = folders.find(item => item.id === activeFolderId)
+        const targetFolderId = folderId || activeFolderId
+        if (!targetFolderId) return null
+        const folder = folders.find(item => item.id === targetFolderId)
         try {
-            return await this.exportNotesBundle(this.getExportableNotes(note => note.folderId === activeFolderId), {
+            return await this.exportNotesBundle(this.getExportableNotes(note => note.folderId === targetFolderId), {
                 scope: "folder",
                 folder,
                 folders: folder ? [folder] : [],
@@ -791,12 +853,13 @@ Object.assign(UI, {
         }
     },
 
-    async backupActiveFolderToDrive() {
+    async backupActiveFolderToDrive(folderId = null) {
         const { activeFolderId, folders } = StateStore.read()
-        if (!activeFolderId) return null
-        const folder = folders.find(item => item.id === activeFolderId)
+        const targetFolderId = folderId || activeFolderId
+        if (!targetFolderId) return null
+        const folder = folders.find(item => item.id === targetFolderId)
         try {
-            return await this.backupNotesBundleToDrive(this.getExportableNotes(note => note.folderId === activeFolderId), {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(note => note.folderId === targetFolderId), {
                 scope: "folder",
                 folder,
                 folders: folder ? [folder] : [],
@@ -808,6 +871,18 @@ Object.assign(UI, {
             this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }
+    },
+
+    exportFolderBySelection() {
+        this.selectFolderForExport(folder => {
+            this.exportActiveFolderNotes(folder.id)
+        })
+    },
+
+    backupFolderBySelection() {
+        this.selectFolderForExport(folder => {
+            this.backupActiveFolderToDrive(folder.id)
+        })
     },
 
     openNoteActionsFlow(noteId, options = {}) {
