@@ -126,7 +126,7 @@ export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds
     })
 }
 
-export async function requestGoogleAccessToken({ clientId, scope, prompt = "consent", timeoutMilliseconds = 12000 }) {
+export async function requestGoogleAccessToken({ clientId, scope, prompt = "consent", loginHint = "", timeoutMilliseconds = 12000 }) {
     if (!clientId) {
         throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
     }
@@ -161,11 +161,18 @@ export async function requestGoogleAccessToken({ clientId, scope, prompt = "cons
             finishWithReject(createError("auth/google-oauth-timeout", "Google OAuth timeout"))
         }, timeoutMilliseconds)
 
+        const normalizedLoginHint = String(loginHint || "").trim()
+
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: clientId,
             scope,
             prompt,
+            login_hint: normalizedLoginHint || undefined,
             callback: response => {
+                if (response?.error) {
+                    finishWithReject(createError(`auth/google-oauth-${String(response.error || "request-failed")}`, String(response?.error_description || response?.error || "Google OAuth request failed")))
+                    return
+                }
                 const accessToken = String(response?.access_token || "")
                 if (!accessToken) {
                     finishWithReject(createError("auth/google-oauth-empty-token", "Google OAuth access token is empty"))
@@ -183,7 +190,10 @@ export async function requestGoogleAccessToken({ clientId, scope, prompt = "cons
         })
 
         try {
-            tokenClient.requestAccessToken({ prompt })
+            tokenClient.requestAccessToken({
+                prompt,
+                login_hint: normalizedLoginHint || undefined
+            })
         } catch (error) {
             finishWithReject(createError("auth/google-oauth-request-failed", error?.message || "Google OAuth request failed"))
         }

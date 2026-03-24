@@ -53,6 +53,26 @@ const SettingsSyncService = (() => {
     }
     function getCacheKey(uid) { return `user-settings-cache:${String(uid || "")}` }
     function writeOriginal(settings) { StateStore.update("originalUserSettings", JSON.parse(JSON.stringify(settings))) }
+    async function externalizeAppearanceMedia(settings) {
+        const source = settings && typeof settings === "object" ? settings : null
+        if (!source?.customTheme) return source
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const status = mediaService?.getStatus?.() || null
+        if (!status?.linked || typeof mediaService?.uploadDataUrl !== "function") return source
+        const nextSettings = JSON.parse(JSON.stringify(source))
+        const entries = [
+            { imageField: "mainBackgroundImage", urlField: "mainBackgroundUrl", fileNameBase: "main_background" },
+            { imageField: "sidebarBackgroundImage", urlField: "sidebarBackgroundUrl", fileNameBase: "sidebar_background" }
+        ]
+        for (const entry of entries) {
+            const imageValue = String(nextSettings.customTheme?.[entry.imageField] || "")
+            if (!imageValue.startsWith("data:image/")) continue
+            const publicUrl = await mediaService.uploadDataUrl(imageValue, { fileNameBase: entry.fileNameBase })
+            nextSettings.customTheme[entry.urlField] = publicUrl
+            nextSettings.customTheme[entry.imageField] = ""
+        }
+        return nextSettings
+    }
     function applyToRuntime(userSettings, options = {}) {
         const settings = normalizeUserSettings(userSettings)
         ThemeManager.applySettings({ preset: settings.themeId, ...settings.customTheme }, options.persistTheme !== false)
@@ -65,7 +85,8 @@ const SettingsSyncService = (() => {
     async function saveUserSettings(settingsToSave) {
         const user = StateStore.read().user
         if (!user) return null
-        const normalized = normalizeUserSettings(settingsToSave)
+        const externalizedSettings = await externalizeAppearanceMedia(settingsToSave)
+        const normalized = normalizeUserSettings(externalizedSettings)
         const resolved = state.reference ? { reference: state.reference } : await SettingsRepository.resolveReference(user)
         if (!resolved.reference) return null
         await SettingsRepository.write(resolved.reference, normalized)

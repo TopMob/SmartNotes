@@ -36,6 +36,69 @@ const refreshCurrentList = () => {
     updateSearchQuery(currentSearchValue)
 }
 
+const getTrashedItems = () => {
+    const state = StateStore.read()
+    return {
+        notes: Array.isArray(state.notes) ? state.notes.filter(note => !!note?.trashedAt) : [],
+        folders: Array.isArray(state.folders) ? state.folders.filter(folder => !!folder?.trashedAt) : []
+    }
+}
+
+const normalizeConfirmationValue = value => String(value || "").trim().toLocaleUpperCase()
+
+const commitPermanentDeletes = async (references, chunkSize = 400) => {
+    const validReferences = (Array.isArray(references) ? references : []).filter(Boolean)
+    for (let index = 0; index < validReferences.length; index += chunkSize) {
+        const batch = db.batch()
+        validReferences.slice(index, index + chunkSize).forEach(reference => {
+            batch.delete(reference)
+        })
+        await batch.commit()
+    }
+}
+
+async function clearTrashPermanently() {
+    const user = StateStore.read().user
+    if (!db || !user) return
+    const trashedItems = getTrashedItems()
+    if (!trashedItems.notes.length && !trashedItems.folders.length) {
+        UI.showToast(UI.getText("trash_already_empty", "Trash is already empty"))
+        UI.updateTrashActionVisibility?.()
+        return
+    }
+    UI.confirm("clear_trash", () => {
+        const confirmationKeyword = UI.getText("clear_trash_keyword", "DELETE")
+        UI.showPrompt(
+            UI.getText("clear_trash_prompt_title", "Type DELETE to clear trash"),
+            UI.getText("clear_trash_prompt_placeholder", "Type DELETE"),
+            async (value) => {
+                if (normalizeConfirmationValue(value) !== normalizeConfirmationValue(confirmationKeyword)) {
+                    UI.showToast(UI.getText("clear_trash_keyword_error", "Confirmation did not match, trash was not cleared"))
+                    return
+                }
+                const currentTrashedItems = getTrashedItems()
+                const noteReferences = currentTrashedItems.notes
+                    .map(note => getNoteReference(note, user))
+                    .filter(Boolean)
+                const folderReferences = currentTrashedItems.folders
+                    .map(folder => DataPath.getUserFoldersCollection(user).doc(folder.id))
+                    .filter(Boolean)
+                await commitPermanentDeletes([...noteReferences, ...folderReferences])
+                const deletedNoteIds = new Set(currentTrashedItems.notes.map(note => note.id))
+                const deletedFolderIds = new Set(currentTrashedItems.folders.map(folder => folder.id))
+                StateActions.setNotes(StateStore.read().notes.filter(note => !deletedNoteIds.has(note.id)))
+                StateStore.update("folders", StateStore.read().folders.filter(folder => !deletedFolderIds.has(folder.id)))
+                if (deletedNoteIds.has(StateStore.read().currentNote?.id)) {
+                    window.SmartNotesEditor?.close?.()
+                }
+                UI.showToast(UI.getText("trash_cleared", "Trash cleared"))
+                UI.updateTrashActionVisibility?.()
+                refreshCurrentList()
+            }
+        )
+    })
+}
+
 const ensureManageAccess = (note) => {
     if (!note) return false
     if (typeof CollaborationService === "undefined" || CollaborationService.canManage(note)) return true
@@ -230,3 +293,4 @@ window.toggleArchive = toggleArchive
 window.moveNoteToFolder = moveNoteToFolder
 window.restoreFolderById = restoreFolderById
 window.deleteFolderPermanently = deleteFolderPermanently
+window.clearTrashPermanently = clearTrashPermanently

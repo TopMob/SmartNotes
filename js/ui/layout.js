@@ -390,16 +390,18 @@ Object.assign(UI, {
         const descriptionSource = String(safeFolder.description || "").trim()
         const validatedName = window.Validators.validateFolderName(nameSource) || nameSource.slice(0, 50).trim()
         const validatedDescription = window.Validators.validateFolderDescription(descriptionSource)
+        const importedFolderOrder = Number(safeFolder.folderOrder)
         if (!validatedName) return null
         return {
             sourceId: String(safeFolder.id || ""),
             id: Utils.generateId(),
             name: validatedName,
             description: validatedDescription == null ? descriptionSource.slice(0, 300) : validatedDescription,
-            isHidden: false,
+            isHidden: !!safeFolder.isHidden,
             trashedAt: null,
-            folderOrder: Date.now() + index,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            folderOrder: Number.isFinite(importedFolderOrder) ? importedFolderOrder : Date.now() + index,
+            createdAt: this.normalizeImportedDate(safeFolder.createdAt),
+            updatedAt: this.normalizeImportedDate(safeFolder.updatedAt || safeFolder.createdAt),
             ownerUid: String(ownerUid || "")
         }
     },
@@ -467,7 +469,7 @@ Object.assign(UI, {
             relevance: 0,
             folderId: targetFolderId,
             trashedAt: null,
-            reminderAt: normalizedNote.reminderAt || null,
+            reminderAt: normalizedNote.reminderAt ? this.normalizeImportedDate(normalizedNote.reminderAt) : null,
             order: Date.now()
         }
         return this.normalizeImportedNoteMedia(importedNote)
@@ -687,6 +689,40 @@ Object.assign(UI, {
         return fileName
     },
 
+    async backupNotesBundleToDrive(notes, options = {}) {
+        const exportableNotes = Array.isArray(notes) ? notes : []
+        if (!exportableNotes.length) {
+            const emptyKey = options.emptyMessageKey || "export_empty"
+            const fallbackMessage = options.emptyFallback || "No notes available for export"
+            this.showToast(this.getText(emptyKey, fallbackMessage))
+            return null
+        }
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        if (!mediaService?.uploadFile) {
+            this.showToast(this.getText("backup_connected_drive_required", "Connect external storage to create a backup"))
+            return null
+        }
+        const preparedNotes = await this.prepareExportNotes(exportableNotes)
+        const payload = window.NoteExportService.buildExportPayload({
+            notes: preparedNotes,
+            folders: this.getExportFoldersForNotes(preparedNotes, options),
+            scope: options.scope || "all",
+            folder: options.folder || null
+        })
+        const fileName = window.NoteExportService.buildExportFileName({
+            scope: options.scope || "all",
+            folderName: options.folder?.name || ""
+        })
+        const blob = window.NoteExportService.createExportBlob(payload)
+        const publicUrl = await mediaService.uploadFile(blob, {
+            fileName,
+            mimeType: "application/json",
+            targetFolder: "backups"
+        })
+        this.showToast(this.getText("backup_success", "Backup saved to external storage"))
+        return { fileName, publicUrl }
+    },
+
     async exportAllNotes() {
         try {
             return await this.exportNotesBundle(this.getExportableNotes(), {
@@ -696,6 +732,20 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async backupAllNotesToDrive() {
+        try {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(), {
+                scope: "all",
+                emptyMessageKey: "export_empty",
+                emptyFallback: "No notes available for export"
+            })
+        } catch (error) {
+            console.error("Backup failed", error)
             this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }
@@ -715,6 +765,25 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async backupActiveFolderToDrive() {
+        const { activeFolderId, folders } = StateStore.read()
+        if (!activeFolderId) return null
+        const folder = folders.find(item => item.id === activeFolderId)
+        try {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(note => note.folderId === activeFolderId), {
+                scope: "folder",
+                folder,
+                folders: folder ? [folder] : [],
+                emptyMessageKey: "export_folder_empty",
+                emptyFallback: "This folder has no notes to export"
+            })
+        } catch (error) {
+            console.error("Backup failed", error)
             this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
             return null
         }
@@ -866,8 +935,31 @@ Object.assign(UI, {
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
+        this.updateTrashActionVisibility()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
+    },
+
+    getTrashSummary() {
+        const state = StateStore.read()
+        const trashedNotes = Array.isArray(state.notes) ? state.notes.filter(note => !!note?.trashedAt) : []
+        const trashedFolders = Array.isArray(state.folders) ? state.folders.filter(folder => !!folder?.trashedAt) : []
+        return {
+            notes: trashedNotes,
+            folders: trashedFolders,
+            totalCount: trashedNotes.length + trashedFolders.length
+        }
+    },
+
+    updateTrashActionVisibility() {
+        const clearTrashButton = this.els.clearTrashButton
+        if (!clearTrashButton) return
+        const isTrashView = StateStore.read().view === "trash"
+        const trashSummary = this.getTrashSummary()
+        clearTrashButton.classList.toggle("hidden", !isTrashView)
+        clearTrashButton.disabled = trashSummary.totalCount === 0
+        clearTrashButton.title = this.getText("clear_trash", "Clear trash")
+        clearTrashButton.setAttribute("aria-label", this.getText("clear_trash", "Clear trash"))
     },
 
     updatePrimaryActionLabel() {

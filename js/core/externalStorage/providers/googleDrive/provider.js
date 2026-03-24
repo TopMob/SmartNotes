@@ -122,6 +122,14 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         exportsId: state.folders.exportsId || ''
     }
 
+    const resolveTargetFolderId = (folders, targetFolder) => {
+        const normalizedTargetFolder = String(targetFolder || 'attachments').trim().toLowerCase()
+        if (normalizedTargetFolder === 'backups') return String(folders?.backupsId || '')
+        if (normalizedTargetFolder === 'exports') return String(folders?.exportsId || '')
+        if (normalizedTargetFolder === 'root') return String(folders?.rootId || '')
+        return String(folders?.attachmentsId || '')
+    }
+
     const uploadBlob = async (blob, options = {}, attempt = 0) => {
         const mimeType = String(options.mimeType || blob.type || 'application/octet-stream')
         const fileName = String(options.fileName || buildFileName({ fileNameBase: options.fileNameBase, mimeType }))
@@ -129,7 +137,8 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         const folders = await folderManager.ensureFolders(accessToken)
         const boundary = `smartnotes_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`
         const metadata = { name: fileName, mimeType }
-        if (folders.attachmentsId) metadata.parents = [folders.attachmentsId]
+        const targetFolderId = resolveTargetFolderId(folders, options.targetFolder)
+        if (targetFolderId) metadata.parents = [targetFolderId]
         const response = await fetch(uploadEndpoint, {
             method: 'POST',
             headers: {
@@ -208,13 +217,8 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         async handleSignedInUser(user, options = {}) {
             const userKey = getCurrentUserKey(user)
             const storedState = applyStoredState(userKey)
-            const hydratedState = await bindingStore.hydrateState(user, storedState)
-            const isGoogleUser = !!user?.providerData?.some?.(provider => String(provider?.providerId || '') === 'google.com')
-            if (hydratedState?.granted) return this.getStatus()
-            if (!options.interactiveAllowed || !isGoogleUser || state.interactivePromptedForUser === userKey) return this.getStatus()
-            state.interactivePromptedForUser = userKey
-            await connectDrive({ interactive: true, userKey })
-            await bindingStore.saveBinding(user, getPersistedBinding(userKey))
+            state.lastErrorCode = ''
+            await bindingStore.hydrateState(user, storedState)
             return this.getStatus()
         },
         handleSignedOutUser() {

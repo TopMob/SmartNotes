@@ -16,7 +16,22 @@ export const createExternalMediaError = (code, cause = null) => {
 const inferAuthorizationErrorCode = (error) => {
     const code = String(error?.code || "").toLowerCase()
     const message = String(error?.message || "").toLowerCase()
-    if (code.includes("popup") || code.includes("cancel") || code.includes("denied") || message.includes("popup") || message.includes("cancel") || message.includes("denied") || message.includes("token") || message.includes("consent")) {
+    if (
+        code.includes("popup")
+        || code.includes("cancel")
+        || code.includes("denied")
+        || code.includes("interaction")
+        || code.includes("login_required")
+        || code.includes("account")
+        || message.includes("popup")
+        || message.includes("cancel")
+        || message.includes("denied")
+        || message.includes("interaction")
+        || message.includes("login required")
+        || message.includes("account")
+        || message.includes("token")
+        || message.includes("consent")
+    ) {
         return ERROR_CODES.UNLINKED
     }
     return ERROR_CODES.UNAVAILABLE

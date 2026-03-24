@@ -255,6 +255,10 @@
                                     <i class="material-icons-round" aria-hidden="true">folder_zip</i>
                                     <span data-lang="export_active_folder">Экспорт папки</span>
                                 </button>
+                                <button type="button" class="dropdown-item" data-action="backup-active-folder">
+                                    <i class="material-icons-round" aria-hidden="true">cloud_upload</i>
+                                    <span data-lang="backup_active_folder">Резервная копия папки</span>
+                                </button>
                                 <button type="button" class="dropdown-item danger" data-action="delete-active-folder">
                                     <i class="material-icons-round" aria-hidden="true">delete</i>
                                     <span data-lang="delete_folder">Удалить папку</span>
@@ -272,6 +276,9 @@
                 <div class="header-right">
                     <button type="button" class="btn-icon" data-action="trigger-import" aria-label="Импортировать файл" data-lang-aria="import_file">
                         <i class="material-icons-round" aria-hidden="true">upload_file</i>
+                    </button>
+                    <button type="button" id="clear-trash-button" class="btn-icon hidden" data-action="clear-trash" aria-label="Очистить корзину" data-lang-aria="clear_trash">
+                        <i class="material-icons-round" aria-hidden="true">delete_sweep</i>
                     </button>
                     <button type="button" id="notes-filter-toggle" class="btn-icon" data-action="toggle-filter-menu" aria-label="Фильтры" data-lang-aria="filters">
                         <i class="material-icons-round" aria-hidden="true">filter_alt</i>
@@ -291,6 +298,10 @@
                                 <i class="material-icons-round" aria-hidden="true">download</i>
                                 <span data-lang="export_all_notes">Экспорт всех заметок</span>
                             </button>
+                            <button type="button" class="dropdown-item" data-action="backup-all-notes">
+                                <i class="material-icons-round" aria-hidden="true">backup</i>
+                                <span data-lang="backup_all_notes">Резервная копия всех заметок</span>
+                            </button>
                             <button type="button" class="dropdown-item danger" data-action="logout">
                                 <i class="material-icons-round" aria-hidden="true">logout</i>
                                 <span data-lang="logout">Выйти</span>
@@ -302,6 +313,16 @@
 
             <div id="notes-filter-menu" class="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
                 <div class="filter-section">
+                    <label for="notes-saved-filter-select" data-lang="saved_filters">Сохранённые фильтры</label>
+                    <select id="notes-saved-filter-select" class="input-area filter-select" aria-label="Сохранённые фильтры" data-lang-aria="saved_filters">
+                        <option value="" data-lang="saved_filters_none">Без сохранённого фильтра</option>
+                    </select>
+                    <div class="row-left" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+                        <button type="button" id="notes-save-filter-button" class="btn-secondary" data-lang="save_filter">Сохранить</button>
+                        <button type="button" id="notes-delete-filter-button" class="btn-secondary" data-lang="delete_saved_filter">Удалить</button>
+                    </div>
+                </div>
+                <div class="filter-section">
                     <label for="notes-sort-select" data-lang="sort_by">Сортировка</label>
                     <select id="notes-sort-select" class="input-area filter-select" aria-label="Сортировка" data-lang-aria="sort_by">
                         <option value="updated" data-lang="sort_updated">По времени изменения</option>
@@ -310,6 +331,20 @@
                         <option value="title" data-lang="sort_title">По алфавиту</option>
                         <option value="length" data-lang="sort_length">По количеству символов</option>
                         <option value="manual" data-lang="sort_manual">Вручную</option>
+                    </select>
+                </div>
+                <div class="filter-section">
+                    <label for="notes-tag-filter-input" data-lang="filter_tags">Теги</label>
+                    <input type="text" id="notes-tag-filter-input" class="input-area filter-select" placeholder="design, work" data-lang-placeholder="filter_tags_placeholder" aria-label="Теги" data-lang-aria="filter_tags">
+                </div>
+                <div class="filter-section">
+                    <label for="notes-date-filter-select" data-lang="filter_updated_period">Период обновления</label>
+                    <select id="notes-date-filter-select" class="input-area filter-select" aria-label="Период обновления" data-lang-aria="filter_updated_period">
+                        <option value="0" data-lang="filter_updated_any">За всё время</option>
+                        <option value="1" data-lang="filter_updated_day">За 24 часа</option>
+                        <option value="7" data-lang="filter_updated_week">За 7 дней</option>
+                        <option value="30" data-lang="filter_updated_month">За 30 дней</option>
+                        <option value="365" data-lang="filter_updated_year">За год</option>
                     </select>
                 </div>
                 <div class="filter-section">

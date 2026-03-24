@@ -72,6 +72,7 @@ export const createGoogleDriveBindingStore = ({ stateController }) => {
             return remoteBinding
         }
         if (normalizedLocalBinding) {
+            persistState(normalizedLocalBinding, userKey)
             await saveBinding(user, normalizedLocalBinding)
             return normalizedLocalBinding
         }
