@@ -9,6 +9,7 @@ const UI = {
     eventsBound: false,
     eventListenersController: null,
     resizeListenersController: null,
+    inputPolicyObserver: null,
     toastDeduplication: { lastMessage: "", lastShownAt: 0 },
 
     init() {
@@ -50,6 +51,7 @@ const UI = {
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
         this.applyInputAutocompletePolicy()
+        this.startInputAutocompleteObserver()
     },
 
     getText(key, fallback = "") {
@@ -80,7 +82,8 @@ const UI = {
         element.setAttribute("autocorrect", "off")
         element.setAttribute("spellcheck", "false")
         element.setAttribute("inputmode", "text")
-        element.setAttribute("autocomplete", normalizedMode === "password" ? "new-password" : "off")
+        element.setAttribute("autocomplete", "off")
+        element.setAttribute("data-bwignore", "true")
         element.setAttribute("name", `smartnotes_${normalizedMode}_${Date.now()}`)
         element.readOnly = true
         requestAnimationFrame(() => {
@@ -110,6 +113,20 @@ const UI = {
                 element.setAttribute("autocomplete", "off")
             }
         })
+    },
+
+
+    startInputAutocompleteObserver() {
+        if (this.inputPolicyObserver) this.inputPolicyObserver.disconnect()
+        this.inputPolicyObserver = new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (!(node instanceof Element)) return
+                    this.applyInputAutocompletePolicy(node)
+                })
+            })
+        })
+        this.inputPolicyObserver.observe(document.body, { childList: true, subtree: true })
     },
 
     setLang(lang) {

@@ -866,7 +866,7 @@ export const EditorAPI = (() => {
         { id: "bullets", i: "format_list_bulleted", label: "tool_bullets", cmd: () => editorCommands.toggleBulletedList() },
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => editorCommands.toggleNumberedList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => inputHandlers.insertHorizontalRule() },
-        { id: "table", i: "table_rows", label: "tool_table", cmd: () => {
+        { id: "table", i: "table_chart", label: "tool_table", cmd: () => {
             inputHandlers.storeSelection()
             if (tableHandlers.isSelectionInsideTable()) {
                 UI.showPrompt(
@@ -880,14 +880,9 @@ export const EditorAPI = (() => {
                 )
                 return
             }
-            UI.showPrompt(
-                UI.getText("table_insert_title", "Размер таблицы"),
-                UI.getText("table_insert_placeholder", "Например: 3x4"),
-                (value) => {
-                    const parsed = tableHandlers.parseSizeInput(value, { rows: 2, cols: 3 })
-                    tableHandlers.insertTable({ rows: parsed.rows, cols: parsed.cols })
-                }
-            )
+            UI.openTableBuilder({ rows: 2, cols: 3 }, ({ rows, cols }) => {
+                tableHandlers.insertTable({ rows, cols })
+            })
         } },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
             inputHandlers.storeSelection()

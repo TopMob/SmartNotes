@@ -599,6 +599,24 @@ Object.assign(UI, {
                 window.DomSecurity.setText(el, expanded ? this.getText("show_less", "Свернуть") : this.getText("show_more", "Ещё"))
                 break
             }
+            case "table-builder-confirm":
+                this.confirmTableBuilder()
+                break
+            case "table-builder-cancel":
+                this.closeModal("table-builder-modal")
+                break
+            case "table-rows-inc":
+                this.updateTableBuilder(1, 0)
+                break
+            case "table-rows-dec":
+                this.updateTableBuilder(-1, 0)
+                break
+            case "table-cols-inc":
+                this.updateTableBuilder(0, 1)
+                break
+            case "table-cols-dec":
+                this.updateTableBuilder(0, -1)
+                break
             case "editor-undo":
                 window.SmartNotesEditor?.undo()
                 break
