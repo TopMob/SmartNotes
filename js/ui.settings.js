@@ -29,9 +29,6 @@ Object.assign(UI, {
             }
             StateStore.update("appearanceDraft", null)
         }
-        if (id === "table-builder-modal") {
-            this.tableBuilderCallback = null
-        }
     },
 
     syncSettingsDraftFromOriginal() {
@@ -1072,50 +1069,6 @@ Object.assign(UI, {
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)
     },
-
-
-    normalizeTableBuilderValue(value, fallback, max) {
-        const parsed = Number(value)
-        if (!Number.isFinite(parsed)) return fallback
-        return Math.max(1, Math.min(max, Math.trunc(parsed)))
-    },
-
-    updateTableBuilder(deltaRows = 0, deltaCols = 0) {
-        const rowsInput = document.getElementById("table-builder-rows")
-        const colsInput = document.getElementById("table-builder-cols")
-        if (!rowsInput || !colsInput) return
-        const rows = this.normalizeTableBuilderValue(Number(rowsInput.value || 0) + Number(deltaRows || 0), 2, 20)
-        const cols = this.normalizeTableBuilderValue(Number(colsInput.value || 0) + Number(deltaCols || 0), 3, 12)
-        rowsInput.value = String(rows)
-        colsInput.value = String(cols)
-    },
-
-    openTableBuilder(options = {}, callback = null) {
-        const rowsInput = document.getElementById("table-builder-rows")
-        const colsInput = document.getElementById("table-builder-cols")
-        const titleElement = document.getElementById("table-builder-title")
-        if (!rowsInput || !colsInput) return false
-        if (titleElement) titleElement.textContent = this.getText("table_insert_title", "Размер таблицы")
-        rowsInput.value = String(this.normalizeTableBuilderValue(options.rows, 2, 20))
-        colsInput.value = String(this.normalizeTableBuilderValue(options.cols, 3, 12))
-        this.tableBuilderCallback = typeof callback === "function" ? callback : null
-        this.openModal("table-builder-modal")
-        this.applyInputAutocompletePolicy(document.getElementById("table-builder-modal"))
-        setTimeout(() => rowsInput.focus(), 50)
-        return true
-    },
-
-    confirmTableBuilder() {
-        const rowsInput = document.getElementById("table-builder-rows")
-        const colsInput = document.getElementById("table-builder-cols")
-        if (!rowsInput || !colsInput) return
-        const rows = this.normalizeTableBuilderValue(rowsInput.value, 2, 20)
-        const cols = this.normalizeTableBuilderValue(colsInput.value, 3, 12)
-        const callback = this.tableBuilderCallback
-        this.closeModal("table-builder-modal")
-        if (typeof callback === "function") callback({ rows, cols })
-    },
-
     showPasswordPrompt(title, placeholder) {
         const modal = document.getElementById("lock-modal")
         const input = document.getElementById("lock-password")

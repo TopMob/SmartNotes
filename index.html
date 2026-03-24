@@ -749,40 +749,7 @@
 
     
 
-    <div id="table-builder-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Таблица" data-lang-aria="tool_table">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h3 id="table-builder-title" data-lang="table_insert_title">Размер таблицы</h3>
-                <button type="button" class="btn-icon" data-action="table-builder-cancel" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round" aria-hidden="true">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <div class="field" style="margin-bottom:12px;">
-                    <span class="field-label" data-lang="table_rows">Строки</span>
-                    <div class="row-left" style="gap:8px;">
-                        <button type="button" class="btn-secondary" data-action="table-rows-dec" aria-label="Уменьшить строки"><i class="material-icons-round" aria-hidden="true">keyboard_arrow_down</i></button>
-                        <input type="number" id="table-builder-rows" class="input-area" min="1" max="20" step="1" inputmode="numeric" value="2" aria-label="Строки" data-lang-aria="table_rows">
-                        <button type="button" class="btn-secondary" data-action="table-rows-inc" aria-label="Увеличить строки"><i class="material-icons-round" aria-hidden="true">keyboard_arrow_up</i></button>
-                    </div>
-                </div>
-                <div class="field">
-                    <span class="field-label" data-lang="table_cols">Столбцы</span>
-                    <div class="row-left" style="gap:8px;">
-                        <button type="button" class="btn-secondary" data-action="table-cols-dec" aria-label="Уменьшить столбцы"><i class="material-icons-round" aria-hidden="true">keyboard_arrow_down</i></button>
-                        <input type="number" id="table-builder-cols" class="input-area" min="1" max="12" step="1" inputmode="numeric" value="3" aria-label="Столбцы" data-lang-aria="table_cols">
-                        <button type="button" class="btn-secondary" data-action="table-cols-inc" aria-label="Увеличить столбцы"><i class="material-icons-round" aria-hidden="true">keyboard_arrow_up</i></button>
-                    </div>
-                </div>
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-secondary" data-action="table-builder-cancel" data-lang="cancel">Отмена</button>
-                <button type="button" class="btn-primary" data-action="table-builder-confirm" data-lang="ok">ОК</button>
-            </footer>
-        </div>
-    </div>
-
-    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+        <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
