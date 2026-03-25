@@ -7,6 +7,14 @@ const RUSSIAN_TAG_SYNONYM_MAP = new Map([
     ["идея", ["idea", "concept", "thought", "brainstorm", "insight"]]
 ])
 
+const normalizeDriveDeliveryHtml = (html) => {
+    const source = String(html || "")
+    if (!source) return ""
+    return source
+        .replace(/https:\/\/drive\.google\.com\/uc\?id=([^&"'\s>]+)&export=download/gi, "https://drive.google.com/thumbnail?id=$1&sz=w2048")
+        .replace(/https:\/\/drive\.google\.com\/file\/d\/([^/"'\s>]+)\/view\?usp=sharing/gi, "https://drive.google.com/thumbnail?id=$1&sz=w2048")
+}
+
 const normalizeAiTagToRussian = (value) => {
     const normalizedValue = String(value || "").trim().toLowerCase()
     if (!normalizedValue) return ""
