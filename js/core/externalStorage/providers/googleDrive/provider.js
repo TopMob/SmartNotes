@@ -75,7 +75,41 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`
     }
 
+    const toDriveThumbnailUrl = (value) => {
+        const fileId = extractDriveFileId(value)
+        if (!fileId) return ''
+        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w2000`
+    }
+
     const isImageMimeType = (mimeType) => String(mimeType || '').toLowerCase().startsWith('image/')
+
+    const isGoogleDriveHost = (value) => /^https?:\/\/drive\.google\.com\//i.test(String(value || '').trim())
+
+    const isDriveDownloadOrViewUrl = (value) => {
+        const source = String(value || '').trim()
+        if (!source) return false
+        if (!isGoogleDriveHost(source)) return false
+        if (/\/file\/d\//i.test(source)) return true
+        if (/\/uc\?/i.test(source) && /export=(download|view)/i.test(source)) return true
+        if (/export=(download|view)/i.test(source)) return true
+        return false
+    }
+
+    const toRenderableImageUrl = (value, { preferBackendImageUrl = false } = {}) => {
+        const source = String(value || '').trim()
+        if (!source) return ''
+        if (preferBackendImageUrl && /^https?:\/\//i.test(source)) return source
+        if (isDriveDownloadOrViewUrl(source)) {
+            return toDriveThumbnailUrl(source) || ''
+        }
+        if (/^https?:\/\/drive\.google\.com\/file\/d\//i.test(source)) {
+            return toDriveThumbnailUrl(source) || ''
+        }
+        if (isGoogleDriveHost(source)) {
+            return toDriveThumbnailUrl(source) || toDriveDirectImageUrl(source) || source
+        }
+        return source
+    }
 
     const normalizePublicUrl = (file, options = {}) => {
         if (typeof file === 'string') return file
@@ -87,12 +121,19 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         const genericUrl = String(file?.url || '').trim()
         const webViewLink = String(file?.webViewLink || '').trim()
         if (imageMode) {
-            return imageUrl
-                || publicUrl
-                || webContentLink
-                || toDriveDirectImageUrl(genericUrl)
-                || toDriveDirectImageUrl(webViewLink)
-                || genericUrl
+            const preferredImageUrl = toRenderableImageUrl(imageUrl, { preferBackendImageUrl: true })
+            const candidates = [
+                preferredImageUrl,
+                toRenderableImageUrl(publicUrl),
+                toRenderableImageUrl(webContentLink),
+                toRenderableImageUrl(genericUrl),
+                toRenderableImageUrl(webViewLink),
+                toDriveThumbnailUrl(genericUrl),
+                toDriveThumbnailUrl(webViewLink),
+                toDriveDirectImageUrl(genericUrl),
+                toDriveDirectImageUrl(webViewLink)
+            ]
+            return candidates.find(candidate => /^https?:\/\//i.test(String(candidate || '').trim())) || ''
         }
         return genericUrl || publicUrl || webContentLink || webViewLink
     }
