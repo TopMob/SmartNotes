@@ -116,6 +116,21 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         }
     }
 
+    const getStatusSnapshot = () => {
+        const hasBackend = /^https?:\/\//i.test(uploadEndpoint)
+        return {
+            providerId,
+            configured: hasBackend,
+            linked: !!state.linked,
+            connected: !!state.connected,
+            available: !!state.available,
+            pending: !!state.pending,
+            errorCode: state.errorCode || ''
+        }
+    }
+
+    const resolveProviderStatus = () => providerApi?.getStatus?.() || getStatusSnapshot()
+
     const syncStatusFromBackend = async ({ reason = 'default' } = {}) => {
         console.info('[GoogleDriveProvider] status refresh requested', { reason })
         state.pending = true
@@ -175,7 +190,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                 state.errorCode = ''
                 state.checked = true
                 console.info('[GoogleDriveProvider] status refresh normalized state', { reason, branch: 'payload-connected-true', ...normalized, checked: state.checked, errorCode: state.errorCode })
-                return this.getStatus()
+                return resolveProviderStatus()
             }
             state.linked = false
             state.connected = false
@@ -192,7 +207,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                 checked: state.checked,
                 errorCode: state.errorCode
             })
-            return this.getStatus()
+            return resolveProviderStatus()
         } catch (error) {
             const code = normalizeExternalMediaErrorCode(error)
             state.errorCode = code
@@ -201,7 +216,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.available = false
             state.checked = true
             console.error('[GoogleDriveProvider] status refresh failed', { reason, code, failureBranch, message: error?.message, stack: error?.stack, error })
-            if (code === ERROR_CODES.UNLINKED) return this.getStatus()
+            if (code === ERROR_CODES.UNLINKED) return resolveProviderStatus()
             throw createExternalMediaError(code, error)
         } finally {
             state.pending = false
@@ -345,16 +360,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         uploadDataUrl,
         resolveUserFacingError,
         getStatus() {
-            const hasBackend = /^https?:\/\//i.test(uploadEndpoint)
-            return {
-                providerId,
-                configured: hasBackend,
-                linked: !!state.linked,
-                connected: !!state.connected,
-                available: !!state.available,
-                pending: !!state.pending,
-                errorCode: state.errorCode || ''
-            }
+            return getStatusSnapshot()
         }
     }
     return providerApi
