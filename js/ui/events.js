@@ -479,6 +479,25 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
+            case "copy-user-uid": {
+                const uid = WorkspaceAccessService?.getCurrentUserUid?.() || ""
+                if (!uid) {
+                    this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                    break
+                }
+                const copied = await CollaborationService.copyToClipboard(uid)
+                this.showToast(copied ? this.getText("share_link_copied", "Ссылка скопирована") : uid)
+                break
+            }
+            case "join-shared-workspace-link": {
+                this.showPrompt(this.getText("join_shared_workspace", "Присоединиться по ссылке"), this.getText("join_shared_workspace_placeholder", "Вставьте ссылку или токен"), async value => {
+                    const user = StateStore.read().user
+                    if (!user?.uid) return
+                    const result = await WorkspaceAccessService?.acceptWorkspaceShareToken?.(value, user)
+                    this.showToast(result ? this.getText("join_shared_workspace_success", "Совместная папка добавлена") : this.getText("join_shared_workspace_failed", "Не удалось добавить совместную папку"))
+                })
+                break
+            }
             case "open-shared-workspace":
                 switchView("shared_workspace", null, el.dataset.workspaceId)
                 if (!window.matchMedia("(min-width: 1024px)").matches) {

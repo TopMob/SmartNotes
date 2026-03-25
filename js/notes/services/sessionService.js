@@ -68,6 +68,7 @@ const SessionService = (() => {
                 SharedNotesService.subscribe(user)
                 WorkspacesService.subscribe(user)
                 if (typeof WorkspaceAccessService !== "undefined") {
+                    await WorkspaceAccessService.acceptWorkspaceShareFromUrl(user)
                     await WorkspaceAccessService.acceptPendingWorkspaceShare(user)
                 }
                 RemindersService.start()

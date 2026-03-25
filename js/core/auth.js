@@ -314,9 +314,11 @@ export function createAuthManager({ auth }) {
             const appScreen = document.getElementById("app")
             const userPhoto = document.getElementById("user-photo")
             const userName = document.getElementById("user-name")
+            const userUid = document.getElementById("user-uid")
 
             if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
+            if (userUid) userUid.textContent = `UID: ${String(user.uid || "-")}`
 
             if (loginScreen) {
                 loginScreen.classList.remove("active")

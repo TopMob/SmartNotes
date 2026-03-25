@@ -12,6 +12,23 @@ const WorkspaceAccessService = (() => {
         return url.toString()
     }
 
+    function getWorkspaceShareTokenFromUrl() {
+        const url = new URL(window.location.href)
+        return String(url.searchParams.get("workspaceShare") || "").trim()
+    }
+
+    function normalizeShareToken(value) {
+        const raw = String(value || "").trim()
+        if (!raw) return ""
+        if (/^[A-Za-z0-9_-]{12,}$/.test(raw)) return raw
+        try {
+            const url = new URL(raw)
+            return String(url.searchParams.get("workspaceShare") || "").trim()
+        } catch {
+            return ""
+        }
+    }
+
     async function generateToken() {
         if (window.crypto?.getRandomValues) {
             const bytes = new Uint8Array(16)
@@ -77,14 +94,13 @@ const WorkspaceAccessService = (() => {
         if (!workspaceSnapshot.exists) return false
         const workspace = workspaceSnapshot.data() || {}
         if (String(workspace.ownerUid || "") !== user.uid) return false
-        const normalizedRole = normalizeRole(role)
-        await workspaceReference.set({
-            members: { ...(workspace.members || {}), [normalizedTargetUid]: normalizedRole },
+        await workspaceReference.update({
+            [`members.${normalizedTargetUid}`]: normalizeRole(role),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
+        })
         await db.collection("users").doc(normalizedTargetUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).set({
             workspaceId: normalizedWorkspaceId,
-            role: normalizedRole,
+            role: normalizeRole(role),
             workspaceName: String(workspace.name || ""),
             ownerUid: workspace.ownerUid,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -114,18 +130,18 @@ const WorkspaceAccessService = (() => {
     }
 
     function captureWorkspaceShareToken() {
-        const url = new URL(window.location.href)
-        const token = String(url.searchParams.get("workspaceShare") || "").trim()
+        const token = getWorkspaceShareTokenFromUrl()
         if (!token) return ""
         SafeStorage.session.set(pendingTokenKey, token)
+        const url = new URL(window.location.href)
         url.searchParams.delete("workspaceShare")
         window.history.replaceState({}, document.title, url.toString())
         return token
     }
 
-    async function acceptWorkspaceShareToken(token, user) {
+    async function acceptWorkspaceShareToken(value, user) {
         if (!db || !user?.uid) return null
-        const normalizedToken = String(token || "").trim()
+        const normalizedToken = normalizeShareToken(value)
         if (!normalizedToken) return null
         const shareSnapshot = await db.collection(shareCollection).doc(normalizedToken).get()
         if (!shareSnapshot.exists) return null
@@ -138,10 +154,10 @@ const WorkspaceAccessService = (() => {
         if (!workspaceSnapshot.exists) return null
         const workspace = workspaceSnapshot.data() || {}
         const role = normalizeRole(shareData.role)
-        await workspaceReference.set({
-            members: { ...(workspace.members || {}), [user.uid]: role },
+        await workspaceReference.update({
+            [`members.${user.uid}`]: role,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
+        })
         await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(workspaceId).set({
             workspaceId,
             role,
@@ -159,11 +175,22 @@ const WorkspaceAccessService = (() => {
         return acceptWorkspaceShareToken(token, user)
     }
 
+    async function acceptWorkspaceShareFromUrl(user) {
+        const token = getWorkspaceShareTokenFromUrl()
+        if (!token) return null
+        captureWorkspaceShareToken()
+        return acceptPendingWorkspaceShare(user)
+    }
+
     function getWorkspaceById(workspaceId) {
         const normalizedWorkspaceId = String(workspaceId || "")
         if (!normalizedWorkspaceId) return null
         const workspaces = Array.isArray(StateStore.read().sharedWorkspaces) ? StateStore.read().sharedWorkspaces : []
         return workspaces.find(workspace => workspace.id === normalizedWorkspaceId) || null
+    }
+
+    function getCurrentUserUid() {
+        return String(StateStore.read().user?.uid || "")
     }
 
     return {
@@ -174,8 +201,11 @@ const WorkspaceAccessService = (() => {
         addMemberByUid,
         createInviteLink,
         captureWorkspaceShareToken,
+        normalizeShareToken,
         acceptWorkspaceShareToken,
         acceptPendingWorkspaceShare,
-        getWorkspaceById
+        acceptWorkspaceShareFromUrl,
+        getWorkspaceById,
+        getCurrentUserUid
     }
 })()

@@ -47,12 +47,31 @@ Object.assign(UI, {
         return card
     },
 
+    createJoinWorkspaceCard() {
+        const card = document.createElement("div")
+        card.className = "folder-card"
+        const title = document.createElement("div")
+        title.className = "folder-title"
+        window.DomSecurity.setText(title, this.getText("join_shared_workspace", "Присоединиться по ссылке"))
+        const actions = document.createElement("div")
+        actions.className = "row-left"
+        const joinButton = document.createElement("button")
+        joinButton.type = "button"
+        joinButton.className = "btn-secondary"
+        joinButton.dataset.action = "join-shared-workspace-link"
+        window.DomSecurity.setText(joinButton, this.getText("join_shared_workspace", "Присоединиться по ссылке"))
+        actions.append(joinButton)
+        card.append(title, actions)
+        return card
+    },
+
     renderSharedAccessView() {
         this.updateEmptyState("groups", this.getText("shared_access_empty", "У вас пока нет совместных папок"))
         const workspaces = Array.isArray(StateStore.read().sharedWorkspaces) ? StateStore.read().sharedWorkspaces : []
         this.els.grid.classList.add("folder-grid")
-        this.els.empty.classList.toggle("hidden", workspaces.length > 0)
+        this.els.empty.classList.add("hidden")
         const fragment = document.createDocumentFragment()
+        fragment.append(this.createJoinWorkspaceCard())
         workspaces.forEach(workspace => {
             const card = this.createSharedWorkspaceCard(workspace)
             if (card) fragment.append(card)
