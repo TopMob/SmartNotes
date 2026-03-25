@@ -38,6 +38,13 @@ const UI = {
             activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
             activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
             activeFolderHideButton: document.getElementById("active-folder-hide-button"),
+            activeWorkspaceMenu: document.getElementById("active-workspace-menu"),
+            activeWorkspaceMenuToggle: document.getElementById("active-workspace-menu-toggle"),
+            activeWorkspaceMenuWrapper: document.getElementById("active-workspace-menu-wrapper"),
+            workspaceCopyLinkButton: document.getElementById("workspace-copy-link-button"),
+            workspaceAddUserButton: document.getElementById("workspace-add-user-button"),
+            workspaceRenameButton: document.getElementById("workspace-rename-button"),
+            workspaceEditDescriptionButton: document.getElementById("workspace-edit-description-button"),
             adminToolsNavButton: document.getElementById("admin-tools-nav-button")
         }
         this.bindEvents()

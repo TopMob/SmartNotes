@@ -56,16 +56,18 @@ const WorkspaceAccessService = (() => {
         return role === "owner" || role === "editor"
     }
 
-    async function createWorkspace(name) {
+    async function createWorkspace(name, description = "") {
         const user = StateStore.read().user
         if (!db || !user?.uid) return null
         const normalizedName = String(name || "").trim()
-        if (!normalizedName) return null
+        const normalizedDescription = String(description || "").trim()
+        if (!normalizedName || normalizedName.length > 50 || normalizedDescription.length > 300) return null
         const workspaceReference = db.collection("workspaces").doc()
         const payload = {
             name: normalizedName,
             ownerUid: user.uid,
             members: { [user.uid]: "owner" },
+            description: normalizedDescription,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }
@@ -192,6 +194,43 @@ const WorkspaceAccessService = (() => {
         return workspaces.find(workspace => workspace.id === normalizedWorkspaceId) || null
     }
 
+
+    async function updateWorkspace(workspaceId, updates = {}) {
+        const user = StateStore.read().user
+        const normalizedWorkspaceId = String(workspaceId || "").trim()
+        if (!db || !user?.uid || !normalizedWorkspaceId) return false
+        const workspace = getWorkspaceById(normalizedWorkspaceId)
+        if (!workspace || !canManageWorkspace(workspace)) return false
+        const nextName = updates.name === undefined ? workspace.name : String(updates.name || "").trim()
+        const nextDescription = updates.description === undefined ? String(workspace.description || "") : String(updates.description || "").trim()
+        if (!nextName || nextName.length > 50 || nextDescription.length > 300) return false
+        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
+        if (!workspaceReference) return false
+        await workspaceReference.set({
+            name: nextName,
+            description: nextDescription,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+        await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(normalizedWorkspaceId).set({
+            workspaceId: normalizedWorkspaceId,
+            workspaceName: nextName,
+            ownerUid: workspace.ownerUid,
+            role: workspace.role || "owner",
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+        return true
+    }
+
+    function getWorkspaceMembers(workspaceId) {
+        const workspace = getWorkspaceById(workspaceId)
+        if (!workspace) return []
+        const members = workspace.members && typeof workspace.members === "object" ? workspace.members : {}
+        return Object.entries(members).map(([uid, role]) => ({
+            uid: String(uid || ""),
+            role: role === "owner" || role === "editor" || role === "viewer" ? role : "viewer"
+        }))
+    }
+
     function getCurrentUserUid() {
         return String(StateStore.read().user?.uid || "")
     }
@@ -209,6 +248,8 @@ const WorkspaceAccessService = (() => {
         acceptPendingWorkspaceShare,
         acceptWorkspaceShareFromUrl,
         getWorkspaceById,
+        getWorkspaceMembers,
+        updateWorkspace,
         getCurrentUserUid
     }
 })()

@@ -1,55 +1,11 @@
 ;Object.assign(UI, {
-    buildWorkspaceMemberItems(workspace) {
-        const members = workspace?.members && typeof workspace.members === "object" ? workspace.members : {}
-        const entries = Object.entries(members)
-        if (!entries.length) return []
-        return entries.map(([uid, role]) => {
-            const normalizedUid = String(uid || "")
-            const normalizedRole = role === "owner" || role === "editor" || role === "viewer" ? role : "viewer"
-            return {
-                uid: normalizedUid,
-                shortUid: normalizedUid.length > 12 ? `${normalizedUid.slice(0, 6)}…${normalizedUid.slice(-4)}` : normalizedUid,
-                role: normalizedRole
-            }
-        })
-    },
-
-    createWorkspaceMembersBlock(workspace) {
-        const members = this.buildWorkspaceMemberItems(workspace)
-        const wrapper = document.createElement("div")
-        wrapper.className = "shared-workspace-members"
-        const title = document.createElement("div")
-        title.className = "shared-workspace-members-title"
-        window.DomSecurity.setText(title, this.getText("shared_members", "Участники"))
-        wrapper.append(title)
-        if (!members.length) {
-            const empty = document.createElement("div")
-            empty.className = "shared-workspace-member-chip"
-            window.DomSecurity.setText(empty, this.getText("shared_members_empty", "Пока нет участников"))
-            wrapper.append(empty)
-            return wrapper
-        }
-        const list = document.createElement("div")
-        list.className = "shared-workspace-members-list"
-        members.forEach(member => {
-            const chip = document.createElement("div")
-            chip.className = "shared-workspace-member-chip"
-            const roleLabel = member.role === "owner"
-                ? this.getText("shared_role_owner", "Владелец")
-                : (member.role === "editor" ? this.getText("shared_role_editor", "Редактор") : this.getText("shared_role_viewer", "Читатель"))
-            window.DomSecurity.setText(chip, `${member.shortUid} · ${roleLabel}`)
-            chip.title = member.uid
-            list.append(chip)
-        })
-        wrapper.append(list)
-        return wrapper
-    },
-
     createSharedWorkspaceCard(workspace) {
         const safeWorkspaceId = window.DomSecurity.sanitizeIdentifier(workspace?.id)
         if (!safeWorkspaceId) return null
         const card = document.createElement("div")
         card.className = "folder-card shared-workspace-card"
+        card.dataset.action = "open-shared-workspace"
+        card.dataset.workspaceId = safeWorkspaceId
 
         const title = document.createElement("div")
         title.className = "folder-title"
@@ -62,34 +18,11 @@
             : (workspace.role === "editor" ? this.getText("shared_role_editor", "Редактор") : this.getText("shared_role_viewer", "Читатель"))
         window.DomSecurity.setText(meta, roleLabel)
 
-        const actions = document.createElement("div")
-        actions.className = "row-left shared-workspace-actions"
+        const description = document.createElement("p")
+        description.className = "folder-description-preview"
+        window.DomSecurity.setText(description, window.DomSecurity.sanitizeInputValue(workspace?.description || this.getText("shared_workspace_no_description", "Без описания")))
 
-        const openButton = document.createElement("button")
-        openButton.type = "button"
-        openButton.className = "btn-primary"
-        openButton.dataset.action = "open-shared-workspace"
-        openButton.dataset.workspaceId = safeWorkspaceId
-        window.DomSecurity.setText(openButton, this.getText("open", "Open"))
-
-        const inviteButton = document.createElement("button")
-        inviteButton.type = "button"
-        inviteButton.className = "btn-secondary"
-        inviteButton.dataset.action = "copy-shared-workspace-link"
-        inviteButton.dataset.workspaceId = safeWorkspaceId
-        inviteButton.disabled = workspace.role !== "owner"
-        window.DomSecurity.setText(inviteButton, this.getText("shared_copy_link", "Скопировать ссылку"))
-
-        const addUserButton = document.createElement("button")
-        addUserButton.type = "button"
-        addUserButton.className = "btn-secondary"
-        addUserButton.dataset.action = "add-shared-workspace-user"
-        addUserButton.dataset.workspaceId = safeWorkspaceId
-        addUserButton.disabled = workspace.role !== "owner"
-        window.DomSecurity.setText(addUserButton, this.getText("shared_add_user", "Добавить пользователя"))
-
-        actions.append(openButton, inviteButton, addUserButton)
-        card.append(title, meta, this.createWorkspaceMembersBlock(workspace), actions)
+        card.append(title, meta, description)
         return card
     },
 
@@ -127,4 +60,4 @@
         })
         this.els.grid.replaceChildren(fragment)
     }
-})()
+})

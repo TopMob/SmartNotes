@@ -929,15 +929,34 @@ Object.assign(UI, {
 
 
     createSharedWorkspace() {
-        this.showPrompt(this.getText("shared_workspace_create", "Новая совместная папка"), this.getText("shared_workspace_placeholder", "Название папки"), async (name) => {
+        this.showPrompt(this.getText("shared_workspace_create", "Новая совместная папка"), this.getText("shared_workspace_placeholder", "Название папки"), async (name, description) => {
             const normalizedName = String(name || "").trim()
-            if (!normalizedName) return
-            const workspace = await WorkspaceAccessService?.createWorkspace?.(normalizedName)
+            const normalizedDescription = String(description || "").trim()
+            if (!normalizedName) {
+                this.showToast(this.getText("folder_empty", "Введите название папки"))
+                return
+            }
+            if (normalizedName.length > 50 || normalizedDescription.length > 300) {
+                this.showToast(this.getText("shared_workspace_limits_error", "Проверьте длину названия и описания"))
+                return
+            }
+            const workspace = await WorkspaceAccessService?.createWorkspace?.(normalizedName, normalizedDescription)
             if (!workspace) {
                 this.showToast(this.getText("save_failed", "Save failed"))
                 return
             }
             this.showToast(this.getText("shared_workspace_created", "Совместная папка создана"))
+        }, "", {
+            maxLength: 50,
+            showCounter: true,
+            secondaryField: {
+                value: "",
+                placeholder: this.getText("shared_workspace_description_placeholder", "Описание папки"),
+                ariaLabel: this.getText("shared_workspace_description", "Описание"),
+                showCounter: true,
+                softLimit: 300,
+                maxLength: 300
+            }
         })
     },
 
@@ -1062,6 +1081,7 @@ Object.assign(UI, {
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
+        this.updateActiveWorkspaceMenu()
         this.updateTrashActionVisibility()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
@@ -1098,6 +1118,7 @@ Object.assign(UI, {
         this.els.fab.setAttribute("aria-label", label)
         this.els.fab.classList.toggle("hidden", !this.canShowPrimaryAction(view))
         this.updateActiveFolderMenu()
+        this.updateActiveWorkspaceMenu()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
     },
@@ -1176,6 +1197,35 @@ Object.assign(UI, {
         })
         await batch.commit()
     },
+
+    toggleActiveWorkspaceMenu(force) {
+        const menu = this.els.activeWorkspaceMenu
+        if (!menu) return
+        menu.classList.toggle("active", typeof force === "boolean" ? force : !menu.classList.contains("active"))
+    },
+
+    renameActiveWorkspace() {
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+        if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
+        this.showPrompt(this.getText("rename_workspace", "Переименовать папку"), this.getText("shared_workspace_placeholder", "Название папки"), async name => {
+            const normalizedName = String(name || "").trim()
+            if (!normalizedName || normalizedName.length > 50) return
+            const ok = await WorkspaceAccessService.updateWorkspace(workspace.id, { name: normalizedName })
+            this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+        }, String(workspace.name || ""), { maxLength: 50, showCounter: true })
+    },
+
+    editActiveWorkspaceDescription() {
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+        if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
+        this.showPrompt(this.getText("edit_workspace_description", "Изменить описание"), this.getText("shared_workspace_description_placeholder", "Описание папки"), async value => {
+            const normalized = String(value || "").trim()
+            if (normalized.length > 300) return
+            const ok = await WorkspaceAccessService.updateWorkspace(workspace.id, { description: normalized })
+            this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+        }, String(workspace.description || ""), { maxLength: 300, showCounter: true })
+    },
+
     toggleActiveFolderMenu(force) {
         const menu = this.els.activeFolderMenu
         if (!menu) return
@@ -1335,6 +1385,25 @@ Object.assign(UI, {
                 window.DomSecurity.setText(triggerButton, initialLabel || this.getText("analysis_pending_reindex_button", "Проиндексировать непроиндексированные"))
             }
         }
+    },
+
+
+    updateActiveWorkspaceMenu() {
+        const wrapper = this.els.activeWorkspaceMenuWrapper
+        if (!wrapper) return
+        const state = StateStore.read()
+        const isVisible = state.view === "shared_workspace" && !!state.activeSharedWorkspaceId
+        wrapper.classList.toggle("hidden", !isVisible)
+        if (!isVisible) {
+            this.toggleActiveWorkspaceMenu(false)
+            return
+        }
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(state.activeSharedWorkspaceId)
+        const canManage = !!workspace && WorkspaceAccessService?.canManageWorkspace?.(workspace)
+        if (this.els.workspaceCopyLinkButton) this.els.workspaceCopyLinkButton.classList.toggle("hidden", !canManage)
+        if (this.els.workspaceAddUserButton) this.els.workspaceAddUserButton.classList.toggle("hidden", !canManage)
+        if (this.els.workspaceRenameButton) this.els.workspaceRenameButton.classList.toggle("hidden", !canManage)
+        if (this.els.workspaceEditDescriptionButton) this.els.workspaceEditDescriptionButton.classList.toggle("hidden", !canManage)
     },
 
     updateActiveFolderMenu() {

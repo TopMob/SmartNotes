@@ -24,6 +24,9 @@ Object.assign(UI, {
             if (this.els.activeFolderMenu?.classList.contains("active") && !event.target.closest("#active-folder-menu-wrapper")) {
                 this.toggleActiveFolderMenu(false)
             }
+            if (this.els.activeWorkspaceMenu?.classList.contains("active") && !event.target.closest("#active-workspace-menu-wrapper")) {
+                this.toggleActiveWorkspaceMenu(false)
+            }
 
             const overlayElement = event.target.closest(".modal-overlay")
             if (overlayElement && event.target === overlayElement && !overlayElement.dataset.modalStatic) {
@@ -498,6 +501,31 @@ Object.assign(UI, {
                 })
                 break
             }
+            case "toggle-active-workspace-menu":
+                this.toggleActiveWorkspaceMenu()
+                break
+            case "view-workspace-members": {
+                const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+                const members = WorkspaceAccessService?.getWorkspaceMembers?.(StateStore.read().activeSharedWorkspaceId) || []
+                const mapped = members.map(member => {
+                    const roleLabel = member.role === "owner"
+                        ? this.getText("shared_role_owner", "Владелец")
+                        : (member.role === "editor" ? this.getText("shared_role_editor", "Редактор") : this.getText("shared_role_viewer", "Читатель"))
+                    return `${member.uid} · ${roleLabel}`
+                })
+                const title = workspace?.name || this.getText("shared_members", "Участники")
+                this.showToast(mapped.length ? `${title}: ${mapped.join(" | ")}` : this.getText("shared_members_empty", "Пока нет участников"))
+                this.toggleActiveWorkspaceMenu(false)
+                break
+            }
+            case "rename-workspace":
+                this.renameActiveWorkspace()
+                this.toggleActiveWorkspaceMenu(false)
+                break
+            case "edit-workspace-description":
+                this.editActiveWorkspaceDescription()
+                this.toggleActiveWorkspaceMenu(false)
+                break
             case "open-shared-workspace":
                 switchView("shared_workspace", null, el.dataset.workspaceId)
                 if (!window.matchMedia("(min-width: 1024px)").matches) {
@@ -505,7 +533,7 @@ Object.assign(UI, {
                 }
                 break
             case "copy-shared-workspace-link": {
-                const workspaceId = String(el.dataset.workspaceId || "")
+                const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
                 const link = await WorkspaceAccessService?.createInviteLink?.(workspaceId, "editor")
                 if (!link) {
                     this.showToast(this.getText("share_manage_denied", "Permission denied"))
@@ -516,7 +544,7 @@ Object.assign(UI, {
                 break
             }
             case "add-shared-workspace-user": {
-                const workspaceId = String(el.dataset.workspaceId || "")
+                const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
                 this.showPrompt(this.getText("shared_user_uid_prompt", "UID пользователя"), this.getText("shared_user_uid_placeholder", "Введите UID"), async value => {
                     const targetUid = String(value || "").trim()
                     if (!targetUid) return

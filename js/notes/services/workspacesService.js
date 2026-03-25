@@ -51,6 +51,7 @@ const WorkspacesService = (() => {
                 id: workspaceId,
                 name: String(data.name || entry.workspaceName || "Совместная папка"),
                 ownerUid: String(data.ownerUid || entry.ownerUid || ""),
+                description: String(data.description || ""),
                 role: entry.role || "viewer",
                 members,
                 createdAt: data.createdAt || null,
