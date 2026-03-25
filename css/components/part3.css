@@ -418,3 +418,77 @@ select.input-area optgroup {
     font-size: 12px;
     color: var(--text-dim);
 }
+
+.shared-workspace-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.shared-workspace-card .folder-description-preview {
+    margin: 0;
+}
+
+.user-profile-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.user-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.user-uid-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.user-uid-row .material-icons-round {
+    font-size: 18px;
+    opacity: 0.8;
+}
+
+.shared-member-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 180px auto auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.shared-member-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.shared-member-field-label {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.shared-member-uid {
+    font-size: 12px;
+    color: var(--text-dim);
+    word-break: break-all;
+}
+
+@media (max-width: 860px) {
+    .shared-member-row {
+        grid-template-columns: 1fr;
+    }
+}

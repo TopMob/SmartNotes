@@ -14,6 +14,10 @@ const NotesUIAdapter = (() => {
             UI.renderHiddenFolders()
             return
         }
+        if (viewModel.view === "shared_access") {
+            UI.renderSharedAccessView()
+            return
+        }
         if (viewModel.view === "admin_tools") {
             UI.renderAdminToolsView()
             return

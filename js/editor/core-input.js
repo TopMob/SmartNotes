@@ -58,6 +58,12 @@ export const createInputHandlers = (context) => {
         return container.innerHTML
     }
 
+    const resolveExternalMediaMessage = (error, options = {}) => {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
+    }
+
     const createFragmentFromHtml = (html) => {
         const template = document.createElement("template")
         template.innerHTML = html
@@ -96,8 +102,17 @@ export const createInputHandlers = (context) => {
             event.preventDefault()
             const file = imageItem.getAsFile()
             if (!file) return
-            const url = await fileToDataUrl(file)
-            insertMedia(url, "image")
+            try {
+                const url = await fileToDataUrl(file)
+                insertMedia(url, "image")
+            } catch (error) {
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
+                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                    return
+                }
+                throw error
+            }
             return
         }
 
@@ -106,8 +121,31 @@ export const createInputHandlers = (context) => {
         const plainText = event.clipboardData?.getData("text/plain") || ""
         const normalizedHtml = html ? normalizePastedHtml(html) : ""
         const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
-        const hasInsertedContent = sanitizedHtml
-            ? insertFragmentAtSelection(createFragmentFromHtml(sanitizedHtml))
+        let preparedHtml = sanitizedHtml
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const hasInlineMedia = /data:(image|audio)\//i.test(preparedHtml)
+        if (preparedHtml && hasInlineMedia && !mediaService) {
+            UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
+            return
+        }
+        if (preparedHtml && mediaService) {
+            try {
+                const externalizedResult = await mediaService.externalizeHtmlMedia(preparedHtml, { fileNameBase: "pasted_media" })
+                preparedHtml = externalizedResult.html
+                if (mediaService.containsInlineMedia?.(preparedHtml)) {
+                    throw new Error("external-inline-media-blocked")
+                }
+            } catch (error) {
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
+                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                    return
+                }
+                throw error
+            }
+        }
+        const hasInsertedContent = preparedHtml
+            ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
             : (plainText ? insertFragmentAtSelection(document.createTextNode(plainText)) : false)
         if (hasInsertedContent) queueSnapshot()
     }

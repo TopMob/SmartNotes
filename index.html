@@ -43,6 +43,7 @@
     <script src="js/presets/runtime.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/presets/active.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/services.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/core/noteExport.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/security/dom.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/base.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/events.js?v=2026-02-22-1e1b181" defer></script>
@@ -52,21 +53,25 @@
     <script src="js/ui/render/lock.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/drag.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/folders.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/ui/render/shared-access.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/feedback.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/ui/render/note-actions.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/storage.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
     <script src="js/notes/renderer.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/foldersRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/settingsRepository.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/repositories/workspacesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/paginationService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/domain/notesSortingStrategy.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/domain/notesAggregationService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/remindersService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/notificationService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/settingsSyncService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/ownedNotesService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sharedNotesService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/workspaceAccessService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/workspacesService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sessionService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/notesQueryService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesPresenter.js?v=2026-02-22-1e1b181" defer></script>
@@ -188,6 +193,11 @@
                         <span data-lang="folders_overview">Папки</span>
                     </button>
 
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="shared_access">
+                        <i class="material-icons-round" aria-hidden="true">groups</i>
+                        <span data-lang="shared_access">Совместный доступ</span>
+                    </button>
+
                     <button type="button" class="nav-item" data-action="create-folder">
                         <i class="material-icons-round" aria-hidden="true">create_new_folder</i>
                         <span data-lang="create_folder">Создать папку</span>
@@ -257,6 +267,33 @@
                                 </button>
                             </div>
                         </div>
+                        <div id="active-workspace-menu-wrapper" class="active-folder-menu-wrapper hidden">
+                            <button type="button" id="active-workspace-menu-toggle" class="btn-icon" data-action="toggle-active-workspace-menu" aria-label="Действия с совместной папкой" data-lang-aria="workspace_actions">
+                                <i class="material-icons-round" aria-hidden="true">more_vert</i>
+                            </button>
+                            <div id="active-workspace-menu" class="dropdown-menu active-folder-menu" role="menu" aria-label="Действия с совместной папкой" data-lang-aria="workspace_actions">
+                                <button type="button" class="dropdown-item" data-action="view-workspace-members">
+                                    <i class="material-icons-round" aria-hidden="true">groups</i>
+                                    <span data-lang="shared_members">Участники</span>
+                                </button>
+                                <button type="button" id="workspace-copy-link-button" class="dropdown-item" data-action="copy-shared-workspace-link">
+                                    <i class="material-icons-round" aria-hidden="true">link</i>
+                                    <span data-lang="shared_copy_link">Скопировать ссылку</span>
+                                </button>
+                                <button type="button" id="workspace-add-user-button" class="dropdown-item" data-action="add-shared-workspace-user">
+                                    <i class="material-icons-round" aria-hidden="true">person_add</i>
+                                    <span data-lang="shared_add_user">Добавить пользователя</span>
+                                </button>
+                                <button type="button" id="workspace-rename-button" class="dropdown-item" data-action="rename-workspace">
+                                    <i class="material-icons-round" aria-hidden="true">edit</i>
+                                    <span data-lang="rename_workspace">Переименовать папку</span>
+                                </button>
+                                <button type="button" id="workspace-edit-description-button" class="dropdown-item" data-action="edit-workspace-description">
+                                    <i class="material-icons-round" aria-hidden="true">description</i>
+                                    <span data-lang="edit_workspace_description">Изменить описание</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -266,8 +303,8 @@
                 </div>
 
                 <div class="header-right">
-                    <button type="button" class="btn-icon" data-action="trigger-import" aria-label="Импортировать файл" data-lang-aria="import_file">
-                        <i class="material-icons-round" aria-hidden="true">upload_file</i>
+                    <button type="button" id="clear-trash-button" class="btn-icon hidden" data-action="clear-trash" aria-label="Очистить корзину" data-lang-aria="clear_trash">
+                        <i class="material-icons-round" aria-hidden="true">delete_sweep</i>
                     </button>
                     <button type="button" id="notes-filter-toggle" class="btn-icon" data-action="toggle-filter-menu" aria-label="Фильтры" data-lang-aria="filters">
                         <i class="material-icons-round" aria-hidden="true">filter_alt</i>
@@ -276,8 +313,21 @@
                     <div class="user-avatar-wrapper">
                         <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" class="header-avatar" data-action="toggle-user-menu">
                         <div id="user-dropdown" class="dropdown-menu" role="menu" aria-label="Пользователь" data-lang-aria="user_menu">
-                            <div class="dropdown-header">
-                                <span id="user-name">.</span>
+                            <div class="dropdown-header user-profile-header">
+                                <div class="user-name-row">
+                                    <span id="user-name">.</span>
+                                    <button type="button" class="btn-icon" data-action="edit-display-name" aria-label="Изменить имя" data-lang-aria="edit_display_name">
+                                        <i class="material-icons-round" aria-hidden="true">edit</i>
+                                    </button>
+                                </div>
+                                <button type="button" class="user-uid-row" data-action="copy-user-uid" aria-label="UID пользователя" data-lang-aria="copy_uid_row">
+                                    <span data-lang="user_uid_label">UID пользователя</span>
+                                    <span id="user-uid" class="user-uid-label">-</span>
+                                    <i class="material-icons-round" aria-hidden="true">content_copy</i>
+                                </button>
+                                <div class="row-left">
+                                    <button type="button" class="btn-secondary" data-action="change-avatar" data-lang="change_avatar">Изменить фото</button>
+                                </div>
                             </div>
                             <button type="button" class="dropdown-item" data-action="switch-account">
                                 <i class="material-icons-round" aria-hidden="true">switch_account</i>
@@ -293,7 +343,17 @@
             </header>
 
             <div id="notes-filter-menu" class="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-saved">
+                    <label for="notes-saved-filter-select" data-lang="saved_filters">Сохранённые фильтры</label>
+                    <select id="notes-saved-filter-select" class="input-area filter-select" aria-label="Сохранённые фильтры" data-lang-aria="saved_filters">
+                        <option value="" data-lang="saved_filters_none">Без сохранённого фильтра</option>
+                    </select>
+                    <div class="row-left" style="margin-top:10px; gap:8px; flex-wrap:wrap;">
+                        <button type="button" id="notes-save-filter-button" class="btn-secondary" data-lang="save_filter">Сохранить</button>
+                        <button type="button" id="notes-delete-filter-button" class="btn-secondary" data-lang="delete_saved_filter">Удалить</button>
+                    </div>
+                </div>
+                <div class="filter-section" id="notes-filter-section-sort">
                     <label for="notes-sort-select" data-lang="sort_by">Сортировка</label>
                     <select id="notes-sort-select" class="input-area filter-select" aria-label="Сортировка" data-lang-aria="sort_by">
                         <option value="updated" data-lang="sort_updated">По времени изменения</option>
@@ -304,7 +364,21 @@
                         <option value="manual" data-lang="sort_manual">Вручную</option>
                     </select>
                 </div>
-                <div class="filter-section">
+                <div class="filter-section" id="notes-filter-section-tags">
+                    <label for="notes-tag-filter-input" data-lang="filter_tags">Теги</label>
+                    <input type="text" id="notes-tag-filter-input" class="input-area filter-select" placeholder="design, work" data-lang-placeholder="filter_tags_placeholder" aria-label="Теги" data-lang-aria="filter_tags">
+                </div>
+                <div class="filter-section" id="notes-filter-section-date">
+                    <label for="notes-date-filter-select" data-lang="filter_updated_period">Период обновления</label>
+                    <select id="notes-date-filter-select" class="input-area filter-select" aria-label="Период обновления" data-lang-aria="filter_updated_period">
+                        <option value="0" data-lang="filter_updated_any">За всё время</option>
+                        <option value="1" data-lang="filter_updated_day">За 24 часа</option>
+                        <option value="7" data-lang="filter_updated_week">За 7 дней</option>
+                        <option value="30" data-lang="filter_updated_month">За 30 дней</option>
+                        <option value="365" data-lang="filter_updated_year">За год</option>
+                    </select>
+                </div>
+                <div class="filter-section" id="notes-filter-section-folders">
                     <div class="filter-title" data-lang="filter_folders">Папки</div>
                     <div id="notes-folder-filters" class="filter-options"></div>
                 </div>
@@ -535,7 +609,7 @@
                 </button>
             </header>
             <div class="modal-body">
-                <input id="lock-password" type="password" class="input-area" placeholder="Пароль" data-lang-placeholder="lock_password" autocomplete="new-password">
+                <input id="lock-password" type="password" class="input-area" placeholder="Пароль" data-lang-placeholder="lock_password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other">
                 <div class="row-right">
                     <button type="button" class="btn-secondary" data-action="close-modal" data-modal="lock-modal" data-lang="cancel">Отмена</button>
                     <button type="button" class="btn-primary" id="lock-apply" data-lang="apply">Применить</button>
@@ -724,14 +798,33 @@
 
     
 
-    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+        <div id="global-loading-overlay" class="global-loading-overlay hidden" aria-live="assertive" aria-busy="false">
+            <div class="global-loading-card">
+                <div class="global-loading-spinner" aria-hidden="true"></div>
+                <span id="global-loading-text">Загрузка...</span>
+            </div>
+        </div>
+
+        <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
+    <input type="file" id="avatar-upload-input" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
 
 
 
 
     
+
+    <div id="workspace-members-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Участники совместной папки" data-lang-aria="shared_members">
+        <div class="modal-card" style="max-width:640px;">
+            <h3 data-lang="shared_members">Участники</h3>
+            <div id="workspace-members-content" class="scrollable" style="max-height:50vh;"></div>
+            <div class="row-left" style="margin-top:12px; justify-content:flex-end;">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="workspace-members-modal" data-lang="close">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

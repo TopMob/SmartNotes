@@ -1,5 +1,6 @@
 const FAVORITES_STORAGE_KEY = "favorite-notes"
 const NOTES_FILTER_KEY = "notes-filter"
+const SAVED_NOTES_FILTERS_KEY = "saved-notes-filters"
 const NOTES_CACHE_KEY = "notes-cache"
 
 const shrinkNoteForCache = (note) => {
@@ -52,9 +53,60 @@ const applyStoredFavorites = (notes) => {
 const loadNotesFilter = () => {
     const storedFilter = SafeStorage.local.getJson(NOTES_FILTER_KEY)
     if (storedFilter && typeof storedFilter === "object") {
-        const currentFilter = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
-        StateActions.updateConfig({ notesFilter: { ...currentFilter, ...storedFilter } })
+        const currentFilter = normalizeNotesFilter(StateStore.read().config.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 })
+        StateActions.updateConfig({ notesFilter: normalizeNotesFilter({ ...currentFilter, ...storedFilter }) })
     }
+}
+
+const normalizeNotesFilter = (filter) => {
+    const source = filter && typeof filter === "object" ? filter : {}
+    const allowedSortValues = new Set(["updated", "relevance", "importance", "title", "length", "manual"])
+    const allowedDateWindowValues = new Set([0, 1, 7, 30, 365])
+    const parsedUpdatedWindowDays = Number(source.updatedWindowDays)
+    return {
+        sort: allowedSortValues.has(String(source.sort || "")) ? String(source.sort) : "manual",
+        folders: Array.isArray(source.folders)
+            ? [...new Set(source.folders.map(value => String(value || "").trim()).filter(Boolean))]
+            : [],
+        tags: Array.isArray(source.tags)
+            ? [...new Set(source.tags.map(value => String(value || "").trim()).filter(Boolean))]
+            : [],
+        updatedWindowDays: allowedDateWindowValues.has(parsedUpdatedWindowDays) ? parsedUpdatedWindowDays : 0
+    }
+}
+
+const normalizeSavedNotesFilter = (savedFilter) => {
+    const source = savedFilter && typeof savedFilter === "object" ? savedFilter : {}
+    const normalizedConfig = normalizeNotesFilter(source)
+    const id = String(source.id || "").trim()
+    const name = String(source.name || "").trim()
+    if (!id || !name) return null
+    return {
+        id,
+        name,
+        sort: normalizedConfig.sort,
+        folders: normalizedConfig.folders,
+        tags: normalizedConfig.tags,
+        updatedWindowDays: normalizedConfig.updatedWindowDays,
+        createdAt: Number(source.createdAt || Date.now())
+    }
+}
+
+const readSavedNotesFilters = () => {
+    const stored = SafeStorage.local.getJson(SAVED_NOTES_FILTERS_KEY, [])
+    if (!Array.isArray(stored)) return []
+    return stored
+        .map(normalizeSavedNotesFilter)
+        .filter(Boolean)
+        .sort((firstItem, secondItem) => String(firstItem.name || "").localeCompare(String(secondItem.name || ""), StateStore.read().config.lang || "ru"))
+}
+
+const writeSavedNotesFilters = (savedFilters) => {
+    const normalized = (Array.isArray(savedFilters) ? savedFilters : [])
+        .map(normalizeSavedNotesFilter)
+        .filter(Boolean)
+    SafeStorage.local.setJson(SAVED_NOTES_FILTERS_KEY, normalized)
+    return normalized
 }
 
 const readCachedNotes = (uid) => {
@@ -92,6 +144,9 @@ window.NotesStorage = {
     applyStoredFavorites,
     syncFavoritesStorage,
     loadNotesFilter,
+    normalizeNotesFilter,
+    readSavedNotesFilters,
+    writeSavedNotesFilters,
     readCachedNotes,
     writeCachedNotes
 }

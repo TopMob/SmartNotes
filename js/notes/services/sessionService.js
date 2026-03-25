@@ -1,5 +1,5 @@
 const SessionService = (() => {
-    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], sharedNotes: [] }
+    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], sharedNotes: [], workspaceNotes: [] }
     function sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
             const firstCreatedAt = firstFolder?.createdAt?.toDate ? firstFolder.createdAt.toDate().getTime() : Date.parse(firstFolder?.createdAt || "") || 0
@@ -9,7 +9,7 @@ const SessionService = (() => {
         })
     }
     function publishNotes() {
-        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.sharedNotes, state.activeUid)
+        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.sharedNotes, state.workspaceNotes, state.activeUid)
         StateStore.update("notes", aggregatedNotes)
     }
     function bindAggregation() {
@@ -21,6 +21,10 @@ const SessionService = (() => {
             state.sharedNotes = Array.isArray(sharedNotes) ? sharedNotes : []
             publishNotes()
         })
+        EventBus.subscribe("workspaceNotesUpdated", workspaceNotes => {
+            state.workspaceNotes = Array.isArray(workspaceNotes) ? workspaceNotes : []
+            publishNotes()
+        })
     }
     bindAggregation()
     function stopUserSession() {
@@ -29,10 +33,12 @@ const SessionService = (() => {
         SettingsSyncService.clear()
         OwnedNotesService.clear()
         SharedNotesService.clear()
+        WorkspacesService.clear()
         RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
         state.sharedNotes = []
+        state.workspaceNotes = []
         StateStore.resetSession()
     }
     async function startUserSession(user, options = {}) {
@@ -44,19 +50,27 @@ const SessionService = (() => {
         state.sessionStartPromise = (async () => {
             try {
                 StateActions.setUser(user)
-            await DataPath.ensureUserDocument(user)
-            await SettingsSyncService.initialize(user)
-            OwnedNotesService.subscribe(user)
-            const cachedNotes = NotesStorage.readCachedNotes(user.uid)
-            if (cachedNotes.length) {
-                StateStore.update("notes", NotesStorage.applyStoredFavorites(cachedNotes))
-            }
-            if (state.foldersUnsubscribe) state.foldersUnsubscribe()
-            state.foldersUnsubscribe = FoldersRepository.subscribeFolders(user, snapshot => {
-                const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
-                StateStore.update("folders", folders)
-            }, error => EventBus.publish("foldersSyncError", error))
-            SharedNotesService.subscribe(user)
+                await DataPath.ensureUserDocument(user)
+                if (typeof WorkspaceAccessService !== "undefined") {
+                    WorkspaceAccessService.captureWorkspaceShareToken()
+                }
+                await SettingsSyncService.initialize(user)
+                OwnedNotesService.subscribe(user)
+                const cachedNotes = NotesStorage.readCachedNotes(user.uid)
+                if (cachedNotes.length) {
+                    StateStore.update("notes", NotesStorage.applyStoredFavorites(cachedNotes))
+                }
+                if (state.foldersUnsubscribe) state.foldersUnsubscribe()
+                state.foldersUnsubscribe = FoldersRepository.subscribeFolders(user, snapshot => {
+                    const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
+                    StateStore.update("folders", folders)
+                }, error => EventBus.publish("foldersSyncError", error))
+                SharedNotesService.subscribe(user)
+                WorkspacesService.subscribe(user)
+                if (typeof WorkspaceAccessService !== "undefined") {
+                    await WorkspaceAccessService.acceptWorkspaceShareFromUrl(user)
+                    await WorkspaceAccessService.acceptPendingWorkspaceShare(user)
+                }
                 RemindersService.start()
                 return true
             } catch (error) {

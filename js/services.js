@@ -216,18 +216,20 @@ const NoteIO = {
         const noteAccessIdentifier = safe.access?.noteId ? String(safe.access.noteId) : ""
         const shareIdentifier = safe.access?.shareId ? String(safe.access.shareId) : ""
         const ownerCollectionName = safe.access?.ownerCollection ? String(safe.access.ownerCollection) : ""
+        const workspaceId = safe.workspaceId ? String(safe.workspaceId) : (safe.access?.workspaceId ? String(safe.access.workspaceId) : "")
         const access = {
             ownerUid,
             roles,
             noteId: noteAccessIdentifier,
             shareId: shareIdentifier,
-            ownerCollection: ownerCollectionName
+            ownerCollection: ownerCollectionName,
+            workspaceId
         }
 
         return {
             id: safe.id ? String(safe.id) : Utils.generateId(),
             title: safe.title ? String(safe.title).trim() : "",
-            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
+            content: safe.content ? Utils.sanitizeHtml(normalizeDriveDeliveryHtml(String(safe.content))) : "",
             pageDrawings,
             pageTitles,
             pageDrawingsRevision: typeof safe.pageDrawingsRevision === "string" && safe.pageDrawingsRevision
@@ -235,6 +237,7 @@ const NoteIO = {
                 : buildPageDrawingsRevision(pageDrawings),
             tags,
             folderId: safe.folderId ? String(safe.folderId) : null,
+            workspaceId: workspaceId || null,
             folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
@@ -663,6 +666,10 @@ const CollaborationService = {
         const currentUserUid = StateStore.read().user?.uid || ""
         if (!currentUserUid) return "viewer"
         if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
+        if (access?.workspaceId && typeof WorkspaceAccessService !== "undefined") {
+            const workspace = WorkspaceAccessService.getWorkspaceById(access.workspaceId)
+            if (workspace) return WorkspaceAccessService.getWorkspaceRole(workspace)
+        }
         const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"
@@ -762,6 +769,11 @@ const CollaborationService = {
     getNoteReference(note, user) {
         if (!db || !user || !note) return null
         const access = this.getAccess(note)
+        const workspaceId = access?.workspaceId || note.workspaceId
+        if (workspaceId) {
+            const noteId = access?.noteId || String(note.id || "").replace(`workspace_${workspaceId}_`, "")
+            return db.collection("workspaces").doc(workspaceId).collection("notes").doc(noteId)
+        }
         const ownerUid = access?.ownerUid || user.uid
         const noteId = access?.noteId || note.id
         return db.collection("users").doc(ownerUid).collection("notes").doc(noteId)

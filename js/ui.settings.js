@@ -1,8 +1,10 @@
 Object.assign(UI, {
     openModal(id) {
         const el = document.getElementById(id)
-        if (!el) return
+        if (!el) return false
+        el.classList.remove("hidden")
         el.classList.add("active")
+        el.setAttribute("aria-hidden", "false")
         this.toggleSidebar(false)
         if (id === "poll-modal") {
             this.startSurvey()
@@ -10,12 +12,15 @@ Object.assign(UI, {
         if (id === "lock-center-modal") {
             this.renderLockCenter()
         }
+        return el.classList.contains("active")
     },
 
     closeModal(id) {
         const el = document.getElementById(id)
         if (!el) return
         el.classList.remove("active")
+        el.setAttribute("aria-hidden", "true")
+        el.dispatchEvent(new CustomEvent("smartnotes:modal-closed", { detail: { id } }))
         if (id === "settings-modal") {
             const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
             if (pendingTimerId) {
@@ -34,6 +39,7 @@ Object.assign(UI, {
 
     openSettings() {
         this.settingsPage = null
+        this.interfaceSettingsPersistPending = false
         this.syncSettingsDraftFromOriginal()
         this.openModal("settings-modal")
         this.renderSettingsPage()
@@ -76,10 +82,17 @@ Object.assign(UI, {
                         </div>
                         <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                     </button>
-                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="editor_tools">
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="interface">
                         <div class="settings-menu-meta">
-                            <span class="settings-menu-title">${dict.settings_editor_tools || "Editor Tools"}</span>
-                            <span class="settings-menu-desc">${dict.settings_category_editor_tools_desc || ""}</span>
+                            <span class="settings-menu-title">${dict.settings_interface || "Interface Elements"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_interface_desc || ""}</span>
+                        </div>
+                        <i class="material-icons-round" aria-hidden="true">chevron_right</i>
+                    </button>
+                    <button type="button" class="settings-menu-item" data-action="open-settings-page" data-page="export_import">
+                        <div class="settings-menu-meta">
+                            <span class="settings-menu-title">${dict.settings_export_import || "Export / Import"}</span>
+                            <span class="settings-menu-desc">${dict.settings_category_export_import_desc || ""}</span>
                         </div>
                         <i class="material-icons-round" aria-hidden="true">chevron_right</i>
                     </button>
@@ -117,6 +130,15 @@ Object.assign(UI, {
                                 <option value="20">20</option>
                                 <option value="50">50</option>
                             </select>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_external_storage || "Google Drive"}</span>
+                            <div class="settings-toggle-item" style="padding:0; background:none; border:0; gap:12px; align-items:center;">
+                                <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
+                                    <span id="settings-drive-status">${dict.drive_not_connected || "Not connected"}</span>
+                                </div>
+                                <button type="button" id="settings-drive-connect" class="btn-secondary">${dict.drive_connect || "Connect"}</button>
+                            </div>
                         </div>
                         <div class="settings-toggle-item">
                             <span>${dict.reduce_motion || "Reduce motion"}</span>
@@ -283,12 +305,53 @@ Object.assign(UI, {
             return
         }
 
-        if (page === "editor_tools") {
-            title.textContent = dict.settings_editor_tools || dict.editor_settings || "Editor tools"
-            root.innerHTML = `<div id="editor-tools-list" class="settings-toggle-list"></div>`
+        if (page === "interface") {
+            title.textContent = dict.settings_interface || dict.editor_settings || "Interface Elements"
+            const interfaceSettings = this.getSettingsDraft()?.interface || {}
+            root.innerHTML = `
+                <div class="settings-group">
+                    <details class="settings-section" open>
+                        <summary class="settings-section-title">${dict.settings_interface_filters || "Фильтры"}</summary>
+                        <div class="settings-toggle-list">
+                            ${this.buildInterfaceSettingToggle("showSavedFilters", dict.settings_show_saved_filters || "Показывать сохранённые фильтры", interfaceSettings.showSavedFilters !== false)}
+                            ${this.buildInterfaceSettingToggle("showTagFilter", dict.settings_show_tag_filter || "Показывать фильтр по тегам", interfaceSettings.showTagFilter !== false)}
+                            ${this.buildInterfaceSettingToggle("showUpdatedPeriodFilter", dict.settings_show_updated_period || "Показывать период обновления", interfaceSettings.showUpdatedPeriodFilter !== false)}
+                        </div>
+                    </details>
+                    <details class="settings-section">
+                        <summary class="settings-section-title">${dict.settings_editor_tools || "Editor Tools"}</summary>
+                        <div id="editor-tools-list" class="settings-toggle-list"></div>
+                    </details>
+                </div>
+            `
+            root.querySelectorAll("[data-interface-key]").forEach(input => {
+                input.addEventListener("change", event => {
+                    const key = event.target.dataset.interfaceKey
+                    const nextInterface = {
+                        ...(this.getSettingsDraft()?.interface || {}),
+                        [key]: !!event.target.checked
+                    }
+                    this.updateSettingsDraft({ interface: nextInterface })
+                    this.applyDraftSettingsToRuntime()
+                    this.renderFilterMenu()
+                    this.interfaceSettingsPersistPending = true
+                })
+            })
             this.renderEditorSettings()
             this.applyInputAutocompletePolicy(root)
         }
+    },
+
+    buildInterfaceSettingToggle(key, label, checked) {
+        return `
+            <label class="settings-toggle-item">
+                <span>${label}</span>
+                <label class="switch">
+                    <input type="checkbox" data-interface-key="${key}" ${checked ? "checked" : ""}>
+                    <span class="slider"></span>
+                </label>
+            </label>
+        `
     },
 
     getSettingsDraft() {
@@ -325,6 +388,10 @@ Object.assign(UI, {
     },
 
     requestCloseSettingsModal() {
+        if (this.interfaceSettingsPersistPending) {
+            this.saveSettingsDraft()
+            return
+        }
         if (!this.isSettingsDirty()) {
             this.closeModal("settings-modal")
             return
@@ -345,6 +412,7 @@ Object.assign(UI, {
         } else {
             this.syncSettingsUI()
         }
+        this.interfaceSettingsPersistPending = false
         this.closeModal("settings-modal")
     },
 
@@ -368,12 +436,12 @@ Object.assign(UI, {
             } else {
                 this.syncSettingsUI()
             }
+            this.interfaceSettingsPersistPending = false
             this.closeModal("settings-modal")
         } catch {
             this.showToast(this.getText("sync_error", "Sync error"))
         }
     },
-
     initAppearanceDraft() {
         const settingsDraft = this.getSettingsDraft()
         const sourceTheme = settingsDraft
@@ -597,6 +665,42 @@ Object.assign(UI, {
                 this.updateSettingsDraft({ reduceMotion: !!event.target.checked })
                 this.applyDraftSettingsToRuntime()
                 this.syncSettingsUI()
+            })
+        }
+
+        const driveConnectButton = document.getElementById("settings-drive-connect")
+        if (driveConnectButton && !driveConnectButton.dataset.bound) {
+            driveConnectButton.dataset.bound = "1"
+            driveConnectButton.addEventListener("click", async () => {
+                const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+                const driveStatus = mediaService?.getStatus?.() || null
+                const canConnect = (!driveStatus?.linked || (!!driveStatus?.linked && !driveStatus?.connected && !!driveStatus?.errorCode)) && !!mediaService?.connect
+                const canUnlink = !!driveStatus?.linked && !!mediaService?.unlink
+                if ((!canConnect && !canUnlink) || !driveStatus?.configured) {
+                    this.showToast(this.getText("external_storage_unavailable", "External disk is temporarily unavailable"))
+                    this.syncSettingsUI()
+                    return
+                }
+                this.syncSettingsUI()
+                try {
+                    if (driveStatus?.linked && !driveStatus?.connected && driveStatus?.errorCode) {
+                        await mediaService.connect()
+                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
+                    } else if (driveStatus?.linked) {
+                        await mediaService.unlink()
+                        this.showToast(this.getText("drive_disconnected", "Google Drive disconnected"))
+                    } else {
+                        await mediaService.connect()
+                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
+                    }
+                } catch (error) {
+                    const message = typeof this.resolveExternalMediaMessage === "function"
+                        ? this.resolveExternalMediaMessage(error, { attachmentOnly: true })
+                        : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
+                    this.showToast(message)
+                } finally {
+                    this.syncSettingsUI()
+                }
             })
         }
     },
@@ -833,6 +937,7 @@ Object.assign(UI, {
             exit: this.getText("confirm_exit", "Sign out?"),
             account: this.getText("confirm_account", "Switch account?"),
             delete_f: this.getText("confirm_delete_folder", "Delete folder?"),
+            clear_trash: this.getText("clear_trash_confirm", "Clear trash?"),
             hide_f: this.getText("confirm_hide_folder", "Do you want to hide this folder?"),
             delete_page: this.getText("page_delete_confirm", "Are you sure you want to delete this page?")
         }
@@ -981,6 +1086,52 @@ Object.assign(UI, {
         modal.classList.add("active")
         setTimeout(() => input.focus(), 80)
     },
+    showPasswordPrompt(title, placeholder) {
+        const modal = document.getElementById("lock-modal")
+        const input = document.getElementById("lock-password")
+        const ok = document.getElementById("lock-apply")
+        const titleEl = modal?.querySelector("[data-lang='lock_title']")
+        if (!modal || !input || !ok || !titleEl) return Promise.resolve(null)
+
+        titleEl.textContent = title
+        input.value = ""
+        input.placeholder = placeholder
+        this.prepareProtectedInput(input, "password")
+
+        return new Promise(resolve => {
+            const handleModalClosed = () => finish(null)
+            const finish = (value) => {
+                modal.classList.remove("active")
+                modal.removeEventListener("smartnotes:modal-closed", handleModalClosed)
+                input.onkeydown = null
+                ok.onclick = null
+                resolve(value)
+            }
+
+            const submit = () => {
+                finish(String(input.value || ""))
+            }
+
+            ok.onclick = submit
+            input.onkeydown = event => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                submit()
+            }
+            modal.addEventListener("smartnotes:modal-closed", handleModalClosed)
+
+            modal.classList.add("active")
+            setTimeout(() => {
+                this.prepareProtectedInput(input, "password")
+                input.focus()
+            }, 80)
+
+            const cancelButtons = modal.querySelectorAll('[data-action="close-modal"][data-modal="lock-modal"]')
+            cancelButtons.forEach(button => {
+                button.onclick = () => finish(null)
+            })
+        })
+    },
 
     syncSettingsUI() {
         const draftSettings = this.getSettingsDraft()
@@ -993,6 +1144,36 @@ Object.assign(UI, {
         if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
         const notesPerPageSelect = document.getElementById("settings-notes-per-page")
         if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 20)
+        const driveStatusElement = document.getElementById("settings-drive-status")
+        const driveConnectButton = document.getElementById("settings-drive-connect")
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const driveStatus = mediaService?.getStatus?.() || null
+        if (driveStatusElement) {
+            if (!driveStatus?.configured) {
+                driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")
+            } else if (driveStatus.pending) {
+                driveStatusElement.textContent = this.getText("drive_connecting", "Connecting...")
+            } else if (driveStatus.connected) {
+                driveStatusElement.textContent = this.getText("drive_connected", "Google Drive connected")
+            } else if (driveStatus.linked) {
+                driveStatusElement.textContent = this.getText("drive_linked", "Google Drive linked")
+            } else if (driveStatus.errorCode) {
+                driveStatusElement.textContent = typeof this.resolveExternalMediaMessage === "function"
+                    ? this.resolveExternalMediaMessage({ code: driveStatus.errorCode }, { attachmentOnly: true })
+                    : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
+            } else {
+                driveStatusElement.textContent = this.getText("drive_not_connected", "Not connected")
+            }
+        }
+        if (driveConnectButton) {
+            const needsReconnect = !!driveStatus?.linked && !driveStatus?.connected && !!driveStatus?.errorCode
+            driveConnectButton.disabled = !driveStatus?.configured || !!driveStatus?.pending
+            driveConnectButton.textContent = driveStatus?.pending
+                ? this.getText("drive_connecting", "Connecting...")
+                : needsReconnect
+                    ? this.getText("drive_reconnect", "Reconnect")
+                    : this.getText(driveStatus?.linked ? "drive_disconnect" : "drive_connect", driveStatus?.linked ? "Disconnect" : "Connect")
+        }
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },
@@ -1019,6 +1200,7 @@ Object.assign(UI, {
             input.setAttribute("aria-label", label.textContent)
             input.addEventListener("change", () => {
                 window.SmartNotesEditor.setToolEnabled(tool.id, input.checked)
+                this.interfaceSettingsPersistPending = true
             })
             
             const slider = document.createElement("span")

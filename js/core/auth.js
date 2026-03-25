@@ -12,7 +12,8 @@ export function createAuthManager({ auth }) {
         googleSignInPendingTimeoutId: null,
         localAuthManager: null,
         persistenceReady: false,
-        authStateResolved: false
+        authStateResolved: false,
+        driveInteractiveAllowed: false
     }
 
     const manager = {
@@ -191,6 +192,7 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(true)
             this._showGoogleSignInPendingFeedback()
+            state.driveInteractiveAllowed = true
 
             await this._ensureLocalPersistence()
             try {
@@ -210,6 +212,7 @@ export function createAuthManager({ auth }) {
                 ])
                 if (!googleIdentityRecoverableCodes.has(googleIdentityErrorCode)) {
                     this._setLoginBusy(false)
+                    state.driveInteractiveAllowed = false
                     this.handleAuthError(googleIdentityError)
                     return
                 }
@@ -230,6 +233,7 @@ export function createAuthManager({ auth }) {
                     lastError = error
                     if (errorCode === "auth/popup-closed-by-user") {
                         this._setLoginBusy(false)
+                        state.driveInteractiveAllowed = false
                         this.handleAuthError(error)
                         return
                     }
@@ -245,15 +249,18 @@ export function createAuthManager({ auth }) {
                     }
                 } catch (redirectRecoveryError) {
                     this._setLoginBusy(false)
+                    state.driveInteractiveAllowed = false
                     this.handleAuthError(redirectRecoveryError)
                     return
                 }
                 this._setLoginBusy(false)
+                state.driveInteractiveAllowed = false
                 this.handleAuthError(lastError)
                 return
             }
 
             this._setLoginBusy(false)
+            state.driveInteractiveAllowed = false
         },
         _ensureLocalAuthManager() {
             if (state.localAuthManager) return state.localAuthManager
@@ -266,12 +273,14 @@ export function createAuthManager({ auth }) {
             return state.localAuthManager
         },
         async loginWithEmail() {
+            state.driveInteractiveAllowed = false
             await this._ensureLocalPersistence()
             await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {
             if (!auth) return
             this._setLoginBusy(false)
+            state.driveInteractiveAllowed = false
             try {
                 await auth.signOut()
             } catch {
@@ -282,6 +291,54 @@ export function createAuthManager({ auth }) {
             await this.logout()
             await this.login()
         },
+
+        async updateDisplayName(nextName = "") {
+            const user = auth?.currentUser
+            const normalizedName = String(nextName || "").trim()
+            if (!user || !normalizedName) return false
+            if (normalizedName.length > 50) return false
+            await user.updateProfile({ displayName: normalizedName })
+            await DataPath.getUserRootReference(user)?.set({ displayName: normalizedName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            this.applySignedInUI({ ...user, displayName: normalizedName })
+            const workspaceId = StateStore.read().activeSharedWorkspaceId
+            if (workspaceId && typeof WorkspaceAccessService !== "undefined") {
+                WorkspaceAccessService.updateMemberDisplayName(workspaceId, user.uid, normalizedName).catch(() => {})
+            }
+            return true
+        },
+
+
+        async updateAvatarFromFile(file) {
+            const user = auth?.currentUser
+            if (!user || !(file instanceof Blob)) return false
+            const readDataUrl = () => new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(String(reader.result || ""))
+                reader.onerror = () => reject(new Error("read_failed"))
+                reader.readAsDataURL(file)
+            })
+            const source = await readDataUrl()
+            const image = await new Promise((resolve, reject) => {
+                const img = new Image()
+                img.onload = () => resolve(img)
+                img.onerror = () => reject(new Error("image_invalid"))
+                img.src = source
+            })
+            const canvas = document.createElement("canvas")
+            const maxSize = 256
+            const ratio = Math.min(1, maxSize / Math.max(image.width, image.height))
+            canvas.width = Math.max(1, Math.round(image.width * ratio))
+            canvas.height = Math.max(1, Math.round(image.height * ratio))
+            const context = canvas.getContext("2d")
+            if (!context) return false
+            context.drawImage(image, 0, 0, canvas.width, canvas.height)
+            const avatarDataUrl = canvas.toDataURL("image/jpeg", 0.82)
+            await user.updateProfile({ photoURL: avatarDataUrl })
+            await DataPath.getUserRootReference(user)?.set({ avatarUrl: avatarDataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            this.applySignedInUI({ ...user, photoURL: avatarDataUrl })
+            return true
+        },
+
         clearState() {
             if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
             if (typeof UI !== "undefined") {
@@ -305,9 +362,11 @@ export function createAuthManager({ auth }) {
             const appScreen = document.getElementById("app")
             const userPhoto = document.getElementById("user-photo")
             const userName = document.getElementById("user-name")
+            const userUid = document.getElementById("user-uid")
 
             if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
+            if (userUid) userUid.textContent = String(user.uid || "-")
 
             if (loginScreen) {
                 loginScreen.classList.remove("active")
@@ -370,11 +429,25 @@ export function createAuthManager({ auth }) {
 
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
-                if (shouldSkipSessionRestart) return
+                if (shouldSkipSessionRestart) {
+                    state.driveInteractiveAllowed = false
+                    return
+                }
                 await this._startSessionWhenReady(normalizedUser)
+                if (window.ExternalMediaService?.handleSignedInUser) {
+                    try {
+                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, { interactiveAllowed: state.driveInteractiveAllowed })
+                    } catch (error) {
+                        if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
+                            UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                        }
+                    }
+                }
+                state.driveInteractiveAllowed = false
                 return
             }
 
+            window.ExternalMediaService?.handleSignedOutUser?.()
             this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()

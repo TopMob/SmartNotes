@@ -54,6 +54,7 @@ const NotesApplication = (() => {
                 || nextState.activeFolderId !== previousState.activeFolderId
                 || nextState.searchQuery !== previousState.searchQuery
                 || nextState.folders !== previousState.folders
+                || nextState.sharedWorkspaces !== previousState.sharedWorkspaces
                 || languageChanged
                 || displayLimitChanged
                 || (configChanged && nextState.config.notesFilter !== previousState.config.notesFilter)
@@ -93,9 +94,10 @@ const NotesApplication = (() => {
         }
         unsubscribeUiEvents.push(EventBus.subscribe("reminderTriggered", note => {
             UI.showToast(`${UI.getText("reminder_note", "Reminder")}: ${note.title || UI.getText("untitled_note", "Untitled")}`)
-            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-                new Notification(note.title || UI.getText("untitled_note", "Untitled"), { body: UI.getText("reminder_note", "Reminder") })
-            }
+            window.NotificationService?.showReminderNotification?.(
+                note.title || UI.getText("untitled_note", "Untitled"),
+                UI.getText("reminder_note", "Reminder")
+            )
         }))
         unsubscribeUiEvents.push(EventBus.subscribe("permissionRevoked", () => {
             UI.showToast(UI.getText("share_manage_denied", "Permission denied"))

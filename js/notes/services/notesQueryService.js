@@ -71,6 +71,30 @@ const NotesQueryService = (() => {
         return getTimestampValue(note?.reminderAt) > Date.now()
     }
 
+    function matchesTagFilters(note, selectedTags) {
+        const normalizedSelectedTags = Array.isArray(selectedTags)
+            ? selectedTags.map(tag => String(tag || "").trim().toLocaleLowerCase()).filter(Boolean)
+            : []
+        if (!normalizedSelectedTags.length) return true
+        const noteTags = [
+            ...(Array.isArray(note?.tags) ? note.tags : []),
+            ...(Array.isArray(note?.hiddenTags) ? note.hiddenTags : [])
+        ]
+            .map(tag => String(tag || "").trim().toLocaleLowerCase())
+            .filter(Boolean)
+        if (!noteTags.length) return false
+        return normalizedSelectedTags.some(tag => noteTags.includes(tag))
+    }
+
+    function matchesUpdatedWindow(note, updatedWindowDays) {
+        const normalizedWindowDays = Number(updatedWindowDays || 0)
+        if (!normalizedWindowDays) return true
+        const noteTimestamp = getTimestampValue(note?.updatedAt || note?.createdAt)
+        if (!noteTimestamp) return false
+        const threshold = Date.now() - (normalizedWindowDays * 24 * 60 * 60 * 1000)
+        return noteTimestamp >= threshold
+    }
+
     function filterByView(notes, stateSnapshot) {
         const view = stateSnapshot.view
         const activeFolderId = stateSnapshot.activeFolderId
@@ -87,6 +111,7 @@ const NotesQueryService = (() => {
             filteredNotes = filteredNotes.filter(note => !isHiddenLocked(note))
         }
 
+        if (view === "shared_access") return []
         if (view === "reminders") filteredNotes = filteredNotes.filter(note => isReminderNote(note) && !note.isArchived && !note.trashedAt)
         if (view === "trash") filteredNotes = filteredNotes.filter(note => !!note.trashedAt)
         else filteredNotes = filteredNotes.filter(note => !note.trashedAt)
@@ -94,15 +119,18 @@ const NotesQueryService = (() => {
         if (view === "favorites") filteredNotes = filteredNotes.filter(note => note.isFavorite && !note.isArchived)
         else if (view === "archive") filteredNotes = filteredNotes.filter(note => note.isArchived)
         else if (view === "folder") filteredNotes = filteredNotes.filter(note => note.folderId === activeFolderId)
-        else if (view !== "locked" && view !== "reminders" && view !== "trash") filteredNotes = filteredNotes.filter(note => !note.isArchived)
+        else if (view === "shared_workspace") filteredNotes = filteredNotes.filter(note => note.workspaceId && note.workspaceId === stateSnapshot.activeSharedWorkspaceId)
+        else if (view !== "locked" && view !== "reminders" && view !== "trash" && view !== "shared_access") filteredNotes = filteredNotes.filter(note => !note.isArchived)
 
-        if (view !== "folder") {
+        if (view !== "folder" && view !== "shared_workspace") {
             filteredNotes = filteredNotes.filter(note => !note.folderId || !hiddenFolderIdentifiers.has(note.folderId))
         }
 
-        const configuredFilter = stateSnapshot.config?.notesFilter || { sort: "manual", folders: [] }
+        const configuredFilter = stateSnapshot.config?.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 }
         const selectedFolders = Array.isArray(configuredFilter.folders) ? configuredFilter.folders : []
-        const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash"
+        const selectedTags = Array.isArray(configuredFilter.tags) ? configuredFilter.tags : []
+        const updatedWindowDays = Number(configuredFilter.updatedWindowDays || 0)
+        const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash" && view !== "shared_workspace" && view !== "shared_access"
 
         if (canUseFolderFilters && selectedFolders.length) {
             filteredNotes = filteredNotes.filter(note => {
@@ -110,6 +138,9 @@ const NotesQueryService = (() => {
                 return selectedFolders.includes(note.folderId)
             })
         }
+
+        filteredNotes = filteredNotes.filter(note => matchesTagFilters(note, selectedTags))
+        filteredNotes = filteredNotes.filter(note => matchesUpdatedWindow(note, updatedWindowDays))
 
         return filteredNotes
     }
@@ -163,7 +194,7 @@ const NotesQueryService = (() => {
         const useRelevanceSorting = String(query || "").trim().length > 0
         const sortMode = useRelevanceSorting ? "relevance" : configuredSortMode
         const sortedNotes = sortMode === "manual"
-            ? normalizeVisibleNotes(searchResult.notes, stateSnapshot.view === "folder" ? "folderOrder" : "order")
+            ? normalizeVisibleNotes(searchResult.notes, stateSnapshot.view === "folder" ? "folderOrder" : (stateSnapshot.view === "shared_workspace" ? "workspaceOrder" : "order"))
             : sortVisibleNotes(searchResult.notes, sortMode, sortMode === "relevance" ? searchResult.scores : null, stateSnapshot.config?.lang || "ru")
         return {
             view: stateSnapshot.view,

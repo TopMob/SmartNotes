@@ -24,6 +24,9 @@ Object.assign(UI, {
             if (this.els.activeFolderMenu?.classList.contains("active") && !event.target.closest("#active-folder-menu-wrapper")) {
                 this.toggleActiveFolderMenu(false)
             }
+            if (this.els.activeWorkspaceMenu?.classList.contains("active") && !event.target.closest("#active-workspace-menu-wrapper")) {
+                this.toggleActiveWorkspaceMenu(false)
+            }
 
             const overlayElement = event.target.closest(".modal-overlay")
             if (overlayElement && event.target === overlayElement && !overlayElement.dataset.modalStatic) {
@@ -112,6 +115,15 @@ Object.assign(UI, {
             this.updateFilterConfig({ sort: safeSortValue })
         }, { signal: listenersSignal })
 
+        this.els.tagFilterInput?.addEventListener("change", event => {
+            const selectedTags = this.readTagFilterSelection(event.target?.value)
+            this.updateFilterConfig({ tags: selectedTags })
+        }, { signal: listenersSignal })
+
+        this.els.dateFilterSelect?.addEventListener("change", event => {
+            this.updateFilterConfig({ updatedWindowDays: Number(event.target?.value || 0) })
+        }, { signal: listenersSignal })
+
         this.els.filterFolders?.addEventListener("change", event => {
             const checkboxInput = event.target.closest("input[type='checkbox']")
             if (!checkboxInput) return
@@ -119,8 +131,24 @@ Object.assign(UI, {
             this.updateFilterConfig({ folders: selectedFolders })
         }, { signal: listenersSignal })
 
+        this.els.savedFilterSelect?.addEventListener("change", event => {
+            const savedFilterId = String(event.target?.value || "")
+            if (!savedFilterId) return
+            this.applySavedFilter(savedFilterId)
+        }, { signal: listenersSignal })
+
+        this.els.saveFilterButton?.addEventListener("click", () => {
+            this.saveCurrentFilterPreset()
+        }, { signal: listenersSignal })
+
+        this.els.deleteFilterButton?.addEventListener("click", () => {
+            const savedFilterId = String(this.els.savedFilterSelect?.value || "")
+            if (!savedFilterId) return
+            this.deleteSavedFilter(savedFilterId)
+        }, { signal: listenersSignal })
+
         this.els.grid?.addEventListener("click", async event => {
-            const actionElement = event.target.closest(".action-btn")
+            const actionElement = event.target.closest("[data-action], button, a, input, select, textarea, label")
             if (actionElement) return
             if (this.els.userMenu?.classList.contains("active")) return
             const noteCardElement = event.target.closest(".note-card")
@@ -196,19 +224,129 @@ Object.assign(UI, {
         return selected
     },
 
+    readTagFilterSelection(rawValue = "") {
+        return String(rawValue || "")
+            .split(",")
+            .map(value => String(value || "").trim())
+            .filter(Boolean)
+    },
+
     updateFilterConfig(next) {
-        const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [] }
-        const updated = { ...current, ...next }
+        const current = StateStore.read().config.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 }
+        const updated = window.NotesStorage?.normalizeNotesFilter
+            ? window.NotesStorage.normalizeNotesFilter({ ...current, ...next })
+            : { ...current, ...next }
         StateActions.updateConfig({ notesFilter: updated })
         SafeStorage.local.setJson("notes-filter", updated)
         updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderFilterMenu()
     },
 
+    getSavedFilterOptions() {
+        return window.NotesStorage?.readSavedNotesFilters?.() || []
+    },
+
+    renderSavedFiltersMenu() {
+        const savedFilterSelect = this.els.savedFilterSelect
+        const deleteFilterButton = this.els.deleteFilterButton
+        if (!savedFilterSelect || !deleteFilterButton) return
+        const savedFilters = this.getSavedFilterOptions()
+        const currentValue = String(savedFilterSelect.value || "")
+        const fragment = document.createDocumentFragment()
+        const emptyOption = document.createElement("option")
+        emptyOption.value = ""
+        emptyOption.textContent = this.getText("saved_filters_none", "No saved filter")
+        fragment.append(emptyOption)
+        savedFilters.forEach(savedFilter => {
+            const option = document.createElement("option")
+            option.value = savedFilter.id
+            option.textContent = savedFilter.name
+            fragment.append(option)
+        })
+        savedFilterSelect.replaceChildren(fragment)
+        const hasCurrentValue = savedFilters.some(savedFilter => savedFilter.id === currentValue)
+        savedFilterSelect.value = hasCurrentValue ? currentValue : ""
+        deleteFilterButton.disabled = !savedFilterSelect.value
+    },
+
+    saveCurrentFilterPreset() {
+        const currentFilter = window.NotesStorage?.normalizeNotesFilter
+            ? window.NotesStorage.normalizeNotesFilter(StateStore.read().config.notesFilter || {})
+            : (StateStore.read().config.notesFilter || { sort: "manual", folders: [] })
+        this.showPrompt(
+            this.getText("save_filter_prompt_title", "Filter name"),
+            this.getText("save_filter_prompt_placeholder", "For example: Work"),
+            (value) => {
+                const filterName = String(value || "").trim()
+                if (!filterName) return
+                const savedFilters = this.getSavedFilterOptions()
+                const existingFilter = savedFilters.find(item => item.name.toLocaleLowerCase() === filterName.toLocaleLowerCase())
+                const nextFilter = {
+                    id: existingFilter?.id || `filter_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+                    name: filterName,
+                    sort: currentFilter.sort,
+                    folders: currentFilter.folders,
+                    tags: currentFilter.tags,
+                    updatedWindowDays: currentFilter.updatedWindowDays,
+                    createdAt: existingFilter?.createdAt || Date.now()
+                }
+                const nextSavedFilters = existingFilter
+                    ? savedFilters.map(item => item.id === existingFilter.id ? nextFilter : item)
+                    : [...savedFilters, nextFilter]
+                window.NotesStorage?.writeSavedNotesFilters?.(nextSavedFilters)
+                this.renderSavedFiltersMenu()
+                if (this.els.savedFilterSelect) this.els.savedFilterSelect.value = nextFilter.id
+                if (this.els.deleteFilterButton) this.els.deleteFilterButton.disabled = false
+                this.showToast(this.getText("saved_filter_saved", "Filter saved"))
+            }
+        )
+    },
+
+    applySavedFilter(savedFilterId) {
+        const savedFilter = this.getSavedFilterOptions().find(item => item.id === String(savedFilterId || ""))
+        if (!savedFilter) {
+            this.showToast(this.getText("saved_filter_missing", "Saved filter not found"))
+            this.renderSavedFiltersMenu()
+            return
+        }
+        this.updateFilterConfig({
+            sort: savedFilter.sort,
+            folders: savedFilter.folders,
+            tags: savedFilter.tags,
+            updatedWindowDays: savedFilter.updatedWindowDays
+        })
+        if (this.els.savedFilterSelect) this.els.savedFilterSelect.value = savedFilter.id
+        if (this.els.deleteFilterButton) this.els.deleteFilterButton.disabled = false
+    },
+
+    deleteSavedFilter(savedFilterId) {
+        const normalizedSavedFilterId = String(savedFilterId || "")
+        const savedFilters = this.getSavedFilterOptions()
+        const hasSavedFilter = savedFilters.some(item => item.id === normalizedSavedFilterId)
+        if (!hasSavedFilter) {
+            this.showToast(this.getText("saved_filter_missing", "Saved filter not found"))
+            this.renderSavedFiltersMenu()
+            return
+        }
+        const nextSavedFilters = savedFilters.filter(item => item.id !== normalizedSavedFilterId)
+        window.NotesStorage?.writeSavedNotesFilters?.(nextSavedFilters)
+        this.renderSavedFiltersMenu()
+        this.showToast(this.getText("saved_filter_deleted", "Filter deleted"))
+    },
+
     renderFilterMenu() {
         if (!this.els.filterFolders || !this.els.filterSort) return
         const { folders, config, view } = StateStore.read()
-        const current = config.notesFilter || { sort: "manual", folders: [] }
+        const interfaceConfig = config.interface || {}
+        const sectionSaved = document.getElementById("notes-filter-section-saved")
+        const sectionTags = document.getElementById("notes-filter-section-tags")
+        const sectionDate = document.getElementById("notes-filter-section-date")
+        if (sectionSaved) sectionSaved.classList.toggle("hidden", interfaceConfig.showSavedFilters === false)
+        if (sectionTags) sectionTags.classList.toggle("hidden", interfaceConfig.showTagFilter === false)
+        if (sectionDate) sectionDate.classList.toggle("hidden", interfaceConfig.showUpdatedPeriodFilter === false)
+        const current = window.NotesStorage?.normalizeNotesFilter
+            ? window.NotesStorage.normalizeNotesFilter(config.notesFilter || {})
+            : (config.notesFilter || { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 })
         const visibleFolders = folders.filter(folder => !folder.isHidden && !folder.trashedAt)
         const visibleFolderIds = new Set(
             visibleFolders
@@ -225,6 +363,8 @@ Object.assign(UI, {
         const folderFiltersBlocked = view === "archive" || view === "trash"
         const safeSortValue = window.DomSecurity.sanitizeInputValue(current.sort, "updated")
         this.els.filterSort.value = safeSortValue
+        if (this.els.tagFilterInput) this.els.tagFilterInput.value = Array.isArray(current.tags) ? current.tags.join(", ") : ""
+        if (this.els.dateFilterSelect) this.els.dateFilterSelect.value = String(Number(current.updatedWindowDays || 0))
 
         const folderFilterFragment = document.createDocumentFragment()
         const items = [{ id: "none", name: this.getText("folder_none", "No folder") }]
@@ -261,6 +401,7 @@ Object.assign(UI, {
         })
 
         this.els.filterFolders.replaceChildren(folderFilterFragment)
+        this.renderSavedFiltersMenu()
     },
 
     toggleFilterMenu(force) {
@@ -309,11 +450,11 @@ Object.assign(UI, {
 
 
 
-    handleAction(el, e) {
+    async handleAction(el, e) {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder", "clear-trash"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -341,6 +482,77 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
+            case "edit-display-name": {
+                const currentName = String(document.getElementById("user-name")?.textContent || "")
+                this.showPrompt(this.getText("display_name", "Отображаемое имя"), this.getText("display_name_placeholder", "Введите имя"), async value => {
+                    const nextName = String(value || "").trim()
+                    if (!nextName || nextName.length > 50) return
+                    const ok = await Auth.updateDisplayName(nextName)
+                    this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+                }, currentName, { maxLength: 50, showCounter: true })
+                break
+            }
+            case "copy-user-uid": {
+                const uid = WorkspaceAccessService?.getCurrentUserUid?.() || ""
+                if (!uid) {
+                    this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                    break
+                }
+                const copied = await CollaborationService.copyToClipboard(uid)
+                this.showToast(copied ? this.getText("uid_copied", "UID скопирован") : uid)
+                break
+            }
+            case "join-shared-workspace-link": {
+                this.showPrompt(this.getText("join_shared_workspace", "Присоединиться по ссылке"), this.getText("join_shared_workspace_placeholder", "Вставьте ссылку или токен"), async value => {
+                    const user = StateStore.read().user
+                    if (!user?.uid) return
+                    const result = await WorkspaceAccessService?.acceptWorkspaceShareToken?.(value, user)
+                    this.showToast(result ? this.getText("join_shared_workspace_success", "Совместная папка добавлена") : this.getText("join_shared_workspace_failed", "Не удалось добавить совместную папку"))
+                })
+                break
+            }
+            case "toggle-active-workspace-menu":
+                this.toggleActiveWorkspaceMenu()
+                break
+            case "view-workspace-members":
+                this.openWorkspaceMembersModal()
+                this.toggleActiveWorkspaceMenu(false)
+                break
+            case "rename-workspace":
+                this.renameActiveWorkspace()
+                this.toggleActiveWorkspaceMenu(false)
+                break
+            case "edit-workspace-description":
+                this.editActiveWorkspaceDescription()
+                this.toggleActiveWorkspaceMenu(false)
+                break
+            case "open-shared-workspace":
+                switchView("shared_workspace", null, el.dataset.workspaceId)
+                if (!window.matchMedia("(min-width: 1024px)").matches) {
+                    this.toggleSidebar(false)
+                }
+                break
+            case "copy-shared-workspace-link": {
+                const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
+                const link = await WorkspaceAccessService?.createInviteLink?.(workspaceId, "editor")
+                if (!link) {
+                    this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                    break
+                }
+                const copied = await CollaborationService.copyToClipboard(link)
+                this.showToast(copied ? this.getText("share_link_copied", "Share link copied") : link)
+                break
+            }
+            case "add-shared-workspace-user": {
+                const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
+                this.showPrompt(this.getText("shared_user_uid_prompt", "UID пользователя"), this.getText("shared_user_uid_placeholder", "Введите UID"), async value => {
+                    const targetUid = String(value || "").trim()
+                    if (!targetUid) return
+                    const ok = await WorkspaceAccessService?.addMemberByUid?.(workspaceId, targetUid, "editor")
+                    this.showToast(ok ? this.getText("shared_user_added", "Пользователь добавлен") : this.getText("share_manage_denied", "Permission denied"))
+                })
+                break
+            }
             case "folder-unhide":
                 this.setFolderHidden(el.dataset.folderId, false)
                 break
@@ -356,6 +568,9 @@ Object.assign(UI, {
             case "toggle-active-folder-hidden":
                 this.toggleFolderHidden(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
+                break
+            case "clear-trash":
+                clearTrashPermanently()
                 break
             case "delete-active-folder":
                 deleteFolder(StateStore.read().activeFolderId)
@@ -382,6 +597,44 @@ Object.assign(UI, {
                 break
             case "settings-save":
                 this.saveSettingsDraft()
+                break
+            case "settings-export-all-notes": {
+                if (el.disabled) break
+                el.disabled = true
+                const loadingLock = this.startLoading(this.getText("loading_export", "Подготовка экспорта..."))
+                try {
+                    await this.exportAllNotes()
+                } finally {
+                    this.stopLoading(loadingLock)
+                    el.disabled = false
+                }
+                break
+            }
+            case "settings-export-folder": {
+                if (el.disabled) break
+                this.exportFolderBySelection()
+                break
+            }
+            case "settings-backup-all-notes": {
+                if (el.disabled) break
+                el.disabled = true
+                const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
+                try {
+                    await this.backupAllNotesToDrive()
+                } finally {
+                    this.stopLoading(loadingLock)
+                    el.disabled = false
+                    this.renderSettingsPage()
+                }
+                break
+            }
+            case "settings-backup-folder": {
+                if (el.disabled) break
+                this.backupFolderBySelection()
+                break
+            }
+            case "settings-trigger-import":
+                this.triggerImport()
                 break
             case "settings-cancel":
                 this.cancelSettingsDraft()
@@ -410,6 +663,19 @@ Object.assign(UI, {
             case "toggle-user-menu":
                 this.toggleUserMenu()
                 break
+            case "change-avatar": {
+                const input = document.getElementById("avatar-upload-input")
+                if (!input) break
+                input.onchange = async () => {
+                    const file = input.files && input.files[0] ? input.files[0] : null
+                    if (!file) return
+                    const ok = await Auth.updateAvatarFromFile(file)
+                    this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+                    input.value = ""
+                }
+                input.click()
+                break
+            }
             case "switch-account":
                 this.confirm("account", () => Auth.switchAccount())
                 break
@@ -476,8 +742,10 @@ Object.assign(UI, {
                 window.SmartNotesEditor?.toggleToolbar()
                 break
             case "editor-note-actions": {
+                e.preventDefault()
+                e.stopPropagation()
                 const noteId = StateStore.read().currentNote?.id
-                if (noteId) openNoteActions(noteId)
+                if (noteId) this.openNoteActionsFlow(noteId)
                 break
             }
             case "open-feedback-modal":
@@ -491,7 +759,14 @@ Object.assign(UI, {
                 toggleFavorite(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-menu":
-                openNoteActions(decodeURIComponent(el.dataset.noteId || ""))
+                e.preventDefault()
+                e.stopPropagation()
+                this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""))
+                break
+            case "lock-note-menu":
+                e.preventDefault()
+                e.stopPropagation()
+                this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""), { allowLocked: true })
                 break
             case "note-pin-toggle":
                 this.toggleSelectedPin(decodeURIComponent(el.dataset.noteId || ""))

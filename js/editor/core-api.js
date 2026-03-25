@@ -164,6 +164,13 @@ export const EditorAPI = (() => {
         openFromList: (...args) => openFromList(...args)
     })
 
+
+    const resolveExternalMediaMessage = (error, options = {}) => {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
+    }
+
     const AI_ANALYSIS_VERSION = 1
 
     const hasAiRelevantChanges = (previousNote, nextNote) => {
@@ -244,8 +251,8 @@ export const EditorAPI = (() => {
         tags: Array.isArray(note?.tags) ? note.tags.map(tag => String(tag || "")) : [],
         pageTitles: Array.isArray(note?.pageTitles) ? note.pageTitles.map(value => String(value || "")) : [],
         pageDrawings: Array.isArray(note?.pageDrawings) ? note.pageDrawings.map(value => String(value || "")) : [],
-        pageDrawingsRevision: String(note?.pageDrawingsRevision || ""),
-        folderId: String(note?.folderId || "")
+        folderId: String(note?.folderId || ""),
+        workspaceId: String(note?.workspaceId || "")
     })
 
     const save = async (options = {}) => {
@@ -259,7 +266,7 @@ export const EditorAPI = (() => {
             return
         }
         const snapshot = captureSnapshot()
-        const note = {
+        let note = {
             ...currentNote,
             title: snapshot.title,
             content: snapshot.content,
@@ -308,6 +315,39 @@ export const EditorAPI = (() => {
                 await close({ persistChanges: false, silent: true })
             }
             return
+        }
+
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const hasInlineMedia = mediaService?.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || "")) || (Array.isArray(note.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || ""))))
+        if (hasInlineMedia) {
+            if (!mediaService) {
+                UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
+                return
+            }
+            try {
+                const mediaResult = await mediaService.externalizeNoteMedia(note, {
+                    fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note", "note") || "note"
+                })
+                note = NoteIO.normalizeNote({
+                    ...note,
+                    ...mediaResult.note,
+                    pageTitles: note.pageTitles
+                })
+                if (mediaResult.changed) {
+                    StateStore.update("currentNote", note)
+                    renderState()
+                }
+                if (mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || "")) || (Array.isArray(note.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || ""))))) {
+                    throw new Error("external-inline-media-blocked")
+                }
+            } catch (error) {
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
+                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                    return
+                }
+                throw error
+            }
         }
 
         if (hasAiRelevantChanges(currentNote, note)) {
@@ -545,13 +585,20 @@ export const EditorAPI = (() => {
                 if (!(targetElement instanceof HTMLInputElement)) return
                 const file = targetElement.files?.[0]
                 if (!file) return
+                const loadingLock = UI.startLoading(UI.getText("loading_image", "Загрузка изображения..."))
                 try {
                     const imageUrl = await fileToDataUrl(file)
                     mediaHandlers.insertMedia(imageUrl, "image")
                     targetElement.value = ""
                 } catch (error) {
                     const errorCode = error?.code || error?.message || "unknown"
-                    UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
+                    if (String(errorCode).includes("external-") || String(errorCode).startsWith("drive-")) {
+                        UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                    } else {
+                        UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
+                    }
+                } finally {
+                    UI.stopLoading(loadingLock)
                 }
             }, { signal })
         }
@@ -877,6 +924,7 @@ export const EditorAPI = (() => {
 
         const current = StateStore.read()
         const folderId = current.view === "folder" ? current.activeFolderId : null
+        const workspaceId = current.view === "shared_workspace" ? current.activeSharedWorkspaceId : null
         const user = current.user
 
         const base = note
@@ -886,7 +934,8 @@ export const EditorAPI = (() => {
                 folderId,
                 createdAt: Utils.serverTimestamp(),
                 order: Date.now(),
-                ownerUid: user?.uid || null
+                ownerUid: user?.uid || null,
+                workspaceId
             })
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)
@@ -932,11 +981,9 @@ export const EditorAPI = (() => {
             }
         }
         if (note.lock && note.lock.hash) {
-            const verified = await new Promise(resolve => {
-                UI.showPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"), async (val) => {
-                    resolve(await LockService.verify(note, val))
-                })
-            })
+            const password = await UI.showPasswordPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"))
+            if (password == null) return
+            const verified = await LockService.verify(note, password)
             if (!verified) {
                 UI.showToast(UI.getText("lock_invalid_password", "Invalid password"))
                 return

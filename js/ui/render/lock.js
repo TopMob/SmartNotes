@@ -27,8 +27,13 @@ Object.assign(UI, {
             return `
                 <div class="lock-center-card" data-note-id="${id}">
                     <div class="lock-center-header">
-                        <div class="lock-center-title">${dict.lock_center_masked_title || "Protected note"}</div>
-                        <div class="lock-center-meta">${Utils.formatDate(note.updatedAt || note.createdAt || Date.now())}</div>
+                        <div>
+                            <div class="lock-center-title">${dict.lock_center_masked_title || "Protected note"}</div>
+                            <div class="lock-center-meta">${Utils.formatDate(note.updatedAt || note.createdAt || Date.now())}</div>
+                        </div>
+                        <button type="button" class="btn-icon" data-action="lock-note-menu" data-note-id="${id}" aria-label="${dict.note_actions || "Actions"}">
+                            <i class="material-icons-round" aria-hidden="true">more_horiz</i>
+                        </button>
                     </div>
                     <div class="lock-center-preview">${randomText()}</div>
                     <div class="lock-center-actions">
@@ -89,11 +94,9 @@ Object.assign(UI, {
         if (!id) return
         const note = StateStore.read().notes.find(n => n.id === id)
         if (!note || !note.lock?.hash) return
-        const verified = await new Promise(resolve => {
-            this.showPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"), async (val) => {
-                resolve(await LockService.verify(note, val))
-            })
-        })
+        const password = await this.showPasswordPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"))
+        if (password == null) return
+        const verified = await LockService.verify(note, password)
         if (!verified) {
             this.showToast(this.getText("lock_invalid_password", "Invalid password"))
             return
@@ -118,11 +121,9 @@ Object.assign(UI, {
         if (!id) return
         const note = StateStore.read().notes.find(n => n.id === id)
         if (!note || !note.lock?.hash) return
-        const verified = await new Promise(resolve => {
-            this.showPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"), async (val) => {
-                resolve(await LockService.verify(note, val))
-            })
-        })
+        const password = await this.showPasswordPrompt(this.getText("password_title", "Password"), this.getText("password_prompt", "Enter password"))
+        if (password == null) return
+        const verified = await LockService.verify(note, password)
         if (!verified) {
             this.showToast(this.getText("lock_invalid_password", "Invalid password"))
             return

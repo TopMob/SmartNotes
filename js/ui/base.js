@@ -9,7 +9,9 @@ const UI = {
     eventsBound: false,
     eventListenersController: null,
     resizeListenersController: null,
+    inputPolicyObserver: null,
     toastDeduplication: { lastMessage: "", lastShownAt: 0 },
+    loadingLocks: new Set(),
 
     init() {
         this.els = {
@@ -24,12 +26,25 @@ const UI = {
             sidebarOverlay: document.getElementById("sidebar-overlay"),
             filterMenu: document.getElementById("notes-filter-menu"),
             filterButton: document.getElementById("notes-filter-toggle"),
+            clearTrashButton: document.getElementById("clear-trash-button"),
+            savedFilterSelect: document.getElementById("notes-saved-filter-select"),
+            saveFilterButton: document.getElementById("notes-save-filter-button"),
+            deleteFilterButton: document.getElementById("notes-delete-filter-button"),
+            tagFilterInput: document.getElementById("notes-tag-filter-input"),
+            dateFilterSelect: document.getElementById("notes-date-filter-select"),
             filterFolders: document.getElementById("notes-folder-filters"),
             filterSort: document.getElementById("notes-sort-select"),
             activeFolderMenu: document.getElementById("active-folder-menu"),
             activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
             activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
             activeFolderHideButton: document.getElementById("active-folder-hide-button"),
+            activeWorkspaceMenu: document.getElementById("active-workspace-menu"),
+            activeWorkspaceMenuToggle: document.getElementById("active-workspace-menu-toggle"),
+            activeWorkspaceMenuWrapper: document.getElementById("active-workspace-menu-wrapper"),
+            workspaceCopyLinkButton: document.getElementById("workspace-copy-link-button"),
+            workspaceAddUserButton: document.getElementById("workspace-add-user-button"),
+            workspaceRenameButton: document.getElementById("workspace-rename-button"),
+            workspaceEditDescriptionButton: document.getElementById("workspace-edit-description-button"),
             adminToolsNavButton: document.getElementById("admin-tools-nav-button")
         }
         this.bindEvents()

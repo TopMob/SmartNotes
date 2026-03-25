@@ -1,3 +1,317 @@
+const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at";
+
+(() => {
+const buildExportFileName = (note, extension) => {
+    const baseName = NoteIO.fileNameFor(note).replace(/\.json$/i, "")
+    return `${baseName}.${extension}`
+}
+
+const buildNoteTextExport = (note) => {
+    const contentWrapper = document.createElement("div")
+    contentWrapper.innerHTML = Utils.sanitizeHtml(note.content || "")
+    contentWrapper.querySelectorAll("img, figure, picture, svg, canvas").forEach(element => element.remove())
+    const contentText = Utils.stripHtml(contentWrapper.innerHTML).replace(/\r\n/g, "\n").trim()
+    const titleText = (note.title || NoteText.buildAutoTitle(note)).trim()
+    const parts = []
+    if (titleText) parts.push(titleText)
+    if (contentText) parts.push(contentText)
+    return parts.join("\n\n")
+}
+
+const buildSafeExportPagesHtml = (note) => {
+    const safeContentHtml = Utils.sanitizeHtml(note.content || "")
+    const contentWrapper = document.createElement("div")
+    contentWrapper.innerHTML = safeContentHtml
+    const pages = Array.from(contentWrapper.querySelectorAll(".note-page"))
+    const pageDrawings = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
+    const sourcePages = pages.length ? pages : [contentWrapper]
+    const exportRoot = document.createElement("div")
+    sourcePages.forEach((page, index) => {
+        const pageElement = document.createElement("div")
+        pageElement.className = "note-page"
+        const pageHtml = page.innerHTML || ""
+        pageElement.innerHTML = Utils.sanitizeHtml(pageHtml)
+        const drawingSource = pageDrawings[index]
+        if (typeof drawingSource === "string" && drawingSource.trim()) {
+            const drawingElement = document.createElement("img")
+            drawingElement.className = "note-drawing"
+            drawingElement.alt = ""
+            drawingElement.src = drawingSource
+            pageElement.appendChild(drawingElement)
+        }
+        exportRoot.appendChild(pageElement)
+    })
+    return Utils.sanitizeHtml(exportRoot.innerHTML)
+}
+
+const buildPrintableNoteHtml = (note, dict) => {
+    const titleText = (note.title || NoteText.buildAutoTitle(note)).trim()
+    const formattedDate = Utils.formatDate(note.updatedAt || note.createdAt || Date.now())
+    return {
+        language: StateStore.read().config.lang || "ru",
+        printableTitle: titleText || dict.untitled_note || "Untitled",
+        printableDate: formattedDate,
+        printableContentHtml: buildSafeExportPagesHtml(note),
+        printableStyles: `
+        :root { color-scheme: light dark; }
+        body { margin: 32px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1f1f1f; background: #ffffff; }
+        h1 { font-size: 24px; margin: 0 0 6px; }
+        .note-date { font-size: 12px; color: #6f6f6f; margin-bottom: 18px; }
+        .note-content { font-size: 14px; line-height: 1.6; }
+        .note-page { position: relative; padding: 18px; border: 1px solid #e6e6e6; border-radius: 12px; margin-bottom: 18px; min-height: 240px; }
+        .note-page:last-child { margin-bottom: 0; }
+        .note-drawing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+        .note-content img { max-width: 100%; height: auto; }
+        .note-content ul, .note-content ol { padding-left: 22px; }
+        .note-content p { margin: 0 0 10px; }
+        @media print {
+            body { margin: 20mm; }
+            .note-page { break-inside: avoid; }
+        }
+    `
+    }
+}
+
+const openPrintWindow = (printableDocument, dict) => {
+    const frame = document.createElement("iframe")
+    frame.style.position = "fixed"
+    frame.style.right = "0"
+    frame.style.bottom = "0"
+    frame.style.width = "0"
+    frame.style.height = "0"
+    frame.style.border = "0"
+    frame.style.opacity = "0"
+    frame.setAttribute("aria-hidden", "true")
+    frame.src = "about:blank"
+    document.body.appendChild(frame)
+    frame.addEventListener("load", () => {
+        const doc = frame.contentDocument
+        if (!doc) {
+            frame.remove()
+            UI.showToast(dict.popup_blocked || "Allow popups to print")
+            return
+        }
+        doc.documentElement.lang = printableDocument.language
+        doc.head.replaceChildren()
+        const metaCharset = doc.createElement("meta")
+        metaCharset.setAttribute("charset", "utf-8")
+        const documentTitle = doc.createElement("title")
+        documentTitle.textContent = printableDocument.printableTitle
+        const stylesElement = doc.createElement("style")
+        stylesElement.textContent = printableDocument.printableStyles
+        doc.head.append(metaCharset, documentTitle, stylesElement)
+        doc.body.replaceChildren()
+        const headerElement = doc.createElement("header")
+        const titleElement = doc.createElement("h1")
+        titleElement.textContent = printableDocument.printableTitle
+        const dateElement = doc.createElement("div")
+        dateElement.className = "note-date"
+        dateElement.textContent = printableDocument.printableDate
+        headerElement.append(titleElement, dateElement)
+        const contentElement = doc.createElement("main")
+        contentElement.className = "note-content"
+        contentElement.innerHTML = printableDocument.printableContentHtml
+        doc.body.append(headerElement, contentElement)
+        requestAnimationFrame(() => {
+            if (!frame.contentWindow) {
+                UI.showToast(dict.popup_blocked || "Allow popups to print")
+                frame.remove()
+                return
+            }
+            frame.contentDocument.title = printableDocument.printableTitle
+            frame.contentWindow.focus()
+            frame.contentWindow.print()
+            setTimeout(() => frame.remove(), 1200)
+        })
+    }, { once: true })
+}
+
+Object.assign(UI, {
+    renderNoteActions(noteId) {
+        const note = this.resolveNoteById(noteId)
+        const root = document.getElementById("note-actions-content")
+        if (!note || !root) return
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        const folders = StateStore.read().folders
+        const isArchived = !!note.isArchived
+        const archiveLabel = isArchived ? (dict.restore_note || "Restore") : (dict.archive_note || "Archive")
+        const folderOptions = [`<option value="">${dict.folder_none || "No folder"}</option>`]
+        folders.forEach(f => {
+            const selected = note.folderId === f.id ? "selected" : ""
+            folderOptions.push(`<option value="${f.id}" ${selected}>${Utils.escapeHtml(f.name)}</option>`)
+        })
+        const reminderStamp = note.reminderAt?.toDate ? note.reminderAt.toDate() : (note.reminderAt ? new Date(note.reminderAt) : null)
+        const reminderValue = reminderStamp ? new Date(reminderStamp.getTime() - reminderStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
+        const reminderClearButton = reminderValue
+            ? `<button type="button" class="btn-secondary" data-action="note-reminder-clear" data-note-id="${encodeURIComponent(note.id)}">
+                    ${dict.reminder_clear || "Clear"}
+                </button>`
+            : ""
+        root.innerHTML = `
+            <div class="modal-actions-grid">
+                <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">inventory_2</i>${archiveLabel}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-lock-toggle" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">lock</i>${note.lock?.hash ? (dict.unlock_note || "Unlock") : (dict.lock_note || "Lock")}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-copy-text" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">content_copy</i>${dict.copy_text || "Copy text"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="note-mark-for-reanalysis" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">psychology</i>${dict.note_mark_for_reanalysis || "Отметить для повторного анализа"}
+                </button>
+                <button type="button" class="btn-danger" data-action="note-delete" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">delete</i>${note.trashedAt ? (dict.delete_permanently || "Delete permanently") : (dict.delete_note || "Delete")}
+                </button>
+                ${note.trashedAt ? `<button type="button" class="btn-secondary" data-action="note-restore" data-note-id="${encodeURIComponent(note.id)}">${dict.restore_note || "Restore"}</button>` : ""}
+            </div>
+            <div class="lock-center-folder" style="margin-top:12px;">
+                <select class="input-area lock-center-select note-actions-select" data-note-id="${encodeURIComponent(note.id)}" aria-label="${dict.folder_view_aria || "Folder"}">
+                    ${folderOptions.join("")}
+                </select>
+                <button type="button" class="btn-primary" data-action="note-move-folder" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">drive_file_move</i>${dict.move_to_folder || "Move"}
+                </button>
+            </div>
+            <div class="lock-center-folder" style="margin-top:12px;">
+                <input type="datetime-local" class="input-area note-reminder-input" data-note-id="${encodeURIComponent(note.id)}" value="${reminderValue}" aria-label="${dict.reminder_note || "Reminder"}">
+                <button type="button" class="btn-primary" data-action="note-reminder-set" data-note-id="${encodeURIComponent(note.id)}">
+                    <i class="material-icons-round" aria-hidden="true">notifications</i>${dict.reminder_note || "Reminder"}
+                </button>
+                ${reminderClearButton}
+            </div>
+            <div class="modal-actions-grid" style="margin-top:12px;">
+                <button type="button" class="btn-primary" data-action="download-note" data-lang="download_note">
+                    <i class="material-icons-round" aria-hidden="true">download</i>${dict.download_note || "Download"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="export-note-txt" data-lang="export_txt">
+                    <i class="material-icons-round" aria-hidden="true">description</i>${dict.export_txt || "Export TXT"}
+                </button>
+                <button type="button" class="btn-secondary" data-action="export-note-pdf" data-lang="export_pdf">
+                    <i class="material-icons-round" aria-hidden="true">picture_as_pdf</i>${dict.export_pdf || "Export PDF"}
+                </button>
+            </div>
+        `
+        this.applyInputAutocompletePolicy(root)
+    },
+
+
+    async toggleSelectedLock(noteId) {
+        if (!noteId) return
+        const note = this.resolveNoteById(noteId)
+        if (!note) return
+        if (note.lock?.hash) {
+            const password = await this.showPasswordPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"))
+            if (password == null) return
+            const verified = await LockService.verify(note, password)
+            if (!verified) {
+                this.showToast(this.getText("lock_invalid_password", "Invalid password"))
+                return
+            }
+            const user = StateStore.read().user
+            if (!user || !db) return
+            const ref = DataPath.getUserNotesCollection(user).doc(note.id)
+            const payload = { lock: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+            if (firebase?.firestore?.FieldValue?.delete) payload.lock = firebase.firestore.FieldValue.delete()
+            await ref.update(payload)
+            StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: null } : item))
+            this.showToast(this.getText("unlock_success", "Note unlocked"))
+            this.closeModal("note-actions-modal")
+            return
+        }
+        const password = await this.showPasswordPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"))
+        if (password == null) return
+        const normalizedPassword = String(password || "").trim()
+        if (!normalizedPassword) {
+            this.showToast(this.getText("lock_password_empty", "Password is empty"))
+            return
+        }
+        const user = StateStore.read().user
+        if (!user || !db) return
+        const lockedNote = await LockService.setLock(note, normalizedPassword)
+        const ref = DataPath.getUserNotesCollection(user).doc(note.id)
+        await ref.update({ lock: lockedNote.lock || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: lockedNote.lock } : item))
+        this.showToast(this.getText("lock_hidden", "Note hidden"))
+        this.closeModal("note-actions-modal")
+    },
+    async toggleSelectedPin(noteId) {
+        if (!noteId) return
+        await togglePin(noteId)
+        this.closeModal("note-actions-modal")
+    },
+
+    async toggleSelectedArchive(noteId) {
+        if (!noteId) return
+        const note = this.resolveNoteById(noteId)
+        if (!note) return
+        await toggleArchive(noteId, !note.isArchived)
+        this.closeModal("note-actions-modal")
+    },
+
+    async moveSelectedNoteToFolder(noteId) {
+        if (!noteId) return
+        const select = document.querySelector(`.note-actions-select[data-note-id="${encodeURIComponent(noteId)}"]`)
+        if (!select) return
+        const folderId = select.value || null
+        await moveNoteToFolder(noteId, folderId)
+        this.closeModal("note-actions-modal")
+    },
+
+    downloadSelectedNote() {
+        const note = this.resolveNoteById(this.currentNoteActionId)
+        if (!note) return
+        if (note.lock?.hash) {
+            this.showToast(this.getText("lock_download_blocked", "Note is locked"))
+            return
+        }
+        const data = NoteIO.exportNote(note)
+        const blob = new Blob([data], { type: "application/json" })
+        const a = document.createElement("a")
+        a.href = URL.createObjectURL(blob)
+        a.download = NoteIO.fileNameFor(note)
+        a.click()
+        URL.revokeObjectURL(a.href)
+        this.showToast(this.getText("download_success", "File saved"))
+        this.closeModal("note-actions-modal")
+    },
+
+    exportSelectedNoteAsText() {
+        const note = this.resolveNoteById(this.currentNoteActionId)
+        if (!note) return
+        if (note.lock?.hash) {
+            this.showToast(this.getText("lock_download_blocked", "Note is locked"))
+            return
+        }
+        const text = buildNoteTextExport(note)
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
+        const link = document.createElement("a")
+        link.href = URL.createObjectURL(blob)
+        link.download = buildExportFileName(note, "txt")
+        link.click()
+        URL.revokeObjectURL(link.href)
+        this.showToast(this.getText("download_success", "File saved"))
+        this.closeModal("note-actions-modal")
+    },
+
+    exportSelectedNoteAsPdf() {
+        const note = this.resolveNoteById(this.currentNoteActionId)
+        if (!note) return
+        if (note.lock?.hash) {
+            this.showToast(this.getText("lock_download_blocked", "Note is locked"))
+            return
+        }
+        const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        const printableDocument = buildPrintableNoteHtml(note, dict)
+        openPrintWindow(printableDocument, dict)
+        this.closeModal("note-actions-modal")
+    },
+
+});
+})();
+
+
 Object.assign(UI, {
     updateSidebarLayout() {
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
@@ -27,6 +341,12 @@ Object.assign(UI, {
         if (!input) return
         input.value = ""
         input.click()
+    },
+
+    resolveExternalMediaMessage(error, options = {}) {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        return this.getText(descriptor.messageKey, descriptor.fallbackMessage)
     },
 
     normalizeImportedDate(inputValue) {
@@ -119,6 +439,66 @@ Object.assign(UI, {
             })
             await batch.commit()
         }
+        return importResults
+    },
+
+    async saveImportedNotes(user, importedNotes) {
+        const notes = Array.isArray(importedNotes) ? importedNotes : []
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        const hasInlineMedia = mediaService
+            ? notes.some(note => mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia)
+            : notes.some(note => /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))))
+        if (hasInlineMedia) {
+            throw new Error(mediaService ? "external-inline-media-blocked" : "external-storage-unlinked")
+        }
+        const chunkSize = 450
+        for (let index = 0; index < notes.length; index += chunkSize) {
+            const batch = db.batch()
+            notes.slice(index, index + chunkSize).forEach(importedNote => {
+                const reference = DataPath.getUserNotesCollection(user).doc(importedNote.id)
+                batch.set(reference, importedNote, { merge: true })
+            })
+            await batch.commit()
+        }
+    },
+
+    async saveImportedFolders(user, importedFolders) {
+        const folders = Array.isArray(importedFolders) ? importedFolders : []
+        if (!folders.length) return new Map()
+        const existingFolders = StateStore.read().folders.filter(folder => !folder.trashedAt)
+        const existingByName = new Map(existingFolders.map(folder => [String(folder.name || "").trim().toLowerCase(), folder]))
+        const folderIdMap = new Map()
+        const foldersToCreate = []
+
+        folders.forEach((importedFolder, index) => {
+            if (!importedFolder) return
+            const normalizedName = String(importedFolder.name || "").trim().toLowerCase()
+            if (!normalizedName) return
+            const existingFolder = existingByName.get(normalizedName)
+            if (existingFolder) {
+                folderIdMap.set(String(importedFolder.sourceId || importedFolder.id || ""), existingFolder.id)
+                return
+            }
+            const nextFolder = {
+                ...importedFolder,
+                id: importedFolder.id || Utils.generateId(),
+                folderOrder: Date.now() + index
+            }
+            folderIdMap.set(String(importedFolder.sourceId || importedFolder.id || ""), nextFolder.id)
+            foldersToCreate.push(nextFolder)
+            existingByName.set(normalizedName, nextFolder)
+        })
+
+        if (!foldersToCreate.length) return folderIdMap
+
+        const batch = db.batch()
+        foldersToCreate.forEach(folder => {
+            const reference = DataPath.getUserFoldersCollection(user).doc(folder.id)
+            const { sourceId, ...folderPayload } = folder
+            batch.set(reference, folderPayload, { merge: true })
+        })
+        await batch.commit()
+        return folderIdMap
     },
 
     async handleNoteImport(e) {
@@ -131,11 +511,12 @@ Object.assign(UI, {
         }
         const reader = new FileReader()
         reader.onload = async () => {
+            const loadingLock = this.startLoading(this.getText("loading_import", "Импорт данных..."))
             try {
                 const text = String(reader.result || "").replace(/^﻿/, "")
                 const parsed = JSON.parse(text)
-                const importedNotes = NoteIO.parseImport(parsed)
-                if (!importedNotes.length) {
+                const importBundle = NoteIO.parseImportBundle(parsed)
+                if (!importBundle.notes.length) {
                     this.showToast(this.getText("import_empty", "No notes found"))
                     return
                 }
@@ -143,16 +524,294 @@ Object.assign(UI, {
                 const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid))
                 await this.saveImportedNotes(current.user, notesToImport)
                 this.showToast(this.getText("import_success", "Imported"))
-            } catch {
+            } catch (error) {
+                console.error("Import failed", error)
+                const errorCode = String(error?.message || error?.code || "")
+                if (errorCode.includes("external-") || errorCode.includes("drive-")) {
+                    this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                    return
+                }
                 this.showToast(this.getText("import_failed", "Import failed"))
+            } finally {
+                this.stopLoading(loadingLock)
             }
         }
         reader.onerror = () => this.showToast(this.getText("import_failed", "Import failed"))
         reader.readAsText(file, "utf-8")
     },
 
+    getExportableNotes(filterFn = null) {
+        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        return notes.filter(note => {
+            if (!note || note.trashedAt) return false
+            return typeof filterFn === "function" ? filterFn(note) : true
+        })
+    },
+
+    getVisibleExportableNotes() {
+        const stateSnapshot = StateStore.read()
+        const query = document.getElementById("search-input")?.value || stateSnapshot.searchQuery || ""
+        const visible = NotesQueryService.execute(stateSnapshot, query).notes || []
+        return visible.filter(note => !!note && !note.trashedAt)
+    },
+
+    getExportFoldersForNotes(notes, options = {}) {
+        if (Array.isArray(options.folders)) return options.folders
+        const stateFolders = Array.isArray(StateStore.read().folders) ? StateStore.read().folders : []
+        const folderIds = new Set((Array.isArray(notes) ? notes : []).map(note => String(note?.folderId || "")).filter(Boolean))
+        if (options.folder && typeof options.folder === "object") {
+            folderIds.add(String(options.folder.id || ""))
+        }
+        return stateFolders.filter(folder => folderIds.has(String(folder.id || "")))
+    },
+
+    async prepareExportNotes(notes) {
+        const exportableNotes = Array.isArray(notes) ? notes : []
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        if (!mediaService) {
+            if (exportableNotes.some(note => /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))))) {
+                throw new Error("external-storage-unlinked")
+            }
+            return exportableNotes
+        }
+        return Promise.all(exportableNotes.map(async note => {
+            const prepared = await mediaService.externalizeNoteMedia(note, {
+                fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note_export", "note_export") || "note_export"
+            })
+            const normalizedNote = NoteIO.normalizeNote(prepared.note)
+            if (mediaService.getInlineMediaSummary?.(normalizedNote)?.hasInlineMedia) {
+                throw new Error("drive-upload-failed:export-inline-media")
+            }
+            return normalizedNote
+        }))
+    },
+
+    async exportNotesBundle(notes, options = {}) {
+        const loadingLock = this.startLoading(this.getText("loading_export", "Подготовка экспорта..."))
+        try {
+            const exportableNotes = Array.isArray(notes) ? notes : []
+            if (!exportableNotes.length) {
+                const emptyKey = options.emptyMessageKey || "export_empty"
+                const fallbackMessage = options.emptyFallback || "No notes available for export"
+                this.showToast(this.getText(emptyKey, fallbackMessage))
+                return null
+            }
+            const preparedNotes = await this.prepareExportNotes(exportableNotes)
+            const payload = window.NoteExportService.buildExportPayload({
+                notes: preparedNotes,
+                folders: this.getExportFoldersForNotes(preparedNotes, options),
+                scope: options.scope || "all",
+                folder: options.folder || null
+            })
+            const fileName = window.NoteExportService.downloadExportPayload(payload, {
+                scope: options.scope || "all",
+                folderName: options.folder?.name || ""
+            })
+            this.showToast(this.getText("download_success", "File saved"))
+            return fileName
+        } finally {
+            this.stopLoading(loadingLock)
+        }
+    },
+
+    async backupNotesBundleToDrive(notes, options = {}) {
+        const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
+        try {
+            const exportableNotes = Array.isArray(notes) ? notes : []
+            if (!exportableNotes.length) {
+                const emptyKey = options.emptyMessageKey || "export_empty"
+                const fallbackMessage = options.emptyFallback || "No notes available for export"
+                this.showToast(this.getText(emptyKey, fallbackMessage))
+                return null
+            }
+            const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+            if (!mediaService?.uploadFile) {
+                this.showToast(this.getText("backup_connected_drive_required", "Connect external storage to create a backup"))
+                return null
+            }
+            const preparedNotes = await this.prepareExportNotes(exportableNotes)
+            const payload = window.NoteExportService.buildExportPayload({
+                notes: preparedNotes,
+                folders: this.getExportFoldersForNotes(preparedNotes, options),
+                scope: options.scope || "all",
+                folder: options.folder || null
+            })
+            const fileName = window.NoteExportService.buildExportFileName({
+                scope: options.scope || "all",
+                folderName: options.folder?.name || ""
+            })
+            const blob = window.NoteExportService.createExportBlob(payload)
+            const publicUrl = await mediaService.uploadFile(blob, {
+                fileName,
+                mimeType: "application/json",
+                targetFolder: "backups"
+            })
+            const completedAt = new Date().toISOString()
+            SafeStorage.local.set(DRIVE_LAST_MANUAL_BACKUP_AT_KEY, completedAt)
+            this.showToast(this.getText("backup_success", "Backup saved to external storage"))
+            return { fileName, publicUrl, completedAt }
+        } finally {
+            this.stopLoading(loadingLock)
+        }
+    },
+
+    async exportAllNotes() {
+        try {
+            return await this.exportNotesBundle(this.getExportableNotes(), {
+                scope: "all",
+                emptyMessageKey: "export_empty",
+                emptyFallback: "No notes available for export"
+            })
+        } catch (error) {
+            console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async exportVisibleNotes() {
+        try {
+            return await this.exportNotesBundle(this.getVisibleExportableNotes(), {
+                scope: "selection",
+                emptyMessageKey: "export_visible_empty",
+                emptyFallback: "No notes found for the current filters"
+            })
+        } catch (error) {
+            console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    getExportableFoldersList() {
+        const folders = Array.isArray(StateStore.read().folders) ? StateStore.read().folders : []
+        return folders.filter(folder => !folder?.trashedAt)
+    },
+
+    getLastDriveBackupAt() {
+        const rawValue = SafeStorage.local.get(DRIVE_LAST_MANUAL_BACKUP_AT_KEY)
+        if (!rawValue) return null
+        const date = new Date(rawValue)
+        return Number.isFinite(date.getTime()) ? date : null
+    },
+
+    getLastDriveBackupLabel() {
+        const date = this.getLastDriveBackupAt()
+        if (!date) return this.getText("backup_last_manual_none", "Пока не выполнялось")
+        return date.toLocaleString(StateStore.read().config.lang === "en" ? "en-US" : "ru-RU")
+    },
+
+    resolveFolderByName(folderName) {
+        const normalizedName = String(folderName || "").trim().toLocaleLowerCase()
+        if (!normalizedName) return null
+        return this.getExportableFoldersList().find(folder => String(folder.name || "").trim().toLocaleLowerCase() === normalizedName) || null
+    },
+
+    selectFolderForExport(callback) {
+        const folders = this.getExportableFoldersList()
+        if (!folders.length) {
+            this.showToast(this.getText("folder_not_found", "Folder not found"))
+            return
+        }
+        this.showPrompt(
+            this.getText("export_folder_prompt_title", "Выберите папку для экспорта/резервной копии"),
+            this.getText("export_folder_prompt_placeholder", "Введите точное название папки"),
+            (value) => {
+                const folder = this.resolveFolderByName(value)
+                if (!folder) {
+                    this.showToast(this.getText("export_folder_not_found", "Папка не найдена"))
+                    return
+                }
+                callback(folder)
+            }
+        )
+    },
+
+    async backupAllNotesToDrive() {
+        try {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(), {
+                scope: "all",
+                emptyMessageKey: "export_empty",
+                emptyFallback: "No notes available for export"
+            })
+        } catch (error) {
+            console.error("Backup failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async exportActiveFolderNotes(folderId = null) {
+        const { activeFolderId, folders } = StateStore.read()
+        const targetFolderId = folderId || activeFolderId
+        if (!targetFolderId) return null
+        const folder = folders.find(item => item.id === targetFolderId)
+        try {
+            return await this.exportNotesBundle(this.getExportableNotes(note => note.folderId === targetFolderId), {
+                scope: "folder",
+                folder,
+                folders: folder ? [folder] : [],
+                emptyMessageKey: "export_folder_empty",
+                emptyFallback: "This folder has no notes to export"
+            })
+        } catch (error) {
+            console.error("Export failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    async backupActiveFolderToDrive(folderId = null) {
+        const { activeFolderId, folders } = StateStore.read()
+        const targetFolderId = folderId || activeFolderId
+        if (!targetFolderId) return null
+        const folder = folders.find(item => item.id === targetFolderId)
+        try {
+            return await this.backupNotesBundleToDrive(this.getExportableNotes(note => note.folderId === targetFolderId), {
+                scope: "folder",
+                folder,
+                folders: folder ? [folder] : [],
+                emptyMessageKey: "export_folder_empty",
+                emptyFallback: "This folder has no notes to export"
+            })
+        } catch (error) {
+            console.error("Backup failed", error)
+            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            return null
+        }
+    },
+
+    exportFolderBySelection() {
+        this.selectFolderForExport(folder => {
+            this.exportActiveFolderNotes(folder.id)
+        })
+    },
+
+    backupFolderBySelection() {
+        this.selectFolderForExport(folder => {
+            this.backupActiveFolderToDrive(folder.id)
+        })
+    },
+
+    openNoteActionsFlow(noteId, options = {}) {
+        const normalizedNoteId = String(noteId || "")
+        if (!normalizedNoteId) return false
+        const opener = typeof window.openNoteActions === "function" ? window.openNoteActions : null
+        if (!opener) return false
+        opener(normalizedNoteId, options)
+        const modalElement = document.getElementById("note-actions-modal")
+        const contentElement = document.getElementById("note-actions-content")
+        const isVisible = !!modalElement && modalElement.classList.contains("active") && !modalElement.classList.contains("hidden") && document.body.contains(modalElement)
+        const hasContent = !!contentElement && String(contentElement.innerHTML || "").trim().length > 0
+        const opened = isVisible && hasContent
+        if (!opened && options.showError !== false) {
+            this.showToast(this.getText("note_actions_unavailable", "Unable to open note actions"))
+        }
+        return opened
+    },
+
     canShowPrimaryAction(view = StateStore.read().view) {
-        return new Set(["notes", "folder", "folders"]).has(String(view || "notes"))
+        return new Set(["notes", "folder", "folders", "shared_access", "shared_workspace"]).has(String(view || "notes"))
     },
 
     primaryAction() {
@@ -162,7 +821,51 @@ Object.assign(UI, {
             this.createFolder()
             return
         }
+        if (currentView === "shared_access") {
+            this.createSharedWorkspace()
+            return
+        }
+        if (currentView === "shared_workspace") {
+            const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+            if (!workspace || !WorkspaceAccessService?.canEditWorkspace?.(workspace)) {
+                this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                return
+            }
+        }
         window.SmartNotesEditor?.open()
+    },
+
+
+    createSharedWorkspace() {
+        this.showPrompt(this.getText("shared_workspace_create", "Новая совместная папка"), this.getText("shared_workspace_placeholder", "Название папки"), async (name, description) => {
+            const normalizedName = String(name || "").trim()
+            const normalizedDescription = String(description || "").trim()
+            if (!normalizedName) {
+                this.showToast(this.getText("folder_empty", "Введите название папки"))
+                return
+            }
+            if (normalizedName.length > 50 || normalizedDescription.length > 300) {
+                this.showToast(this.getText("shared_workspace_limits_error", "Проверьте длину названия и описания"))
+                return
+            }
+            const workspace = await WorkspaceAccessService?.createWorkspace?.(normalizedName, normalizedDescription)
+            if (!workspace) {
+                this.showToast(this.getText("save_failed", "Save failed"))
+                return
+            }
+            this.showToast(this.getText("shared_workspace_created", "Совместная папка создана"))
+        }, "", {
+            maxLength: 50,
+            showCounter: true,
+            secondaryField: {
+                value: "",
+                placeholder: this.getText("shared_workspace_description_placeholder", "Описание папки"),
+                ariaLabel: this.getText("shared_workspace_description", "Описание"),
+                showCounter: true,
+                softLimit: 300,
+                maxLength: 300
+            }
+        })
     },
 
     updateFolderLimitControls() {
@@ -269,28 +972,61 @@ Object.assign(UI, {
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
             hidden_folders: dict.hidden_folders || "Hidden folders",
-            admin_tools: dict.admin_tools || "Admin tools"
+            admin_tools: dict.admin_tools || "Admin tools",
+            shared_access: dict.shared_access || "Совместный доступ",
+            shared_workspace: dict.shared_workspace || "Совместная папка"
         }
-        const { view, activeFolderId, folders } = StateStore.read()
+        const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
         let title = titles[view] || "SmartNotes"
         if (view === "folder" && activeFolderId) {
             const folder = folders.find(f => f.id === activeFolderId)
             if (folder) title = folder.name
         }
+        if (view === "shared_workspace" && activeSharedWorkspaceId) {
+            const workspace = (sharedWorkspaces || []).find(item => item.id === activeSharedWorkspaceId)
+            if (workspace) title = workspace.name
+        }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
         this.updateActiveFolderMenu()
+        this.updateActiveWorkspaceMenu()
+        this.updateTrashActionVisibility()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
+    },
+
+    getTrashSummary() {
+        const state = StateStore.read()
+        const trashedNotes = Array.isArray(state.notes) ? state.notes.filter(note => !!note?.trashedAt) : []
+        const trashedFolders = Array.isArray(state.folders) ? state.folders.filter(folder => !!folder?.trashedAt) : []
+        return {
+            notes: trashedNotes,
+            folders: trashedFolders,
+            totalCount: trashedNotes.length + trashedFolders.length
+        }
+    },
+
+    updateTrashActionVisibility() {
+        const clearTrashButton = this.els.clearTrashButton
+        if (!clearTrashButton) return
+        const isTrashView = StateStore.read().view === "trash"
+        const trashSummary = this.getTrashSummary()
+        clearTrashButton.classList.toggle("hidden", !isTrashView)
+        clearTrashButton.disabled = trashSummary.totalCount === 0
+        clearTrashButton.title = this.getText("clear_trash", "Clear trash")
+        clearTrashButton.setAttribute("aria-label", this.getText("clear_trash", "Clear trash"))
     },
 
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
         const view = StateStore.read().view
-        const label = view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
+        const label = view === "folders"
+            ? this.getText("create_folder", "Create folder")
+            : (view === "shared_access" ? this.getText("shared_workspace_create", "Новая совместная папка") : this.getText("create_note", "Create note"))
         this.els.fab.setAttribute("aria-label", label)
         this.els.fab.classList.toggle("hidden", !this.canShowPrimaryAction(view))
         this.updateActiveFolderMenu()
+        this.updateActiveWorkspaceMenu()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
     },
@@ -315,6 +1051,10 @@ Object.assign(UI, {
             return true
         }
         const currentView = StateStore.read().view
+        if (currentView === "shared_workspace") {
+            switchView("shared_access")
+            return true
+        }
         if (currentView !== "notes") {
             switchView("notes")
             return true
@@ -365,6 +1105,128 @@ Object.assign(UI, {
         })
         await batch.commit()
     },
+
+    toggleActiveWorkspaceMenu(force) {
+        const menu = this.els.activeWorkspaceMenu
+        if (!menu) return
+        menu.classList.toggle("active", typeof force === "boolean" ? force : !menu.classList.contains("active"))
+    },
+
+
+    async openWorkspaceMembersModal() {
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+        if (!workspace) return
+        const root = document.getElementById("workspace-members-content")
+        if (!root) return
+        const canManage = WorkspaceAccessService?.canManageWorkspace?.(workspace)
+        const members = WorkspaceAccessService?.getWorkspaceMembers?.(workspace.id) || []
+        if (!members.length) {
+            const empty = document.createElement("div")
+            empty.className = "folder-meta"
+            window.DomSecurity.setText(empty, this.getText("shared_members_empty", "Пока нет участников"))
+            root.replaceChildren(empty)
+            this.openModal("workspace-members-modal")
+            return
+        }
+        const fragment = document.createDocumentFragment()
+        members.forEach(member => {
+            const row = document.createElement("div")
+            row.className = "shared-member-row"
+            const uidLabel = document.createElement("div")
+            uidLabel.className = "shared-member-uid"
+            window.DomSecurity.setText(uidLabel, member.uid)
+
+            const nameGroup = document.createElement("div")
+            nameGroup.className = "shared-member-field"
+            const nameLabel = document.createElement("div")
+            nameLabel.className = "shared-member-field-label"
+            window.DomSecurity.setText(nameLabel, this.getText("display_name", "Отображаемое имя"))
+            const nameInput = document.createElement("input")
+            nameInput.type = "text"
+            nameInput.className = "input-area"
+            nameInput.maxLength = 50
+            nameInput.value = member.displayName || member.uid
+            nameInput.disabled = !canManage && member.uid !== StateStore.read().user?.uid
+            nameGroup.append(nameLabel, nameInput)
+
+            const roleGroup = document.createElement("div")
+            roleGroup.className = "shared-member-field"
+            const roleLabel = document.createElement("div")
+            roleLabel.className = "shared-member-field-label"
+            window.DomSecurity.setText(roleLabel, this.getText("workspace_access_level", "Права"))
+            const roleSelect = document.createElement("select")
+            roleSelect.className = "input-area"
+            const options = [
+                { value: "viewer", label: this.getText("role_viewer", "Читатель") },
+                { value: "editor", label: this.getText("role_editor", "Редактор") },
+                { value: "owner", label: this.getText("role_owner", "Полный доступ") }
+            ]
+            options.forEach(optionData => {
+                const option = document.createElement("option")
+                option.value = optionData.value
+                option.textContent = optionData.label
+                roleSelect.append(option)
+            })
+            roleSelect.value = member.role
+            roleSelect.disabled = !canManage || member.uid === workspace.ownerUid
+            roleGroup.append(roleLabel, roleSelect)
+
+            const saveButton = document.createElement("button")
+            saveButton.type = "button"
+            saveButton.className = "btn-secondary"
+            window.DomSecurity.setText(saveButton, this.getText("save", "Сохранить"))
+            saveButton.onclick = async () => {
+                const nextName = String(nameInput.value || "").trim()
+                if (nextName && nextName.length <= 50) {
+                    await WorkspaceAccessService.updateMemberDisplayName(workspace.id, member.uid, nextName)
+                }
+                if (canManage && member.uid !== workspace.ownerUid) {
+                    await WorkspaceAccessService.updateMemberRole(workspace.id, member.uid, roleSelect.value)
+                }
+                this.showToast(this.getText("saved", "Сохранено"))
+            }
+
+            const removeButton = document.createElement("button")
+            removeButton.type = "button"
+            removeButton.className = "btn-danger"
+            window.DomSecurity.setText(removeButton, this.getText("remove_member", "Удалить"))
+            removeButton.disabled = !canManage || member.uid === workspace.ownerUid
+            removeButton.onclick = async () => {
+                const ok = await WorkspaceAccessService.removeMember(workspace.id, member.uid)
+                if (!ok) return
+                row.remove()
+                this.showToast(this.getText("saved", "Сохранено"))
+            }
+
+            row.append(uidLabel, nameGroup, roleGroup, saveButton, removeButton)
+            fragment.append(row)
+        })
+        root.replaceChildren(fragment)
+        this.openModal("workspace-members-modal")
+    },
+
+        renameActiveWorkspace() {
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+        if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
+        this.showPrompt(this.getText("rename_workspace", "Переименовать папку"), this.getText("shared_workspace_placeholder", "Название папки"), async name => {
+            const normalizedName = String(name || "").trim()
+            if (!normalizedName || normalizedName.length > 50) return
+            const ok = await WorkspaceAccessService.updateWorkspace(workspace.id, { name: normalizedName })
+            this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+        }, String(workspace.name || ""), { maxLength: 50, showCounter: true })
+    },
+
+    editActiveWorkspaceDescription() {
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+        if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
+        this.showPrompt(this.getText("edit_workspace_description", "Изменить описание"), this.getText("shared_workspace_description_placeholder", "Описание папки"), async value => {
+            const normalized = String(value || "").trim()
+            if (normalized.length > 300) return
+            const ok = await WorkspaceAccessService.updateWorkspace(workspace.id, { description: normalized })
+            this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+        }, String(workspace.description || ""), { maxLength: 300, showCounter: true })
+    },
+
     toggleActiveFolderMenu(force) {
         const menu = this.els.activeFolderMenu
         if (!menu) return
@@ -526,12 +1388,31 @@ Object.assign(UI, {
         }
     },
 
+
+    updateActiveWorkspaceMenu() {
+        const wrapper = this.els.activeWorkspaceMenuWrapper
+        if (!wrapper) return
+        const state = StateStore.read()
+        const isVisible = state.view === "shared_workspace" && !!state.activeSharedWorkspaceId
+        wrapper.classList.toggle("hidden", !isVisible)
+        if (!isVisible) {
+            this.toggleActiveWorkspaceMenu(false)
+            return
+        }
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(state.activeSharedWorkspaceId)
+        const canManage = !!workspace && WorkspaceAccessService?.canManageWorkspace?.(workspace)
+        if (this.els.workspaceCopyLinkButton) this.els.workspaceCopyLinkButton.classList.toggle("hidden", !canManage)
+        if (this.els.workspaceAddUserButton) this.els.workspaceAddUserButton.classList.toggle("hidden", !canManage)
+        if (this.els.workspaceRenameButton) this.els.workspaceRenameButton.classList.toggle("hidden", !canManage)
+        if (this.els.workspaceEditDescriptionButton) this.els.workspaceEditDescriptionButton.classList.toggle("hidden", !canManage)
+    },
+
     updateActiveFolderMenu() {
         const wrapper = this.els.activeFolderMenuWrapper
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
         if (!wrapper) return
-        const { view, activeFolderId, folders } = StateStore.read()
+        const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {

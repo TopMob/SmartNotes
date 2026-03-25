@@ -6,7 +6,7 @@ Object.assign(UI, {
             const buttonFolderId = buttonElement.dataset.folderId
             let isActive = false
             if (buttonView) {
-                isActive = stateSnapshot.view === buttonView
+                isActive = stateSnapshot.view === buttonView || (buttonView === "shared_access" && stateSnapshot.view === "shared_workspace")
             } else if (buttonFolderId) {
                 isActive = stateSnapshot.view === "folder" && stateSnapshot.activeFolderId === buttonFolderId
             }
@@ -72,6 +72,7 @@ Object.assign(UI, {
         root.replaceChildren(fragment)
         this.updateNavigationActiveState()
         this.renderFilterMenu()
+        this.updateTrashActionVisibility()
         this.updateFolderLimitControls()
         this.updateAdminToolsNavigationVisibility()
     },
@@ -187,6 +188,7 @@ Object.assign(UI, {
         const hasFolders = trashedFolders.length > 0
         this.els.empty.classList.toggle("hidden", hasNotes || hasFolders)
         this.els.grid.classList.remove("folder-grid")
+        this.updateTrashActionVisibility()
         if (!hasFolders) {
             NotesRenderer.render(trashedNotes)
             return
