@@ -112,6 +112,13 @@ const NotesQueryService = (() => {
         }
 
         if (view === "shared_access") return []
+        if (view === "notes") {
+            filteredNotes = filteredNotes.filter(note => {
+                if (note?.workspaceId) return false
+                if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) return false
+                return true
+            })
+        }
         if (view === "reminders") filteredNotes = filteredNotes.filter(note => isReminderNote(note) && !note.isArchived && !note.trashedAt)
         if (view === "trash") filteredNotes = filteredNotes.filter(note => !!note.trashedAt)
         else filteredNotes = filteredNotes.filter(note => !note.trashedAt)

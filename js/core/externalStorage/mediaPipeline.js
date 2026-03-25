@@ -52,7 +52,7 @@ export const createExternalMediaPipeline = ({ uploadDataUrl, sanitizeFileNamePar
             if (!isInlineMediaSource(source)) continue
             const fileNameBase = `${options.fileNameBase || 'attachment'}_${index + 1}`
             try {
-                const publicUrl = await uploadDataUrl(source, { fileNameBase, noteId: options.noteId })
+                const publicUrl = await uploadDataUrl(source, { fileNameBase })
                 element.setAttribute('src', publicUrl)
                 if (element.tagName.toLowerCase() === 'audio' && element instanceof HTMLMediaElement) {
                     element.src = publicUrl
@@ -95,8 +95,7 @@ export const createExternalMediaPipeline = ({ uploadDataUrl, sanitizeFileNamePar
             if (!isInlineMediaSource(source)) continue
             try {
                 drawings[index] = await uploadDataUrl(source, {
-                    fileNameBase: `${options.fileNameBase || 'drawing'}_${index + 1}`,
-                    noteId: options.noteId
+                    fileNameBase: `${options.fileNameBase || 'drawing'}_${index + 1}`
                 })
                 changed = true
             } catch (error) {
@@ -118,13 +117,11 @@ export const createExternalMediaPipeline = ({ uploadDataUrl, sanitizeFileNamePar
         const normalizedNote = note && typeof note === 'object' ? { ...note } : {}
         const htmlResult = await externalizeHtmlMedia(normalizedNote.content || '', {
             fileNameBase: options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || 'note_media', 'note_media'),
-            mode: options.mode,
-            noteId: options.noteId || normalizedNote.id || ''
+            mode: options.mode
         })
         const drawingsResult = await externalizePageDrawings(normalizedNote.pageDrawings || [], {
             fileNameBase: `${options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || 'note_drawing', 'note_drawing')}_drawing`,
-            mode: options.mode,
-            noteId: options.noteId || normalizedNote.id || ''
+            mode: options.mode
         })
         const nextNote = {
             ...normalizedNote,

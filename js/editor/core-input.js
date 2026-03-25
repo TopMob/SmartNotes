@@ -60,7 +60,7 @@ export const createInputHandlers = (context) => {
 
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "External storage is not available, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
+        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
         return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
     }
 
