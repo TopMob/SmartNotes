@@ -44,24 +44,66 @@ service cloud.firestore {
         && request.resource.data.access.roles[ownerId] == 'owner';
     }
 
-    function isWorkspaceMember(workspaceData) {
+    function workspaceDocument(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)).data;
+    }
+
+    function workspaceExists(workspaceId) {
+      return exists(/databases/$(database)/documents/workspaces/$(workspaceId));
+    }
+
+    function isWorkspaceOwner(workspaceId) {
       return isAuthenticated()
-        && workspaceData.members is map
-        && request.auth.uid in workspaceData.members;
+        && workspaceExists(workspaceId)
+        && workspaceDocument(workspaceId).ownerUid == request.auth.uid;
     }
 
-    function workspaceRole(workspaceData) {
-      return workspaceData.members[request.auth.uid];
+    function hasWorkspaceEntry(workspaceId) {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/sharedWorkspaces/$(workspaceId));
     }
 
-    function canEditWorkspace(workspaceData) {
-      return isWorkspaceMember(workspaceData)
-        && workspaceRole(workspaceData) in ['owner', 'editor'];
+    function workspaceEntry(workspaceId) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)/sharedWorkspaces/$(workspaceId)).data;
     }
 
-    function canManageWorkspace(workspaceData) {
-      return isWorkspaceMember(workspaceData)
-        && workspaceRole(workspaceData) == 'owner';
+    function workspaceEntryRole(workspaceId) {
+      return workspaceEntry(workspaceId).role;
+    }
+
+    function canReadWorkspace(workspaceId) {
+      return hasWorkspaceEntry(workspaceId);
+    }
+
+    function canEditWorkspace(workspaceId) {
+      return hasWorkspaceEntry(workspaceId)
+        && workspaceEntryRole(workspaceId) in ['owner', 'editor'];
+    }
+
+    function canManageWorkspace(workspaceId) {
+      return isWorkspaceOwner(workspaceId)
+        || (
+          hasWorkspaceEntry(workspaceId)
+          && workspaceEntryRole(workspaceId) == 'owner'
+        );
+    }
+
+    function isValidThemePreferencePayload() {
+      return request.resource.data.settings is map
+        && request.resource.data.settings.preset is string
+        && request.resource.data.settings.p is string
+        && request.resource.data.settings.bg is string
+        && request.resource.data.settings.t is string
+        && request.resource.data.settings.mainBackgroundImage is string
+        && request.resource.data.settings.mainBackgroundImage.size() <= 2048
+        && request.resource.data.settings.sidebarBackgroundImage is string
+        && request.resource.data.settings.sidebarBackgroundImage.size() <= 2048
+        && request.resource.data.settings.uiOpacity is number
+        && request.resource.data.settings.cardsOpacity is number
+        && (
+          !('customPresets' in request.resource.data)
+          || request.resource.data.customPresets is list
+        );
     }
 
     match /users/{userId} {
@@ -90,21 +132,6 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
-      function isValidThemePreferencePayload() {
-        return request.resource.data.settings is map
-          && request.resource.data.settings.preset is string
-          && request.resource.data.settings.p is string
-          && request.resource.data.settings.bg is string
-          && request.resource.data.settings.t is string
-          && request.resource.data.settings.mainBackgroundImage is string
-          && request.resource.data.settings.mainBackgroundImage.size() <= 2048
-          && request.resource.data.settings.sidebarBackgroundImage is string
-          && request.resource.data.settings.sidebarBackgroundImage.size() <= 2048
-          && request.resource.data.settings.uiOpacity is number
-          && request.resource.data.settings.cardsOpacity is number
-          && (!('customPresets' in request.resource.data) || request.resource.data.customPresets is list);
-      }
-
       match /preferences/{preferenceId} {
         allow read: if isOwner(userId);
         allow create, update: if isOwner(userId)
@@ -118,8 +145,22 @@ service cloud.firestore {
       }
 
       match /sharedWorkspaces/{workspaceId} {
-        allow read, create, delete: if isOwner(userId);
-        allow update: if false;
+        allow read: if isOwner(userId);
+
+        allow create, update: if (
+            isOwner(userId)
+            && request.resource.data.workspaceId == workspaceId
+            && request.resource.data.ownerUid is string
+            && request.resource.data.role in ['owner', 'editor', 'viewer']
+          )
+          || (
+            isWorkspaceOwner(workspaceId)
+            && request.resource.data.workspaceId == workspaceId
+            && request.resource.data.ownerUid == request.auth.uid
+            && request.resource.data.role in ['owner', 'editor', 'viewer']
+          );
+
+        allow delete: if isOwner(userId) || isWorkspaceOwner(workspaceId);
       }
     }
 
@@ -136,7 +177,6 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid;
     }
 
-
     match /workspaceShares/{token} {
       allow create: if isAuthenticated()
         && request.resource.data.ownerUid == request.auth.uid
@@ -151,25 +191,25 @@ service cloud.firestore {
     }
 
     match /workspaces/{workspaceId} {
-      allow read: if isWorkspaceMember(resource.data);
+      allow read: if canReadWorkspace(workspaceId) || isWorkspaceOwner(workspaceId);
 
       allow create: if isAuthenticated()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner';
 
-      allow update: if canManageWorkspace(resource.data);
-      allow delete: if canManageWorkspace(resource.data);
+      allow update: if canManageWorkspace(workspaceId);
+      allow delete: if canManageWorkspace(workspaceId);
 
       match /notes/{noteId} {
-        allow read: if isWorkspaceMember(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data);
+        allow read: if canReadWorkspace(workspaceId) || isWorkspaceOwner(workspaceId);
 
-        allow create: if canEditWorkspace(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data)
+        allow create: if canEditWorkspace(workspaceId)
           && request.resource.data.workspaceId == workspaceId;
 
-        allow update: if canEditWorkspace(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data)
+        allow update: if canEditWorkspace(workspaceId)
           && request.resource.data.workspaceId == workspaceId;
 
-        allow delete: if canEditWorkspace(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data);
+        allow delete: if canEditWorkspace(workspaceId);
       }
     }
 

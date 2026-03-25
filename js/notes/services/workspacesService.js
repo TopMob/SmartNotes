@@ -24,7 +24,8 @@ const WorkspacesService = (() => {
     function publishWorkspaces() {
         const userUid = state.user?.uid || ""
         const items = [...state.workspaces.values()].map(workspace => {
-            const role = workspace.ownerUid === userUid ? "owner" : (workspace.members?.[userUid] || "viewer")
+            const entry = state.workspaceEntries.get(workspace.id) || {}
+            const role = workspace.ownerUid === userUid ? "owner" : (entry.role || workspace.members?.[userUid] || "viewer")
             return { ...workspace, role }
         }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), StateStore.read().config.lang || "ru"))
         StateStore.update("sharedWorkspaces", items)
@@ -46,17 +47,11 @@ const WorkspacesService = (() => {
             }
             const data = snapshot.data() || {}
             const members = data.members && typeof data.members === "object" ? data.members : {}
-            const userUid = state.user?.uid || ""
-            if (!members[userUid]) {
-                cleanupWorkspace(workspaceId)
-                publishWorkspaces()
-                publishWorkspaceNotes()
-                return
-            }
             state.workspaces.set(workspaceId, {
                 id: workspaceId,
                 name: String(data.name || entry.workspaceName || "Совместная папка"),
                 ownerUid: String(data.ownerUid || entry.ownerUid || ""),
+                role: entry.role || "viewer",
                 members,
                 createdAt: data.createdAt || null,
                 updatedAt: data.updatedAt || null
@@ -66,7 +61,7 @@ const WorkspacesService = (() => {
         state.workspaceUnsubscribers.set(workspaceId, unsubscribeWorkspace)
 
         const unsubscribeWorkspaceNotes = WorkspacesRepository.subscribeWorkspaceNotes(workspaceId, snapshot => {
-            const workspace = state.workspaces.get(workspaceId) || { id: workspaceId, ownerUid: entry.ownerUid || "", members: {} }
+            const workspace = state.workspaces.get(workspaceId) || { id: workspaceId, ownerUid: entry.ownerUid || "", members: {}, role: entry.role || "viewer" }
             const notes = snapshot.docs.map(documentEntry => {
                 const data = documentEntry.data() || {}
                 const normalized = NoteIO.normalizeNote({ id: documentEntry.id, ...data })

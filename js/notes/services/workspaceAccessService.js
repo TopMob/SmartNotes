@@ -43,6 +43,7 @@ const WorkspaceAccessService = (() => {
         const userUid = StateStore.read().user?.uid || ""
         if (!workspace || !userUid) return "viewer"
         if (workspace.ownerUid === userUid) return "owner"
+        if (workspace.role) return normalizeRole(workspace.role)
         return normalizeRole(workspace.members?.[userUid])
     }
 
@@ -154,15 +155,11 @@ const WorkspaceAccessService = (() => {
         if (!workspaceSnapshot.exists) return null
         const workspace = workspaceSnapshot.data() || {}
         const role = normalizeRole(shareData.role)
-        await workspaceReference.update({
-            [`members.${user.uid}`]: role,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        })
         await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(workspaceId).set({
             workspaceId,
             role,
             workspaceName: String(workspace.name || ""),
-            ownerUid: workspace.ownerUid,
+            ownerUid: String(workspace.ownerUid || shareData.ownerUid || ""),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true })
         return { workspaceId, role }
