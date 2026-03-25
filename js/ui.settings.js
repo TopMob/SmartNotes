@@ -1,7 +1,19 @@
 Object.assign(UI, {
+    getNextModalLayerBase() {
+        const activeModals = Array.from(document.querySelectorAll(".modal-overlay.active"))
+        const currentMax = activeModals.reduce((max, modalElement) => {
+            const inlineZ = Number(modalElement.style.zIndex || 0)
+            const computedZ = Number(window.getComputedStyle(modalElement).zIndex || 0)
+            const value = Number.isFinite(inlineZ) && inlineZ > 0 ? inlineZ : computedZ
+            return value > max ? value : max
+        }, 0)
+        return currentMax > 0 ? currentMax + 2 : 3002
+    },
+
     openModal(id) {
         const el = document.getElementById(id)
         if (!el) return false
+        el.style.zIndex = String(this.getNextModalLayerBase())
         el.classList.remove("hidden")
         el.classList.add("active")
         el.setAttribute("aria-hidden", "false")
@@ -20,6 +32,7 @@ Object.assign(UI, {
         if (!el) return
         el.classList.remove("active")
         el.setAttribute("aria-hidden", "true")
+        el.style.removeProperty("z-index")
         el.dispatchEvent(new CustomEvent("smartnotes:modal-closed", { detail: { id } }))
         if (id === "settings-modal") {
             const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)

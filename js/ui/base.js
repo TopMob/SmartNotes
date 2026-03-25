@@ -74,30 +74,34 @@ const UI = {
     },
 
     isAuthAutocompleteAllowed(element) {
-        return !!element?.closest?.("#login-screen")
+        return false
     },
 
     applyInputAutocompletePolicy(root = document) {
         const scope = root && typeof root.querySelectorAll === "function" ? root : document
         scope.querySelectorAll("input, textarea").forEach(element => {
-            if (this.isAuthAutocompleteAllowed(element)) return
             const tagName = element.tagName.toLowerCase()
             const inputType = String(element.getAttribute("type") || "text").toLowerCase()
             if (inputType === "hidden") return
             element.setAttribute("data-lpignore", "true")
             element.setAttribute("data-1p-ignore", "true")
+            element.setAttribute("data-form-type", "other")
+            element.setAttribute("autocorrect", "off")
             element.setAttribute("autocapitalize", "off")
+            element.setAttribute("spellcheck", "false")
             if (tagName === "textarea") {
                 element.setAttribute("autocomplete", "off")
+                element.setAttribute("name", "field_no_autofill")
                 return
             }
             if (inputType === "password") {
-                element.setAttribute("autocomplete", "one-time-code")
+                element.setAttribute("autocomplete", "new-password")
                 element.setAttribute("inputmode", "text")
                 return
             }
             if (!["checkbox", "radio", "range", "file", "button", "submit", "color"].includes(inputType)) {
                 element.setAttribute("autocomplete", "off")
+                element.setAttribute("name", "field_no_autofill")
             }
         })
     },
