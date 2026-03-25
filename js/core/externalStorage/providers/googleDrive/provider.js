@@ -59,9 +59,42 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         return 'bin'
     }
 
-    const normalizePublicUrl = (file) => {
+    const extractDriveFileId = (value) => {
+        const source = String(value || '').trim()
+        if (!source) return ''
+        const idFromParam = source.match(/[?&]id=([^&#]+)/i)?.[1]
+        if (idFromParam) return decodeURIComponent(idFromParam)
+        const idFromFilePath = source.match(/\/file\/d\/([^/]+)/i)?.[1]
+        if (idFromFilePath) return decodeURIComponent(idFromFilePath)
+        return ''
+    }
+
+    const toDriveDirectImageUrl = (value) => {
+        const fileId = extractDriveFileId(value)
+        if (!fileId) return ''
+        return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`
+    }
+
+    const isImageMimeType = (mimeType) => String(mimeType || '').toLowerCase().startsWith('image/')
+
+    const normalizePublicUrl = (file, options = {}) => {
         if (typeof file === 'string') return file
-        return String(file?.url || file?.publicUrl || file?.webContentLink || '').trim()
+        const mimeType = String(options.mimeType || file?.mimeType || '')
+        const imageMode = isImageMimeType(mimeType)
+        const imageUrl = String(file?.imageUrl || '').trim()
+        const publicUrl = String(file?.publicUrl || '').trim()
+        const webContentLink = String(file?.webContentLink || '').trim()
+        const genericUrl = String(file?.url || '').trim()
+        const webViewLink = String(file?.webViewLink || '').trim()
+        if (imageMode) {
+            return imageUrl
+                || publicUrl
+                || webContentLink
+                || toDriveDirectImageUrl(genericUrl)
+                || toDriveDirectImageUrl(webViewLink)
+                || genericUrl
+        }
+        return genericUrl || publicUrl || webContentLink || webViewLink
     }
 
     const getCurrentUser = () => state.currentUser || window.auth?.currentUser || (typeof StateStore !== 'undefined' && typeof StateStore.read === 'function' ? StateStore.read().user : null) || null
@@ -293,7 +326,13 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                     throw uploadError
                 }
                 const result = parsedResponse || {}
-                const publicUrl = normalizePublicUrl(result)
+                const publicUrl = normalizePublicUrl(result, { mimeType })
+                console.info('[GoogleDriveProvider] upload selected media url', {
+                    mimeType,
+                    imageMode: isImageMimeType(mimeType),
+                    selectedUrl: publicUrl,
+                    payload: result
+                })
                 if (!/^https?:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
                 state.linked = true
                 state.connected = true
