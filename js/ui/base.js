@@ -66,6 +66,13 @@ const UI = {
         return dict[key] || fallback || key
     },
 
+    resolveNoteById(noteId) {
+        const targetId = String(noteId || "")
+        if (!targetId) return null
+        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        return notes.find(note => String(note?.id || "") === targetId) || null
+    },
+
     isAuthAutocompleteAllowed(element) {
         return !!element?.closest?.("#login-screen")
     },
