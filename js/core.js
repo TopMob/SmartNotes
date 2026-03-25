@@ -7,7 +7,7 @@ import { bootstrapCore } from "./core/bootstrap.js"
 import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
 import { validateFolderName, validateFolderDescription, canAddFolder, canAddCustomTheme, canAssignToFolder, FOLDER_DESCRIPTION_SOFT_LIMIT, FOLDER_DESCRIPTION_HARD_LIMIT } from "./core/validators.js"
 import { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload } from "./core/noteHelpers.js"
-import { GoogleDriveMediaService } from "./core/googleDriveMedia.js"
+import { VercelBlobMediaService } from "./core/vercelBlobMedia.js"
 
 const core = window.__smartnotesCore || (() => {
     const context = { auth: null, db: null, Auth: null }
@@ -44,8 +44,9 @@ window.Validators = {
     FOLDER_DESCRIPTION_HARD_LIMIT
 }
 window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
-window.GoogleDriveMediaService = GoogleDriveMediaService
-window.ExternalMediaService = GoogleDriveMediaService
+window.GoogleDriveMediaService = VercelBlobMediaService
+window.VercelBlobMediaService = VercelBlobMediaService
+window.ExternalMediaService = VercelBlobMediaService
 
 const firebaseRuntimeSources = [
     {

@@ -53,11 +53,11 @@ export const resolveUserFacingError = (error, options = {}) => {
     const code = normalizeExternalMediaErrorCode(error)
     if (code === ERROR_CODES.UNLINKED) {
         return options.attachmentOnly
-            ? { code, messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" }
+            ? { code, messageKey: "external_attachment_unavailable", fallbackMessage: "External storage is not available, attachment unavailable" }
             : { code, messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" }
     }
     if (code === ERROR_CODES.OFFLINE || code === ERROR_CODES.UNAVAILABLE) {
-        return { code, messageKey: "external_storage_unavailable", fallbackMessage: "External disk is temporarily unavailable" }
+        return { code, messageKey: "external_storage_unavailable", fallbackMessage: "External storage is temporarily unavailable" }
     }
-    return { code, messageKey: "external_attachment_save_failed", fallbackMessage: "Unable to save attachment to external disk" }
+    return { code, messageKey: "external_attachment_save_failed", fallbackMessage: "Unable to save attachment to external storage" }
 }

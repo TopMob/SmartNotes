@@ -132,7 +132,7 @@ Object.assign(UI, {
                             </select>
                         </div>
                         <div class="field">
-                            <span class="field-label">${dict.settings_external_storage || "Google Drive"}</span>
+                            <span class="field-label">${dict.settings_external_storage || "External storage"}</span>
                             <div class="settings-toggle-item" style="padding:0; background:none; border:0; gap:12px; align-items:center;">
                                 <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
                                     <span id="settings-drive-status">${dict.drive_not_connected || "Not connected"}</span>
@@ -677,7 +677,7 @@ Object.assign(UI, {
                 const canConnect = (!driveStatus?.linked || (!!driveStatus?.linked && !driveStatus?.connected && !!driveStatus?.errorCode)) && !!mediaService?.connect
                 const canUnlink = !!driveStatus?.linked && !!mediaService?.unlink
                 if ((!canConnect && !canUnlink) || !driveStatus?.configured) {
-                    this.showToast(this.getText("external_storage_unavailable", "External disk is temporarily unavailable"))
+                    this.showToast(this.getText("external_storage_unavailable", "External storage is temporarily unavailable"))
                     this.syncSettingsUI()
                     return
                 }
@@ -685,18 +685,18 @@ Object.assign(UI, {
                 try {
                     if (driveStatus?.linked && !driveStatus?.connected && driveStatus?.errorCode) {
                         await mediaService.connect()
-                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
+                        this.showToast(this.getText("drive_connected", "External storage connected"))
                     } else if (driveStatus?.linked) {
                         await mediaService.unlink()
-                        this.showToast(this.getText("drive_disconnected", "Google Drive disconnected"))
+                        this.showToast(this.getText("drive_disconnected", "External storage disconnected"))
                     } else {
                         await mediaService.connect()
-                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
+                        this.showToast(this.getText("drive_connected", "External storage connected"))
                     }
                 } catch (error) {
                     const message = typeof this.resolveExternalMediaMessage === "function"
                         ? this.resolveExternalMediaMessage(error, { attachmentOnly: true })
-                        : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
+                        : this.getText("external_attachment_unavailable", "External storage is not available, attachment unavailable")
                     this.showToast(message)
                 } finally {
                     this.syncSettingsUI()
@@ -1150,17 +1150,17 @@ Object.assign(UI, {
         const driveStatus = mediaService?.getStatus?.() || null
         if (driveStatusElement) {
             if (!driveStatus?.configured) {
-                driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")
+                driveStatusElement.textContent = this.getText("external_storage_unavailable", "External storage is temporarily unavailable")
             } else if (driveStatus.pending) {
                 driveStatusElement.textContent = this.getText("drive_connecting", "Connecting...")
             } else if (driveStatus.connected) {
-                driveStatusElement.textContent = this.getText("drive_connected", "Google Drive connected")
+                driveStatusElement.textContent = this.getText("drive_connected", "External storage connected")
             } else if (driveStatus.linked) {
-                driveStatusElement.textContent = this.getText("drive_linked", "Google Drive linked")
+                driveStatusElement.textContent = this.getText("drive_linked", "External storage linked")
             } else if (driveStatus.errorCode) {
                 driveStatusElement.textContent = typeof this.resolveExternalMediaMessage === "function"
                     ? this.resolveExternalMediaMessage({ code: driveStatus.errorCode }, { attachmentOnly: true })
-                    : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
+                    : this.getText("external_attachment_unavailable", "External storage is not available, attachment unavailable")
             } else {
                 driveStatusElement.textContent = this.getText("drive_not_connected", "Not connected")
             }
