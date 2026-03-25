@@ -237,6 +237,50 @@ const WorkspaceAccessService = (() => {
         }))
     }
 
+
+    async function updateMemberRole(workspaceId, memberUid, role) {
+        const user = StateStore.read().user
+        const normalizedWorkspaceId = String(workspaceId || "").trim()
+        const normalizedMemberUid = String(memberUid || "").trim()
+        const normalizedRole = normalizeRole(role)
+        if (!db || !user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
+        const workspace = getWorkspaceById(normalizedWorkspaceId)
+        if (!workspace || !canManageWorkspace(workspace)) return false
+        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
+        if (!workspaceReference) return false
+        await workspaceReference.update({
+            [`members.${normalizedMemberUid}`]: normalizedRole,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        await db.collection("users").doc(normalizedMemberUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).set({
+            workspaceId: normalizedWorkspaceId,
+            role: normalizedRole,
+            workspaceName: String(workspace.name || ""),
+            ownerUid: workspace.ownerUid,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+        return true
+    }
+
+    async function removeMember(workspaceId, memberUid) {
+        const user = StateStore.read().user
+        const normalizedWorkspaceId = String(workspaceId || "").trim()
+        const normalizedMemberUid = String(memberUid || "").trim()
+        if (!db || !user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
+        const workspace = getWorkspaceById(normalizedWorkspaceId)
+        if (!workspace || !canManageWorkspace(workspace)) return false
+        if (normalizedMemberUid === workspace.ownerUid) return false
+        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
+        if (!workspaceReference) return false
+        await workspaceReference.update({
+            [`members.${normalizedMemberUid}`]: firebase.firestore.FieldValue.delete(),
+            [`memberNames.${normalizedMemberUid}`]: firebase.firestore.FieldValue.delete(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        await db.collection("users").doc(normalizedMemberUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).delete().catch(() => {})
+        return true
+    }
+
     async function updateMemberDisplayName(workspaceId, memberUid, displayName) {
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
@@ -271,6 +315,8 @@ const WorkspaceAccessService = (() => {
         getWorkspaceById,
         getWorkspaceMembers,
         updateMemberDisplayName,
+        updateMemberRole,
+        removeMember,
         updateWorkspace,
         getCurrentUserUid
     }

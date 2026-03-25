@@ -265,6 +265,10 @@
                                     <i class="material-icons-round" aria-hidden="true">delete</i>
                                     <span data-lang="delete_folder">Удалить папку</span>
                                 </button>
+                                <div class="row-left">
+                                    <input id="avatar-upload-input" type="file" accept="image/*" class="hidden">
+                                    <button type="button" class="btn-secondary" data-action="change-avatar" data-lang="change_avatar">Изменить фото</button>
+                                </div>
                             </div>
                         </div>
                         <div id="active-workspace-menu-wrapper" class="active-folder-menu-wrapper hidden">
@@ -292,6 +296,10 @@
                                     <i class="material-icons-round" aria-hidden="true">description</i>
                                     <span data-lang="edit_workspace_description">Изменить описание</span>
                                 </button>
+                                <div class="row-left">
+                                    <input id="avatar-upload-input" type="file" accept="image/*" class="hidden">
+                                    <button type="button" class="btn-secondary" data-action="change-avatar" data-lang="change_avatar">Изменить фото</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -325,6 +333,10 @@
                                     <span id="user-uid" class="user-uid-label">-</span>
                                     <i class="material-icons-round" aria-hidden="true">content_copy</i>
                                 </button>
+                                <div class="row-left">
+                                    <input id="avatar-upload-input" type="file" accept="image/*" class="hidden">
+                                    <button type="button" class="btn-secondary" data-action="change-avatar" data-lang="change_avatar">Изменить фото</button>
+                                </div>
                             </div>
                             <button type="button" class="dropdown-item" data-action="switch-account">
                                 <i class="material-icons-round" aria-hidden="true">switch_account</i>
@@ -811,5 +823,16 @@
 
 
     
+
+    <div id="workspace-members-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Участники совместной папки" data-lang-aria="shared_members">
+        <div class="modal-card" style="max-width:640px;">
+            <h3 data-lang="shared_members">Участники</h3>
+            <div id="workspace-members-content" class="scrollable" style="max-height:50vh;"></div>
+            <div class="row-left" style="margin-top:12px; justify-content:flex-end;">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="workspace-members-modal" data-lang="close">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

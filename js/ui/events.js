@@ -499,7 +499,7 @@ Object.assign(UI, {
                     break
                 }
                 const copied = await CollaborationService.copyToClipboard(uid)
-                this.showToast(copied ? this.getText("share_link_copied", "Ссылка скопирована") : uid)
+                this.showToast(copied ? this.getText("uid_copied", "UID скопирован") : uid)
                 break
             }
             case "join-shared-workspace-link": {
@@ -514,20 +514,10 @@ Object.assign(UI, {
             case "toggle-active-workspace-menu":
                 this.toggleActiveWorkspaceMenu()
                 break
-            case "view-workspace-members": {
-                const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
-                const members = WorkspaceAccessService?.getWorkspaceMembers?.(StateStore.read().activeSharedWorkspaceId) || []
-                const mapped = members.map(member => {
-                    const roleLabel = member.role === "owner"
-                        ? this.getText("shared_role_owner", "Владелец")
-                        : (member.role === "editor" ? this.getText("shared_role_editor", "Редактор") : this.getText("shared_role_viewer", "Читатель"))
-                    return `${member.displayName} (${member.uid}) · ${roleLabel}`
-                })
-                const title = workspace?.name || this.getText("shared_members", "Участники")
-                this.showToast(mapped.length ? `${title}: ${mapped.join(" | ")}` : this.getText("shared_members_empty", "Пока нет участников"))
+            case "view-workspace-members":
+                this.openWorkspaceMembersModal()
                 this.toggleActiveWorkspaceMenu(false)
                 break
-            }
             case "rename-workspace":
                 this.renameActiveWorkspace()
                 this.toggleActiveWorkspaceMenu(false)
@@ -673,6 +663,19 @@ Object.assign(UI, {
             case "toggle-user-menu":
                 this.toggleUserMenu()
                 break
+            case "change-avatar": {
+                const input = document.getElementById("avatar-upload-input")
+                if (!input) break
+                input.onchange = async () => {
+                    const file = input.files && input.files[0] ? input.files[0] : null
+                    if (!file) return
+                    const ok = await Auth.updateAvatarFromFile(file)
+                    this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+                    input.value = ""
+                }
+                input.click()
+                break
+            }
             case "switch-account":
                 this.confirm("account", () => Auth.switchAccount())
                 break

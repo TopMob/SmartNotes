@@ -307,6 +307,38 @@ export function createAuthManager({ auth }) {
             return true
         },
 
+
+        async updateAvatarFromFile(file) {
+            const user = auth?.currentUser
+            if (!user || !(file instanceof Blob)) return false
+            const readDataUrl = () => new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(String(reader.result || ""))
+                reader.onerror = () => reject(new Error("read_failed"))
+                reader.readAsDataURL(file)
+            })
+            const source = await readDataUrl()
+            const image = await new Promise((resolve, reject) => {
+                const img = new Image()
+                img.onload = () => resolve(img)
+                img.onerror = () => reject(new Error("image_invalid"))
+                img.src = source
+            })
+            const canvas = document.createElement("canvas")
+            const maxSize = 256
+            const ratio = Math.min(1, maxSize / Math.max(image.width, image.height))
+            canvas.width = Math.max(1, Math.round(image.width * ratio))
+            canvas.height = Math.max(1, Math.round(image.height * ratio))
+            const context = canvas.getContext("2d")
+            if (!context) return false
+            context.drawImage(image, 0, 0, canvas.width, canvas.height)
+            const avatarDataUrl = canvas.toDataURL("image/jpeg", 0.82)
+            await user.updateProfile({ photoURL: avatarDataUrl })
+            await DataPath.getUserRootReference(user)?.set({ avatarUrl: avatarDataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            this.applySignedInUI({ ...user, photoURL: avatarDataUrl })
+            return true
+        },
+
         clearState() {
             if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
             if (typeof UI !== "undefined") {

@@ -1204,7 +1204,80 @@ Object.assign(UI, {
         menu.classList.toggle("active", typeof force === "boolean" ? force : !menu.classList.contains("active"))
     },
 
-    renameActiveWorkspace() {
+
+    async openWorkspaceMembersModal() {
+        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+        if (!workspace) return
+        const root = document.getElementById("workspace-members-content")
+        if (!root) return
+        const canManage = WorkspaceAccessService?.canManageWorkspace?.(workspace)
+        const members = WorkspaceAccessService?.getWorkspaceMembers?.(workspace.id) || []
+        const fragment = document.createDocumentFragment()
+        members.forEach(member => {
+            const row = document.createElement("div")
+            row.className = "shared-member-row"
+            const uidLabel = document.createElement("div")
+            uidLabel.className = "shared-member-uid"
+            window.DomSecurity.setText(uidLabel, member.uid)
+
+            const nameInput = document.createElement("input")
+            nameInput.type = "text"
+            nameInput.className = "input-area"
+            nameInput.maxLength = 50
+            nameInput.value = member.displayName || member.uid
+            nameInput.disabled = !canManage && member.uid !== StateStore.read().user?.uid
+
+            const roleSelect = document.createElement("select")
+            roleSelect.className = "input-area"
+            const options = [
+                { value: "viewer", label: this.getText("role_viewer", "Читатель") },
+                { value: "editor", label: this.getText("role_editor", "Редактор") },
+                { value: "owner", label: this.getText("role_owner", "Полный доступ") }
+            ]
+            options.forEach(optionData => {
+                const option = document.createElement("option")
+                option.value = optionData.value
+                option.textContent = optionData.label
+                roleSelect.append(option)
+            })
+            roleSelect.value = member.role
+            roleSelect.disabled = !canManage || member.uid === workspace.ownerUid
+
+            const saveButton = document.createElement("button")
+            saveButton.type = "button"
+            saveButton.className = "btn-secondary"
+            window.DomSecurity.setText(saveButton, this.getText("save", "Сохранить"))
+            saveButton.onclick = async () => {
+                const nextName = String(nameInput.value || "").trim()
+                if (nextName && nextName.length <= 50) {
+                    await WorkspaceAccessService.updateMemberDisplayName(workspace.id, member.uid, nextName)
+                }
+                if (canManage && member.uid !== workspace.ownerUid) {
+                    await WorkspaceAccessService.updateMemberRole(workspace.id, member.uid, roleSelect.value)
+                }
+                this.showToast(this.getText("saved", "Сохранено"))
+            }
+
+            const removeButton = document.createElement("button")
+            removeButton.type = "button"
+            removeButton.className = "btn-danger"
+            window.DomSecurity.setText(removeButton, this.getText("remove_member", "Удалить"))
+            removeButton.disabled = !canManage || member.uid === workspace.ownerUid
+            removeButton.onclick = async () => {
+                const ok = await WorkspaceAccessService.removeMember(workspace.id, member.uid)
+                if (!ok) return
+                row.remove()
+                this.showToast(this.getText("saved", "Сохранено"))
+            }
+
+            row.append(uidLabel, nameInput, roleSelect, saveButton, removeButton)
+            fragment.append(row)
+        })
+        root.replaceChildren(fragment)
+        this.openModal("workspace-members-modal")
+    },
+
+        renameActiveWorkspace() {
         const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
         if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
         this.showPrompt(this.getText("rename_workspace", "Переименовать папку"), this.getText("shared_workspace_placeholder", "Название папки"), async name => {
