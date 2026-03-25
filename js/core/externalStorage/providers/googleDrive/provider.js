@@ -99,13 +99,6 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         }
     }
 
-    const ensureDriveConnected = async () => {
-        if (state.connected && state.linked) return true
-        if (!providerApi) return false
-        const status = await syncStatusFromBackend.call(providerApi)
-        return !!(status?.connected && status?.linked)
-    }
-
     const uploadDataUrl = async (dataUrl, options = {}) => {
         const source = String(dataUrl || '').trim()
         if (!source.startsWith('data:')) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
@@ -115,9 +108,8 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.pending = true
             state.errorCode = ''
             try {
+                if (state.checked && !state.connected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
                 const idToken = await requireIdToken()
-                const isConnected = await ensureDriveConnected()
-                if (!isConnected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
                 const mimeType = String(source.match(/^data:([^;,]+)/i)?.[1] || '')
                 const fileNameBase = sanitizeFileNamePart(options.fileNameBase || 'attachment', 'attachment')
                 const response = await fetch(uploadEndpoint, {
@@ -182,11 +174,6 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.pending = true
             state.errorCode = ''
             try {
-                const alreadyConnected = await ensureDriveConnected()
-                if (alreadyConnected) {
-                    state.pending = false
-                    return this.getStatus()
-                }
                 const idToken = await requireIdToken()
                 const response = await fetch(connectUrlEndpoint, {
                     method: 'POST',
