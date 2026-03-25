@@ -1039,6 +1039,11 @@ Object.assign(UI, {
         if (titleEl) titleEl.textContent = title
         input.value = value
         input.placeholder = placeholder
+        input.readOnly = true
+        input.setAttribute("autocomplete", "new-password")
+        input.setAttribute("autocorrect", "off")
+        input.setAttribute("autocapitalize", "off")
+        input.setAttribute("spellcheck", "false")
 
         if (secondaryField && secondaryInput && secondaryOptions) {
             secondaryField.classList.remove("hidden")
@@ -1046,11 +1051,17 @@ Object.assign(UI, {
             secondaryInput.placeholder = String(secondaryOptions.placeholder || "")
             secondaryInput.setAttribute("aria-label", String(secondaryOptions.ariaLabel || secondaryInput.getAttribute("aria-label") || ""))
             secondaryInput.maxLength = secondaryMaxLength > 0 ? secondaryMaxLength : 524288
+            secondaryInput.readOnly = true
+            secondaryInput.setAttribute("autocomplete", "new-password")
+            secondaryInput.setAttribute("autocorrect", "off")
+            secondaryInput.setAttribute("autocapitalize", "off")
+            secondaryInput.setAttribute("spellcheck", "false")
         } else if (secondaryField && secondaryInput) {
             secondaryField.classList.add("hidden")
             secondaryInput.value = ""
             secondaryInput.placeholder = ""
             secondaryInput.removeAttribute("maxLength")
+            secondaryInput.readOnly = false
         }
 
         let primaryCounter = modal.querySelector('[data-counter="primary"]')
@@ -1140,8 +1151,14 @@ Object.assign(UI, {
         }
         updatePromptState()
 
+        this.applyInputAutocompletePolicy(modal)
         modal.classList.add("active")
-        setTimeout(() => input.focus(), 80)
+        setTimeout(() => {
+            input.readOnly = false
+            input.focus()
+            input.select()
+            if (secondaryInput) secondaryInput.readOnly = false
+        }, 80)
     },
     showPasswordPrompt(title, placeholder) {
         const modal = document.getElementById("lock-modal")

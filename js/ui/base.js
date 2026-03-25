@@ -83,25 +83,32 @@ const UI = {
             const tagName = element.tagName.toLowerCase()
             const inputType = String(element.getAttribute("type") || "text").toLowerCase()
             if (inputType === "hidden") return
+            const closestForm = element.closest("form")
+            if (closestForm) closestForm.setAttribute("autocomplete", "off")
+            if (!element.dataset.noAutofillName) {
+                element.dataset.noAutofillName = `sn_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`
+            }
             element.setAttribute("data-lpignore", "true")
             element.setAttribute("data-1p-ignore", "true")
             element.setAttribute("data-form-type", "other")
             element.setAttribute("autocorrect", "off")
             element.setAttribute("autocapitalize", "off")
             element.setAttribute("spellcheck", "false")
+            element.setAttribute("aria-autocomplete", "none")
             if (tagName === "textarea") {
-                element.setAttribute("autocomplete", "off")
-                element.setAttribute("name", "field_no_autofill")
+                element.setAttribute("autocomplete", "new-password")
+                element.setAttribute("name", element.dataset.noAutofillName)
                 return
             }
             if (inputType === "password") {
                 element.setAttribute("autocomplete", "new-password")
+                element.setAttribute("name", element.dataset.noAutofillName)
                 element.setAttribute("inputmode", "text")
                 return
             }
             if (!["checkbox", "radio", "range", "file", "button", "submit", "color"].includes(inputType)) {
-                element.setAttribute("autocomplete", "off")
-                element.setAttribute("name", "field_no_autofill")
+                element.setAttribute("autocomplete", "new-password")
+                element.setAttribute("name", element.dataset.noAutofillName)
             }
         })
     },
