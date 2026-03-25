@@ -339,36 +339,6 @@ Object.assign(UI, {
             })
             this.renderEditorSettings()
             this.applyInputAutocompletePolicy(root)
-            return
-        }
-
-        if (page === "export_import") {
-            title.textContent = dict.settings_export_import || "Export / Import"
-            root.innerHTML = `
-                <div class="settings-group">
-                    <div class="settings-section">
-                        <div class="settings-section-title">${dict.export_all_notes || "Export all notes"}</div>
-                        <div class="settings-grid" style="gap:10px;">
-                            <button type="button" class="btn-secondary" data-action="settings-export-all-notes">${dict.export_all_notes || "Export all notes"}</button>
-                            <button type="button" class="btn-secondary" data-action="settings-export-folder">${dict.export_folder_select || "Export folder"}</button>
-                        </div>
-                    </div>
-                    <div class="settings-section">
-                        <div class="settings-section-title">${dict.backup_all_notes_drive || "Резервная копия всех заметок на диск"}</div>
-                        <div class="settings-grid" style="gap:10px;">
-                            <button type="button" class="btn-secondary" data-action="settings-backup-all-notes">${dict.backup_all_notes_drive || "Резервная копия всех заметок на диск"}</button>
-                            <button type="button" class="btn-secondary" data-action="settings-backup-folder">${dict.backup_folder_select || "Резервная копия папки на диск"}</button>
-                            <div class="folder-meta">${dict.backup_last_manual || "Последняя ручная копия"}: ${this.getLastDriveBackupLabel ? this.getLastDriveBackupLabel() : (dict.backup_last_manual_none || "Пока не выполнялось")}</div>
-                        </div>
-                    </div>
-                    <div class="settings-section">
-                        <div class="settings-section-title">${dict.import_file || "Import file"}</div>
-                        <button type="button" class="btn-primary" data-action="settings-trigger-import">${dict.import_file || "Import file"}</button>
-                    </div>
-                </div>
-            `
-            this.applyInputAutocompletePolicy(root)
-            return
         }
     },
 

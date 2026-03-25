@@ -111,20 +111,14 @@ const getNoteReference = (note, user) => {
     return DataPath.getUserNotesCollection(user).doc(note.id)
 }
 
-function openNoteActions(noteId, options = {}) {
+function openNoteActions(noteId) {
     const note = UI.resolveNoteById(noteId)
     const currentNoteId = StateStore.read().currentNote?.id || ""
     const allowHiddenCurrentNote = !!note && isHiddenLocked(note) && currentNoteId === note.id
-    const allowHiddenFromActionMenu = !!note && isHiddenLocked(note) && options.allowLocked === true
-    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote && !allowHiddenFromActionMenu)) return false
-    const modalElement = document.getElementById("note-actions-modal")
-    const contentElement = document.getElementById("note-actions-content")
-    if (!modalElement || !contentElement) return false
+    if (!note || (isHiddenLocked(note) && !allowHiddenCurrentNote)) return
     UI.currentNoteActionId = note.id
     UI.renderNoteActions(note.id)
-    const opened = UI.openModal("note-actions-modal")
-    const hasRenderedContent = String(contentElement.innerHTML || "").trim().length > 0
-    return !!opened && hasRenderedContent && modalElement.classList.contains("active")
+    UI.openModal("note-actions-modal")
 }
 
 async function deleteNoteById(noteId) {

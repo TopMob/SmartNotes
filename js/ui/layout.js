@@ -386,65 +386,17 @@ Object.assign(UI, {
         return uniqueTags
     },
 
-    buildImportedFolder(rawFolder, ownerUid, index = 0) {
-        const safeFolder = rawFolder && typeof rawFolder === "object" ? rawFolder : {}
-        const nameSource = String(safeFolder.name || "").trim()
-        const descriptionSource = String(safeFolder.description || "").trim()
-        const validatedName = window.Validators.validateFolderName(nameSource) || nameSource.slice(0, 50).trim()
-        const validatedDescription = window.Validators.validateFolderDescription(descriptionSource)
-        const importedFolderOrder = Number(safeFolder.folderOrder)
-        if (!validatedName) return null
-        return {
-            sourceId: String(safeFolder.id || ""),
-            id: Utils.generateId(),
-            name: validatedName,
-            description: validatedDescription == null ? descriptionSource.slice(0, 300) : validatedDescription,
-            isHidden: !!safeFolder.isHidden,
-            trashedAt: null,
-            folderOrder: Number.isFinite(importedFolderOrder) ? importedFolderOrder : Date.now() + index,
-            createdAt: this.normalizeImportedDate(safeFolder.createdAt),
-            updatedAt: this.normalizeImportedDate(safeFolder.updatedAt || safeFolder.createdAt),
-            ownerUid: String(ownerUid || "")
-        }
-    },
-
-    async normalizeImportedNoteMedia(note) {
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const inlineSummary = mediaService?.getInlineMediaSummary?.(note) || {
-            hasInlineMedia: /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))),
-            count: (String(note?.content || "").match(/data:(image|audio)\//gi) || []).length + ((Array.isArray(note?.pageDrawings) ? note.pageDrawings : []).filter(item => /data:(image|audio)\//i.test(String(item || ""))).length)
-        }
-        if (!mediaService) {
-            const sanitizedContent = String(note?.content || "").replace(/<img[^>]+src=["']data:(?:image|audio)[^>]*>/gi, "").replace(/<audio[^>]*>[\s\S]*?<\/audio>/gi, "")
-            return {
-                note: NoteIO.normalizeNote({ ...note, content: sanitizedContent, pageDrawings: [] }),
-                hadInlineMedia: !!inlineSummary.hasInlineMedia,
-                failedMediaCount: inlineSummary.hasInlineMedia ? Math.max(1, Number(inlineSummary.count || 0)) : 0
-            }
-        }
-        const normalizedResult = await mediaService.externalizeNoteMedia(note, {
-            fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "imported_note", "imported_note") || "imported_note",
-            mode: "best-effort"
-        })
-        return {
-            note: NoteIO.normalizeNote(normalizedResult.note),
-            hadInlineMedia: !!inlineSummary.hasInlineMedia,
-            failedMediaCount: Array.isArray(normalizedResult.failures) ? normalizedResult.failures.length : 0
-        }
-    },
-
-    async buildImportedNote(rawNote, ownerUid, folderIdMap = new Map()) {
+    buildImportedNote(rawNote, ownerUid) {
         const normalizedNote = NoteIO.normalizeNote({
             ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
             id: Utils.generateId(),
             ownerUid: String(ownerUid || ""),
+            folderId: null,
             trashedAt: null,
             access: null,
             hiddenTags: []
         })
-        const normalizedFolderId = String(normalizedNote.folderId || "")
-        const targetFolderId = normalizedFolderId ? (folderIdMap.get(normalizedFolderId) || null) : null
-        const importedNote = {
+        return {
             ...normalizedNote,
             tags: this.normalizeImportedTags(normalizedNote.tags),
             pageTitles: Array.isArray(normalizedNote.pageTitles) ? normalizedNote.pageTitles : [],
@@ -469,53 +421,23 @@ Object.assign(UI, {
             aiLastAnalyzed: null,
             hiddenTags: [],
             relevance: 0,
-            folderId: targetFolderId,
+            folderId: null,
             trashedAt: null,
-            reminderAt: normalizedNote.reminderAt ? this.normalizeImportedDate(normalizedNote.reminderAt) : null,
+            reminderAt: normalizedNote.reminderAt || null,
             order: Date.now()
         }
-        return this.normalizeImportedNoteMedia(importedNote)
     },
 
-    buildImportResultSummary(results = []) {
-        return results.reduce((summary, result) => {
-            if (!result) return summary
-            if (result.note) summary.savedNotes += 1
-            if (result.failedMediaCount) summary.failedMediaCount += Number(result.failedMediaCount) || 0
-            if (result.hadInlineMedia) summary.notesWithInlineMedia += 1
-            return summary
-        }, {
-            savedNotes: 0,
-            failedMediaCount: 0,
-            notesWithInlineMedia: 0
-        })
-    },
-
-    async importNotesWithRecovery(rawNotes, ownerUid, folderIdMap = new Map()) {
-        const importResults = []
-        for (const rawNote of Array.isArray(rawNotes) ? rawNotes : []) {
-            try {
-                const result = await this.buildImportedNote(rawNote, ownerUid, folderIdMap)
-                if (result?.note) importResults.push(result)
-            } catch (error) {
-                const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
-                    const fallbackNote = await this.buildImportedNote({
-                        ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
-                        content: Utils.sanitizeHtml(Utils.stripHtml(String(rawNote?.content || rawNote?.body || rawNote?.text || ""))),
-                        pageDrawings: []
-                    }, ownerUid, folderIdMap)
-                    if (fallbackNote?.note) {
-                        importResults.push({
-                            ...fallbackNote,
-                            failedMediaCount: (Number(fallbackNote.failedMediaCount) || 0) + 1,
-                            hadInlineMedia: true
-                        })
-                        continue
-                    }
-                }
-                throw error
-            }
+    async saveImportedNotes(user, importedNotes) {
+        const notes = Array.isArray(importedNotes) ? importedNotes : []
+        const chunkSize = 450
+        for (let index = 0; index < notes.length; index += chunkSize) {
+            const batch = db.batch()
+            notes.slice(index, index + chunkSize).forEach(importedNote => {
+                const reference = DataPath.getUserNotesCollection(user).doc(importedNote.id)
+                batch.set(reference, importedNote, { merge: true })
+            })
+            await batch.commit()
         }
         return importResults
     },
@@ -599,22 +521,8 @@ Object.assign(UI, {
                     return
                 }
                 const current = StateStore.read()
-                const foldersToImport = (Array.isArray(importBundle.folders) ? importBundle.folders : [])
-                    .map((folder, index) => this.buildImportedFolder(folder, current.user.uid, index))
-                    .filter(Boolean)
-                const folderIdMap = await this.saveImportedFolders(current.user, foldersToImport)
-                const importResults = await this.importNotesWithRecovery(importBundle.notes, current.user.uid, folderIdMap)
-                const notesToImport = importResults.map(result => result.note).filter(Boolean)
-                if (!notesToImport.length) {
-                    this.showToast(this.getText("import_failed", "Import failed"))
-                    return
-                }
+                const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid))
                 await this.saveImportedNotes(current.user, notesToImport)
-                const importSummary = this.buildImportResultSummary(importResults)
-                if (importSummary.failedMediaCount > 0) {
-                    this.showToast(`${this.getText("import_success", "Imported")}. ${this.resolveExternalMediaMessage(new Error("external-attachment-save-failed"), { attachmentOnly: true })}`)
-                    return
-                }
                 this.showToast(this.getText("import_success", "Imported"))
             } catch (error) {
                 console.error("Import failed", error)

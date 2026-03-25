@@ -59,7 +59,6 @@ const UI = {
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
         this.applyInputAutocompletePolicy()
-        this.startInputAutocompleteObserver()
     },
 
     getText(key, fallback = "") {
@@ -67,39 +66,8 @@ const UI = {
         return dict[key] || fallback || key
     },
 
-    resolveNoteById(noteId) {
-        const normalizedNoteId = String(noteId || "")
-        const { currentNote, notes } = StateStore.read()
-        if (currentNote && (!normalizedNoteId || currentNote.id === normalizedNoteId)) return currentNote
-        if (normalizedNoteId) return notes.find(note => note.id === normalizedNoteId) || null
-        if (this.currentNoteActionId) return notes.find(note => note.id === this.currentNoteActionId) || null
-        return null
-    },
-
     isAuthAutocompleteAllowed(element) {
         return !!element?.closest?.("#login-screen")
-    },
-
-    prepareProtectedInput(element, mode = "text") {
-        if (!element) return null
-        const normalizedMode = mode === "password" ? "password" : "text"
-        element.setAttribute("data-lpignore", "true")
-        element.setAttribute("data-1p-ignore", "true")
-        element.setAttribute("data-form-type", "other")
-        element.setAttribute("autocapitalize", "off")
-        element.setAttribute("autocorrect", "off")
-        element.setAttribute("spellcheck", "false")
-        element.setAttribute("inputmode", "text")
-        element.setAttribute("autocomplete", "off")
-        element.setAttribute("data-bwignore", "true")
-        element.setAttribute("name", `smartnotes_${normalizedMode}_${Date.now()}`)
-        element.readOnly = true
-        const releaseReadOnly = () => {
-            element.readOnly = false
-        }
-        if (typeof requestAnimationFrame === "function") requestAnimationFrame(releaseReadOnly)
-        else setTimeout(releaseReadOnly, 0)
-        return element
     },
 
     applyInputAutocompletePolicy(root = document) {
@@ -109,60 +77,22 @@ const UI = {
             const tagName = element.tagName.toLowerCase()
             const inputType = String(element.getAttribute("type") || "text").toLowerCase()
             if (inputType === "hidden") return
+            element.setAttribute("data-lpignore", "true")
+            element.setAttribute("data-1p-ignore", "true")
+            element.setAttribute("autocapitalize", "off")
             if (tagName === "textarea") {
-                this.prepareProtectedInput(element, "text")
                 element.setAttribute("autocomplete", "off")
                 return
             }
             if (inputType === "password") {
-                this.prepareProtectedInput(element, "password")
+                element.setAttribute("autocomplete", "one-time-code")
+                element.setAttribute("inputmode", "text")
                 return
             }
             if (!["checkbox", "radio", "range", "file", "button", "submit", "color"].includes(inputType)) {
-                this.prepareProtectedInput(element, "text")
                 element.setAttribute("autocomplete", "off")
             }
         })
-    },
-
-
-    startInputAutocompleteObserver() {
-        if (typeof MutationObserver !== "function") return
-        if (!document.body) return
-        if (this.inputPolicyObserver) this.inputPolicyObserver.disconnect()
-        this.inputPolicyObserver = new MutationObserver(mutations => {
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
-                    if (!node || node.nodeType !== 1) return
-                    this.applyInputAutocompletePolicy(node)
-                })
-            })
-        })
-        this.inputPolicyObserver.observe(document.body, { childList: true, subtree: true })
-    },
-
-
-    startLoading(message = "") {
-        const overlay = document.getElementById("global-loading-overlay")
-        const text = document.getElementById("global-loading-text")
-        const lockId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        this.loadingLocks.add(lockId)
-        if (text) text.textContent = message || this.getText("loading", "Loading...")
-        if (overlay) {
-            overlay.classList.remove("hidden")
-            overlay.setAttribute("aria-busy", "true")
-        }
-        return lockId
-    },
-
-    stopLoading(lockId = "") {
-        const normalizedLockId = String(lockId || "")
-        if (normalizedLockId) this.loadingLocks.delete(normalizedLockId)
-        if (this.loadingLocks.size) return
-        const overlay = document.getElementById("global-loading-overlay")
-        if (!overlay) return
-        overlay.classList.add("hidden")
-        overlay.setAttribute("aria-busy", "false")
     },
 
     setLang(lang) {
