@@ -9,6 +9,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
     const state = {
         linked: false,
         connected: false,
+        available: true,
         pending: false,
         errorCode: '',
         checked: false,
@@ -85,32 +86,69 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         console.info('[GoogleDriveProvider] status refresh requested', { reason })
         state.pending = true
         state.errorCode = ''
+        let failureBranch = ''
         try {
             const idToken = await requireIdToken()
             console.info('[GoogleDriveProvider] status refresh fetch start', { reason })
-            const response = await fetch(statusEndpoint, {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${idToken}`
-                }
-            })
+            let response = null
+            try {
+                response = await fetch(statusEndpoint, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${idToken}`
+                    }
+                })
+            } catch (error) {
+                failureBranch = 'fetch-throw'
+                console.error('[GoogleDriveProvider] status refresh branch fetch-throw', { reason, error })
+                throw createExternalMediaError(ERROR_CODES.UNAVAILABLE, error)
+            }
             if (!response.ok) {
+                failureBranch = `http-${response.status}`
+                console.error('[GoogleDriveProvider] status refresh non-ok response', { reason, status: response.status })
                 if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
                 throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
             }
-            const payload = await response.json()
-            console.info('[GoogleDriveProvider] status refresh payload', payload)
-            const isLinked = !!(payload?.linked || payload?.connected)
-            if (!isLinked) {
-                console.warn('[GoogleDriveProvider] status refresh returned disconnected response', payload)
+            const rawBody = await response.text()
+            let payload = null
+            try {
+                payload = rawBody ? JSON.parse(rawBody) : {}
+            } catch (error) {
+                failureBranch = 'payload-parse-failed'
+                console.error('[GoogleDriveProvider] status refresh branch payload-parse-failed', { reason, rawBody, error })
+                throw createExternalMediaError(ERROR_CODES.UNAVAILABLE, error)
             }
-            state.linked = isLinked
-            state.connected = isLinked
+            console.info('[GoogleDriveProvider] status refresh raw payload', payload)
+            const connected = payload?.connected === true || payload?.linked === true
+            if (connected) {
+                state.linked = true
+                state.connected = true
+                state.available = true
+                state.errorCode = ''
+                state.checked = true
+                console.info('[GoogleDriveProvider] status refresh normalized state', {
+                    reason,
+                    branch: 'payload-connected-true',
+                    linked: state.linked,
+                    connected: state.connected,
+                    available: state.available,
+                    checked: state.checked,
+                    errorCode: state.errorCode
+                })
+                return this.getStatus()
+            }
+            state.linked = false
+            state.connected = false
+            state.available = true
             state.checked = true
-            console.info('[GoogleDriveProvider] provider state updated after status refresh', {
+            state.errorCode = ''
+            console.warn('[GoogleDriveProvider] status refresh returned connected=false', payload)
+            console.info('[GoogleDriveProvider] status refresh normalized state', {
                 reason,
+                branch: 'payload-connected-false',
                 linked: state.linked,
                 connected: state.connected,
+                available: state.available,
                 checked: state.checked,
                 errorCode: state.errorCode
             })
@@ -120,8 +158,9 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.errorCode = code
             state.linked = false
             state.connected = false
+            state.available = false
             state.checked = true
-            console.error('[GoogleDriveProvider] status refresh failed', { reason, code, error })
+            console.error('[GoogleDriveProvider] status refresh failed', { reason, code, failureBranch, error })
             if (code === ERROR_CODES.UNLINKED) return this.getStatus()
             throw createExternalMediaError(code, error)
         } finally {
@@ -163,6 +202,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                 if (!/^https?:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
                 state.linked = true
                 state.connected = true
+                state.available = true
                 state.checked = true
                 return publicUrl
             } catch (error) {
@@ -231,6 +271,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         async unlink() {
             state.linked = false
             state.connected = false
+            state.available = true
             state.checked = true
             state.errorCode = ''
             uploadCache.clear()
@@ -254,6 +295,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.currentUser = null
             state.linked = false
             state.connected = false
+            state.available = true
             state.pending = false
             state.errorCode = ''
             state.checked = false
@@ -269,6 +311,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                 configured: hasBackend,
                 linked: !!state.linked,
                 connected: !!state.connected,
+                available: !!state.available,
                 pending: !!state.pending,
                 errorCode: state.errorCode || ''
             }
