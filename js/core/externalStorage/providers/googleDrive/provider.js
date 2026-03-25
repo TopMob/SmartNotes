@@ -5,7 +5,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
     const normalizedBackendBaseUrl = String(backendBaseUrl || '').replace(/\/+$/g, '')
     const uploadEndpoint = `${normalizedBackendBaseUrl}/api/drive/upload`
     const statusEndpoint = `${normalizedBackendBaseUrl}/api/drive/status`
-    const connectEndpoint = '/api/drive/connect'
+    const connectUrlEndpoint = `${normalizedBackendBaseUrl}/api/drive/connect-url`
     const state = {
         linked: false,
         connected: false,
@@ -167,9 +167,33 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         providerId,
         sanitizeFileNamePart,
         normalizePublicUrl,
-        connect() {
-            window.location.assign(connectEndpoint)
-            return this.getStatus()
+        async connect() {
+            state.pending = true
+            state.errorCode = ''
+            try {
+                const idToken = await requireIdToken()
+                const response = await fetch(connectUrlEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${idToken}`
+                    }
+                })
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                    throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+                }
+                const payload = await response.json()
+                const redirectUrl = String(payload?.url || '').trim()
+                if (!/^https?:\/\//i.test(redirectUrl)) throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+                state.pending = false
+                window.location.assign(redirectUrl)
+                return this.getStatus()
+            } catch (error) {
+                const code = normalizeExternalMediaErrorCode(error)
+                state.errorCode = code
+                state.pending = false
+                throw createExternalMediaError(code, error)
+            }
         },
         async unlink() {
             state.linked = false
