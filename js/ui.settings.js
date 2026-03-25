@@ -1206,6 +1206,22 @@ Object.assign(UI, {
             })
         })
     },
+    prepareProtectedInput(input, mode = "password") {
+        if (!input) return
+        const normalizedMode = mode === "text" ? "text" : "password"
+        input.type = normalizedMode
+        input.setAttribute("autocomplete", "new-password")
+        input.setAttribute("autocorrect", "off")
+        input.setAttribute("autocapitalize", "off")
+        input.setAttribute("spellcheck", "false")
+        input.setAttribute("data-lpignore", "true")
+        input.setAttribute("data-1p-ignore", "true")
+        input.setAttribute("data-form-type", "other")
+        if (!input.dataset.noAutofillName) {
+            input.dataset.noAutofillName = `sn_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`
+        }
+        input.setAttribute("name", input.dataset.noAutofillName)
+    },
 
     syncSettingsUI() {
         const draftSettings = this.getSettingsDraft()
