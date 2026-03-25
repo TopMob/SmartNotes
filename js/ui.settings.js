@@ -339,6 +339,50 @@ Object.assign(UI, {
             })
             this.renderEditorSettings()
             this.applyInputAutocompletePolicy(root)
+            return
+        }
+
+        if (page === "export_import") {
+            title.textContent = dict.settings_export_import || "Export / Import"
+            const lastBackupLabel = typeof this.getLastDriveBackupLabel === "function"
+                ? this.getLastDriveBackupLabel()
+                : ""
+            root.innerHTML = `
+                <div class="settings-group">
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.export_section_title || "Export"}</div>
+                        <div class="settings-actions-grid">
+                            <button type="button" class="btn-secondary" data-action="settings-export-all-notes">
+                                ${dict.settings_export_all_notes || dict.export_all || "Export all notes"}
+                            </button>
+                            <button type="button" class="btn-secondary" data-action="settings-export-folder">
+                                ${dict.settings_export_folder || dict.export_folder || "Export folder"}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.backup_section_title || "Backup"}</div>
+                        <div class="settings-actions-grid">
+                            <button type="button" class="btn-secondary" data-action="settings-backup-all-notes">
+                                ${dict.settings_backup_all_notes || dict.backup_all_notes_drive || "Back up all notes"}
+                            </button>
+                            <button type="button" class="btn-secondary" data-action="settings-backup-folder">
+                                ${dict.settings_backup_folder || dict.backup_folder_select || "Back up folder"}
+                            </button>
+                        </div>
+                        <div class="folder-meta">${lastBackupLabel}</div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.import_section_title || "Import"}</div>
+                        <div class="settings-actions-grid">
+                            <button type="button" class="btn-primary" data-action="settings-trigger-import">
+                                ${dict.settings_import_notes || dict.import_file || "Import notes"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `
+            this.applyInputAutocompletePolicy(root)
         }
     },
 
