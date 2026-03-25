@@ -1,4 +1,4 @@
-Object.assign(UI, {
+;Object.assign(UI, {
     createSharedWorkspaceCard(workspace) {
         const safeWorkspaceId = window.DomSecurity.sanitizeIdentifier(workspace?.id)
         if (!safeWorkspaceId) return null

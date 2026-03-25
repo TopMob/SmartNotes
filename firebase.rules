@@ -181,7 +181,10 @@ service cloud.firestore {
       allow create: if isAuthenticated()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.workspaceId is string
-        && request.resource.data.role in ['viewer', 'editor'];
+        && request.resource.data.workspaceName is string
+        && request.resource.data.role in ['viewer', 'editor']
+        && workspaceExists(request.resource.data.workspaceId)
+        && workspaceDocument(request.resource.data.workspaceId).ownerUid == request.auth.uid;
 
       allow read: if isAuthenticated();
       allow update: if false;

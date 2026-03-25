@@ -123,6 +123,7 @@ const WorkspaceAccessService = (() => {
         const token = await generateToken()
         await db.collection(shareCollection).doc(token).set({
             workspaceId: normalizedWorkspaceId,
+            workspaceName: String(workspace.name || ""),
             ownerUid: user.uid,
             role: normalizeRole(role),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -149,17 +150,12 @@ const WorkspaceAccessService = (() => {
         const shareData = shareSnapshot.data() || {}
         const workspaceId = String(shareData.workspaceId || "")
         if (!workspaceId) return null
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(workspaceId)
-        if (!workspaceReference) return null
-        const workspaceSnapshot = await workspaceReference.get()
-        if (!workspaceSnapshot.exists) return null
-        const workspace = workspaceSnapshot.data() || {}
         const role = normalizeRole(shareData.role)
         await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(workspaceId).set({
             workspaceId,
             role,
-            workspaceName: String(workspace.name || ""),
-            ownerUid: String(workspace.ownerUid || shareData.ownerUid || ""),
+            workspaceName: String(shareData.workspaceName || ""),
+            ownerUid: String(shareData.ownerUid || ""),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true })
         return { workspaceId, role }
