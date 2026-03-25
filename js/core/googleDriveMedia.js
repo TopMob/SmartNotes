@@ -2,10 +2,8 @@ import { createExternalStorageService } from './externalStorage/service.js'
 import { createGoogleDriveProvider } from './externalStorage/providers/googleDrive/provider.js'
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from './externalStorage/errors.js'
 import { containsInlineMedia, getInlineMediaSummary, isInlineMediaSource } from './externalStorage/mediaPipeline.js'
-import { firebaseConfig } from './firebase.js'
-import { requestGoogleAccessToken } from './googleIdentityAuth.js'
 
-const googleDriveProvider = createGoogleDriveProvider({ firebaseConfig, requestGoogleAccessToken })
+const googleDriveProvider = createGoogleDriveProvider()
 const externalStorageService = createExternalStorageService({
     providers: [googleDriveProvider],
     defaultProviderId: googleDriveProvider.providerId

@@ -1,39 +1,20 @@
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from '../../errors.js'
-import { createGoogleDriveAuthFlow } from './auth.js'
-import { createGoogleDriveBindingStore } from './binding.js'
-import { createGoogleDriveFolderManager } from './folders.js'
-import { createGoogleDriveState } from './state.js'
 
-export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessToken }) => {
+export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfornmartnotes.vercel.app' } = {}) => {
     const providerId = 'google-drive'
-    const uploadScope = 'https://www.googleapis.com/auth/drive.file'
-    const uploadEndpoint = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webContentLink'
-    const filesEndpoint = 'https://www.googleapis.com/drive/v3/files'
-    const folderMimeType = 'application/vnd.google-apps.folder'
-    const stateController = createGoogleDriveState({ storageKey: 'google-drive-state' })
-    const { state, applyStoredState, readStoredState, writeStoredState, resetRuntimeState, getCurrentUser, getCurrentUserKey } = stateController
-    const bindingStore = createGoogleDriveBindingStore({ stateController })
-    const folderManager = createGoogleDriveFolderManager({
-        stateController,
-        errors: { ERROR_CODES, createExternalMediaError },
-        filesEndpoint,
-        folderMimeType,
-        folderNames: {
-            root: 'SmartNotes',
-            attachments: 'Attachments',
-            backups: 'Backups',
-            exports: 'Exports'
-        }
-    })
-    const getGoogleClientId = () => String(window.auth?.app?.options?.clientId || firebaseConfig.clientId || '').trim()
-    const { getAccessToken, connectDrive } = createGoogleDriveAuthFlow({
-        stateController,
-        errors: { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode },
-        folderManager,
-        getGoogleClientId,
-        requestGoogleAccessToken,
-        uploadScope
-    })
+    const normalizedBackendBaseUrl = String(backendBaseUrl || '').replace(/\/+$/g, '')
+    const uploadEndpoint = `${normalizedBackendBaseUrl}/api/drive/upload`
+    const statusEndpoint = `${normalizedBackendBaseUrl}/api/drive/status`
+    const connectEndpoint = '/api/drive/connect'
+    const state = {
+        linked: false,
+        connected: false,
+        pending: false,
+        errorCode: '',
+        checked: false,
+        currentUser: null
+    }
+    const uploadCache = new Map()
 
     const sanitizeFileNamePart = (value, fallback) => {
         const normalizedValue = String(value || '').trim().toLowerCase()
@@ -55,200 +36,174 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         if (normalizedMimeType.includes('wav')) return 'wav'
         if (normalizedMimeType.includes('ogg')) return 'ogg'
         if (normalizedMimeType.includes('mp4')) return 'mp4'
+        if (normalizedMimeType.includes('pdf')) return 'pdf'
         return 'bin'
     }
 
-    const buildFileName = ({ fileNameBase = 'attachment', mimeType = '' } = {}) => `${sanitizeFileNamePart(fileNameBase, 'attachment')}.${inferFileExtension(mimeType)}`
-
-    const buildBlobCacheKey = (blob) => {
-        if (!blob || typeof blob !== 'object') return ''
-        const blobName = typeof blob.name === 'string' ? blob.name : ''
-        const blobType = typeof blob.type === 'string' ? blob.type : ''
-        const blobSize = Number.isFinite(blob.size) ? blob.size : 0
-        const lastModified = Number.isFinite(blob.lastModified) ? blob.lastModified : 0
-        return [blobName, blobType, blobSize, lastModified].join(':')
-    }
-
-    const dataUrlToBlob = (dataUrl) => {
-        const source = String(dataUrl || '')
-        const match = source.match(/^data:([^;,]+)?(;base64)?,(.*)$/i)
-        if (!match) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        const mimeType = String(match[1] || 'application/octet-stream')
-        const payload = source.slice(source.indexOf(',') + 1)
-        const binary = atob(payload)
-        const bytes = new Uint8Array(binary.length)
-        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-        return new Blob([bytes], { type: mimeType })
-    }
-
     const normalizePublicUrl = (file) => {
-        const fileId = typeof file === 'string' ? file : String(file?.id || '').trim()
-        const webContentLink = typeof file?.webContentLink === 'string' ? file.webContentLink.trim() : ''
-        if (String(file?.mimeType || '').toLowerCase().startsWith('image/') && fileId) {
-            return `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}`
-        }
-        if (/^https:\/\//i.test(webContentLink)) return webContentLink
-        if (!fileId) return ''
-        return `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download`
+        if (typeof file === 'string') return file
+        return String(file?.url || file?.publicUrl || file?.webContentLink || '').trim()
     }
 
-    const createMultipartBody = (metadata, blob, boundary) => new Blob([
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
-        `--${boundary}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`,
-        blob,
-        `\r\n--${boundary}--`
-    ], { type: `multipart/related; boundary=${boundary}` })
+    const getCurrentUser = () => state.currentUser || window.auth?.currentUser || (typeof StateStore !== 'undefined' && typeof StateStore.read === 'function' ? StateStore.read().user : null) || null
 
-    const ensureDrivePermission = async (fileId, accessToken) => {
-        const response = await fetch(`${filesEndpoint}/${encodeURIComponent(fileId)}/permissions`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ type: 'anyone', role: 'reader' })
-        })
-        if (response.ok || response.status === 409) return
-        throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-    }
-
-    const uploadCache = new Map()
-    const getPersistedBinding = userKey => readStoredState(userKey) || {
-        granted: !!state.granted,
-        linkedAt: Date.now(),
-        rootId: state.folders.rootId || '',
-        attachmentsId: state.folders.attachmentsId || '',
-        backupsId: state.folders.backupsId || '',
-        exportsId: state.folders.exportsId || ''
-    }
-
-    const resolveTargetFolderId = (folders, targetFolder) => {
-        const normalizedTargetFolder = String(targetFolder || 'attachments').trim().toLowerCase()
-        if (normalizedTargetFolder === 'backups') return String(folders?.backupsId || '')
-        if (normalizedTargetFolder === 'exports') return String(folders?.exportsId || '')
-        if (normalizedTargetFolder === 'root') return String(folders?.rootId || '')
-        return String(folders?.attachmentsId || '')
-    }
-
-    const uploadBlob = async (blob, options = {}, attempt = 0) => {
-        const mimeType = String(options.mimeType || blob.type || 'application/octet-stream')
-        const fileName = String(options.fileName || buildFileName({ fileNameBase: options.fileNameBase, mimeType }))
-        const accessToken = await getAccessToken(attempt > 0, { interactive: false })
-        const folders = await folderManager.ensureFolders(accessToken)
-        const boundary = `smartnotes_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`
-        const metadata = { name: fileName, mimeType }
-        const targetFolderId = resolveTargetFolderId(folders, options.targetFolder)
-        if (targetFolderId) metadata.parents = [targetFolderId]
-        const response = await fetch(uploadEndpoint, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            },
-            body: createMultipartBody(metadata, blob, boundary)
-        })
-
-        if (response.status === 401 && attempt === 0) {
-            state.expiresAt = 0
-            return uploadBlob(blob, options, 1)
-        }
-        if (response.status === 401) {
-            state.lastErrorCode = ERROR_CODES.UNLINKED
-            throw createExternalMediaError(ERROR_CODES.UNLINKED)
-        }
-        if (!response.ok) {
-            state.lastErrorCode = ERROR_CODES.SAVE_FAILED
-            throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        }
-
-        const file = await response.json()
-        if (!file?.id) {
-            state.lastErrorCode = ERROR_CODES.SAVE_FAILED
-            throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        }
-        await ensureDrivePermission(file.id, accessToken)
-        const publicUrl = normalizePublicUrl(file)
-        if (!/^https:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        return { ...file, publicUrl }
-    }
-
-    const uploadBlobCached = async (cacheKey, blob, options = {}) => {
-        if (cacheKey && uploadCache.has(cacheKey)) return uploadCache.get(cacheKey)
-        const uploadPromise = uploadBlob(blob, options)
-        if (cacheKey) uploadCache.set(cacheKey, uploadPromise)
+    const requireIdToken = async () => {
+        const user = getCurrentUser()
+        if (!user || typeof user.getIdToken !== 'function') throw createExternalMediaError(ERROR_CODES.UNLINKED)
         try {
-            return await uploadPromise
+            return await user.getIdToken()
         } catch (error) {
-            if (cacheKey) uploadCache.delete(cacheKey)
-            throw error
+            throw createExternalMediaError(ERROR_CODES.UNLINKED, error)
+        }
+    }
+
+    const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(createExternalMediaError(ERROR_CODES.SAVE_FAILED, reader.error))
+        reader.readAsDataURL(blob)
+    })
+
+    const syncStatusFromBackend = async () => {
+        state.pending = true
+        state.errorCode = ''
+        try {
+            const idToken = await requireIdToken()
+            const response = await fetch(statusEndpoint, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${idToken}`
+                }
+            })
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+            }
+            const payload = await response.json()
+            const isLinked = !!(payload?.linked || payload?.connected)
+            state.linked = isLinked
+            state.connected = isLinked
+            state.checked = true
+            return this.getStatus()
+        } catch (error) {
+            const code = normalizeExternalMediaErrorCode(error)
+            state.errorCode = code
+            state.linked = false
+            state.connected = false
+            state.checked = true
+            if (code === ERROR_CODES.UNLINKED) return this.getStatus()
+            throw createExternalMediaError(code, error)
+        } finally {
+            state.pending = false
         }
     }
 
     const uploadDataUrl = async (dataUrl, options = {}) => {
-        const blob = dataUrlToBlob(dataUrl)
-        const result = await uploadBlobCached(String(dataUrl || ''), blob, {
-            fileNameBase: options.fileNameBase || 'attachment',
-            mimeType: blob.type
-        })
-        return result.publicUrl
+        const source = String(dataUrl || '').trim()
+        if (!source.startsWith('data:')) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+        if (uploadCache.has(source)) return uploadCache.get(source)
+
+        const uploadPromise = (async () => {
+            state.pending = true
+            state.errorCode = ''
+            try {
+                const idToken = await requireIdToken()
+                const mimeType = String(source.match(/^data:([^;,]+)/i)?.[1] || '')
+                const fileNameBase = options.fileNameBase || 'attachment'
+                const response = await fetch(uploadEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${idToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        dataUrl: source,
+                        fileNameBase: `${sanitizeFileNamePart(fileNameBase, 'attachment')}.${inferFileExtension(mimeType)}`
+                    })
+                })
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                    throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+                }
+                const result = await response.json()
+                const publicUrl = normalizePublicUrl(result)
+                if (!/^https?:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+                state.linked = true
+                state.connected = true
+                state.checked = true
+                return publicUrl
+            } catch (error) {
+                const code = normalizeExternalMediaErrorCode(error)
+                state.errorCode = code
+                if (code === ERROR_CODES.UNLINKED) {
+                    state.linked = false
+                    state.connected = false
+                }
+                throw createExternalMediaError(code, error)
+            } finally {
+                state.pending = false
+            }
+        })()
+
+        uploadCache.set(source, uploadPromise)
+        try {
+            return await uploadPromise
+        } catch (error) {
+            uploadCache.delete(source)
+            throw error
+        }
     }
 
     const uploadFile = async (file, options = {}) => {
         if (!(file instanceof Blob)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        const result = await uploadBlobCached(buildBlobCacheKey(file), file, {
-            fileName: options.fileName || '',
-            fileNameBase: options.fileNameBase || String(file.name || 'attachment'),
-            mimeType: file.type || options.mimeType || 'application/octet-stream'
+        const dataUrl = await blobToDataUrl(file)
+        return uploadDataUrl(dataUrl, {
+            ...options,
+            fileNameBase: options.fileNameBase || String(file.name || 'attachment')
         })
-        return result.publicUrl
     }
 
     return {
         providerId,
         sanitizeFileNamePart,
         normalizePublicUrl,
-        async connect(options = {}) {
-            const user = options.user || getCurrentUser()
-            const userKey = String(options.userKey || getCurrentUserKey(user)).trim()
-            await connectDrive({ interactive: options.interactive !== false, userKey })
-            await bindingStore.saveBinding(user, getPersistedBinding(userKey))
+        connect() {
+            window.location.assign(connectEndpoint)
             return this.getStatus()
         },
-        async handleSignedInUser(user, options = {}) {
-            const userKey = getCurrentUserKey(user)
-            const storedState = applyStoredState(userKey)
-            state.lastErrorCode = ''
-            await bindingStore.hydrateState(user, storedState)
+        async unlink() {
+            state.linked = false
+            state.connected = false
+            state.checked = true
+            state.errorCode = ''
+            uploadCache.clear()
             return this.getStatus()
+        },
+        async handleSignedInUser(user) {
+            state.currentUser = user || null
+            return syncStatusFromBackend.call(this)
         },
         handleSignedOutUser() {
-            resetRuntimeState()
-        },
-        async unlink(options = {}) {
-            const user = options.user || getCurrentUser()
-            const userKey = String(options.userKey || getCurrentUserKey(user)).trim()
-            resetRuntimeState()
-            if (userKey) writeStoredState(null, userKey)
-            await bindingStore.clearBinding(user)
-            return this.getStatus()
+            state.currentUser = null
+            state.linked = false
+            state.connected = false
+            state.pending = false
+            state.errorCode = ''
+            state.checked = false
+            uploadCache.clear()
         },
         uploadFile,
         uploadDataUrl,
         resolveUserFacingError,
         getStatus() {
-            applyStoredState()
-            const now = Date.now()
+            const hasBackend = /^https?:\/\//i.test(uploadEndpoint)
             return {
                 providerId,
-                configured: !!getGoogleClientId(),
-                linked: !!state.granted,
-                connected: !!state.accessToken && state.expiresAt - now > 60000,
-                pending: !!state.pendingPromise,
-                errorCode: state.lastErrorCode || '',
-                rootId: state.folders.rootId || '',
-                attachmentsId: state.folders.attachmentsId || '',
-                backupsId: state.folders.backupsId || '',
-                exportsId: state.folders.exportsId || ''
+                configured: hasBackend,
+                linked: !!state.linked,
+                connected: !!state.connected,
+                pending: !!state.pending,
+                errorCode: state.errorCode || ''
             }
         }
     }
