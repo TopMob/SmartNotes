@@ -158,6 +158,16 @@ const WorkspaceAccessService = (() => {
             ownerUid: String(shareData.ownerUid || ""),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true })
+        const workspaceReference = WorkspacesRepository.getWorkspaceReference(workspaceId)
+        if (workspaceReference) {
+            try {
+                await workspaceReference.set({
+                    members: { [user.uid]: role },
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true })
+            } catch {
+            }
+        }
         return { workspaceId, role }
     }
 

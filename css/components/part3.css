@@ -418,3 +418,50 @@ select.input-area optgroup {
     font-size: 12px;
     color: var(--text-dim);
 }
+
+.shared-workspace-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.shared-workspace-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.shared-workspace-actions > button {
+    flex: 1 1 180px;
+}
+
+.shared-workspace-members {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.shared-workspace-members-title {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.shared-workspace-members-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.shared-workspace-member-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.06);
+    font-size: 12px;
+    color: var(--text-main);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

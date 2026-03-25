@@ -88,6 +88,17 @@ service cloud.firestore {
         );
     }
 
+    function canSelfRegisterWorkspaceMember(workspaceId) {
+      return hasWorkspaceEntry(workspaceId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.members is map
+        && resource.data.members is map
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid] == workspaceEntryRole(workspaceId);
+    }
+
     function isValidThemePreferencePayload() {
       return request.resource.data.settings is map
         && request.resource.data.settings.preset is string
@@ -200,7 +211,7 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner';
 
-      allow update: if canManageWorkspace(workspaceId);
+      allow update: if canManageWorkspace(workspaceId) || canSelfRegisterWorkspaceMember(workspaceId);
       allow delete: if canManageWorkspace(workspaceId);
 
       match /notes/{noteId} {

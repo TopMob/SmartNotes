@@ -169,6 +169,29 @@ const collectImportedFolders = (payload, visited = new Set()) => {
     return []
 }
 
+
+const normalizeDriveDeliveryUrl = (urlValue) => {
+    const source = String(urlValue || "").trim()
+    if (!source) return ""
+    try {
+        const parsed = new URL(source)
+        const host = parsed.hostname.toLowerCase()
+        if (!host.includes('drive.google.com')) return source
+        const fileIdFromPathMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/i)
+        const fileId = String(parsed.searchParams.get('id') || fileIdFromPathMatch?.[1] || '').trim()
+        if (!fileId) return source
+        return `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}`
+    } catch {
+        return source
+    }
+}
+
+const normalizeDriveDeliveryHtml = (htmlValue) => {
+    const source = String(htmlValue || "")
+    if (!source) return ""
+    return source.replace(/https:\/\/drive\.google\.com\/[^"'\s)]+/gi, match => normalizeDriveDeliveryUrl(match))
+}
+
 const NoteIO = {
     toTimestampMillis(dateValue) {
         if (dateValue === null || dateValue === undefined || dateValue === "") return 0
@@ -278,7 +301,7 @@ const NoteIO = {
         return {
             id: safe.id ? String(safe.id) : Utils.generateId(),
             title: safe.title ? String(safe.title).trim() : "",
-            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
+            content: safe.content ? Utils.sanitizeHtml(normalizeDriveDeliveryHtml(String(safe.content))) : "",
             pageDrawings,
             pageTitles,
             pageDrawingsRevision: typeof safe.pageDrawingsRevision === "string" && safe.pageDrawingsRevision
