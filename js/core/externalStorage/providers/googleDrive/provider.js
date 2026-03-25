@@ -15,6 +15,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         currentUser: null
     }
     const uploadCache = new Map()
+    let providerApi = null
 
     const sanitizeFileNamePart = (value, fallback) => {
         const normalizedValue = String(value || '').trim().toLowerCase()
@@ -98,6 +99,13 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         }
     }
 
+    const ensureDriveConnected = async () => {
+        if (state.connected && state.linked) return true
+        if (!providerApi) return false
+        const status = await syncStatusFromBackend.call(providerApi)
+        return !!(status?.connected && status?.linked)
+    }
+
     const uploadDataUrl = async (dataUrl, options = {}) => {
         const source = String(dataUrl || '').trim()
         if (!source.startsWith('data:')) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
@@ -108,8 +116,10 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.errorCode = ''
             try {
                 const idToken = await requireIdToken()
+                const isConnected = await ensureDriveConnected()
+                if (!isConnected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
                 const mimeType = String(source.match(/^data:([^;,]+)/i)?.[1] || '')
-                const fileNameBase = options.fileNameBase || 'attachment'
+                const fileNameBase = sanitizeFileNamePart(options.fileNameBase || 'attachment', 'attachment')
                 const response = await fetch(uploadEndpoint, {
                     method: 'POST',
                     headers: {
@@ -118,7 +128,8 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                     },
                     body: JSON.stringify({
                         dataUrl: source,
-                        fileNameBase: `${sanitizeFileNamePart(fileNameBase, 'attachment')}.${inferFileExtension(mimeType)}`
+                        fileNameBase,
+                        extension: inferFileExtension(mimeType)
                     })
                 })
                 if (!response.ok) {
@@ -163,7 +174,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         })
     }
 
-    return {
+    providerApi = {
         providerId,
         sanitizeFileNamePart,
         normalizePublicUrl,
@@ -171,6 +182,11 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.pending = true
             state.errorCode = ''
             try {
+                const alreadyConnected = await ensureDriveConnected()
+                if (alreadyConnected) {
+                    state.pending = false
+                    return this.getStatus()
+                }
                 const idToken = await requireIdToken()
                 const response = await fetch(connectUrlEndpoint, {
                     method: 'POST',
@@ -231,4 +247,5 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             }
         }
     }
+    return providerApi
 }
