@@ -6,6 +6,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
     const uploadEndpoint = `${normalizedBackendBaseUrl}/api/drive/upload`
     const statusEndpoint = `${normalizedBackendBaseUrl}/api/drive/status`
     const connectUrlEndpoint = `${normalizedBackendBaseUrl}/api/drive/connect-url`
+    const disconnectEndpoint = `${normalizedBackendBaseUrl}/api/drive/disconnect`
     const state = {
         linked: false,
         connected: false,
@@ -105,6 +106,16 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         return JSON.parse(source)
     }
 
+    const parseJsonSafe = (rawText) => {
+        const source = String(rawText || '').trim()
+        if (!source) return null
+        try {
+            return JSON.parse(source)
+        } catch (error) {
+            return null
+        }
+    }
+
     const normalizeStatusPayload = (payload) => {
         const normalizedPayload = payload && typeof payload === 'object' ? payload : {}
         const connected = normalizedPayload.connected === true || normalizedPayload.linked === true
@@ -130,6 +141,15 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
     }
 
     const resolveProviderStatus = () => providerApi?.getStatus?.() || getStatusSnapshot()
+
+    const createAuthorizedHeaders = (idToken, includeJson = false) => includeJson
+        ? {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        }
+        : {
+            Authorization: `Bearer ${idToken}`
+        }
 
     const syncStatusFromBackend = async ({ reason = 'default' } = {}) => {
         console.info('[GoogleDriveProvider] status refresh requested', { reason })
@@ -236,23 +256,43 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                 const idToken = await requireIdToken()
                 const mimeType = String(source.match(/^data:([^;,]+)/i)?.[1] || '')
                 const fileNameBase = sanitizeFileNamePart(options.fileNameBase || 'attachment', 'attachment')
+                const payload = {
+                    dataUrl: source,
+                    fileNameBase,
+                    extension: inferFileExtension(mimeType)
+                }
+                console.info('[GoogleDriveProvider] upload request prepared', {
+                    fileNameBase,
+                    mimeType,
+                    fileSizeBytes: Number(options.fileSizeBytes || 0) || source.length,
+                    extension: payload.extension
+                })
                 const response = await fetch(uploadEndpoint, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${idToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        dataUrl: source,
-                        fileNameBase,
-                        extension: inferFileExtension(mimeType)
-                    })
+                    headers: createAuthorizedHeaders(idToken, true),
+                    body: JSON.stringify(payload)
+                })
+                const rawResponseText = await response.text()
+                const parsedResponse = parseJsonSafe(rawResponseText)
+                console.info('[GoogleDriveProvider] upload response', {
+                    status: response.status,
+                    ok: response.ok,
+                    rawResponseText,
+                    parsedResponse
                 })
                 if (!response.ok) {
                     if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
-                    throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+                    const uploadError = createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+                    uploadError.details = {
+                        status: response.status,
+                        rawResponseText,
+                        parsedResponse,
+                        fileNameBase,
+                        mimeType
+                    }
+                    throw uploadError
                 }
-                const result = await response.json()
+                const result = parsedResponse || {}
                 const publicUrl = normalizePublicUrl(result)
                 if (!/^https?:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
                 state.linked = true
@@ -267,6 +307,12 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                     state.linked = false
                     state.connected = false
                 }
+                console.error('[GoogleDriveProvider] upload failed', {
+                    code,
+                    message: error?.message,
+                    stack: error?.stack,
+                    details: error?.details || null
+                })
                 throw createExternalMediaError(code, error)
             } finally {
                 state.pending = false
@@ -287,7 +333,8 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         const dataUrl = await blobToDataUrl(file)
         return uploadDataUrl(dataUrl, {
             ...options,
-            fileNameBase: options.fileNameBase || String(file.name || 'attachment')
+            fileNameBase: options.fileNameBase || String(file.name || 'attachment'),
+            fileSizeBytes: Number(file.size || 0)
         })
     }
 
@@ -324,13 +371,48 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             }
         },
         async unlink() {
-            state.linked = false
-            state.connected = false
-            state.available = true
-            state.checked = true
+            state.pending = true
             state.errorCode = ''
-            uploadCache.clear()
-            return this.getStatus()
+            try {
+                const idToken = await requireIdToken()
+                const response = await fetch(disconnectEndpoint, {
+                    method: 'POST',
+                    headers: createAuthorizedHeaders(idToken)
+                })
+                const rawResponseText = await response.text()
+                const parsedResponse = parseJsonSafe(rawResponseText)
+                console.info('[GoogleDriveProvider] disconnect response', {
+                    status: response.status,
+                    ok: response.ok,
+                    rawResponseText,
+                    parsedResponse
+                })
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                    throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+                }
+                state.linked = false
+                state.connected = false
+                state.available = true
+                state.checked = true
+                state.errorCode = ''
+                uploadCache.clear()
+                return this.getStatus()
+            } catch (error) {
+                const code = normalizeExternalMediaErrorCode(error)
+                state.errorCode = code
+                if (code !== ERROR_CODES.UNLINKED) {
+                    state.available = false
+                }
+                console.error('[GoogleDriveProvider] disconnect failed', {
+                    code,
+                    message: error?.message,
+                    stack: error?.stack
+                })
+                throw createExternalMediaError(code, error)
+            } finally {
+                state.pending = false
+            }
         },
         async handleSignedInUser(user) {
             state.currentUser = user || null
