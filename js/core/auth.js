@@ -291,6 +291,22 @@ export function createAuthManager({ auth }) {
             await this.logout()
             await this.login()
         },
+
+        async updateDisplayName(nextName = "") {
+            const user = auth?.currentUser
+            const normalizedName = String(nextName || "").trim()
+            if (!user || !normalizedName) return false
+            if (normalizedName.length > 50) return false
+            await user.updateProfile({ displayName: normalizedName })
+            await DataPath.getUserRootReference(user)?.set({ displayName: normalizedName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            this.applySignedInUI({ ...user, displayName: normalizedName })
+            const workspaceId = StateStore.read().activeSharedWorkspaceId
+            if (workspaceId && typeof WorkspaceAccessService !== "undefined") {
+                WorkspaceAccessService.updateMemberDisplayName(workspaceId, user.uid, normalizedName).catch(() => {})
+            }
+            return true
+        },
+
         clearState() {
             if (typeof StateStore !== "undefined" && StateStore.resetSession) StateStore.resetSession()
             if (typeof UI !== "undefined") {
@@ -318,7 +334,7 @@ export function createAuthManager({ auth }) {
 
             if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
-            if (userUid) userUid.textContent = `UID: ${String(user.uid || "-")}`
+            if (userUid) userUid.textContent = String(user.uid || "-")
 
             if (loginScreen) {
                 loginScreen.classList.remove("active")

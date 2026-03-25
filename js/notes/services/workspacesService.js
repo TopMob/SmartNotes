@@ -47,6 +47,7 @@ const WorkspacesService = (() => {
             }
             const data = snapshot.data() || {}
             const members = data.members && typeof data.members === "object" ? data.members : {}
+            const memberNames = data.memberNames && typeof data.memberNames === "object" ? data.memberNames : {}
             state.workspaces.set(workspaceId, {
                 id: workspaceId,
                 name: String(data.name || entry.workspaceName || "Совместная папка"),
@@ -54,6 +55,7 @@ const WorkspacesService = (() => {
                 description: String(data.description || ""),
                 role: entry.role || "viewer",
                 members,
+                memberNames,
                 createdAt: data.createdAt || null,
                 updatedAt: data.updatedAt || null
             })
@@ -62,7 +64,7 @@ const WorkspacesService = (() => {
         state.workspaceUnsubscribers.set(workspaceId, unsubscribeWorkspace)
 
         const unsubscribeWorkspaceNotes = WorkspacesRepository.subscribeWorkspaceNotes(workspaceId, snapshot => {
-            const workspace = state.workspaces.get(workspaceId) || { id: workspaceId, ownerUid: entry.ownerUid || "", members: {}, role: entry.role || "viewer" }
+            const workspace = state.workspaces.get(workspaceId) || { id: workspaceId, ownerUid: entry.ownerUid || "", members: {}, memberNames: {}, role: entry.role || "viewer" }
             const notes = snapshot.docs.map(documentEntry => {
                 const data = documentEntry.data() || {}
                 const normalized = NoteIO.normalizeNote({ id: documentEntry.id, ...data })

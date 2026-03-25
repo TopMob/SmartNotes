@@ -93,10 +93,14 @@ service cloud.firestore {
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.name == resource.data.name
         && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.description == resource.data.description
         && request.resource.data.members is map
         && resource.data.members is map
         && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
-        && request.resource.data.members[request.auth.uid] == workspaceEntryRole(workspaceId);
+        && request.resource.data.members[request.auth.uid] == workspaceEntryRole(workspaceId)
+        && request.resource.data.memberNames is map
+        && resource.data.memberNames is map
+        && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.auth.uid]);
     }
 
     function isValidThemePreferencePayload() {

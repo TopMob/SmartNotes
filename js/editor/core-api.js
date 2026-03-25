@@ -251,8 +251,8 @@ export const EditorAPI = (() => {
         tags: Array.isArray(note?.tags) ? note.tags.map(tag => String(tag || "")) : [],
         pageTitles: Array.isArray(note?.pageTitles) ? note.pageTitles.map(value => String(value || "")) : [],
         pageDrawings: Array.isArray(note?.pageDrawings) ? note.pageDrawings.map(value => String(value || "")) : [],
-        pageDrawingsRevision: String(note?.pageDrawingsRevision || ""),
-        folderId: String(note?.folderId || "")
+        folderId: String(note?.folderId || ""),
+        workspaceId: String(note?.workspaceId || "")
     })
 
     const save = async (options = {}) => {

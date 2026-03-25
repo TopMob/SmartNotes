@@ -313,10 +313,18 @@
                     <div class="user-avatar-wrapper">
                         <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" class="header-avatar" data-action="toggle-user-menu">
                         <div id="user-dropdown" class="dropdown-menu" role="menu" aria-label="Пользователь" data-lang-aria="user_menu">
-                            <div class="dropdown-header">
-                                <span id="user-name">.</span>
-                                <div id="user-uid" class="user-uid-label">UID: -</div>
-                                <button type="button" class="btn-secondary" data-action="copy-user-uid" data-lang="copy_uid">Скопировать UID</button>
+                            <div class="dropdown-header user-profile-header">
+                                <div class="user-name-row">
+                                    <span id="user-name">.</span>
+                                    <button type="button" class="btn-icon" data-action="edit-display-name" aria-label="Изменить имя" data-lang-aria="edit_display_name">
+                                        <i class="material-icons-round" aria-hidden="true">edit</i>
+                                    </button>
+                                </div>
+                                <button type="button" class="user-uid-row" data-action="copy-user-uid" aria-label="UID пользователя" data-lang-aria="copy_uid_row">
+                                    <span data-lang="user_uid_label">UID пользователя</span>
+                                    <span id="user-uid" class="user-uid-label">-</span>
+                                    <i class="material-icons-round" aria-hidden="true">content_copy</i>
+                                </button>
                             </div>
                             <button type="button" class="dropdown-item" data-action="switch-account">
                                 <i class="material-icons-round" aria-hidden="true">switch_account</i>

@@ -67,6 +67,7 @@ const WorkspaceAccessService = (() => {
             name: normalizedName,
             ownerUid: user.uid,
             members: { [user.uid]: "owner" },
+            memberNames: { [user.uid]: String(user.displayName || (user.email ? user.email.split("@")[0] : user.uid) || user.uid) },
             description: normalizedDescription,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -99,6 +100,7 @@ const WorkspaceAccessService = (() => {
         if (String(workspace.ownerUid || "") !== user.uid) return false
         await workspaceReference.update({
             [`members.${normalizedTargetUid}`]: normalizeRole(role),
+            [`memberNames.${normalizedTargetUid}`]: normalizedTargetUid,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         })
         await db.collection("users").doc(normalizedTargetUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).set({
@@ -153,6 +155,7 @@ const WorkspaceAccessService = (() => {
         const workspaceId = String(shareData.workspaceId || "")
         if (!workspaceId) return null
         const role = normalizeRole(shareData.role)
+        const displayName = String(user.displayName || (user.email ? user.email.split("@")[0] : user.uid) || user.uid)
         await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(workspaceId).set({
             workspaceId,
             role,
@@ -165,6 +168,7 @@ const WorkspaceAccessService = (() => {
             try {
                 await workspaceReference.set({
                     members: { [user.uid]: role },
+                    memberNames: { [user.uid]: displayName },
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true })
             } catch {
@@ -225,10 +229,27 @@ const WorkspaceAccessService = (() => {
         const workspace = getWorkspaceById(workspaceId)
         if (!workspace) return []
         const members = workspace.members && typeof workspace.members === "object" ? workspace.members : {}
+        const memberNames = workspace.memberNames && typeof workspace.memberNames === "object" ? workspace.memberNames : {}
         return Object.entries(members).map(([uid, role]) => ({
             uid: String(uid || ""),
+            displayName: String(memberNames[uid] || uid || ""),
             role: role === "owner" || role === "editor" || role === "viewer" ? role : "viewer"
         }))
+    }
+
+    async function updateMemberDisplayName(workspaceId, memberUid, displayName) {
+        const user = StateStore.read().user
+        const normalizedWorkspaceId = String(workspaceId || "").trim()
+        const normalizedMemberUid = String(memberUid || "").trim()
+        const normalizedDisplayName = String(displayName || "").trim()
+        if (!db || !user?.uid || !normalizedWorkspaceId || !normalizedMemberUid || !normalizedDisplayName || normalizedDisplayName.length > 50) return false
+        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
+        if (!workspaceReference) return false
+        await workspaceReference.set({
+            memberNames: { [normalizedMemberUid]: normalizedDisplayName },
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true })
+        return true
     }
 
     function getCurrentUserUid() {
@@ -249,6 +270,7 @@ const WorkspaceAccessService = (() => {
         acceptWorkspaceShareFromUrl,
         getWorkspaceById,
         getWorkspaceMembers,
+        updateMemberDisplayName,
         updateWorkspace,
         getCurrentUserUid
     }

@@ -482,6 +482,16 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
+            case "edit-display-name": {
+                const currentName = String(document.getElementById("user-name")?.textContent || "")
+                this.showPrompt(this.getText("display_name", "Отображаемое имя"), this.getText("display_name_placeholder", "Введите имя"), async value => {
+                    const nextName = String(value || "").trim()
+                    if (!nextName || nextName.length > 50) return
+                    const ok = await Auth.updateDisplayName(nextName)
+                    this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
+                }, currentName, { maxLength: 50, showCounter: true })
+                break
+            }
             case "copy-user-uid": {
                 const uid = WorkspaceAccessService?.getCurrentUserUid?.() || ""
                 if (!uid) {
@@ -511,7 +521,7 @@ Object.assign(UI, {
                     const roleLabel = member.role === "owner"
                         ? this.getText("shared_role_owner", "Владелец")
                         : (member.role === "editor" ? this.getText("shared_role_editor", "Редактор") : this.getText("shared_role_viewer", "Читатель"))
-                    return `${member.uid} · ${roleLabel}`
+                    return `${member.displayName} (${member.uid}) · ${roleLabel}`
                 })
                 const title = workspace?.name || this.getText("shared_members", "Участники")
                 this.showToast(mapped.length ? `${title}: ${mapped.join(" | ")}` : this.getText("shared_members_empty", "Пока нет участников"))
