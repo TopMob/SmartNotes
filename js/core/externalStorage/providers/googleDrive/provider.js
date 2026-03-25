@@ -17,6 +17,22 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
     const uploadCache = new Map()
     let providerApi = null
 
+    const readOAuthRedirectFlag = () => {
+        const search = typeof window !== 'undefined' ? window.location?.search : ''
+        const params = new URLSearchParams(String(search || ''))
+        return params.get('drive') === 'connected'
+    }
+
+    const clearOAuthRedirectFlag = () => {
+        const currentUrl = new URL(window.location.href)
+        if (currentUrl.searchParams.get('drive') !== 'connected') return
+        currentUrl.searchParams.delete('drive')
+        const nextSearch = currentUrl.searchParams.toString()
+        const nextUrl = `${currentUrl.pathname}${nextSearch ? `?${nextSearch}` : ''}${currentUrl.hash || ''}`
+        window.history.replaceState(window.history.state, '', nextUrl)
+        console.info('[GoogleDriveProvider] OAuth redirect query removed', { nextUrl })
+    }
+
     const sanitizeFileNamePart = (value, fallback) => {
         const normalizedValue = String(value || '').trim().toLowerCase()
         const safeValue = normalizedValue
@@ -65,11 +81,13 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         reader.readAsDataURL(blob)
     })
 
-    const syncStatusFromBackend = async () => {
+    const syncStatusFromBackend = async ({ reason = 'default' } = {}) => {
+        console.info('[GoogleDriveProvider] status refresh requested', { reason })
         state.pending = true
         state.errorCode = ''
         try {
             const idToken = await requireIdToken()
+            console.info('[GoogleDriveProvider] status refresh fetch start', { reason })
             const response = await fetch(statusEndpoint, {
                 method: 'GET',
                 headers: {
@@ -81,10 +99,21 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
                 throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
             }
             const payload = await response.json()
+            console.info('[GoogleDriveProvider] status refresh payload', payload)
             const isLinked = !!(payload?.linked || payload?.connected)
+            if (!isLinked) {
+                console.warn('[GoogleDriveProvider] status refresh returned disconnected response', payload)
+            }
             state.linked = isLinked
             state.connected = isLinked
             state.checked = true
+            console.info('[GoogleDriveProvider] provider state updated after status refresh', {
+                reason,
+                linked: state.linked,
+                connected: state.connected,
+                checked: state.checked,
+                errorCode: state.errorCode
+            })
             return this.getStatus()
         } catch (error) {
             const code = normalizeExternalMediaErrorCode(error)
@@ -92,6 +121,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
             state.linked = false
             state.connected = false
             state.checked = true
+            console.error('[GoogleDriveProvider] status refresh failed', { reason, code, error })
             if (code === ERROR_CODES.UNLINKED) return this.getStatus()
             throw createExternalMediaError(code, error)
         } finally {
@@ -208,7 +238,17 @@ export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfor
         },
         async handleSignedInUser(user) {
             state.currentUser = user || null
-            return syncStatusFromBackend.call(this)
+            const hasOAuthRedirectFlag = readOAuthRedirectFlag()
+            console.info('[GoogleDriveProvider] oauth redirect flag detected', { hasOAuthRedirectFlag })
+            const status = await syncStatusFromBackend.call(this, { reason: hasOAuthRedirectFlag ? 'oauth-redirect' : 'signed-in-user' })
+            if (hasOAuthRedirectFlag) {
+                if (status?.connected) {
+                    clearOAuthRedirectFlag()
+                } else {
+                    console.warn('[GoogleDriveProvider] OAuth redirect status returned disconnected state', status)
+                }
+            }
+            return status
         },
         handleSignedOutUser() {
             state.currentUser = null
