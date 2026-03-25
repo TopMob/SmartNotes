@@ -4,13 +4,14 @@ function updateSearchQuery(query) {
     StateStore.update("searchQuery", queryValue)
 }
 
-function switchView(view, folderId = null) {
+function switchView(view, folderId = null, sharedWorkspaceId = null) {
     const currentState = StateStore.read()
     const nextView = String(view || "notes")
     const nextFolderId = nextView === "folder" ? folderId : null
-    if (currentState.view === nextView && currentState.activeFolderId === nextFolderId) return
+    const nextWorkspaceId = nextView === "shared_workspace" ? sharedWorkspaceId : null
+    if (currentState.view === nextView && currentState.activeFolderId === nextFolderId && currentState.activeSharedWorkspaceId === nextWorkspaceId) return
     if (nextView === "admin_tools" && !(UI.hasSmartNotesFolderAccess && UI.hasSmartNotesFolderAccess())) return
-    StateStore.set(previousState => ({ ...previousState, view: nextView, activeFolderId: nextFolderId }))
+    StateStore.set(previousState => ({ ...previousState, view: nextView, activeFolderId: nextFolderId, activeSharedWorkspaceId: nextWorkspaceId }))
 }
 
 function getLockedNotes() {

@@ -924,6 +924,7 @@ export const EditorAPI = (() => {
 
         const current = StateStore.read()
         const folderId = current.view === "folder" ? current.activeFolderId : null
+        const workspaceId = current.view === "shared_workspace" ? current.activeSharedWorkspaceId : null
         const user = current.user
 
         const base = note
@@ -933,7 +934,8 @@ export const EditorAPI = (() => {
                 folderId,
                 createdAt: Utils.serverTimestamp(),
                 order: Date.now(),
-                ownerUid: user?.uid || null
+                ownerUid: user?.uid || null,
+                workspaceId
             })
         const prepared = JSON.parse(JSON.stringify(base))
         StateStore.update("currentNote", prepared)

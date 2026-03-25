@@ -44,6 +44,26 @@ service cloud.firestore {
         && request.resource.data.access.roles[ownerId] == 'owner';
     }
 
+    function isWorkspaceMember(workspaceData) {
+      return isAuthenticated()
+        && workspaceData.members is map
+        && request.auth.uid in workspaceData.members;
+    }
+
+    function workspaceRole(workspaceData) {
+      return workspaceData.members[request.auth.uid];
+    }
+
+    function canEditWorkspace(workspaceData) {
+      return isWorkspaceMember(workspaceData)
+        && workspaceRole(workspaceData) in ['owner', 'editor'];
+    }
+
+    function canManageWorkspace(workspaceData) {
+      return isWorkspaceMember(workspaceData)
+        && workspaceRole(workspaceData) == 'owner';
+    }
+
     match /users/{userId} {
       allow read, write: if isOwner(userId);
 
@@ -96,6 +116,11 @@ service cloud.firestore {
         allow read, create, delete: if isOwner(userId);
         allow update: if false;
       }
+
+      match /sharedWorkspaces/{workspaceId} {
+        allow read, create, delete: if isOwner(userId);
+        allow update: if false;
+      }
     }
 
     match /noteShares/{token} {
@@ -109,6 +134,43 @@ service cloud.firestore {
 
       allow delete: if isAuthenticated()
         && resource.data.ownerUid == request.auth.uid;
+    }
+
+
+    match /workspaceShares/{token} {
+      allow create: if isAuthenticated()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.workspaceId is string
+        && request.resource.data.role in ['viewer', 'editor'];
+
+      allow read: if isAuthenticated();
+      allow update: if false;
+
+      allow delete: if isAuthenticated()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /workspaces/{workspaceId} {
+      allow read: if isWorkspaceMember(resource.data);
+
+      allow create: if isAuthenticated()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.members[request.auth.uid] == 'owner';
+
+      allow update: if canManageWorkspace(resource.data);
+      allow delete: if canManageWorkspace(resource.data);
+
+      match /notes/{noteId} {
+        allow read: if isWorkspaceMember(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data);
+
+        allow create: if canEditWorkspace(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data)
+          && request.resource.data.workspaceId == workspaceId;
+
+        allow update: if canEditWorkspace(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data)
+          && request.resource.data.workspaceId == workspaceId;
+
+        allow delete: if canEditWorkspace(get(/databases/$(database)/documents/workspaces/$(workspaceId)).data);
+      }
     }
 
     match /feedback/{id} {

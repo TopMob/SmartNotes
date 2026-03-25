@@ -903,7 +903,7 @@ Object.assign(UI, {
     },
 
     canShowPrimaryAction(view = StateStore.read().view) {
-        return new Set(["notes", "folder", "folders"]).has(String(view || "notes"))
+        return new Set(["notes", "folder", "folders", "shared_access", "shared_workspace"]).has(String(view || "notes"))
     },
 
     primaryAction() {
@@ -913,7 +913,32 @@ Object.assign(UI, {
             this.createFolder()
             return
         }
+        if (currentView === "shared_access") {
+            this.createSharedWorkspace()
+            return
+        }
+        if (currentView === "shared_workspace") {
+            const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
+            if (!workspace || !WorkspaceAccessService?.canEditWorkspace?.(workspace)) {
+                this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                return
+            }
+        }
         window.SmartNotesEditor?.open()
+    },
+
+
+    createSharedWorkspace() {
+        this.showPrompt(this.getText("shared_workspace_create", "Новая совместная папка"), this.getText("shared_workspace_placeholder", "Название папки"), async (name) => {
+            const normalizedName = String(name || "").trim()
+            if (!normalizedName) return
+            const workspace = await WorkspaceAccessService?.createWorkspace?.(normalizedName)
+            if (!workspace) {
+                this.showToast(this.getText("save_failed", "Save failed"))
+                return
+            }
+            this.showToast(this.getText("shared_workspace_created", "Совместная папка создана"))
+        })
     },
 
     updateFolderLimitControls() {
@@ -1020,13 +1045,19 @@ Object.assign(UI, {
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
             hidden_folders: dict.hidden_folders || "Hidden folders",
-            admin_tools: dict.admin_tools || "Admin tools"
+            admin_tools: dict.admin_tools || "Admin tools",
+            shared_access: dict.shared_access || "Совместный доступ",
+            shared_workspace: dict.shared_workspace || "Совместная папка"
         }
-        const { view, activeFolderId, folders } = StateStore.read()
+        const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
         let title = titles[view] || "SmartNotes"
         if (view === "folder" && activeFolderId) {
             const folder = folders.find(f => f.id === activeFolderId)
             if (folder) title = folder.name
+        }
+        if (view === "shared_workspace" && activeSharedWorkspaceId) {
+            const workspace = (sharedWorkspaces || []).find(item => item.id === activeSharedWorkspaceId)
+            if (workspace) title = workspace.name
         }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
@@ -1061,7 +1092,9 @@ Object.assign(UI, {
     updatePrimaryActionLabel() {
         if (!this.els.fab) return
         const view = StateStore.read().view
-        const label = view === "folders" ? this.getText("create_folder", "Create folder") : this.getText("create_note", "Create note")
+        const label = view === "folders"
+            ? this.getText("create_folder", "Create folder")
+            : (view === "shared_access" ? this.getText("shared_workspace_create", "Новая совместная папка") : this.getText("create_note", "Create note"))
         this.els.fab.setAttribute("aria-label", label)
         this.els.fab.classList.toggle("hidden", !this.canShowPrimaryAction(view))
         this.updateActiveFolderMenu()
@@ -1089,6 +1122,10 @@ Object.assign(UI, {
             return true
         }
         const currentView = StateStore.read().view
+        if (currentView === "shared_workspace") {
+            switchView("shared_access")
+            return true
+        }
         if (currentView !== "notes") {
             switchView("notes")
             return true
@@ -1305,7 +1342,7 @@ Object.assign(UI, {
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
         if (!wrapper) return
-        const { view, activeFolderId, folders } = StateStore.read()
+        const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {

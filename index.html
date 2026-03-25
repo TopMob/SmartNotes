@@ -53,6 +53,7 @@
     <script src="js/ui/render/lock.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/drag.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/folders.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/ui/render/shared-access.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/feedback.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/storage.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
@@ -60,6 +61,7 @@
     <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/foldersRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/settingsRepository.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/repositories/workspacesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/paginationService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/domain/notesSortingStrategy.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/domain/notesAggregationService.js?v=2026-02-22-1e1b181" defer></script>
@@ -68,6 +70,8 @@
     <script src="js/notes/services/settingsSyncService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/ownedNotesService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sharedNotesService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/workspaceAccessService.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/services/workspacesService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/sessionService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/services/notesQueryService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesPresenter.js?v=2026-02-22-1e1b181" defer></script>
@@ -187,6 +191,11 @@
                     <button type="button" class="nav-item" data-action="switch-view" data-view="folders">
                         <i class="material-icons-round" aria-hidden="true">folder</i>
                         <span data-lang="folders_overview">Папки</span>
+                    </button>
+
+                    <button type="button" class="nav-item" data-action="switch-view" data-view="shared_access">
+                        <i class="material-icons-round" aria-hidden="true">groups</i>
+                        <span data-lang="shared_access">Совместный доступ</span>
                     </button>
 
                     <button type="button" class="nav-item" data-action="create-folder">

@@ -54,6 +54,7 @@ const NotesApplication = (() => {
                 || nextState.activeFolderId !== previousState.activeFolderId
                 || nextState.searchQuery !== previousState.searchQuery
                 || nextState.folders !== previousState.folders
+                || nextState.sharedWorkspaces !== previousState.sharedWorkspaces
                 || languageChanged
                 || displayLimitChanged
                 || (configChanged && nextState.config.notesFilter !== previousState.config.notesFilter)

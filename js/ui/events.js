@@ -479,6 +479,33 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
+            case "open-shared-workspace":
+                switchView("shared_workspace", null, el.dataset.workspaceId)
+                if (!window.matchMedia("(min-width: 1024px)").matches) {
+                    this.toggleSidebar(false)
+                }
+                break
+            case "copy-shared-workspace-link": {
+                const workspaceId = String(el.dataset.workspaceId || "")
+                const link = await WorkspaceAccessService?.createInviteLink?.(workspaceId, "editor")
+                if (!link) {
+                    this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                    break
+                }
+                const copied = await CollaborationService.copyToClipboard(link)
+                this.showToast(copied ? this.getText("share_link_copied", "Share link copied") : link)
+                break
+            }
+            case "add-shared-workspace-user": {
+                const workspaceId = String(el.dataset.workspaceId || "")
+                this.showPrompt(this.getText("shared_user_uid_prompt", "UID пользователя"), this.getText("shared_user_uid_placeholder", "Введите UID"), async value => {
+                    const targetUid = String(value || "").trim()
+                    if (!targetUid) return
+                    const ok = await WorkspaceAccessService?.addMemberByUid?.(workspaceId, targetUid, "editor")
+                    this.showToast(ok ? this.getText("shared_user_added", "Пользователь добавлен") : this.getText("share_manage_denied", "Permission denied"))
+                })
+                break
+            }
             case "folder-unhide":
                 this.setFolderHidden(el.dataset.folderId, false)
                 break
