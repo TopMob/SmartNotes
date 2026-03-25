@@ -470,6 +470,17 @@ select.input-area optgroup {
     margin-bottom: 8px;
 }
 
+.shared-member-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.shared-member-field-label {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
 .shared-member-uid {
     font-size: 12px;
     color: var(--text-dim);

@@ -1212,6 +1212,14 @@ Object.assign(UI, {
         if (!root) return
         const canManage = WorkspaceAccessService?.canManageWorkspace?.(workspace)
         const members = WorkspaceAccessService?.getWorkspaceMembers?.(workspace.id) || []
+        if (!members.length) {
+            const empty = document.createElement("div")
+            empty.className = "folder-meta"
+            window.DomSecurity.setText(empty, this.getText("shared_members_empty", "Пока нет участников"))
+            root.replaceChildren(empty)
+            this.openModal("workspace-members-modal")
+            return
+        }
         const fragment = document.createDocumentFragment()
         members.forEach(member => {
             const row = document.createElement("div")
@@ -1220,13 +1228,24 @@ Object.assign(UI, {
             uidLabel.className = "shared-member-uid"
             window.DomSecurity.setText(uidLabel, member.uid)
 
+            const nameGroup = document.createElement("div")
+            nameGroup.className = "shared-member-field"
+            const nameLabel = document.createElement("div")
+            nameLabel.className = "shared-member-field-label"
+            window.DomSecurity.setText(nameLabel, this.getText("display_name", "Отображаемое имя"))
             const nameInput = document.createElement("input")
             nameInput.type = "text"
             nameInput.className = "input-area"
             nameInput.maxLength = 50
             nameInput.value = member.displayName || member.uid
             nameInput.disabled = !canManage && member.uid !== StateStore.read().user?.uid
+            nameGroup.append(nameLabel, nameInput)
 
+            const roleGroup = document.createElement("div")
+            roleGroup.className = "shared-member-field"
+            const roleLabel = document.createElement("div")
+            roleLabel.className = "shared-member-field-label"
+            window.DomSecurity.setText(roleLabel, this.getText("workspace_access_level", "Права"))
             const roleSelect = document.createElement("select")
             roleSelect.className = "input-area"
             const options = [
@@ -1242,6 +1261,7 @@ Object.assign(UI, {
             })
             roleSelect.value = member.role
             roleSelect.disabled = !canManage || member.uid === workspace.ownerUid
+            roleGroup.append(roleLabel, roleSelect)
 
             const saveButton = document.createElement("button")
             saveButton.type = "button"
@@ -1270,7 +1290,7 @@ Object.assign(UI, {
                 this.showToast(this.getText("saved", "Сохранено"))
             }
 
-            row.append(uidLabel, nameInput, roleSelect, saveButton, removeButton)
+            row.append(uidLabel, nameGroup, roleGroup, saveButton, removeButton)
             fragment.append(row)
         })
         root.replaceChildren(fragment)
