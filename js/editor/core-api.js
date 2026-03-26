@@ -502,6 +502,25 @@ export const EditorAPI = (() => {
             boundElements.content.addEventListener("keydown", inputHandlers.handleListEnter, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleTagLineEnter, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
+            boundElements.content.addEventListener("keydown", (event) => {
+                if (event.altKey) return
+                const hasPrimaryModifier = event.ctrlKey || event.metaKey
+                if (!hasPrimaryModifier) return
+                const key = String(event.key || "").toLowerCase()
+                if (key === "z") {
+                    event.preventDefault()
+                    if (event.shiftKey) {
+                        redo()
+                    } else {
+                        undo()
+                    }
+                    return
+                }
+                if (key === "y") {
+                    event.preventDefault()
+                    redo()
+                }
+            }, { signal })
             boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
@@ -773,7 +792,7 @@ export const EditorAPI = (() => {
         if (!contentElement) return
         const pages = getPages()
         if (pages.length >= 99) {
-            UI?.showToast?.("Maximum 99 pages per note")
+            UI?.showToast?.(UI.getText("page_limit_reached", "Максимум 99 страниц на заметку"))
             return
         }
         const previousCount = pages.length || 1
