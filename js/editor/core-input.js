@@ -146,6 +146,42 @@ export const createInputHandlers = (context) => {
         return compact.join("\n")
     }
 
+    const blockLikeTags = new Set(["p", "div", "section", "article", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"])
+
+    const fragmentToPlainText = (fragment) => {
+        const output = []
+        const append = (value) => {
+            if (!value) return
+            output.push(value)
+        }
+        const appendLineBreak = () => {
+            if (!output.length) return
+            const last = output[output.length - 1]
+            if (last === "\n") return
+            output.push("\n")
+        }
+        const visit = (node) => {
+            if (!node) return
+            if (node.nodeType === Node.TEXT_NODE) {
+                append(node.textContent || "")
+                return
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return
+            const tag = String(node.tagName || "").toLowerCase()
+            if (tag === "br") {
+                appendLineBreak()
+                return
+            }
+            if (tag === "li") {
+                append("• ")
+            }
+            Array.from(node.childNodes || []).forEach(visit)
+            if (blockLikeTags.has(tag)) appendLineBreak()
+        }
+        Array.from(fragment.childNodes || []).forEach(visit)
+        return normalizeClipboardPlainText(output.join(""))
+    }
+
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
         const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
@@ -193,9 +229,11 @@ export const createInputHandlers = (context) => {
         }
 
         event.preventDefault()
+        const smartNotesHtml = event.clipboardData?.getData("application/x-smartnotes-html") || ""
         const html = event.clipboardData?.getData("text/html") || ""
         const plainText = normalizeClipboardPlainText(event.clipboardData?.getData("text/plain") || "")
-        const normalizedHtml = html ? normalizePastedHtml(html) : ""
+        const sourceHtml = smartNotesHtml || html
+        const normalizedHtml = sourceHtml ? normalizePastedHtml(sourceHtml) : ""
         const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
         const sanitizedFragment = sanitizedHtml ? sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml)) : null
         let preparedHtml = sanitizedFragment ? (() => {
@@ -225,9 +263,9 @@ export const createInputHandlers = (context) => {
                 throw error
             }
         }
-        const hasInsertedContent = plainText
-            ? insertFragmentAtSelection(plainTextToFragment(plainText))
-            : (preparedHtml ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml)) : false)
+        const hasInsertedContent = preparedHtml
+            ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
+            : (plainText ? insertFragmentAtSelection(plainTextToFragment(plainText)) : false)
         if (hasInsertedContent) queueSnapshot()
     }
 
@@ -239,11 +277,12 @@ export const createInputHandlers = (context) => {
         const fragment = range.cloneContents()
         const container = document.createElement("div")
         container.appendChild(fragment)
-        const plainText = normalizeClipboardPlainText(container.innerText || container.textContent || "")
+        const plainText = fragmentToPlainText(fragment)
         if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
         event.clipboardData?.setData("text/html", container.innerHTML)
+        event.clipboardData?.setData("application/x-smartnotes-html", container.innerHTML)
     }
 
     const handleCut = (event) => {
