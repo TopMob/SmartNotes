@@ -1,12 +1,13 @@
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from '../../errors.js'
+import { resolveBackendBaseUrl, createApiEndpoint } from '../../../backendConfig.js'
 
-export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfornmartnotes.vercel.app' } = {}) => {
+export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
     const providerId = 'google-drive'
-    const normalizedBackendBaseUrl = String(backendBaseUrl || '').replace(/\/+$/g, '')
-    const uploadEndpoint = `${normalizedBackendBaseUrl}/api/drive/upload`
-    const statusEndpoint = `${normalizedBackendBaseUrl}/api/drive/status`
-    const connectUrlEndpoint = `${normalizedBackendBaseUrl}/api/drive/connect-url`
-    const disconnectEndpoint = `${normalizedBackendBaseUrl}/api/drive/disconnect`
+    const normalizedBackendBaseUrl = resolveBackendBaseUrl({ backendBaseUrl })
+    const uploadEndpoint = createApiEndpoint('drive/upload', { backendBaseUrl: normalizedBackendBaseUrl })
+    const statusEndpoint = createApiEndpoint('drive/status', { backendBaseUrl: normalizedBackendBaseUrl })
+    const connectUrlEndpoint = createApiEndpoint('drive/connect-url', { backendBaseUrl: normalizedBackendBaseUrl })
+    const disconnectEndpoint = createApiEndpoint('drive/disconnect', { backendBaseUrl: normalizedBackendBaseUrl })
     const state = {
         linked: false,
         connected: false,
