@@ -1,39 +1,39 @@
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from '../../errors.js'
-import { createGoogleDriveAuthFlow } from './auth.js'
-import { createGoogleDriveBindingStore } from './binding.js'
-import { createGoogleDriveFolderManager } from './folders.js'
-import { createGoogleDriveState } from './state.js'
 
-export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessToken }) => {
+export const createGoogleDriveProvider = ({ backendBaseUrl = 'https://backendfornmartnotes.vercel.app' } = {}) => {
     const providerId = 'google-drive'
-    const uploadScope = 'https://www.googleapis.com/auth/drive.file'
-    const uploadEndpoint = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webContentLink'
-    const filesEndpoint = 'https://www.googleapis.com/drive/v3/files'
-    const folderMimeType = 'application/vnd.google-apps.folder'
-    const stateController = createGoogleDriveState({ storageKey: 'google-drive-state' })
-    const { state, applyStoredState, readStoredState, writeStoredState, resetRuntimeState, getCurrentUser, getCurrentUserKey } = stateController
-    const bindingStore = createGoogleDriveBindingStore({ stateController })
-    const folderManager = createGoogleDriveFolderManager({
-        stateController,
-        errors: { ERROR_CODES, createExternalMediaError },
-        filesEndpoint,
-        folderMimeType,
-        folderNames: {
-            root: 'SmartNotes',
-            attachments: 'Attachments',
-            backups: 'Backups',
-            exports: 'Exports'
-        }
-    })
-    const getGoogleClientId = () => String(window.auth?.app?.options?.clientId || firebaseConfig.clientId || '').trim()
-    const { getAccessToken, connectDrive } = createGoogleDriveAuthFlow({
-        stateController,
-        errors: { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode },
-        folderManager,
-        getGoogleClientId,
-        requestGoogleAccessToken,
-        uploadScope
-    })
+    const normalizedBackendBaseUrl = String(backendBaseUrl || '').replace(/\/+$/g, '')
+    const uploadEndpoint = `${normalizedBackendBaseUrl}/api/drive/upload`
+    const statusEndpoint = `${normalizedBackendBaseUrl}/api/drive/status`
+    const connectUrlEndpoint = `${normalizedBackendBaseUrl}/api/drive/connect-url`
+    const disconnectEndpoint = `${normalizedBackendBaseUrl}/api/drive/disconnect`
+    const state = {
+        linked: false,
+        connected: false,
+        available: true,
+        pending: false,
+        errorCode: '',
+        checked: false,
+        currentUser: null
+    }
+    const uploadCache = new Map()
+    let providerApi = null
+
+    const readOAuthRedirectFlag = () => {
+        const search = typeof window !== 'undefined' ? window.location?.search : ''
+        const params = new URLSearchParams(String(search || ''))
+        return params.get('drive') === 'connected'
+    }
+
+    const clearOAuthRedirectFlag = () => {
+        const currentUrl = new URL(window.location.href)
+        if (currentUrl.searchParams.get('drive') !== 'connected') return
+        currentUrl.searchParams.delete('drive')
+        const nextSearch = currentUrl.searchParams.toString()
+        const nextUrl = `${currentUrl.pathname}${nextSearch ? `?${nextSearch}` : ''}${currentUrl.hash || ''}`
+        window.history.replaceState(window.history.state, '', nextUrl)
+        console.info('[GoogleDriveProvider] OAuth redirect query removed', { nextUrl })
+    }
 
     const sanitizeFileNamePart = (value, fallback) => {
         const normalizedValue = String(value || '').trim().toLowerCase()
@@ -55,201 +55,475 @@ export const createGoogleDriveProvider = ({ firebaseConfig, requestGoogleAccessT
         if (normalizedMimeType.includes('wav')) return 'wav'
         if (normalizedMimeType.includes('ogg')) return 'ogg'
         if (normalizedMimeType.includes('mp4')) return 'mp4'
+        if (normalizedMimeType.includes('pdf')) return 'pdf'
         return 'bin'
     }
 
-    const buildFileName = ({ fileNameBase = 'attachment', mimeType = '' } = {}) => `${sanitizeFileNamePart(fileNameBase, 'attachment')}.${inferFileExtension(mimeType)}`
-
-    const buildBlobCacheKey = (blob) => {
-        if (!blob || typeof blob !== 'object') return ''
-        const blobName = typeof blob.name === 'string' ? blob.name : ''
-        const blobType = typeof blob.type === 'string' ? blob.type : ''
-        const blobSize = Number.isFinite(blob.size) ? blob.size : 0
-        const lastModified = Number.isFinite(blob.lastModified) ? blob.lastModified : 0
-        return [blobName, blobType, blobSize, lastModified].join(':')
+    const extractDriveFileId = (value) => {
+        const source = String(value || '').trim()
+        if (!source) return ''
+        const idFromParam = source.match(/[?&]id=([^&#]+)/i)?.[1]
+        if (idFromParam) return decodeURIComponent(idFromParam)
+        const idFromFilePath = source.match(/\/file\/d\/([^/]+)/i)?.[1]
+        if (idFromFilePath) return decodeURIComponent(idFromFilePath)
+        return ''
     }
 
-    const dataUrlToBlob = (dataUrl) => {
-        const source = String(dataUrl || '')
-        const match = source.match(/^data:([^;,]+)?(;base64)?,(.*)$/i)
-        if (!match) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        const mimeType = String(match[1] || 'application/octet-stream')
-        const payload = source.slice(source.indexOf(',') + 1)
-        const binary = atob(payload)
-        const bytes = new Uint8Array(binary.length)
-        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-        return new Blob([bytes], { type: mimeType })
-    }
-
-    const normalizePublicUrl = (file) => {
-        const fileId = typeof file === 'string' ? file : String(file?.id || '').trim()
-        const webContentLink = typeof file?.webContentLink === 'string' ? file.webContentLink.trim() : ''
-        if (String(file?.mimeType || '').toLowerCase().startsWith('image/') && fileId) {
-            return `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}`
-        }
-        if (/^https:\/\//i.test(webContentLink)) return webContentLink
+    const toDriveDirectImageUrl = (value) => {
+        const fileId = extractDriveFileId(value)
         if (!fileId) return ''
-        return `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download`
+        return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`
     }
 
-    const createMultipartBody = (metadata, blob, boundary) => new Blob([
-        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
-        `--${boundary}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`,
-        blob,
-        `\r\n--${boundary}--`
-    ], { type: `multipart/related; boundary=${boundary}` })
-
-    const ensureDrivePermission = async (fileId, accessToken) => {
-        const response = await fetch(`${filesEndpoint}/${encodeURIComponent(fileId)}/permissions`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ type: 'anyone', role: 'reader' })
-        })
-        if (response.ok || response.status === 409) return
-        throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+    const toDriveThumbnailUrl = (value) => {
+        const fileId = extractDriveFileId(value)
+        if (!fileId) return ''
+        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w2000`
     }
 
-    const uploadCache = new Map()
-    const getPersistedBinding = userKey => readStoredState(userKey) || {
-        granted: !!state.granted,
-        linkedAt: Date.now(),
-        rootId: state.folders.rootId || '',
-        attachmentsId: state.folders.attachmentsId || '',
-        backupsId: state.folders.backupsId || '',
-        exportsId: state.folders.exportsId || ''
+    const isImageMimeType = (mimeType) => String(mimeType || '').toLowerCase().startsWith('image/')
+
+    const isGoogleDriveHost = (value) => /^https?:\/\/drive\.google\.com\//i.test(String(value || '').trim())
+
+    const isDriveDownloadOrViewUrl = (value) => {
+        const source = String(value || '').trim()
+        if (!source) return false
+        if (!isGoogleDriveHost(source)) return false
+        if (/\/file\/d\//i.test(source)) return true
+        if (/\/uc\?/i.test(source) && /export=(download|view)/i.test(source)) return true
+        if (/export=(download|view)/i.test(source)) return true
+        return false
     }
 
-    const resolveTargetFolderId = (folders, targetFolder) => {
-        const normalizedTargetFolder = String(targetFolder || 'attachments').trim().toLowerCase()
-        if (normalizedTargetFolder === 'backups') return String(folders?.backupsId || '')
-        if (normalizedTargetFolder === 'exports') return String(folders?.exportsId || '')
-        if (normalizedTargetFolder === 'root') return String(folders?.rootId || '')
-        return String(folders?.attachmentsId || '')
-    }
-
-    const uploadBlob = async (blob, options = {}, attempt = 0) => {
-        const mimeType = String(options.mimeType || blob.type || 'application/octet-stream')
-        const fileName = String(options.fileName || buildFileName({ fileNameBase: options.fileNameBase, mimeType }))
-        const accessToken = await getAccessToken(attempt > 0, { interactive: false })
-        const folders = await folderManager.ensureFolders(accessToken)
-        const boundary = `smartnotes_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`
-        const metadata = { name: fileName, mimeType }
-        const targetFolderId = resolveTargetFolderId(folders, options.targetFolder)
-        if (targetFolderId) metadata.parents = [targetFolderId]
-        const response = await fetch(uploadEndpoint, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            },
-            body: createMultipartBody(metadata, blob, boundary)
-        })
-
-        if (response.status === 401 && attempt === 0) {
-            state.expiresAt = 0
-            return uploadBlob(blob, options, 1)
+    const toRenderableImageUrl = (value, { preferBackendImageUrl = false } = {}) => {
+        const source = String(value || '').trim()
+        if (!source) return ''
+        if (preferBackendImageUrl && /^https?:\/\//i.test(source)) return source
+        if (isDriveDownloadOrViewUrl(source)) {
+            return toDriveThumbnailUrl(source) || ''
         }
-        if (response.status === 401) {
-            state.lastErrorCode = ERROR_CODES.UNLINKED
-            throw createExternalMediaError(ERROR_CODES.UNLINKED)
+        if (/^https?:\/\/drive\.google\.com\/file\/d\//i.test(source)) {
+            return toDriveThumbnailUrl(source) || ''
         }
-        if (!response.ok) {
-            state.lastErrorCode = ERROR_CODES.SAVE_FAILED
-            throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+        if (isGoogleDriveHost(source)) {
+            return toDriveThumbnailUrl(source) || toDriveDirectImageUrl(source) || source
         }
-
-        const file = await response.json()
-        if (!file?.id) {
-            state.lastErrorCode = ERROR_CODES.SAVE_FAILED
-            throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        }
-        await ensureDrivePermission(file.id, accessToken)
-        const publicUrl = normalizePublicUrl(file)
-        if (!/^https:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        return { ...file, publicUrl }
+        return source
     }
 
-    const uploadBlobCached = async (cacheKey, blob, options = {}) => {
-        if (cacheKey && uploadCache.has(cacheKey)) return uploadCache.get(cacheKey)
-        const uploadPromise = uploadBlob(blob, options)
-        if (cacheKey) uploadCache.set(cacheKey, uploadPromise)
+    const normalizePublicUrl = (file, options = {}) => {
+        if (typeof file === 'string') return file
+        const mimeType = String(options.mimeType || file?.mimeType || '')
+        const imageMode = isImageMimeType(mimeType)
+        const imageUrl = String(file?.imageUrl || '').trim()
+        const publicUrl = String(file?.publicUrl || '').trim()
+        const webContentLink = String(file?.webContentLink || '').trim()
+        const genericUrl = String(file?.url || '').trim()
+        const webViewLink = String(file?.webViewLink || '').trim()
+        if (imageMode) {
+            const preferredImageUrl = toRenderableImageUrl(imageUrl, { preferBackendImageUrl: true })
+            const candidates = [
+                preferredImageUrl,
+                toRenderableImageUrl(publicUrl),
+                toRenderableImageUrl(webContentLink),
+                toRenderableImageUrl(genericUrl),
+                toRenderableImageUrl(webViewLink),
+                toDriveThumbnailUrl(genericUrl),
+                toDriveThumbnailUrl(webViewLink),
+                toDriveDirectImageUrl(genericUrl),
+                toDriveDirectImageUrl(webViewLink)
+            ]
+            return candidates.find(candidate => /^https?:\/\//i.test(String(candidate || '').trim())) || ''
+        }
+        return genericUrl || publicUrl || webContentLink || webViewLink
+    }
+
+    const getCurrentUser = () => state.currentUser || window.auth?.currentUser || (typeof StateStore !== 'undefined' && typeof StateStore.read === 'function' ? StateStore.read().user : null) || null
+
+    const requireIdToken = async () => {
+        const user = getCurrentUser()
+        if (!user || typeof user.getIdToken !== 'function') throw createExternalMediaError(ERROR_CODES.UNLINKED)
         try {
-            return await uploadPromise
+            return await user.getIdToken()
         } catch (error) {
-            if (cacheKey) uploadCache.delete(cacheKey)
-            throw error
+            throw createExternalMediaError(ERROR_CODES.UNLINKED, error)
+        }
+    }
+
+    const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(createExternalMediaError(ERROR_CODES.SAVE_FAILED, reader.error))
+        reader.readAsDataURL(blob)
+    })
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+    const getIdTokenWithRetry = async ({ retries = 1, delayMs = 250 } = {}) => {
+        let lastError = null
+        for (let attempt = 0; attempt <= retries; attempt += 1) {
+            try {
+                const token = await requireIdToken()
+                return { token, attempt }
+            } catch (error) {
+                lastError = error
+                if (attempt >= retries) break
+                await sleep(delayMs)
+            }
+        }
+        throw lastError || createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+    }
+
+    const parseStatusPayload = (rawText) => {
+        const source = String(rawText || '').trim()
+        if (!source) return {}
+        return JSON.parse(source)
+    }
+
+    const parseJsonSafe = (rawText) => {
+        const source = String(rawText || '').trim()
+        if (!source) return null
+        try {
+            return JSON.parse(source)
+        } catch (error) {
+            return null
+        }
+    }
+
+    const normalizeStatusPayload = (payload) => {
+        const normalizedPayload = payload && typeof payload === 'object' ? payload : {}
+        const connected = normalizedPayload.connected === true || normalizedPayload.linked === true
+        return {
+            connected,
+            linked: connected,
+            available: true,
+            payload: normalizedPayload
+        }
+    }
+
+    const getStatusSnapshot = () => {
+        const hasBackend = /^https?:\/\//i.test(uploadEndpoint)
+        return {
+            providerId,
+            configured: hasBackend,
+            linked: !!state.linked,
+            connected: !!state.connected,
+            available: !!state.available,
+            pending: !!state.pending,
+            errorCode: state.errorCode || ''
+        }
+    }
+
+    const resolveProviderStatus = () => providerApi?.getStatus?.() || getStatusSnapshot()
+
+    const createAuthorizedHeaders = (idToken, includeJson = false) => includeJson
+        ? {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        }
+        : {
+            Authorization: `Bearer ${idToken}`
+        }
+
+    const syncStatusFromBackend = async ({ reason = 'default' } = {}) => {
+        console.info('[GoogleDriveProvider] status refresh requested', { reason })
+        state.pending = true
+        state.errorCode = ''
+        let failureBranch = ''
+        try {
+            failureBranch = 'id-token'
+            const tokenResult = await getIdTokenWithRetry({ retries: reason === 'oauth-redirect' ? 2 : 1, delayMs: 300 })
+            const idToken = tokenResult.token
+            console.info('[GoogleDriveProvider] status refresh token resolved', { reason, attempt: tokenResult.attempt })
+            failureBranch = 'fetch-start'
+            console.info('[GoogleDriveProvider] status refresh fetch start', { reason, endpoint: statusEndpoint })
+            let response = null
+            try {
+                response = await fetch(statusEndpoint, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${idToken}`
+                    }
+                })
+            } catch (error) {
+                failureBranch = 'fetch-throw'
+                console.error('[GoogleDriveProvider] status refresh branch fetch-throw', { reason, error })
+                throw createExternalMediaError(ERROR_CODES.UNAVAILABLE, error)
+            }
+            console.info('[GoogleDriveProvider] status refresh raw response meta', {
+                reason,
+                status: response.status,
+                ok: response.ok,
+                url: response.url
+            })
+            if (!response.ok) {
+                failureBranch = `http-${response.status}`
+                console.error('[GoogleDriveProvider] status refresh non-ok response', { reason, status: response.status })
+                if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+            }
+            failureBranch = 'response-text'
+            const rawBody = await response.text()
+            console.info('[GoogleDriveProvider] status refresh raw response text', { reason, rawBody })
+            failureBranch = 'payload-parse'
+            let payload = {}
+            try {
+                payload = parseStatusPayload(rawBody)
+            } catch (error) {
+                failureBranch = 'payload-parse-failed'
+                console.error('[GoogleDriveProvider] status refresh branch payload-parse-failed', { reason, rawBody, message: error?.message, stack: error?.stack, error })
+                throw createExternalMediaError(ERROR_CODES.UNAVAILABLE, error)
+            }
+            console.info('[GoogleDriveProvider] status refresh parsed payload', payload)
+            failureBranch = 'payload-normalize'
+            const normalized = normalizeStatusPayload(payload)
+            if (normalized.connected) {
+                state.linked = true
+                state.connected = true
+                state.available = true
+                state.errorCode = ''
+                state.checked = true
+                console.info('[GoogleDriveProvider] status refresh normalized state', { reason, branch: 'payload-connected-true', ...normalized, checked: state.checked, errorCode: state.errorCode })
+                return resolveProviderStatus()
+            }
+            state.linked = false
+            state.connected = false
+            state.available = true
+            state.checked = true
+            state.errorCode = ''
+            console.warn('[GoogleDriveProvider] status refresh returned connected=false', { reason, payload: normalized.payload })
+            console.info('[GoogleDriveProvider] status refresh normalized state', {
+                reason,
+                branch: 'payload-connected-false',
+                linked: state.linked,
+                connected: state.connected,
+                available: state.available,
+                checked: state.checked,
+                errorCode: state.errorCode
+            })
+            return resolveProviderStatus()
+        } catch (error) {
+            const code = normalizeExternalMediaErrorCode(error)
+            state.errorCode = code
+            state.linked = false
+            state.connected = false
+            state.available = false
+            state.checked = true
+            console.error('[GoogleDriveProvider] status refresh failed', { reason, code, failureBranch, message: error?.message, stack: error?.stack, error })
+            if (code === ERROR_CODES.UNLINKED) return resolveProviderStatus()
+            throw createExternalMediaError(code, error)
+        } finally {
+            state.pending = false
         }
     }
 
     const uploadDataUrl = async (dataUrl, options = {}) => {
-        const blob = dataUrlToBlob(dataUrl)
-        const result = await uploadBlobCached(String(dataUrl || ''), blob, {
-            fileNameBase: options.fileNameBase || 'attachment',
-            mimeType: blob.type
-        })
-        return result.publicUrl
+        const source = String(dataUrl || '').trim()
+        if (!source.startsWith('data:')) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+        if (uploadCache.has(source)) return uploadCache.get(source)
+
+        const uploadPromise = (async () => {
+            state.pending = true
+            state.errorCode = ''
+            try {
+                if (state.checked && !state.connected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                const idToken = await requireIdToken()
+                const mimeType = String(source.match(/^data:([^;,]+)/i)?.[1] || '')
+                const fileNameBase = sanitizeFileNamePart(options.fileNameBase || 'attachment', 'attachment')
+                const payload = {
+                    dataUrl: source,
+                    fileNameBase,
+                    extension: inferFileExtension(mimeType)
+                }
+                console.info('[GoogleDriveProvider] upload request prepared', {
+                    fileNameBase,
+                    mimeType,
+                    fileSizeBytes: Number(options.fileSizeBytes || 0) || source.length,
+                    extension: payload.extension
+                })
+                const response = await fetch(uploadEndpoint, {
+                    method: 'POST',
+                    headers: createAuthorizedHeaders(idToken, true),
+                    body: JSON.stringify(payload)
+                })
+                const rawResponseText = await response.text()
+                const parsedResponse = parseJsonSafe(rawResponseText)
+                console.info('[GoogleDriveProvider] upload response', {
+                    status: response.status,
+                    ok: response.ok,
+                    rawResponseText,
+                    parsedResponse
+                })
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                    const uploadError = createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+                    uploadError.details = {
+                        status: response.status,
+                        rawResponseText,
+                        parsedResponse,
+                        fileNameBase,
+                        mimeType
+                    }
+                    throw uploadError
+                }
+                const result = parsedResponse || {}
+                const publicUrl = normalizePublicUrl(result, { mimeType })
+                console.info('[GoogleDriveProvider] upload selected media url', {
+                    mimeType,
+                    imageMode: isImageMimeType(mimeType),
+                    selectedUrl: publicUrl,
+                    payload: result
+                })
+                if (!/^https?:\/\//i.test(publicUrl)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
+                state.linked = true
+                state.connected = true
+                state.available = true
+                state.checked = true
+                return publicUrl
+            } catch (error) {
+                const code = normalizeExternalMediaErrorCode(error)
+                state.errorCode = code
+                if (code === ERROR_CODES.UNLINKED) {
+                    state.linked = false
+                    state.connected = false
+                }
+                console.error('[GoogleDriveProvider] upload failed', {
+                    code,
+                    message: error?.message,
+                    stack: error?.stack,
+                    details: error?.details || null
+                })
+                throw createExternalMediaError(code, error)
+            } finally {
+                state.pending = false
+            }
+        })()
+
+        uploadCache.set(source, uploadPromise)
+        try {
+            return await uploadPromise
+        } catch (error) {
+            uploadCache.delete(source)
+            throw error
+        }
     }
 
     const uploadFile = async (file, options = {}) => {
         if (!(file instanceof Blob)) throw createExternalMediaError(ERROR_CODES.SAVE_FAILED)
-        const result = await uploadBlobCached(buildBlobCacheKey(file), file, {
-            fileName: options.fileName || '',
+        const dataUrl = await blobToDataUrl(file)
+        return uploadDataUrl(dataUrl, {
+            ...options,
             fileNameBase: options.fileNameBase || String(file.name || 'attachment'),
-            mimeType: file.type || options.mimeType || 'application/octet-stream'
+            fileSizeBytes: Number(file.size || 0)
         })
-        return result.publicUrl
     }
 
-    return {
+    providerApi = {
         providerId,
         sanitizeFileNamePart,
         normalizePublicUrl,
-        async connect(options = {}) {
-            const user = options.user || getCurrentUser()
-            const userKey = String(options.userKey || getCurrentUserKey(user)).trim()
-            await connectDrive({ interactive: options.interactive !== false, userKey })
-            await bindingStore.saveBinding(user, getPersistedBinding(userKey))
-            return this.getStatus()
+        async connect() {
+            state.pending = true
+            state.errorCode = ''
+            try {
+                const idToken = await requireIdToken()
+                const response = await fetch(connectUrlEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${idToken}`
+                    }
+                })
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                    throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+                }
+                const payload = await response.json()
+                const redirectUrl = String(payload?.url || '').trim()
+                if (!/^https?:\/\//i.test(redirectUrl)) throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+                state.pending = false
+                window.location.assign(redirectUrl)
+                return this.getStatus()
+            } catch (error) {
+                const code = normalizeExternalMediaErrorCode(error)
+                state.errorCode = code
+                state.pending = false
+                throw createExternalMediaError(code, error)
+            }
         },
-        async handleSignedInUser(user, options = {}) {
-            const userKey = getCurrentUserKey(user)
-            const storedState = applyStoredState(userKey)
-            state.lastErrorCode = ''
-            await bindingStore.hydrateState(user, storedState)
-            return this.getStatus()
+        async unlink() {
+            state.pending = true
+            state.errorCode = ''
+            try {
+                const idToken = await requireIdToken()
+                const response = await fetch(disconnectEndpoint, {
+                    method: 'POST',
+                    headers: createAuthorizedHeaders(idToken)
+                })
+                const rawResponseText = await response.text()
+                const parsedResponse = parseJsonSafe(rawResponseText)
+                console.info('[GoogleDriveProvider] disconnect response', {
+                    status: response.status,
+                    ok: response.ok,
+                    rawResponseText,
+                    parsedResponse
+                })
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                    throw createExternalMediaError(ERROR_CODES.UNAVAILABLE)
+                }
+                state.linked = false
+                state.connected = false
+                state.available = true
+                state.checked = true
+                state.errorCode = ''
+                uploadCache.clear()
+                return this.getStatus()
+            } catch (error) {
+                const code = normalizeExternalMediaErrorCode(error)
+                state.errorCode = code
+                if (code !== ERROR_CODES.UNLINKED) {
+                    state.available = false
+                }
+                console.error('[GoogleDriveProvider] disconnect failed', {
+                    code,
+                    message: error?.message,
+                    stack: error?.stack
+                })
+                throw createExternalMediaError(code, error)
+            } finally {
+                state.pending = false
+            }
+        },
+        async handleSignedInUser(user) {
+            state.currentUser = user || null
+            const hasOAuthRedirectFlag = readOAuthRedirectFlag()
+            console.info('[GoogleDriveProvider] oauth redirect flag detected', { hasOAuthRedirectFlag })
+            const status = await syncStatusFromBackend.call(this, { reason: hasOAuthRedirectFlag ? 'oauth-redirect' : 'signed-in-user' })
+            if (hasOAuthRedirectFlag) {
+                if (status?.connected) {
+                    clearOAuthRedirectFlag()
+                } else {
+                    console.warn('[GoogleDriveProvider] OAuth redirect status returned disconnected state', status)
+                }
+            }
+            return status
         },
         handleSignedOutUser() {
-            resetRuntimeState()
-        },
-        async unlink(options = {}) {
-            const user = options.user || getCurrentUser()
-            const userKey = String(options.userKey || getCurrentUserKey(user)).trim()
-            resetRuntimeState()
-            if (userKey) writeStoredState(null, userKey)
-            await bindingStore.clearBinding(user)
-            return this.getStatus()
+            state.currentUser = null
+            state.linked = false
+            state.connected = false
+            state.available = true
+            state.pending = false
+            state.errorCode = ''
+            state.checked = false
+            uploadCache.clear()
         },
         uploadFile,
         uploadDataUrl,
         resolveUserFacingError,
         getStatus() {
-            applyStoredState()
-            const now = Date.now()
-            return {
-                providerId,
-                configured: !!getGoogleClientId(),
-                linked: !!state.granted,
-                connected: !!state.accessToken && state.expiresAt - now > 60000,
-                pending: !!state.pendingPromise,
-                errorCode: state.lastErrorCode || '',
-                rootId: state.folders.rootId || '',
-                attachmentsId: state.folders.attachmentsId || '',
-                backupsId: state.folders.backupsId || '',
-                exportsId: state.folders.exportsId || ''
-            }
+            return getStatusSnapshot()
         }
     }
+    return providerApi
 }

@@ -430,20 +430,6 @@ Object.assign(UI, {
 
     async saveImportedNotes(user, importedNotes) {
         const notes = Array.isArray(importedNotes) ? importedNotes : []
-        const chunkSize = 450
-        for (let index = 0; index < notes.length; index += chunkSize) {
-            const batch = db.batch()
-            notes.slice(index, index + chunkSize).forEach(importedNote => {
-                const reference = DataPath.getUserNotesCollection(user).doc(importedNote.id)
-                batch.set(reference, importedNote, { merge: true })
-            })
-            await batch.commit()
-        }
-        return importResults
-    },
-
-    async saveImportedNotes(user, importedNotes) {
-        const notes = Array.isArray(importedNotes) ? importedNotes : []
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
         const hasInlineMedia = mediaService
             ? notes.some(note => mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia)

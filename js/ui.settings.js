@@ -1,7 +1,19 @@
 Object.assign(UI, {
+    getNextModalLayerBase() {
+        const activeModals = Array.from(document.querySelectorAll(".modal-overlay.active"))
+        const currentMax = activeModals.reduce((max, modalElement) => {
+            const inlineZ = Number(modalElement.style.zIndex || 0)
+            const computedZ = Number(window.getComputedStyle(modalElement).zIndex || 0)
+            const value = Number.isFinite(inlineZ) && inlineZ > 0 ? inlineZ : computedZ
+            return value > max ? value : max
+        }, 0)
+        return currentMax > 0 ? currentMax + 2 : 3002
+    },
+
     openModal(id) {
         const el = document.getElementById(id)
         if (!el) return false
+        el.style.zIndex = String(this.getNextModalLayerBase())
         el.classList.remove("hidden")
         el.classList.add("active")
         el.setAttribute("aria-hidden", "false")
@@ -20,6 +32,7 @@ Object.assign(UI, {
         if (!el) return
         el.classList.remove("active")
         el.setAttribute("aria-hidden", "true")
+        el.style.removeProperty("z-index")
         el.dispatchEvent(new CustomEvent("smartnotes:modal-closed", { detail: { id } }))
         if (id === "settings-modal") {
             const pendingTimerId = Number(this.draftRuntimeApplyTimerId || 0)
@@ -338,6 +351,50 @@ Object.assign(UI, {
                 })
             })
             this.renderEditorSettings()
+            this.applyInputAutocompletePolicy(root)
+            return
+        }
+
+        if (page === "export_import") {
+            title.textContent = dict.settings_export_import || "Export / Import"
+            const lastBackupLabel = typeof this.getLastDriveBackupLabel === "function"
+                ? this.getLastDriveBackupLabel()
+                : ""
+            root.innerHTML = `
+                <div class="settings-group">
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.export_section_title || "Export"}</div>
+                        <div class="settings-actions-grid">
+                            <button type="button" class="btn-secondary" data-action="settings-export-all-notes">
+                                ${dict.settings_export_all_notes || dict.export_all || "Export all notes"}
+                            </button>
+                            <button type="button" class="btn-secondary" data-action="settings-export-folder">
+                                ${dict.settings_export_folder || dict.export_folder || "Export folder"}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.backup_section_title || "Backup"}</div>
+                        <div class="settings-actions-grid">
+                            <button type="button" class="btn-secondary" data-action="settings-backup-all-notes">
+                                ${dict.settings_backup_all_notes || dict.backup_all_notes_drive || "Back up all notes"}
+                            </button>
+                            <button type="button" class="btn-secondary" data-action="settings-backup-folder">
+                                ${dict.settings_backup_folder || dict.backup_folder_select || "Back up folder"}
+                            </button>
+                        </div>
+                        <div class="folder-meta">${lastBackupLabel}</div>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-section-title">${dict.import_section_title || "Import"}</div>
+                        <div class="settings-actions-grid">
+                            <button type="button" class="btn-primary" data-action="settings-trigger-import">
+                                ${dict.settings_import_notes || dict.import_file || "Import notes"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `
             this.applyInputAutocompletePolicy(root)
         }
     },
@@ -982,6 +1039,11 @@ Object.assign(UI, {
         if (titleEl) titleEl.textContent = title
         input.value = value
         input.placeholder = placeholder
+        input.readOnly = true
+        input.setAttribute("autocomplete", "new-password")
+        input.setAttribute("autocorrect", "off")
+        input.setAttribute("autocapitalize", "off")
+        input.setAttribute("spellcheck", "false")
 
         if (secondaryField && secondaryInput && secondaryOptions) {
             secondaryField.classList.remove("hidden")
@@ -989,11 +1051,17 @@ Object.assign(UI, {
             secondaryInput.placeholder = String(secondaryOptions.placeholder || "")
             secondaryInput.setAttribute("aria-label", String(secondaryOptions.ariaLabel || secondaryInput.getAttribute("aria-label") || ""))
             secondaryInput.maxLength = secondaryMaxLength > 0 ? secondaryMaxLength : 524288
+            secondaryInput.readOnly = true
+            secondaryInput.setAttribute("autocomplete", "new-password")
+            secondaryInput.setAttribute("autocorrect", "off")
+            secondaryInput.setAttribute("autocapitalize", "off")
+            secondaryInput.setAttribute("spellcheck", "false")
         } else if (secondaryField && secondaryInput) {
             secondaryField.classList.add("hidden")
             secondaryInput.value = ""
             secondaryInput.placeholder = ""
             secondaryInput.removeAttribute("maxLength")
+            secondaryInput.readOnly = false
         }
 
         let primaryCounter = modal.querySelector('[data-counter="primary"]')
@@ -1083,8 +1151,14 @@ Object.assign(UI, {
         }
         updatePromptState()
 
+        this.applyInputAutocompletePolicy(modal)
         modal.classList.add("active")
-        setTimeout(() => input.focus(), 80)
+        setTimeout(() => {
+            input.readOnly = false
+            input.focus()
+            input.select()
+            if (secondaryInput) secondaryInput.readOnly = false
+        }, 80)
     },
     showPasswordPrompt(title, placeholder) {
         const modal = document.getElementById("lock-modal")
@@ -1131,6 +1205,22 @@ Object.assign(UI, {
                 button.onclick = () => finish(null)
             })
         })
+    },
+    prepareProtectedInput(input, mode = "password") {
+        if (!input) return
+        const normalizedMode = mode === "text" ? "text" : "password"
+        input.type = normalizedMode
+        input.setAttribute("autocomplete", "new-password")
+        input.setAttribute("autocorrect", "off")
+        input.setAttribute("autocapitalize", "off")
+        input.setAttribute("spellcheck", "false")
+        input.setAttribute("data-lpignore", "true")
+        input.setAttribute("data-1p-ignore", "true")
+        input.setAttribute("data-form-type", "other")
+        if (!input.dataset.noAutofillName) {
+            input.dataset.noAutofillName = `sn_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`
+        }
+        input.setAttribute("name", input.dataset.noAutofillName)
     },
 
     syncSettingsUI() {

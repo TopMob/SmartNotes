@@ -66,31 +66,49 @@ const UI = {
         return dict[key] || fallback || key
     },
 
+    resolveNoteById(noteId) {
+        const targetId = String(noteId || "")
+        if (!targetId) return null
+        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        return notes.find(note => String(note?.id || "") === targetId) || null
+    },
+
     isAuthAutocompleteAllowed(element) {
-        return !!element?.closest?.("#login-screen")
+        return false
     },
 
     applyInputAutocompletePolicy(root = document) {
         const scope = root && typeof root.querySelectorAll === "function" ? root : document
         scope.querySelectorAll("input, textarea").forEach(element => {
-            if (this.isAuthAutocompleteAllowed(element)) return
             const tagName = element.tagName.toLowerCase()
             const inputType = String(element.getAttribute("type") || "text").toLowerCase()
             if (inputType === "hidden") return
+            const closestForm = element.closest("form")
+            if (closestForm) closestForm.setAttribute("autocomplete", "off")
+            if (!element.dataset.noAutofillName) {
+                element.dataset.noAutofillName = `sn_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`
+            }
             element.setAttribute("data-lpignore", "true")
             element.setAttribute("data-1p-ignore", "true")
+            element.setAttribute("data-form-type", "other")
+            element.setAttribute("autocorrect", "off")
             element.setAttribute("autocapitalize", "off")
+            element.setAttribute("spellcheck", "false")
+            element.setAttribute("aria-autocomplete", "none")
             if (tagName === "textarea") {
-                element.setAttribute("autocomplete", "off")
+                element.setAttribute("autocomplete", "new-password")
+                element.setAttribute("name", element.dataset.noAutofillName)
                 return
             }
             if (inputType === "password") {
-                element.setAttribute("autocomplete", "one-time-code")
+                element.setAttribute("autocomplete", "new-password")
+                element.setAttribute("name", element.dataset.noAutofillName)
                 element.setAttribute("inputmode", "text")
                 return
             }
             if (!["checkbox", "radio", "range", "file", "button", "submit", "color"].includes(inputType)) {
-                element.setAttribute("autocomplete", "off")
+                element.setAttribute("autocomplete", "new-password")
+                element.setAttribute("name", element.dataset.noAutofillName)
             }
         })
     },
