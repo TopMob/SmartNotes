@@ -130,6 +130,22 @@ export const createInputHandlers = (context) => {
         return fragment
     }
 
+    const normalizeClipboardPlainText = (value) => {
+        const normalized = String(value || "").replace(/\r\n?/g, "\n")
+        const rows = normalized.split("\n")
+        while (rows.length && rows[0].trim() === "") rows.shift()
+        while (rows.length && rows[rows.length - 1].trim() === "") rows.pop()
+        const compact = []
+        let previousWasEmpty = false
+        rows.forEach(row => {
+            const isEmpty = row.trim() === ""
+            if (isEmpty && previousWasEmpty) return
+            compact.push(row)
+            previousWasEmpty = isEmpty
+        })
+        return compact.join("\n")
+    }
+
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
         const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
@@ -178,7 +194,7 @@ export const createInputHandlers = (context) => {
 
         event.preventDefault()
         const html = event.clipboardData?.getData("text/html") || ""
-        const plainText = event.clipboardData?.getData("text/plain") || ""
+        const plainText = normalizeClipboardPlainText(event.clipboardData?.getData("text/plain") || "")
         const normalizedHtml = html ? normalizePastedHtml(html) : ""
         const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
         const sanitizedFragment = sanitizedHtml ? sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml)) : null
@@ -209,9 +225,9 @@ export const createInputHandlers = (context) => {
                 throw error
             }
         }
-        const hasInsertedContent = preparedHtml
-            ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
-            : (plainText ? insertFragmentAtSelection(plainTextToFragment(plainText)) : false)
+        const hasInsertedContent = plainText
+            ? insertFragmentAtSelection(plainTextToFragment(plainText))
+            : (preparedHtml ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml)) : false)
         if (hasInsertedContent) queueSnapshot()
     }
 
@@ -223,7 +239,7 @@ export const createInputHandlers = (context) => {
         const fragment = range.cloneContents()
         const container = document.createElement("div")
         container.appendChild(fragment)
-        const plainText = String(container.innerText || container.textContent || "").replace(/\r\n?/g, "\n")
+        const plainText = normalizeClipboardPlainText(container.innerText || container.textContent || "")
         if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
