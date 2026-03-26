@@ -1230,6 +1230,10 @@ Object.assign(UI, {
     },
 
     getAnalysisApiEndpoint() {
+        const config = window.SmartNotesBackendConfig
+        if (config && typeof config.createApiEndpoint === "function") {
+            return config.createApiEndpoint("analyze")
+        }
         return "https://backendfornmartnotes.vercel.app/api/analyze"
     },
 
