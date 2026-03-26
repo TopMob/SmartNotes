@@ -207,6 +207,33 @@ export const createInputHandlers = (context) => {
         return true
     }
 
+    const insertWithNativeCommand = ({ html = "", text = "" } = {}) => {
+        if (typeof document.execCommand !== "function") return false
+        const target = elements.content
+        if (!target) return false
+        restoreSelection()
+        target.focus()
+        if (html) {
+            try {
+                if (document.execCommand("insertHTML", false, html)) {
+                    storeSelection()
+                    return true
+                }
+            } catch {
+            }
+        }
+        if (text) {
+            try {
+                if (document.execCommand("insertText", false, text)) {
+                    storeSelection()
+                    return true
+                }
+            } catch {
+            }
+        }
+        return false
+    }
+
     const handlePaste = async (event) => {
         const items = Array.from(event.clipboardData?.items || [])
         const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
@@ -264,8 +291,8 @@ export const createInputHandlers = (context) => {
             }
         }
         const hasInsertedContent = preparedHtml
-            ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
-            : (plainText ? insertFragmentAtSelection(plainTextToFragment(plainText)) : false)
+            ? (insertWithNativeCommand({ html: preparedHtml }) || insertFragmentAtSelection(createFragmentFromHtml(preparedHtml)))
+            : (plainText ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText))) : false)
         if (hasInsertedContent) queueSnapshot()
     }
 
@@ -290,7 +317,17 @@ export const createInputHandlers = (context) => {
         if (!range || range.collapsed) return
         handleCopy(event)
         if (!event.defaultPrevented) event.preventDefault()
-        range.deleteContents()
+        const removedWithNative = (() => {
+            if (typeof document.execCommand !== "function") return false
+            try {
+                restoreSelection()
+                elements.content?.focus()
+                return document.execCommand("delete", false, null)
+            } catch {
+                return false
+            }
+        })()
+        if (!removedWithNative) range.deleteContents()
         storeSelection()
         queueSnapshot()
     }
