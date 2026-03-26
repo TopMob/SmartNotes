@@ -150,6 +150,32 @@
     margin: 0 0 0.8rem;
 }
 
+.note-content p,
+.note-content div,
+.note-content blockquote,
+.note-content pre,
+.note-content h1,
+.note-content h2,
+.note-content h3,
+.note-content h4,
+.note-content h5,
+.note-content h6 {
+    margin: 0 0 0.4em;
+}
+
+.note-content p:last-child,
+.note-content div:last-child,
+.note-content blockquote:last-child,
+.note-content pre:last-child,
+.note-content h1:last-child,
+.note-content h2:last-child,
+.note-content h3:last-child,
+.note-content h4:last-child,
+.note-content h5:last-child,
+.note-content h6:last-child {
+    margin-bottom: 0;
+}
+
 .note-content:focus-within {
     border-color: rgba(var(--primary-rgb), 0.28);
     box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.10);

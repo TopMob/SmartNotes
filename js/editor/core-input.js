@@ -182,6 +182,8 @@ export const createInputHandlers = (context) => {
         return normalizeClipboardPlainText(output.join(""))
     }
 
+    const hasRichFormatting = (html) => /<(strong|b|em|i|u|s|strike|a|ul|ol|li|blockquote|pre|h[1-6]|img|audio|video|table|hr)\b/i.test(String(html || ""))
+
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
         const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
@@ -290,9 +292,12 @@ export const createInputHandlers = (context) => {
                 throw error
             }
         }
-        const hasInsertedContent = preparedHtml
-            ? (insertWithNativeCommand({ html: preparedHtml }) || insertFragmentAtSelection(createFragmentFromHtml(preparedHtml)))
-            : (plainText ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText))) : false)
+        const preferPlainText = !!plainText && (!!smartNotesHtml && !hasRichFormatting(preparedHtml))
+        const hasInsertedContent = preferPlainText
+            ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText)))
+            : (preparedHtml
+                ? (insertWithNativeCommand({ html: preparedHtml }) || insertFragmentAtSelection(createFragmentFromHtml(preparedHtml)))
+                : (plainText ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText))) : false))
         if (hasInsertedContent) queueSnapshot()
     }
 
