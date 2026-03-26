@@ -318,7 +318,7 @@ export const EditorAPI = (() => {
         }
 
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const hasInlineMedia = mediaService?.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || "")) || (Array.isArray(note.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || ""))))
+        const hasInlineMedia = mediaService?.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || ""))
         if (hasInlineMedia) {
             if (!mediaService) {
                 UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
@@ -337,7 +337,7 @@ export const EditorAPI = (() => {
                     StateStore.update("currentNote", note)
                     renderState()
                 }
-                if (mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || "")) || (Array.isArray(note.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || ""))))) {
+                if (mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia || /data:(image|audio)\//i.test(String(note.content || ""))) {
                     throw new Error("external-inline-media-blocked")
                 }
             } catch (error) {
