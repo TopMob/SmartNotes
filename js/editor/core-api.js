@@ -497,6 +497,8 @@ export const EditorAPI = (() => {
             state.observer.observe(boundElements.content, { childList: true, subtree: true, characterData: true, attributes: true })
 
             boundElements.content.addEventListener("paste", handlePaste, { signal })
+            boundElements.content.addEventListener("copy", inputHandlers.handleCopy, { signal })
+            boundElements.content.addEventListener("cut", inputHandlers.handleCut, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleListEnter, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleTagLineEnter, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })

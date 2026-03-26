@@ -70,6 +70,66 @@ export const createInputHandlers = (context) => {
         return template.content.cloneNode(true)
     }
 
+    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
+
+    const sanitizePastedFragment = (fragment) => {
+        const sanitizeNode = (node) => {
+            if (!node) return null
+            if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || "")
+            if (node.nodeType !== Node.ELEMENT_NODE) return null
+
+            const sourceTag = String(node.tagName || "").toLowerCase()
+            if (sourceTag === "br") return document.createElement("br")
+            if (sourceTag === "hr") return document.createElement("hr")
+
+            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
+            const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
+            const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
+
+            if (keepTag === "a") {
+                const href = String(node.getAttribute("href") || "").trim()
+                if (/^(https?:|mailto:|tel:)/i.test(href)) {
+                    container.setAttribute("href", href)
+                    container.setAttribute("target", "_blank")
+                    container.setAttribute("rel", "noopener noreferrer")
+                }
+            }
+
+            Array.from(node.childNodes || []).forEach(child => {
+                const sanitizedChild = sanitizeNode(child)
+                if (sanitizedChild) container.appendChild(sanitizedChild)
+            })
+
+            if (keepTag && normalizedTag !== "br") {
+                const text = (container.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+                const hasMeaningfulChildren = !!container.querySelector("img,audio,video,table,hr,br,li,ul,ol")
+                if (!text && !hasMeaningfulChildren && normalizedTag !== "p" && normalizedTag !== "li") return null
+                if ((normalizedTag === "p" || normalizedTag === "li") && !text && !hasMeaningfulChildren) {
+                    container.appendChild(document.createElement("br"))
+                }
+            }
+            return container
+        }
+
+        const output = document.createDocumentFragment()
+        Array.from(fragment.childNodes || []).forEach(child => {
+            const sanitizedNode = sanitizeNode(child)
+            if (sanitizedNode) output.appendChild(sanitizedNode)
+        })
+        return output
+    }
+
+    const plainTextToFragment = (plainText) => {
+        const fragment = document.createDocumentFragment()
+        const normalizedText = String(plainText || "").replace(/\r\n?/g, "\n")
+        const paragraphs = normalizedText.split("\n")
+        paragraphs.forEach((line, index) => {
+            if (index > 0) fragment.appendChild(document.createElement("br"))
+            fragment.appendChild(document.createTextNode(line))
+        })
+        return fragment
+    }
+
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
         const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
@@ -121,7 +181,12 @@ export const createInputHandlers = (context) => {
         const plainText = event.clipboardData?.getData("text/plain") || ""
         const normalizedHtml = html ? normalizePastedHtml(html) : ""
         const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
-        let preparedHtml = sanitizedHtml
+        const sanitizedFragment = sanitizedHtml ? sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml)) : null
+        let preparedHtml = sanitizedFragment ? (() => {
+            const wrap = document.createElement("div")
+            wrap.appendChild(sanitizedFragment.cloneNode(true))
+            return wrap.innerHTML
+        })() : ""
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
         const hasInlineMedia = /data:(image|audio)\//i.test(preparedHtml)
         if (preparedHtml && hasInlineMedia && !mediaService) {
@@ -146,8 +211,33 @@ export const createInputHandlers = (context) => {
         }
         const hasInsertedContent = preparedHtml
             ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
-            : (plainText ? insertFragmentAtSelection(document.createTextNode(plainText)) : false)
+            : (plainText ? insertFragmentAtSelection(plainTextToFragment(plainText)) : false)
         if (hasInsertedContent) queueSnapshot()
+    }
+
+    const handleCopy = (event) => {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+        const range = getActiveRangeInContent()
+        if (!range) return
+        const fragment = range.cloneContents()
+        const container = document.createElement("div")
+        container.appendChild(fragment)
+        const plainText = String(container.innerText || container.textContent || "").replace(/\r\n?/g, "\n")
+        if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
+        event.preventDefault()
+        event.clipboardData?.setData("text/plain", plainText)
+        event.clipboardData?.setData("text/html", container.innerHTML)
+    }
+
+    const handleCut = (event) => {
+        const range = getActiveRangeInContent()
+        if (!range || range.collapsed) return
+        handleCopy(event)
+        if (!event.defaultPrevented) event.preventDefault()
+        range.deleteContents()
+        storeSelection()
+        queueSnapshot()
     }
 
     const handleEquationConfirmKeyDown = (event) => {
@@ -507,6 +597,8 @@ export const createInputHandlers = (context) => {
 
     return {
         handlePaste,
+        handleCopy,
+        handleCut,
         handleEquationConfirmKeyDown,
         focusEditable,
         storeSelection,

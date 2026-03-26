@@ -77,6 +77,8 @@
     flex-direction: column;
     gap: 8px;
     min-width: 0;
+    overscroll-behavior: contain;
+    overflow-anchor: none;
 }
 
 #note-title {
@@ -114,6 +116,7 @@
     display: block;
     flex: 1 1 auto;
     scroll-padding-bottom: var(--editor-bottom-offset);
+    overflow-anchor: none;
 }
 
 .note-page {
