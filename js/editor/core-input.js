@@ -182,8 +182,6 @@ export const createInputHandlers = (context) => {
         return normalizeClipboardPlainText(output.join(""))
     }
 
-    const hasRichFormatting = (html) => /<(strong|b|em|i|u|s|strike|a|ul|ol|li|blockquote|pre|h[1-6]|img|audio|video|table|hr)\b/i.test(String(html || ""))
-
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
         const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
@@ -258,46 +256,19 @@ export const createInputHandlers = (context) => {
         }
 
         event.preventDefault()
-        const smartNotesHtml = event.clipboardData?.getData("application/x-smartnotes-html") || ""
         const html = event.clipboardData?.getData("text/html") || ""
-        const plainText = normalizeClipboardPlainText(event.clipboardData?.getData("text/plain") || "")
-        const sourceHtml = smartNotesHtml || html
-        const normalizedHtml = sourceHtml ? normalizePastedHtml(sourceHtml) : ""
-        const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
-        const sanitizedFragment = sanitizedHtml ? sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml)) : null
-        let preparedHtml = sanitizedFragment ? (() => {
-            const wrap = document.createElement("div")
-            wrap.appendChild(sanitizedFragment.cloneNode(true))
-            return wrap.innerHTML
-        })() : ""
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const hasInlineMedia = /data:(image|audio)\//i.test(preparedHtml)
-        if (preparedHtml && hasInlineMedia && !mediaService) {
-            UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
-            return
-        }
-        if (preparedHtml && mediaService) {
-            try {
-                const externalizedResult = await mediaService.externalizeHtmlMedia(preparedHtml, { fileNameBase: "pasted_media" })
-                preparedHtml = externalizedResult.html
-                if (mediaService.containsInlineMedia?.(preparedHtml)) {
-                    throw new Error("external-inline-media-blocked")
-                }
-            } catch (error) {
-                const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
-                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    return
-                }
-                throw error
+        let plainText = normalizeClipboardPlainText(event.clipboardData?.getData("text/plain") || "")
+        if (!plainText && html) {
+            const normalizedHtml = normalizePastedHtml(html)
+            const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
+            if (sanitizedHtml) {
+                const fragment = sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml))
+                plainText = fragmentToPlainText(fragment)
             }
         }
-        const preferPlainText = !!plainText && (!!smartNotesHtml && !hasRichFormatting(preparedHtml))
-        const hasInsertedContent = preferPlainText
+        const hasInsertedContent = plainText
             ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText)))
-            : (preparedHtml
-                ? (insertWithNativeCommand({ html: preparedHtml }) || insertFragmentAtSelection(createFragmentFromHtml(preparedHtml)))
-                : (plainText ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText))) : false))
+            : false
         if (hasInsertedContent) queueSnapshot()
     }
 
