@@ -307,8 +307,6 @@
     left: 0;
     z-index: 3;
     touch-action: none;
-    max-width: 100%;
-    max-height: 100%;
 }
 
 
