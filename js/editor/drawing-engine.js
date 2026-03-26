@@ -393,15 +393,24 @@ const DrawingSurfaceEngine = (() => {
                 applyStrokeStyle()
             },
             async setSnapshot(snapshot, options = {}) {
+                const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
+                state.currentSnapshot = normalizedSnapshot
+                if (!normalizedSnapshot) {
+                    clearCanvas()
+                    if (options.resetHistory) {
+                        state.historyStack = [""]
+                        state.redoStack = []
+                    }
+                    hidePointerPreview()
+                    return
+                }
                 scheduleLayoutSync()
                 await new Promise(resolve => requestAnimationFrame(resolve))
-                const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
                 await drawSnapshotOnCanvas(normalizedSnapshot)
                 if (options.resetHistory) {
                     state.historyStack = [normalizedSnapshot]
                     state.redoStack = []
                 }
-                state.currentSnapshot = normalizedSnapshot
                 hidePointerPreview()
             },
             getSnapshot() {
