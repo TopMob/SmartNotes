@@ -464,10 +464,17 @@ select.input-area optgroup {
 
 .shared-member-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 180px auto auto;
+    grid-template-columns: minmax(160px, 1fr) minmax(180px, 220px) auto;
     gap: 8px;
     align-items: center;
     margin-bottom: 8px;
+}
+
+.shared-member-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-word;
 }
 
 .shared-member-field {

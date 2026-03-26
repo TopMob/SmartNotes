@@ -1103,37 +1103,40 @@ Object.assign(UI, {
         const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
         if (!workspace) return
         const root = document.getElementById("workspace-members-content")
+        const saveButton = document.getElementById("workspace-members-save-button")
         if (!root) return
+        if (saveButton) {
+            saveButton.onclick = null
+            saveButton.disabled = true
+        }
+        const currentUserUid = String(StateStore.read().user?.uid || "")
         const canManage = WorkspaceAccessService?.canManageWorkspace?.(workspace)
-        const members = WorkspaceAccessService?.getWorkspaceMembers?.(workspace.id) || []
+        const members = (WorkspaceAccessService?.getWorkspaceMembers?.(workspace.id) || [])
+            .filter(member => member.uid && member.uid !== currentUserUid)
         if (!members.length) {
             const empty = document.createElement("div")
             empty.className = "folder-meta"
-            window.DomSecurity.setText(empty, this.getText("shared_members_empty", "Пока нет участников"))
+            window.DomSecurity.setText(empty, this.getText("shared_members_no_other", "Кроме вас участников нет"))
             root.replaceChildren(empty)
+            if (saveButton) saveButton.classList.add("hidden")
             this.openModal("workspace-members-modal")
             return
+        }
+        if (saveButton) saveButton.classList.remove("hidden")
+        const pendingRoles = new Map()
+        const pendingRemove = new Set()
+        const updateSaveButtonState = () => {
+            if (!saveButton) return
+            saveButton.disabled = !(pendingRoles.size || pendingRemove.size)
         }
         const fragment = document.createDocumentFragment()
         members.forEach(member => {
             const row = document.createElement("div")
             row.className = "shared-member-row"
-            const uidLabel = document.createElement("div")
-            uidLabel.className = "shared-member-uid"
-            window.DomSecurity.setText(uidLabel, member.uid)
 
-            const nameGroup = document.createElement("div")
-            nameGroup.className = "shared-member-field"
             const nameLabel = document.createElement("div")
-            nameLabel.className = "shared-member-field-label"
-            window.DomSecurity.setText(nameLabel, this.getText("display_name", "Отображаемое имя"))
-            const nameInput = document.createElement("input")
-            nameInput.type = "text"
-            nameInput.className = "input-area"
-            nameInput.maxLength = 50
-            nameInput.value = member.displayName || member.uid
-            nameInput.disabled = !canManage && member.uid !== StateStore.read().user?.uid
-            nameGroup.append(nameLabel, nameInput)
+            nameLabel.className = "shared-member-name"
+            window.DomSecurity.setText(nameLabel, member.displayName || member.uid)
 
             const roleGroup = document.createElement("div")
             roleGroup.className = "shared-member-field"
@@ -1154,40 +1157,53 @@ Object.assign(UI, {
                 roleSelect.append(option)
             })
             roleSelect.value = member.role
-            roleSelect.disabled = !canManage || member.uid === workspace.ownerUid
-            roleGroup.append(roleLabel, roleSelect)
-
-            const saveButton = document.createElement("button")
-            saveButton.type = "button"
-            saveButton.className = "btn-secondary"
-            window.DomSecurity.setText(saveButton, this.getText("save", "Сохранить"))
-            saveButton.onclick = async () => {
-                const nextName = String(nameInput.value || "").trim()
-                if (nextName && nextName.length <= 50) {
-                    await WorkspaceAccessService.updateMemberDisplayName(workspace.id, member.uid, nextName)
+            roleSelect.disabled = !canManage
+            roleSelect.onchange = () => {
+                if (roleSelect.value === member.role) {
+                    pendingRoles.delete(member.uid)
+                } else {
+                    pendingRoles.set(member.uid, roleSelect.value)
                 }
-                if (canManage && member.uid !== workspace.ownerUid) {
-                    await WorkspaceAccessService.updateMemberRole(workspace.id, member.uid, roleSelect.value)
-                }
-                this.showToast(this.getText("saved", "Сохранено"))
+                updateSaveButtonState()
             }
+            roleGroup.append(roleLabel, roleSelect)
 
             const removeButton = document.createElement("button")
             removeButton.type = "button"
             removeButton.className = "btn-danger"
             window.DomSecurity.setText(removeButton, this.getText("remove_member", "Удалить"))
-            removeButton.disabled = !canManage || member.uid === workspace.ownerUid
-            removeButton.onclick = async () => {
-                const ok = await WorkspaceAccessService.removeMember(workspace.id, member.uid)
-                if (!ok) return
-                row.remove()
-                this.showToast(this.getText("saved", "Сохранено"))
+            removeButton.disabled = !canManage
+            removeButton.onclick = () => {
+                pendingRemove.add(member.uid)
+                pendingRoles.delete(member.uid)
+                row.classList.add("hidden")
+                updateSaveButtonState()
             }
 
-            row.append(uidLabel, nameGroup, roleGroup, saveButton, removeButton)
+            row.append(nameLabel, roleGroup, removeButton)
             fragment.append(row)
         })
         root.replaceChildren(fragment)
+        if (saveButton) {
+            saveButton.onclick = async () => {
+                const operations = []
+                pendingRoles.forEach((role, memberUid) => {
+                    operations.push(WorkspaceAccessService.updateMemberRole(workspace.id, memberUid, role))
+                })
+                pendingRemove.forEach(memberUid => {
+                    operations.push(WorkspaceAccessService.removeMember(workspace.id, memberUid))
+                })
+                if (!operations.length) return
+                saveButton.disabled = true
+                const result = await Promise.all(operations)
+                const ok = result.every(Boolean)
+                this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Не удалось сохранить"))
+                if (ok) {
+                    this.closeModal("workspace-members-modal")
+                }
+            }
+            updateSaveButtonState()
+        }
         this.openModal("workspace-members-modal")
     },
 
