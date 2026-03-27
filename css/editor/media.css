@@ -331,7 +331,7 @@
 
 @media (max-width: 760px) {
     .editor-scroll-area {
-        --editor-bottom-offset: calc(116px + var(--safe-bottom));
+        --editor-bottom-offset: 16px;
         padding-bottom: var(--editor-bottom-offset);
     }
 
@@ -341,21 +341,9 @@
     }
 
     .editor-overlay.active .editor-bottom-panel {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: calc(var(--z-editor) + 2);
-        margin: 0;
-        width: 100%;
-        box-sizing: border-box;
-        background: var(--surface);
-        padding-top: 6px;
         padding-left: 10px;
         padding-right: 10px;
-        padding-bottom: calc(6px + var(--safe-bottom));
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.32);
+        box-shadow: 0 -12px 26px rgba(0, 0, 0, 0.24);
     }
 
     .editor-bottom-actions {

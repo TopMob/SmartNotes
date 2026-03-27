@@ -63,7 +63,7 @@
 }
 
 .editor-scroll-area {
-    --editor-bottom-offset: 76px;
+    --editor-bottom-offset: 20px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -376,15 +376,13 @@
 }
 
 .editor-bottom-panel {
-    position: sticky;
-    bottom: 0;
+    flex-shrink: 0;
     z-index: 15;
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(var(--blur-strength));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: 2px;
-    padding-top: 4px;
-    padding-bottom: calc(4px + var(--safe-bottom));
+    margin-top: 0;
+    padding: 8px var(--editor-padding) calc(6px + var(--safe-bottom));
 }
 
 .tags-row {
