@@ -98,9 +98,12 @@ const WorkspaceAccessService = (() => {
         if (!workspaceSnapshot.exists) return false
         const workspace = workspaceSnapshot.data() || {}
         if (String(workspace.ownerUid || "") !== user.uid) return false
+        const userProfileSnapshot = await db.collection("users").doc(normalizedTargetUid).get().catch(() => null)
+        const userProfile = userProfileSnapshot?.data?.() || {}
+        const targetDisplayName = String(userProfile.displayName || normalizedTargetUid)
         await workspaceReference.update({
             [`members.${normalizedTargetUid}`]: normalizeRole(role),
-            [`memberNames.${normalizedTargetUid}`]: normalizedTargetUid,
+            [`memberNames.${normalizedTargetUid}`]: targetDisplayName,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         })
         await db.collection("users").doc(normalizedTargetUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).set({

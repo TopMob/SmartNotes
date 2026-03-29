@@ -57,7 +57,8 @@ const DrawingSurfaceEngine = (() => {
         const state = createEngineState()
 
         const ensureCanvasElement = () => {
-            if (!state.containerElement) return
+            const hostElement = state.pageElement || state.containerElement
+            if (!hostElement) return
             if (!state.canvasElement) {
                 const canvasElement = document.createElement("canvas")
                 canvasElement.className = "note-drawing-canvas"
@@ -68,8 +69,8 @@ const DrawingSurfaceEngine = (() => {
                 state.canvasContext = canvasElement.getContext("2d")
                 bindCanvasEvents()
             }
-            if (state.canvasElement.parentElement !== state.containerElement) {
-                state.containerElement.appendChild(state.canvasElement)
+            if (state.canvasElement.parentElement !== hostElement) {
+                hostElement.appendChild(state.canvasElement)
             }
         }
 
@@ -150,6 +151,11 @@ const DrawingSurfaceEngine = (() => {
 
         const syncCanvasPosition = () => {
             if (!state.canvasElement || !state.pageElement) return
+            if (state.canvasElement.parentElement === state.pageElement) {
+                state.canvasElement.style.top = "0px"
+                state.canvasElement.style.left = "0px"
+                return
+            }
             state.canvasElement.style.top = `${state.pageElement.offsetTop}px`
             state.canvasElement.style.left = `${state.pageElement.offsetLeft}px`
         }
@@ -157,7 +163,8 @@ const DrawingSurfaceEngine = (() => {
         const syncCanvasLayout = () => {
             if (!state.canvasElement || !state.canvasContext || !state.pageElement) return
             const cssWidth = Math.max(1, Math.floor(state.pageElement.clientWidth))
-            const cssHeight = Math.max(1, Math.floor(state.pageElement.scrollHeight))
+            const viewportHeight = Math.max(0, Math.floor(state.scrollElement?.clientHeight || 0))
+            const cssHeight = Math.max(1, Math.floor(Math.max(state.pageElement.scrollHeight, viewportHeight)))
             const nextPixelRatio = window.devicePixelRatio || 1
             const pixelWidth = Math.max(1, Math.floor(cssWidth * nextPixelRatio))
             const pixelHeight = Math.max(1, Math.floor(cssHeight * nextPixelRatio))
@@ -386,15 +393,24 @@ const DrawingSurfaceEngine = (() => {
                 applyStrokeStyle()
             },
             async setSnapshot(snapshot, options = {}) {
+                const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
+                state.currentSnapshot = normalizedSnapshot
+                if (!normalizedSnapshot) {
+                    clearCanvas()
+                    if (options.resetHistory) {
+                        state.historyStack = [""]
+                        state.redoStack = []
+                    }
+                    hidePointerPreview()
+                    return
+                }
                 scheduleLayoutSync()
                 await new Promise(resolve => requestAnimationFrame(resolve))
-                const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
                 await drawSnapshotOnCanvas(normalizedSnapshot)
                 if (options.resetHistory) {
                     state.historyStack = [normalizedSnapshot]
                     state.redoStack = []
                 }
-                state.currentSnapshot = normalizedSnapshot
                 hidePointerPreview()
             },
             getSnapshot() {

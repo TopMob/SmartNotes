@@ -289,15 +289,6 @@ export const createEditorCommands = (context) => {
     }
 
     const toggleList = (listTagName) => {
-        const fallbackCommand = listTagName === "ol" ? "insertOrderedList" : "insertUnorderedList"
-        if (execCommandAdapter.isAvailable && fallbackCommand) {
-            const changed = execCommandAdapter.runCommand(fallbackCommand)
-            if (changed) {
-                finalizeChange()
-                return true
-            }
-        }
-
         const range = getValidRange()
         if (!range) return false
 

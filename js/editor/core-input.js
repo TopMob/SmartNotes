@@ -70,6 +70,118 @@ export const createInputHandlers = (context) => {
         return template.content.cloneNode(true)
     }
 
+    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
+
+    const sanitizePastedFragment = (fragment) => {
+        const sanitizeNode = (node) => {
+            if (!node) return null
+            if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || "")
+            if (node.nodeType !== Node.ELEMENT_NODE) return null
+
+            const sourceTag = String(node.tagName || "").toLowerCase()
+            if (sourceTag === "br") return document.createElement("br")
+            if (sourceTag === "hr") return document.createElement("hr")
+
+            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
+            const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
+            const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
+
+            if (keepTag === "a") {
+                const href = String(node.getAttribute("href") || "").trim()
+                if (/^(https?:|mailto:|tel:)/i.test(href)) {
+                    container.setAttribute("href", href)
+                    container.setAttribute("target", "_blank")
+                    container.setAttribute("rel", "noopener noreferrer")
+                }
+            }
+
+            Array.from(node.childNodes || []).forEach(child => {
+                const sanitizedChild = sanitizeNode(child)
+                if (sanitizedChild) container.appendChild(sanitizedChild)
+            })
+
+            if (keepTag && normalizedTag !== "br") {
+                const text = (container.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+                const hasMeaningfulChildren = !!container.querySelector("img,audio,video,table,hr,br,li,ul,ol")
+                if (!text && !hasMeaningfulChildren && normalizedTag !== "p" && normalizedTag !== "li") return null
+                if ((normalizedTag === "p" || normalizedTag === "li") && !text && !hasMeaningfulChildren) {
+                    container.appendChild(document.createElement("br"))
+                }
+            }
+            return container
+        }
+
+        const output = document.createDocumentFragment()
+        Array.from(fragment.childNodes || []).forEach(child => {
+            const sanitizedNode = sanitizeNode(child)
+            if (sanitizedNode) output.appendChild(sanitizedNode)
+        })
+        return output
+    }
+
+    const plainTextToFragment = (plainText) => {
+        const fragment = document.createDocumentFragment()
+        const normalizedText = String(plainText || "").replace(/\r\n?/g, "\n")
+        const paragraphs = normalizedText.split("\n")
+        paragraphs.forEach((line, index) => {
+            if (index > 0) fragment.appendChild(document.createElement("br"))
+            fragment.appendChild(document.createTextNode(line))
+        })
+        return fragment
+    }
+
+    const normalizeClipboardPlainText = (value) => {
+        const normalized = String(value || "").replace(/\r\n?/g, "\n")
+        const rows = normalized.split("\n")
+        while (rows.length && rows[0].trim() === "") rows.shift()
+        while (rows.length && rows[rows.length - 1].trim() === "") rows.pop()
+        const compact = []
+        let previousWasEmpty = false
+        rows.forEach(row => {
+            const isEmpty = row.trim() === ""
+            if (isEmpty && previousWasEmpty) return
+            compact.push(row)
+            previousWasEmpty = isEmpty
+        })
+        return compact.join("\n")
+    }
+
+    const blockLikeTags = new Set(["p", "div", "section", "article", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"])
+
+    const fragmentToPlainText = (fragment) => {
+        const output = []
+        const append = (value) => {
+            if (!value) return
+            output.push(value)
+        }
+        const appendLineBreak = () => {
+            if (!output.length) return
+            const last = output[output.length - 1]
+            if (last === "\n") return
+            output.push("\n")
+        }
+        const visit = (node) => {
+            if (!node) return
+            if (node.nodeType === Node.TEXT_NODE) {
+                append(node.textContent || "")
+                return
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return
+            const tag = String(node.tagName || "").toLowerCase()
+            if (tag === "br") {
+                appendLineBreak()
+                return
+            }
+            if (tag === "li") {
+                append("• ")
+            }
+            Array.from(node.childNodes || []).forEach(visit)
+            if (blockLikeTags.has(tag)) appendLineBreak()
+        }
+        Array.from(fragment.childNodes || []).forEach(visit)
+        return normalizeClipboardPlainText(output.join(""))
+    }
+
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
         const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
@@ -95,6 +207,33 @@ export const createInputHandlers = (context) => {
         return true
     }
 
+    const insertWithNativeCommand = ({ html = "", text = "" } = {}) => {
+        if (typeof document.execCommand !== "function") return false
+        const target = elements.content
+        if (!target) return false
+        restoreSelection()
+        target.focus()
+        if (html) {
+            try {
+                if (document.execCommand("insertHTML", false, html)) {
+                    storeSelection()
+                    return true
+                }
+            } catch {
+            }
+        }
+        if (text) {
+            try {
+                if (document.execCommand("insertText", false, text)) {
+                    storeSelection()
+                    return true
+                }
+            } catch {
+            }
+        }
+        return false
+    }
+
     const handlePaste = async (event) => {
         const items = Array.from(event.clipboardData?.items || [])
         const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
@@ -118,36 +257,55 @@ export const createInputHandlers = (context) => {
 
         event.preventDefault()
         const html = event.clipboardData?.getData("text/html") || ""
-        const plainText = event.clipboardData?.getData("text/plain") || ""
-        const normalizedHtml = html ? normalizePastedHtml(html) : ""
-        const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
-        let preparedHtml = sanitizedHtml
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const hasInlineMedia = /data:(image|audio)\//i.test(preparedHtml)
-        if (preparedHtml && hasInlineMedia && !mediaService) {
-            UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
-            return
-        }
-        if (preparedHtml && mediaService) {
-            try {
-                const externalizedResult = await mediaService.externalizeHtmlMedia(preparedHtml, { fileNameBase: "pasted_media" })
-                preparedHtml = externalizedResult.html
-                if (mediaService.containsInlineMedia?.(preparedHtml)) {
-                    throw new Error("external-inline-media-blocked")
-                }
-            } catch (error) {
-                const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
-                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    return
-                }
-                throw error
+        let plainText = normalizeClipboardPlainText(event.clipboardData?.getData("text/plain") || "")
+        if (!plainText && html) {
+            const normalizedHtml = normalizePastedHtml(html)
+            const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
+            if (sanitizedHtml) {
+                const fragment = sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml))
+                plainText = fragmentToPlainText(fragment)
             }
         }
-        const hasInsertedContent = preparedHtml
-            ? insertFragmentAtSelection(createFragmentFromHtml(preparedHtml))
-            : (plainText ? insertFragmentAtSelection(document.createTextNode(plainText)) : false)
+        const hasInsertedContent = plainText
+            ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText)))
+            : false
         if (hasInsertedContent) queueSnapshot()
+    }
+
+    const handleCopy = (event) => {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
+        const range = getActiveRangeInContent()
+        if (!range) return
+        const fragment = range.cloneContents()
+        const container = document.createElement("div")
+        container.appendChild(fragment)
+        const plainText = fragmentToPlainText(fragment)
+        if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
+        event.preventDefault()
+        event.clipboardData?.setData("text/plain", plainText)
+        event.clipboardData?.setData("text/html", container.innerHTML)
+        event.clipboardData?.setData("application/x-smartnotes-html", container.innerHTML)
+    }
+
+    const handleCut = (event) => {
+        const range = getActiveRangeInContent()
+        if (!range || range.collapsed) return
+        handleCopy(event)
+        if (!event.defaultPrevented) event.preventDefault()
+        const removedWithNative = (() => {
+            if (typeof document.execCommand !== "function") return false
+            try {
+                restoreSelection()
+                elements.content?.focus()
+                return document.execCommand("delete", false, null)
+            } catch {
+                return false
+            }
+        })()
+        if (!removedWithNative) range.deleteContents()
+        storeSelection()
+        queueSnapshot()
     }
 
     const handleEquationConfirmKeyDown = (event) => {
@@ -507,6 +665,8 @@ export const createInputHandlers = (context) => {
 
     return {
         handlePaste,
+        handleCopy,
+        handleCut,
         handleEquationConfirmKeyDown,
         focusEditable,
         storeSelection,
