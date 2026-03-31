@@ -136,6 +136,7 @@
 
 .note-page.is-active {
     display: block;
+    min-height: 100%;
 }
 
 .note-content * {
@@ -307,6 +308,7 @@
     left: 0;
     z-index: 3;
     touch-action: none;
+    pointer-events: none;
 }
 
 

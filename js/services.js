@@ -673,6 +673,7 @@ const CollaborationService = {
         const access = this.getAccess(note)
         const currentUserUid = StateStore.read().user?.uid || ""
         if (!currentUserUid) return "viewer"
+        if (!access && this.isLegacyOwnerNote(note, currentUserUid)) return "owner"
         if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
         if (access?.workspaceId && typeof WorkspaceAccessService !== "undefined") {
             const workspace = WorkspaceAccessService.getWorkspaceById(access.workspaceId)
@@ -681,6 +682,14 @@ const CollaborationService = {
         const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"
+    },
+    isLegacyOwnerNote(note, currentUserUid) {
+        if (!note || typeof note !== "object") return false
+        const workspaceId = String(note.workspaceId || "").trim()
+        if (workspaceId) return false
+        const ownerUid = String(note.ownerUid || "").trim()
+        if (ownerUid) return ownerUid === currentUserUid
+        return true
     },
     canEdit(note) {
         const role = this.getRole(note)
