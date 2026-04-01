@@ -138,7 +138,7 @@ const NotesApplication = (() => {
     }
 
     async function initializeRuntime() {
-        await disableServiceWorkerCaching()
+        disableServiceWorkerCaching()
         if (typeof UI.init === "function") UI.init()
         if (typeof window.SmartNotesEditor?.init === "function") {
             window.SmartNotesEditor.init()

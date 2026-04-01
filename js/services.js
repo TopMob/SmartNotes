@@ -673,7 +673,7 @@ const CollaborationService = {
         const access = this.getAccess(note)
         const currentUserUid = StateStore.read().user?.uid || ""
         if (!currentUserUid) return "viewer"
-        if (!access && this.isLegacyOwnerNote(note, currentUserUid)) return "owner"
+        if (this.isLegacyOwnerNote(note, currentUserUid, access)) return "owner"
         if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
         if (access?.workspaceId && typeof WorkspaceAccessService !== "undefined") {
             const workspace = WorkspaceAccessService.getWorkspaceById(access.workspaceId)
@@ -683,12 +683,27 @@ const CollaborationService = {
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"
     },
-    isLegacyOwnerNote(note, currentUserUid) {
+    isLegacyOwnerNote(note, currentUserUid, access = null) {
         if (!note || typeof note !== "object") return false
         const workspaceId = String(note.workspaceId || "").trim()
-        if (workspaceId) return false
-        const ownerUid = String(note.ownerUid || "").trim()
-        if (ownerUid) return ownerUid === currentUserUid
+        const accessWorkspaceId = String((access?.workspaceId || note?.access?.workspaceId || "")).trim()
+        if (workspaceId || accessWorkspaceId) return false
+        const ownerCandidates = [
+            note.ownerUid,
+            note.ownerId,
+            access?.ownerUid,
+            note?.access?.ownerUid
+        ]
+            .map(value => String(value || "").trim())
+            .filter(Boolean)
+        if (ownerCandidates.length) return ownerCandidates.includes(currentUserUid)
+        const roles = access?.roles && typeof access.roles === "object"
+            ? access.roles
+            : (note?.access?.roles && typeof note.access.roles === "object" ? note.access.roles : {})
+        const hasAnyRole = Object.keys(roles).length > 0
+        if (hasAnyRole) {
+            return roles[currentUserUid] === "owner"
+        }
         return true
     },
     canEdit(note) {

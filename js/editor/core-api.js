@@ -957,7 +957,7 @@ export const EditorAPI = (() => {
                 folderId,
                 createdAt: Utils.serverTimestamp(),
                 order: Date.now(),
-                ownerUid: user?.uid || null,
+                ownerUid: user?.uid || globalThis.auth?.currentUser?.uid || null,
                 workspaceId
             })
         const prepared = JSON.parse(JSON.stringify(base))
