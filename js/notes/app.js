@@ -138,7 +138,7 @@ const NotesApplication = (() => {
     }
 
     async function initializeRuntime() {
-        disableServiceWorkerCaching()
+        await disableServiceWorkerCaching()
         if (typeof UI.init === "function") UI.init()
         startStateRendering()
         startUiEventListeners()

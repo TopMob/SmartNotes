@@ -170,6 +170,29 @@ export const EditorAPI = (() => {
         const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
         return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
     }
+
+    const handleImageUploadSelection = async (targetElement) => {
+        if (!(targetElement instanceof HTMLInputElement)) return
+        const file = targetElement.files?.[0]
+        if (!file) return
+        const loadingLock = typeof UI.startLoading === "function"
+            ? UI.startLoading(UI.getText("loading_image", "Загрузка изображения..."))
+            : null
+        try {
+            const imageUrl = await fileToDataUrl(file)
+            mediaHandlers.insertMedia(imageUrl, "image")
+        } catch (error) {
+            const errorCode = error?.code || error?.message || "unknown"
+            if (String(errorCode).includes("external-") || String(errorCode).startsWith("drive-")) {
+                UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            } else {
+                UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
+            }
+        } finally {
+            targetElement.value = ""
+            if (typeof UI.stopLoading === "function") UI.stopLoading(loadingLock)
+        }
+    }
     const AI_ANALYSIS_VERSION = 1
 
     const hasAiRelevantChanges = (previousNote, nextNote) => {
@@ -612,27 +635,7 @@ export const EditorAPI = (() => {
         const imageUploadInputElement = document.getElementById("img-upload")
         if (imageUploadInputElement) {
             imageUploadInputElement.addEventListener("change", async event => {
-                const targetElement = event.target
-                if (!(targetElement instanceof HTMLInputElement)) return
-                const file = targetElement.files?.[0]
-                if (!file) return
-                const loadingLock = typeof UI.startLoading === "function"
-                    ? UI.startLoading(UI.getText("loading_image", "Загрузка изображения..."))
-                    : null
-                try {
-                    const imageUrl = await fileToDataUrl(file)
-                    mediaHandlers.insertMedia(imageUrl, "image")
-                    targetElement.value = ""
-                } catch (error) {
-                    const errorCode = error?.code || error?.message || "unknown"
-                    if (String(errorCode).includes("external-") || String(errorCode).startsWith("drive-")) {
-                        UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    } else {
-                        UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
-                    }
-                } finally {
-                    if (typeof UI.stopLoading === "function") UI.stopLoading(loadingLock)
-                }
+                await handleImageUploadSelection(event.target)
             }, { signal })
         }
 
