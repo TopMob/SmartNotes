@@ -89,6 +89,53 @@ export const createMediaHandlers = (context) => {
         wrapper.dataset.top = String(Math.max(0, resolvedTop))
     }
 
+    const ensureResizeHandle = (wrapper) => {
+        if (!wrapper) return
+        if (wrapper.querySelector(".media-resize-handle")) return
+        const handle = document.createElement("span")
+        handle.className = "media-resize-handle"
+        handle.setAttribute("aria-hidden", "true")
+        wrapper.appendChild(handle)
+    }
+
+    const wrapLegacyImage = (img, page) => {
+        if (!img || !page) return null
+        if (img.closest(".media-wrapper")) return img.closest(".media-wrapper")
+        const wrapper = document.createElement("div")
+        wrapper.className = "media-wrapper media-draggable-item media-floating"
+        wrapper.id = Utils.generateId()
+        wrapper.contentEditable = "false"
+        wrapper.setAttribute("draggable", "true")
+        const srcWidth = parseFloat(img.style.width || img.getAttribute("width") || "")
+        const srcHeight = parseFloat(img.style.height || img.getAttribute("height") || "")
+        if (Number.isFinite(srcWidth) && srcWidth > 0) wrapper.dataset.width = String(srcWidth)
+        if (Number.isFinite(srcHeight) && srcHeight > 0) wrapper.dataset.height = String(srcHeight)
+        const targetLeft = Math.max(8, img.offsetLeft || 16)
+        const targetTop = Math.max(8, img.offsetTop || 16)
+        wrapper.dataset.left = String(targetLeft)
+        wrapper.dataset.top = String(targetTop)
+        img.before(wrapper)
+        wrapper.appendChild(img)
+        ensureResizeHandle(wrapper)
+        ensureFloatingMediaPosition(wrapper, { fallbackX: targetLeft, fallbackY: targetTop })
+        return wrapper
+    }
+
+    const normalizeLegacyMedia = () => {
+        const pages = getPages()
+        pages.forEach(page => {
+            page.querySelectorAll("img").forEach(img => {
+                wrapLegacyImage(img, page)
+            })
+            page.querySelectorAll(".media-wrapper").forEach(wrapper => {
+                ensureResizeHandle(wrapper)
+                const fallbackLeft = Math.max(8, wrapper.offsetLeft || 16)
+                const fallbackTop = Math.max(8, wrapper.offsetTop || 16)
+                ensureFloatingMediaPosition(wrapper, { fallbackX: fallbackLeft, fallbackY: fallbackTop })
+            })
+        })
+    }
+
     const resolveInsertPosition = () => {
         const page = getActivePageElement()
         if (!page) return { left: 16, top: 16 }
@@ -249,14 +296,17 @@ export const createMediaHandlers = (context) => {
         makeMediaDraggable()
         syncMediaSizes()
         if (wrapper) selectMedia(wrapper)
+        queueSnapshot()
     }
 
     const makeMediaDraggable = () => {
+        normalizeLegacyMedia()
         elements.content.querySelectorAll(".media-wrapper").forEach(w => {
             w.classList.add("media-draggable-item")
             w.setAttribute("draggable", state.drawingState?.active ? "false" : "true")
             w.style.pointerEvents = state.drawingState?.active ? "none" : ""
             w.contentEditable = "false"
+            ensureResizeHandle(w)
             ensureFloatingMediaPosition(w, { fallbackX: 16, fallbackY: 16 })
         })
     }
