@@ -701,8 +701,15 @@ const CollaborationService = {
             ? access.roles
             : (note?.access?.roles && typeof note.access.roles === "object" ? note.access.roles : {})
         const hasAnyRole = Object.keys(roles).length > 0
+        const accessNoteId = String((access?.noteId || note?.access?.noteId || "")).trim()
+        const accessShareId = String((access?.shareId || note?.access?.shareId || "")).trim()
+        const accessOwnerCollection = String((access?.ownerCollection || note?.access?.ownerCollection || "")).trim()
+        const hasShareMetadata = !!(accessNoteId || accessShareId || accessOwnerCollection)
         if (hasAnyRole) {
-            return roles[currentUserUid] === "owner"
+            if (roles[currentUserUid] === "owner") return true
+            const roleKeys = Object.keys(roles)
+            if (!hasShareMetadata && roleKeys.length === 1 && roleKeys[0] === currentUserUid) return true
+            return false
         }
         return true
     },
