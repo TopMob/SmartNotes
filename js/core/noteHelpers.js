@@ -46,9 +46,3 @@ export const buildNoteUpdatePayload = (updates = {}, options = {}) => {
     }
     return payload
 }
-
-window.NoteHelpers = {
-    normalizeDateValue,
-    buildNotePayload,
-    buildNoteUpdatePayload
-}
