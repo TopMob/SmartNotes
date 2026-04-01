@@ -2,6 +2,10 @@ import { CONFIG } from "./core-state.js"
 
 export const createMediaHandlers = (context) => {
     const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText, restoreSelection } = context
+    const isSupportedImageSource = (value) => {
+        const normalizedValue = String(value || "").trim()
+        return /^https?:\/\//i.test(normalizedValue) || /^data:image\//i.test(normalizedValue)
+    }
 
     const optimizeImageDataUrl = (dataUrl, options = {}) => new Promise((resolve) => {
         const source = String(dataUrl || "")
@@ -174,7 +178,7 @@ export const createMediaHandlers = (context) => {
 
     const insertMedia = (src, type) => {
         const normalizedSource = String(src || "").trim()
-        if (type !== "image" || !/^https:\/\//i.test(normalizedSource) && !/^data:image\//i.test(normalizedSource)) return
+        if (type !== "image" || !isSupportedImageSource(normalizedSource)) return
         const id = Utils.generateId()
         const html = `
         <div class="media-wrapper media-draggable-item" id="${id}" contenteditable="false" draggable="true">
