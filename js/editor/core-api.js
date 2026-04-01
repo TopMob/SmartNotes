@@ -235,12 +235,23 @@ export const EditorAPI = (() => {
         return !!titleText || !!plainTextContent || hasMedia || tagsCount > 0 || drawingCount > 0
     }
 
+    const ensureEditablePageHtml = (htmlValue) => {
+        const html = String(htmlValue || "").trim()
+        if (!html) return "<p><br></p>"
+        const plainText = Utils.stripHtml(html).replace(/\u00a0/g, " ").trim()
+        const hasMedia = /<(img|audio|video|table|hr|iframe|canvas|svg)\b/i.test(html)
+        if (!plainText && !hasMedia) return "<p><br></p>"
+        return html
+    }
+
 
     const normalizeEditorHtml = (htmlValue) => {
         const htmlText = String(htmlValue || "")
             .replace(/\s+/g, " ")
             .replace(/>\s+</g, "><")
             .replace(/&nbsp;/gi, " ")
+            .replace(/<p>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/p>/gi, "")
+            .replace(/<div>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/div>/gi, "")
             .trim()
         return htmlText
     }
@@ -706,7 +717,7 @@ export const EditorAPI = (() => {
         page.setAttribute("aria-multiline", "true")
         const label = document.getElementById("note-content-editable")?.getAttribute("aria-label")
         if (label) page.setAttribute("aria-label", label)
-        page.innerHTML = html
+        page.innerHTML = ensureEditablePageHtml(html)
         return page
     }
 
@@ -771,6 +782,7 @@ export const EditorAPI = (() => {
             pages.forEach(page => {
                 page.setAttribute("role", "textbox")
                 page.setAttribute("aria-multiline", "true")
+                page.innerHTML = ensureEditablePageHtml(page.innerHTML)
             })
         }
         const updatedPages = getPages()
