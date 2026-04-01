@@ -419,8 +419,8 @@ export function createAuthManager({ auth }) {
         },
         async _handleAuthState(user) {
             const normalizedUser = user || auth.currentUser || null
-            const previousUserUid = String(state.currentUser?.uid || "")
-            const nextUserUid = String(normalizedUser?.uid || "")
+            const previousUserUid = String(state.currentUser && state.currentUser.uid ? state.currentUser.uid : "")
+            const nextUserUid = String(normalizedUser && normalizedUser.uid ? normalizedUser.uid : "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             const externalMediaService = window.ExternalMediaService || window.GoogleDriveMediaService
             state.currentUser = normalizedUser
@@ -447,13 +447,13 @@ export function createAuthManager({ auth }) {
                         }
                     }
                 }
-
-            if (externalMediaService && typeof externalMediaService.handleSignedOutUser === "function") {
-                externalMediaService.handleSignedOutUser()
-            }
-            this._stopSessionWhenReady()
-            this.clearState()
-            this.applySignedOutUI()
+            } else {
+                if (externalMediaService && typeof externalMediaService.handleSignedOutUser === "function") {
+                    externalMediaService.handleSignedOutUser()
+                }
+                this._stopSessionWhenReady()
+                this.clearState()
+                this.applySignedOutUI()
         },
         async init() {
             if (!auth || state.initialized) return
