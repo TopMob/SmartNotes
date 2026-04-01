@@ -51,7 +51,13 @@ const buildPreviewText = (note) => {
     return mediaSummary || UI.getText("empty_note", "No content")
 }
 
-window.NoteText = {
+const noteTextApi = {
     buildAutoTitle,
     buildPreviewText
+}
+
+if (window.GlobalApi?.publish) {
+    window.GlobalApi.publish({ path: "modules.notes.text", value: noteTextApi, legacyName: "NoteText" })
+} else {
+    window.NoteText = noteTextApi
 }

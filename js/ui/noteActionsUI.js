@@ -90,4 +90,8 @@ const NoteActionsUI = (() => {
     return { handle }
 })()
 
-window.NoteActionsUI = NoteActionsUI
+if (window.GlobalApi?.publish) {
+    window.GlobalApi.publish({ path: "modules.ui.noteActions", value: NoteActionsUI, legacyName: "NoteActionsUI" })
+} else {
+    window.NoteActionsUI = NoteActionsUI
+}

@@ -51,7 +51,7 @@ const invokeAsync = async (methodName, args) => {
     return method(...args)
 }
 
-window.SmartNotesEditor = new Proxy({}, {
+const smartNotesEditorProxy = new Proxy({}, {
     get(_, property) {
         if (property === "__resolve") return resolveEditorApi
         if (typeof property !== "string") return undefined
@@ -60,3 +60,9 @@ window.SmartNotesEditor = new Proxy({}, {
         return (...args) => invokeAsync(property, args)
     }
 })
+
+if (window.GlobalApi?.publish) {
+    window.GlobalApi.publish({ path: "modules.editor.api", value: smartNotesEditorProxy, legacyName: "SmartNotesEditor" })
+} else {
+    window.SmartNotesEditor = smartNotesEditorProxy
+}
