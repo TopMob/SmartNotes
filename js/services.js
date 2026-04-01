@@ -673,6 +673,7 @@ const CollaborationService = {
         const access = this.getAccess(note)
         const currentUserUid = StateStore.read().user?.uid || ""
         if (!currentUserUid) return "viewer"
+        if (this.isLegacyOwnerNote(note, currentUserUid, access)) return "owner"
         if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
         if (access?.workspaceId && typeof WorkspaceAccessService !== "undefined") {
             const workspace = WorkspaceAccessService.getWorkspaceById(access.workspaceId)
@@ -681,6 +682,36 @@ const CollaborationService = {
         const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"
+    },
+    isLegacyOwnerNote(note, currentUserUid, access = null) {
+        if (!note || typeof note !== "object") return false
+        const workspaceId = String(note.workspaceId || "").trim()
+        const accessWorkspaceId = String((access?.workspaceId || note?.access?.workspaceId || "")).trim()
+        if (workspaceId || accessWorkspaceId) return false
+        const ownerCandidates = [
+            note.ownerUid,
+            note.ownerId,
+            access?.ownerUid,
+            note?.access?.ownerUid
+        ]
+            .map(value => String(value || "").trim())
+            .filter(Boolean)
+        if (ownerCandidates.length) return ownerCandidates.includes(currentUserUid)
+        const roles = access?.roles && typeof access.roles === "object"
+            ? access.roles
+            : (note?.access?.roles && typeof note.access.roles === "object" ? note.access.roles : {})
+        const hasAnyRole = Object.keys(roles).length > 0
+        const accessNoteId = String((access?.noteId || note?.access?.noteId || "")).trim()
+        const accessShareId = String((access?.shareId || note?.access?.shareId || "")).trim()
+        const accessOwnerCollection = String((access?.ownerCollection || note?.access?.ownerCollection || "")).trim()
+        const hasShareMetadata = !!(accessNoteId || accessShareId || accessOwnerCollection)
+        if (hasAnyRole) {
+            if (roles[currentUserUid] === "owner") return true
+            const roleKeys = Object.keys(roles)
+            if (!hasShareMetadata && roleKeys.length === 1 && roleKeys[0] === currentUserUid) return true
+            return false
+        }
+        return true
     },
     canEdit(note) {
         const role = this.getRole(note)

@@ -10,6 +10,15 @@ export const createAutosaveHandlers = (context) => {
         updateSnapshotFrame
     } = context
 
+    const normalizeEditorContentForStorage = (contentValue) => {
+        const html = String(contentValue || "").trim()
+        if (!html) return ""
+        const plainText = Utils.stripHtml(html).replace(/\u00a0/g, " ").trim()
+        const hasMedia = /<(img|audio|video|table|hr|iframe|canvas|svg)\b/i.test(html)
+        if (!plainText && !hasMedia) return ""
+        return html
+    }
+
     const captureSnapshot = () => {
         const currentNote = StateStore.read().currentNote
         const titleElement = document.getElementById("note-title")
@@ -47,7 +56,7 @@ export const createAutosaveHandlers = (context) => {
         if (!pageDrawingsRevision) pageDrawingsRevision = buildPageDrawingsRevision(drawings)
         return {
             title: titleElement.value || "",
-            content: contentElement.innerHTML || "",
+            content: normalizeEditorContentForStorage(contentElement.innerHTML || ""),
             tags: [...(currentNote?.tags || [])],
             pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
             pageDrawings: drawings,
@@ -76,7 +85,7 @@ export const createAutosaveHandlers = (context) => {
 
     const isSnapshotEmpty = (snapshot) => {
         const titleText = String(snapshot?.title || "").trim()
-        const contentText = String(snapshot?.content || "").replace(/<br\s*\/?>(\s*)/gi, "").trim()
+        const contentText = normalizeEditorContentForStorage(snapshot?.content || "")
         const tagsCount = Array.isArray(snapshot?.tags) ? snapshot.tags.length : 0
         const drawingsCount = Array.isArray(snapshot?.pageDrawings)
             ? snapshot.pageDrawings.filter(item => String(item || "").trim().length > 0).length

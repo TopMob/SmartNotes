@@ -113,7 +113,8 @@
     touch-action: pan-y;
     box-sizing: border-box;
     position: relative;
-    display: block;
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     scroll-padding-bottom: var(--editor-bottom-offset);
     overflow-anchor: none;
@@ -136,6 +137,8 @@
 
 .note-page.is-active {
     display: block;
+    flex: 1 1 auto;
+    min-height: 100%;
 }
 
 .note-content * {
@@ -307,6 +310,7 @@
     left: 0;
     z-index: 3;
     touch-action: none;
+    pointer-events: none;
 }
 
 

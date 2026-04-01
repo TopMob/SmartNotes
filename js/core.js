@@ -190,11 +190,7 @@ function initializeSplashScreen() {
     }
     splashScreen.classList.add("active")
     splashScreen.style.display = "flex"
-    const timeoutId = setTimeout(() => {
-        hideSplashScreen()
-    }, 3000)
     const wrappedHide = () => {
-        clearTimeout(timeoutId)
         hideSplashScreen()
     }
     window.hideSplashScreen = wrappedHide
