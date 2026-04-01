@@ -22,13 +22,3 @@ export const canAddCustomTheme = (count) => {
 }
 
 export const canAssignToFolder = (folder) => !!folder && folder.trashedAt == null
-
-window.Validators = {
-    validateFolderName,
-    validateFolderDescription,
-    canAddFolder,
-    canAddCustomTheme,
-    canAssignToFolder,
-    FOLDER_DESCRIPTION_SOFT_LIMIT,
-    FOLDER_DESCRIPTION_HARD_LIMIT
-}
