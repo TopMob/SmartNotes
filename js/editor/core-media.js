@@ -45,7 +45,6 @@ export const createMediaHandlers = (context) => {
     })
 
     const uploadImageFile = async (file) => {
-        if (!navigator.onLine) throw new Error("drive-offline")
         const mediaService = resolveMediaService()
         if (!mediaService || typeof mediaService.uploadDataUrl !== "function") throw new Error("external-storage-unlinked")
         const currentUser = window.auth?.currentUser || (typeof StateStore !== "undefined" && typeof StateStore.read === "function" ? StateStore.read().user : null) || null
