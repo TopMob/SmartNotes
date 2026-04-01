@@ -436,7 +436,13 @@ export function createAuthManager({ auth }) {
                 await this._startSessionWhenReady(normalizedUser)
                 if (window.ExternalMediaService?.handleSignedInUser) {
                     try {
-                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, { interactiveAllowed: state.driveInteractiveAllowed })
+                        const shouldSyncExternalMediaStatus = typeof window.ExternalMediaService.hasOAuthRedirectFlag === "function"
+                            ? window.ExternalMediaService.hasOAuthRedirectFlag()
+                            : false
+                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, {
+                            interactiveAllowed: state.driveInteractiveAllowed,
+                            syncStatus: shouldSyncExternalMediaStatus
+                        })
                     } catch (error) {
                         if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
                             UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))

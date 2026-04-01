@@ -495,8 +495,15 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
                 state.pending = false
             }
         },
-        async handleSignedInUser(user) {
+        hasOAuthRedirectFlag() {
+            return readOAuthRedirectFlag()
+        },
+        async handleSignedInUser(user, options = {}) {
             state.currentUser = user || null
+            const shouldSyncStatus = options.syncStatus === true
+            if (!shouldSyncStatus) {
+                return this.getStatus()
+            }
             const hasOAuthRedirectFlag = readOAuthRedirectFlag()
             console.info('[GoogleDriveProvider] oauth redirect flag detected', { hasOAuthRedirectFlag })
             const status = await syncStatusFromBackend.call(this, { reason: hasOAuthRedirectFlag ? 'oauth-redirect' : 'signed-in-user' })

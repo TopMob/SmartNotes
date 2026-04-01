@@ -1,4 +1,7 @@
-import { getCountLabel } from "../editor/core-utils.js"
+const getCountLabel = (count, singleKey, pluralKey) => {
+    if (count === 1) return UI.getText(singleKey, singleKey)
+    return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
+}
 
 const getCleanText = (html) => {
     const wrapper = document.createElement("div")
@@ -48,7 +51,13 @@ const buildPreviewText = (note) => {
     return mediaSummary || UI.getText("empty_note", "No content")
 }
 
-window.NoteText = {
+const noteTextApi = {
     buildAutoTitle,
     buildPreviewText
+}
+
+if (window.GlobalApi?.publish) {
+    window.GlobalApi.publish({ path: "modules.notes.text", value: noteTextApi, legacyName: "NoteText" })
+} else {
+    window.NoteText = noteTextApi
 }

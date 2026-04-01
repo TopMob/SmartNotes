@@ -741,32 +741,29 @@ Object.assign(UI, {
             case "toggle-toolbar":
                 window.SmartNotesEditor?.toggleToolbar()
                 break
-            case "editor-note-actions": {
-                e.preventDefault()
-                e.stopPropagation()
-                const noteId = StateStore.read().currentNote?.id
-                if (noteId) this.openNoteActionsFlow(noteId)
+            case "editor-note-actions":
+            case "note-pin":
+            case "note-favorite":
+            case "note-menu":
+            case "lock-note-menu":
+            case "note-delete":
+            case "note-copy-text":
+            case "note-reminder-set":
+            case "note-reminder-clear":
+            case "note-restore":
+            case "note-move-folder":
+            case "lock-pin":
+            case "lock-archive":
+            case "lock-unhide":
+            case "lock-remove":
+            case "lock-move-folder":
+                if (window.NoteActionsUI?.handle?.({ action, ui: this, element: el, event: e })) {
+                    break
+                }
                 break
-            }
             case "open-feedback-modal":
                 this.closeModal("feedback-menu-modal")
                 this.openModal(el.dataset.modal)
-                break
-            case "note-pin":
-                togglePin(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-favorite":
-                toggleFavorite(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-menu":
-                e.preventDefault()
-                e.stopPropagation()
-                this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "lock-note-menu":
-                e.preventDefault()
-                e.stopPropagation()
-                this.openNoteActionsFlow(decodeURIComponent(el.dataset.noteId || ""), { allowLocked: true })
                 break
             case "note-pin-toggle":
                 this.toggleSelectedPin(decodeURIComponent(el.dataset.noteId || ""))
@@ -776,24 +773,6 @@ Object.assign(UI, {
                 break
             case "note-lock-toggle":
                 this.toggleSelectedLock(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-delete":
-                deleteNoteById(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-copy-text":
-                copyNoteTextById(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-reminder-set":
-                scheduleReminder(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-reminder-clear":
-                clearReminder(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-restore":
-                restoreNoteById(decodeURIComponent(el.dataset.noteId || ""))
-                break
-            case "note-move-folder":
-                this.moveSelectedNoteToFolder(decodeURIComponent(el.dataset.noteId || ""))
                 break
             case "note-mark-for-reanalysis":
                 this.markNoteForReanalysis(decodeURIComponent(el.dataset.noteId || ""))
@@ -806,21 +785,6 @@ Object.assign(UI, {
                 break
             case "export-note-pdf":
                 this.exportSelectedNoteAsPdf()
-                break
-            case "lock-pin":
-                this.toggleLockPin(el.dataset.noteId || "")
-                break
-            case "lock-archive":
-                this.toggleLockArchive(el.dataset.noteId || "")
-                break
-            case "lock-unhide":
-                this.unlockLockedNote(el.dataset.noteId || "")
-                break
-            case "lock-remove":
-                this.removeLockPermanently(el.dataset.noteId || "")
-                break
-            case "lock-move-folder":
-                this.moveLockNoteToFolder(el.dataset.noteId || "")
                 break
             case "appearance-reset":
                 this.resetAppearanceDraft()
