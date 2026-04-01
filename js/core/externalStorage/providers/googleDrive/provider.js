@@ -220,7 +220,10 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
         if (!state.checked) {
             await syncStatusFromBackend.call(providerApi, { reason })
         }
-        if (!state.connected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+        if (!state.connected || !state.linked || state.errorCode) {
+            await syncStatusFromBackend.call(providerApi, { reason: `${reason}-recheck` })
+        }
+        if (!state.connected || !state.linked) throw createExternalMediaError(ERROR_CODES.UNLINKED)
     }
 
     const createAuthorizedHeaders = (idToken, includeJson = false) => includeJson
