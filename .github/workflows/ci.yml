@@ -28,3 +28,6 @@ jobs:
 
       - name: Domain boundaries guard
         run: npm run check:domain-boundaries
+
+      - name: Unused exports guard
+        run: npm run check:unused-exports
