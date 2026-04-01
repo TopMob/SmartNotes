@@ -419,7 +419,7 @@ export function createAuthManager({ auth }) {
         },
         _syncExternalMediaStatusOnSignIn(user) {
             const mediaService = window.ExternalMediaService
-            if (!mediaService?.handleSignedInUser) return
+            if (!mediaService || typeof mediaService.handleSignedInUser !== "function") return
             Promise.resolve(mediaService.handleSignedInUser(user, {
                 interactiveAllowed: state.driveInteractiveAllowed,
                 syncStatus: true
