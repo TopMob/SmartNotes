@@ -30,7 +30,7 @@ export function createAuthManager({ auth }) {
             return provider
         },
         _getGoogleClientId() {
-            const configuredClientId = auth?.app?.options?.clientId
+            const configuredClientId = auth && auth.app && auth.app.options ? auth.app.options.clientId : ""
             return String(configuredClientId || "").trim()
         },
         async _signInWithGoogleIdentity() {
@@ -151,8 +151,8 @@ export function createAuthManager({ auth }) {
             await auth.signInWithPopup(this._provider())
         },
         _isRedirectDomainAllowed() {
-            const currentHost = String(window?.location?.hostname || "").toLowerCase()
-            const authDomainHost = String(auth?.app?.options?.authDomain || "").toLowerCase()
+            const currentHost = String(window && window.location ? window.location.hostname : "").toLowerCase()
+            const authDomainHost = String(auth && auth.app && auth.app.options ? auth.app.options.authDomain : "").toLowerCase()
             if (!currentHost || !authDomainHost) return false
             if (currentHost === authDomainHost) return true
             if (currentHost.endsWith(".firebaseapp.com") || currentHost.endsWith(".web.app")) return true
@@ -160,7 +160,7 @@ export function createAuthManager({ auth }) {
         },
         _canRecoverWithRedirect(error) {
             if (!this._isRedirectDomainAllowed()) return false
-            const errorCode = String(error?.code || "")
+            const errorCode = String(error && error.code ? error.code : "")
             return errorCode === "auth/internal-error"
                 || errorCode === "auth/network-request-failed"
                 || errorCode === "auth/popup-blocked"
@@ -200,7 +200,7 @@ export function createAuthManager({ auth }) {
                 this._setLoginBusy(false)
                 return
             } catch (googleIdentityError) {
-                const googleIdentityErrorCode = String(googleIdentityError?.code || "")
+                const googleIdentityErrorCode = String(googleIdentityError && googleIdentityError.code ? googleIdentityError.code : "")
                 const googleIdentityRecoverableCodes = new Set([
                     "auth/google-identity-script-timeout",
                     "auth/google-identity-script-failed",
@@ -229,7 +229,7 @@ export function createAuthManager({ auth }) {
                     this._setLoginBusy(false)
                     return
                 } catch (error) {
-                    const errorCode = String(error?.code || "")
+                    const errorCode = String(error && error.code ? error.code : "")
                     lastError = error
                     if (errorCode === "auth/popup-closed-by-user") {
                         this._setLoginBusy(false)
@@ -293,12 +293,15 @@ export function createAuthManager({ auth }) {
         },
 
         async updateDisplayName(nextName = "") {
-            const user = auth?.currentUser
+            const user = auth ? auth.currentUser : null
             const normalizedName = String(nextName || "").trim()
             if (!user || !normalizedName) return false
             if (normalizedName.length > 50) return false
             await user.updateProfile({ displayName: normalizedName })
-            await DataPath.getUserRootReference(user)?.set({ displayName: normalizedName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const userRootReference = DataPath.getUserRootReference(user)
+            if (userRootReference) {
+                await userRootReference.set({ displayName: normalizedName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            }
             this.applySignedInUI({ ...user, displayName: normalizedName })
             const workspaceId = StateStore.read().activeSharedWorkspaceId
             if (workspaceId && typeof WorkspaceAccessService !== "undefined") {
@@ -309,7 +312,7 @@ export function createAuthManager({ auth }) {
 
 
         async updateAvatarFromFile(file) {
-            const user = auth?.currentUser
+            const user = auth ? auth.currentUser : null
             if (!user || !(file instanceof Blob)) return false
             const readDataUrl = () => new Promise((resolve, reject) => {
                 const reader = new FileReader()
@@ -334,7 +337,10 @@ export function createAuthManager({ auth }) {
             context.drawImage(image, 0, 0, canvas.width, canvas.height)
             const avatarDataUrl = canvas.toDataURL("image/jpeg", 0.82)
             await user.updateProfile({ photoURL: avatarDataUrl })
-            await DataPath.getUserRootReference(user)?.set({ avatarUrl: avatarDataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const userRootReference = DataPath.getUserRootReference(user)
+            if (userRootReference) {
+                await userRootReference.set({ avatarUrl: avatarDataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            }
             this.applySignedInUI({ ...user, photoURL: avatarDataUrl })
             return true
         },
@@ -353,7 +359,7 @@ export function createAuthManager({ auth }) {
             }
             const search = document.getElementById("search-input")
             if (search) search.value = ""
-            if (typeof window.SmartNotesEditor?.close === "function") {
+            if (window.SmartNotesEditor && typeof window.SmartNotesEditor.close === "function") {
                 try { window.SmartNotesEditor.close() } catch {}
             }
         },
@@ -483,7 +489,7 @@ export function createAuthManager({ auth }) {
             try {
                 await auth.getRedirectResult()
             } catch (error) {
-                const errorCode = String(error?.code || "")
+                const errorCode = String(error && error.code ? error.code : "")
                 if (errorCode && errorCode !== "auth/no-auth-event" && errorCode !== "auth/internal-error") {
                     this.handleAuthError(error)
                 } else {
