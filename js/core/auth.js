@@ -422,6 +422,7 @@ export function createAuthManager({ auth }) {
             const previousUserUid = String(state.currentUser?.uid || "")
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
+            const externalMediaService = window.ExternalMediaService || window.GoogleDriveMediaService
             state.currentUser = normalizedUser
             console.info("[Auth] state changed", normalizedUser ? "logged in" : "logged out")
             state.authReady = true
@@ -434,9 +435,9 @@ export function createAuthManager({ auth }) {
                     return
                 }
                 await this._startSessionWhenReady(normalizedUser)
-                if (window.ExternalMediaService?.handleSignedInUser) {
+                if (externalMediaService && typeof externalMediaService.handleSignedInUser === "function") {
                     try {
-                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, {
+                        await externalMediaService.handleSignedInUser(normalizedUser, {
                             interactiveAllowed: state.driveInteractiveAllowed,
                             syncStatus: true
                         })
@@ -447,8 +448,8 @@ export function createAuthManager({ auth }) {
                     }
                 }
 
-            if (window.ExternalMediaService && typeof window.ExternalMediaService.handleSignedOutUser === "function") {
-                window.ExternalMediaService.handleSignedOutUser()
+            if (externalMediaService && typeof externalMediaService.handleSignedOutUser === "function") {
+                externalMediaService.handleSignedOutUser()
             }
             this._stopSessionWhenReady()
             this.clearState()
