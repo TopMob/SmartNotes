@@ -8,13 +8,6 @@ export const createMediaHandlers = (context) => {
     }
 
     const resolveMediaService = () => window.ExternalMediaService || window.GoogleDriveMediaService
-    const isMediaServiceReadyForUpload = (service) => {
-        if (!service || typeof service.uploadDataUrl !== "function") return false
-        const status = typeof service.getStatus === "function" ? service.getStatus() : null
-        if (!status) return true
-        if (status.checked !== true) return true
-        return status.linked === true && status.connected === true
-    }
 
     const optimizeImageDataUrl = (dataUrl, options = {}) => new Promise((resolve) => {
         const source = String(dataUrl || "")
@@ -52,29 +45,28 @@ export const createMediaHandlers = (context) => {
     })
 
     const uploadImageFile = async (file) => {
-        if (!navigator.onLine) {
-            throw new Error("drive-offline")
-        }
+        if (!navigator.onLine) throw new Error("drive-offline")
         const mediaService = resolveMediaService()
-        if (!mediaService || typeof mediaService.uploadDataUrl !== "function") {
+        if (!mediaService || typeof mediaService.uploadDataUrl !== "function") throw new Error("external-storage-unlinked")
+        const currentUser = window.auth?.currentUser || (typeof StateStore !== "undefined" && typeof StateStore.read === "function" ? StateStore.read().user : null) || null
+        if (!currentUser) throw new Error("external-storage-unlinked")
+        if (typeof mediaService.handleSignedInUser === "function") {
+            await mediaService.handleSignedInUser(currentUser, { syncStatus: true, interactiveAllowed: false })
+        }
+        const status = typeof mediaService.getStatus === "function" ? mediaService.getStatus() : null
+        if (status && status.checked === true && (status.connected !== true || status.linked !== true)) {
             throw new Error("external-storage-unlinked")
         }
-        if (!isMediaServiceReadyForUpload(mediaService)) {
-            const currentUser = window.auth?.currentUser || (typeof StateStore !== "undefined" && typeof StateStore.read === "function" ? StateStore.read().user : null) || null
-            if (currentUser && typeof mediaService.handleSignedInUser === "function") {
-                await mediaService.handleSignedInUser(currentUser, { syncStatus: true, interactiveAllowed: false })
-            }
-        }
-        if (!isMediaServiceReadyForUpload(mediaService)) throw new Error("external-storage-unlinked")
-        const reader = new FileReader()
         const imageDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
             reader.onload = () => resolve(String(reader.result || ""))
             reader.onerror = () => reject(new Error("file-read-failed"))
             reader.readAsDataURL(file)
         })
         const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
         return mediaService.uploadDataUrl(optimizedImageDataUrl, {
-            fileNameBase: file?.name || "note_image"
+            fileNameBase: file?.name || "note_image",
+            folderId: ""
         })
     }
 
