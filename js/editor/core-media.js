@@ -56,9 +56,16 @@ export const createMediaHandlers = (context) => {
             throw new Error("drive-offline")
         }
         const mediaService = resolveMediaService()
-        if (!isMediaServiceReadyForUpload(mediaService)) {
+        if (!mediaService || typeof mediaService.uploadDataUrl !== "function") {
             throw new Error("external-storage-unlinked")
         }
+        if (!isMediaServiceReadyForUpload(mediaService)) {
+            const currentUser = window.auth?.currentUser || (typeof StateStore !== "undefined" && typeof StateStore.read === "function" ? StateStore.read().user : null) || null
+            if (currentUser && typeof mediaService.handleSignedInUser === "function") {
+                await mediaService.handleSignedInUser(currentUser, { syncStatus: true, interactiveAllowed: false })
+            }
+        }
+        if (!isMediaServiceReadyForUpload(mediaService)) throw new Error("external-storage-unlinked")
         const reader = new FileReader()
         const imageDataUrl = await new Promise((resolve, reject) => {
             reader.onload = () => resolve(String(reader.result || ""))

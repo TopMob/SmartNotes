@@ -170,10 +170,21 @@ export const EditorAPI = (() => {
         const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
         return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
     }
-    const isExternalMediaReadyForAttachment = () => {
+    const syncExternalMediaStatusIfNeeded = async (mediaService, status) => {
+        if (!mediaService || typeof mediaService.handleSignedInUser !== "function") return status
+        const needsSync = !status || status.checked !== true || status.connected !== true || status.linked !== true
+        if (!needsSync) return status
+        const currentUser = window.auth?.currentUser || StateStore.read().user || null
+        if (!currentUser) return status
+        await mediaService.handleSignedInUser(currentUser, { syncStatus: true, interactiveAllowed: false })
+        return typeof mediaService.getStatus === "function" ? mediaService.getStatus() : status
+    }
+
+    const isExternalMediaReadyForAttachment = async () => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
         if (!mediaService || typeof mediaService.uploadDataUrl !== "function") return false
-        const status = typeof mediaService.getStatus === "function" ? mediaService.getStatus() : null
+        let status = typeof mediaService.getStatus === "function" ? mediaService.getStatus() : null
+        status = await syncExternalMediaStatusIfNeeded(mediaService, status)
         if (!status) return true
         if (status.checked !== true) return true
         return status.linked === true && status.connected === true
@@ -625,7 +636,7 @@ export const EditorAPI = (() => {
                 if (!(targetElement instanceof HTMLInputElement)) return
                 const file = targetElement.files?.[0]
                 if (!file) return
-                if (!isExternalMediaReadyForAttachment()) {
+                if (!await isExternalMediaReadyForAttachment()) {
                     targetElement.value = ""
                     UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
                     return
@@ -915,10 +926,10 @@ export const EditorAPI = (() => {
                 linkHandlers.applyLink(value)
             })
         }},
-        { id: "image", i: "image", label: "tool_image", cmd: () => {
+        { id: "image", i: "image", label: "tool_image", cmd: async () => {
             const imageUploadInputElement = document.getElementById("img-upload")
             if (!imageUploadInputElement) return
-            if (!isExternalMediaReadyForAttachment()) {
+            if (!await isExternalMediaReadyForAttachment()) {
                 UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
                 return
             }
