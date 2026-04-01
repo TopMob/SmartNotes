@@ -216,6 +216,12 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
     }
 
     const resolveProviderStatus = () => providerApi?.getStatus?.() || getStatusSnapshot()
+    const ensureConnectedStatus = async ({ reason = 'default' } = {}) => {
+        if (!state.checked) {
+            await syncStatusFromBackend.call(providerApi, { reason })
+        }
+        if (!state.connected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+    }
 
     const createAuthorizedHeaders = (idToken, includeJson = false) => includeJson
         ? {
@@ -327,7 +333,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
             state.pending = true
             state.errorCode = ''
             try {
-                if (state.checked && !state.connected) throw createExternalMediaError(ERROR_CODES.UNLINKED)
+                await ensureConnectedStatus({ reason: 'upload-precheck' })
                 const idToken = await requireIdToken()
                 const mimeType = String(source.match(/^data:([^;,]+)/i)?.[1] || '')
                 const fileNameBase = sanitizeFileNamePart(options.fileNameBase || 'attachment', 'attachment')

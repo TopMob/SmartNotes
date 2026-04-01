@@ -417,18 +417,6 @@ export function createAuthManager({ auth }) {
             if (attempt >= maxAttempts) return
             setTimeout(() => this._stopSessionWhenReady(attempt + 1), 100)
         },
-        _syncExternalMediaStatusOnSignIn(user) {
-            const mediaService = window.ExternalMediaService
-            if (!mediaService || typeof mediaService.handleSignedInUser !== "function") return
-            Promise.resolve(mediaService.handleSignedInUser(user, {
-                interactiveAllowed: state.driveInteractiveAllowed,
-                syncStatus: true
-            })).catch(error => {
-                if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
-                    UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                }
-            })
-        },
         async _handleAuthState(user) {
             const normalizedUser = user || auth.currentUser || null
             const previousUserUid = String(state.currentUser?.uid || "")
@@ -442,12 +430,28 @@ export function createAuthManager({ auth }) {
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) {
-                    this._syncExternalMediaStatusOnSignIn(normalizedUser)
+                    if (window.ExternalMediaService?.handleSignedInUser) {
+                        window.ExternalMediaService.handleSignedInUser(normalizedUser, {
+                            interactiveAllowed: state.driveInteractiveAllowed,
+                            syncStatus: true
+                        }).catch(() => {})
+                    }
                     state.driveInteractiveAllowed = false
                     return
                 }
                 await this._startSessionWhenReady(normalizedUser)
-                this._syncExternalMediaStatusOnSignIn(normalizedUser)
+                if (window.ExternalMediaService?.handleSignedInUser) {
+                    try {
+                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, {
+                            interactiveAllowed: state.driveInteractiveAllowed,
+                            syncStatus: true
+                        })
+                    } catch (error) {
+                        if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
+                            UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+                        }
+                    }
+                }
 
             window.ExternalMediaService?.handleSignedOutUser?.()
             this._stopSessionWhenReady()
