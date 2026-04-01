@@ -6,6 +6,7 @@ export const createMediaHandlers = (context) => {
         const normalizedValue = String(value || "").trim()
         return /^https?:\/\//i.test(normalizedValue) || /^data:image\//i.test(normalizedValue)
     }
+    }
     const resolveMediaService = () => window.ExternalMediaService || window.GoogleDriveMediaService
     const isMediaServiceReadyForUpload = (service) => {
         if (!service || typeof service.uploadDataUrl !== "function") return false
@@ -151,7 +152,7 @@ export const createMediaHandlers = (context) => {
         document.addEventListener("pointercancel", handleMediaDragEnd, { once: true })
     }
 
-    const handleMediaDragMove = (event) => {
+        if (type !== "image" || !isSupportedImageSource(normalizedSource)) return
         if (!state.dragState) return
         const dx = event.clientX - state.dragState.startX
         const dy = event.clientY - state.dragState.startY
