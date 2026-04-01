@@ -25,3 +25,6 @@ jobs:
 
       - name: Connected modules guard
         run: npm run check:module-graph
+
+      - name: Domain boundaries guard
+        run: npm run check:domain-boundaries
