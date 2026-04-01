@@ -167,7 +167,7 @@ export function createAuthManager({ auth }) {
         },
         async _attemptRedirectRecovery(error) {
             if (!this._canRecoverWithRedirect(error)) return false
-            const selectedPersistence = await this._preparePersistenceForMethod("redirect")
+            const selectedPersistence = await this._preparePersistenceForMethod()
             if (!selectedPersistence) return false
             try {
                 await this._signInWithMethod("redirect")
@@ -221,7 +221,7 @@ export function createAuthManager({ auth }) {
             let lastError = null
 
             for (const method of methods) {
-                const selectedPersistence = await this._preparePersistenceForMethod(method)
+                const selectedPersistence = await this._preparePersistenceForMethod()
                 if (!selectedPersistence) continue
 
                 try {
