@@ -453,14 +453,15 @@ export function createAuthManager({ auth }) {
                         }
                     }
                 }
-            } else {
-                if (externalMediaService && typeof externalMediaService.handleSignedOutUser === "function") {
-                    externalMediaService.handleSignedOutUser()
-                }
-                this._stopSessionWhenReady()
-                this.clearState()
-                this.applySignedOutUI()
-        },
+	            } else {
+	                if (externalMediaService && typeof externalMediaService.handleSignedOutUser === "function") {
+	                    externalMediaService.handleSignedOutUser()
+	                }
+	                this._stopSessionWhenReady()
+	                this.clearState()
+	                this.applySignedOutUI()
+	            }
+	        },
         async init() {
             if (!auth || state.initialized) return
             state.initialized = true
