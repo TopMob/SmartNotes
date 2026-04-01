@@ -170,6 +170,13 @@ export const EditorAPI = (() => {
         const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
         return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
     }
+    const isExternalMediaReadyForAttachment = () => {
+        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
+        if (!mediaService || typeof mediaService.uploadDataUrl !== "function") return false
+        const status = typeof mediaService.getStatus === "function" ? mediaService.getStatus() : null
+        if (!status) return true
+        return status.linked === true && status.connected === true
+    }
 
     const AI_ANALYSIS_VERSION = 1
 
@@ -617,6 +624,11 @@ export const EditorAPI = (() => {
                 if (!(targetElement instanceof HTMLInputElement)) return
                 const file = targetElement.files?.[0]
                 if (!file) return
+                if (!isExternalMediaReadyForAttachment()) {
+                    targetElement.value = ""
+                    UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
+                    return
+                }
                 const loadingLock = typeof UI.startLoading === "function"
                     ? UI.startLoading(UI.getText("loading_image", "Загрузка изображения..."))
                     : null
@@ -905,6 +917,10 @@ export const EditorAPI = (() => {
         { id: "image", i: "image", label: "tool_image", cmd: () => {
             const imageUploadInputElement = document.getElementById("img-upload")
             if (!imageUploadInputElement) return
+            if (!isExternalMediaReadyForAttachment()) {
+                UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
+                return
+            }
             imageUploadInputElement.value = ""
             imageUploadInputElement.click()
         }},

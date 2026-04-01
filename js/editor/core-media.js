@@ -6,6 +6,13 @@ export const createMediaHandlers = (context) => {
         const normalizedValue = String(value || "").trim()
         return /^https?:\/\//i.test(normalizedValue) || /^data:image\//i.test(normalizedValue)
     }
+    const resolveMediaService = () => window.ExternalMediaService || window.GoogleDriveMediaService
+    const isMediaServiceReadyForUpload = (service) => {
+        if (!service || typeof service.uploadDataUrl !== "function") return false
+        const status = typeof service.getStatus === "function" ? service.getStatus() : null
+        if (!status) return true
+        return status.linked === true && status.connected === true
+    }
 
     const optimizeImageDataUrl = (dataUrl, options = {}) => new Promise((resolve) => {
         const source = String(dataUrl || "")
@@ -46,6 +53,10 @@ export const createMediaHandlers = (context) => {
         if (!navigator.onLine) {
             throw new Error("drive-offline")
         }
+        const mediaService = resolveMediaService()
+        if (!isMediaServiceReadyForUpload(mediaService)) {
+            throw new Error("external-storage-unlinked")
+        }
         const reader = new FileReader()
         const imageDataUrl = await new Promise((resolve, reject) => {
             reader.onload = () => resolve(String(reader.result || ""))
@@ -53,10 +64,6 @@ export const createMediaHandlers = (context) => {
             reader.readAsDataURL(file)
         })
         const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        if (!mediaService) {
-            throw new Error("external-storage-unlinked")
-        }
         return mediaService.uploadDataUrl(optimizedImageDataUrl, {
             fileNameBase: file?.name || "note_image"
         })
