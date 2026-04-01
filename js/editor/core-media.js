@@ -1,7 +1,7 @@
 import { CONFIG } from "./core-state.js"
 
 export const createMediaHandlers = (context) => {
-    const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText, restoreSelection } = context
+    const { elements, state, getPages, queueSnapshot, alignText, restoreSelection } = context
     const isSupportedImageSource = (value) => {
         const normalizedValue = String(value || "").trim()
         return /^https?:\/\//i.test(normalizedValue) || /^data:image\//i.test(normalizedValue)
@@ -71,6 +71,43 @@ export const createMediaHandlers = (context) => {
 
     const fileToDataUrl = async (file) => uploadImageFile(file)
 
+    const getActivePageElement = () => getPages()[state.pageIndex] || elements.content
+
+    const ensureFloatingMediaPosition = (wrapper, { fallbackX = 16, fallbackY = 16 } = {}) => {
+        if (!wrapper) return
+        const page = wrapper.closest(".note-page") || getActivePageElement()
+        if (!page) return
+        const currentLeft = parseFloat(wrapper.dataset.left ?? wrapper.style.left ?? "")
+        const currentTop = parseFloat(wrapper.dataset.top ?? wrapper.style.top ?? "")
+        const resolvedLeft = Number.isFinite(currentLeft) ? currentLeft : fallbackX
+        const resolvedTop = Number.isFinite(currentTop) ? currentTop : fallbackY
+        wrapper.classList.add("media-floating")
+        wrapper.style.position = "absolute"
+        wrapper.style.left = `${Math.max(0, resolvedLeft)}px`
+        wrapper.style.top = `${Math.max(0, resolvedTop)}px`
+        wrapper.dataset.left = String(Math.max(0, resolvedLeft))
+        wrapper.dataset.top = String(Math.max(0, resolvedTop))
+    }
+
+    const resolveInsertPosition = () => {
+        const page = getActivePageElement()
+        if (!page) return { left: 16, top: 16 }
+        const pageRect = page.getBoundingClientRect()
+        const selection = window.getSelection()
+        const range = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null
+        const caretRect = range ? range.getBoundingClientRect() : null
+        const left = caretRect && Number.isFinite(caretRect.left)
+            ? caretRect.left - pageRect.left
+            : pageRect.width / 2 - 120
+        const top = caretRect && Number.isFinite(caretRect.top)
+            ? caretRect.top - pageRect.top + page.scrollTop
+            : page.scrollTop + 24
+        return {
+            left: Math.max(8, Math.round(left)),
+            top: Math.max(8, Math.round(top))
+        }
+    }
+
     const handleResizeStart = (event) => {
         if (state.drawingState?.active) {
             event.preventDefault()
@@ -137,11 +174,14 @@ export const createMediaHandlers = (context) => {
         if (event.target.closest(".media-resize-handle")) return
         const wrapper = event.target.closest(".media-draggable-item")
         if (!wrapper || !elements.content.contains(wrapper)) return
+        const startLeft = parseFloat(wrapper.dataset.left ?? wrapper.style.left ?? "0") || 0
+        const startTop = parseFloat(wrapper.dataset.top ?? wrapper.style.top ?? "0") || 0
         state.dragState = {
             wrapper,
-            trailingBreak: wrapper.nextSibling && wrapper.nextSibling.nodeName === "BR" ? wrapper.nextSibling : null,
             startX: event.clientX,
             startY: event.clientY,
+            startLeft,
+            startTop,
             moved: false
         }
         wrapper.setPointerCapture?.(event.pointerId)
@@ -157,21 +197,28 @@ export const createMediaHandlers = (context) => {
         if (!state.dragState.moved && Math.hypot(dx, dy) < 6) return
         state.dragState.moved = true
         state.dragState.wrapper.classList.add("dragging")
-        state.dragState.wrapper.style.transform = `translate(${dx}px, ${dy}px)`
-        state.dragState.wrapper.style.pointerEvents = "none"
-        state.dragState.wrapper.style.zIndex = "12"
+        const wrapper = state.dragState.wrapper
+        const page = wrapper.closest(".note-page") || getActivePageElement()
+        const pageRect = page?.getBoundingClientRect?.() || null
+        const wrapperRect = wrapper.getBoundingClientRect()
+        const maxLeft = pageRect ? Math.max(0, pageRect.width - wrapperRect.width) : Number.POSITIVE_INFINITY
+        const maxTop = pageRect ? Math.max(0, pageRect.height - wrapperRect.height) : Number.POSITIVE_INFINITY
+        const nextLeft = Utils.clamp(state.dragState.startLeft + dx, 0, maxLeft)
+        const nextTop = Utils.clamp(state.dragState.startTop + dy, 0, maxTop)
+        wrapper.style.left = `${nextLeft}px`
+        wrapper.style.top = `${nextTop}px`
+        wrapper.dataset.left = String(nextLeft)
+        wrapper.dataset.top = String(nextTop)
+        wrapper.style.zIndex = "12"
         event.preventDefault()
     }
 
-    const handleMediaDragEnd = (event) => {
+    const handleMediaDragEnd = () => {
         if (!state.dragState) return
-        const { wrapper, trailingBreak, moved } = state.dragState
+        const { wrapper, moved } = state.dragState
         wrapper.classList.remove("dragging")
-        wrapper.style.transform = ""
-        wrapper.style.pointerEvents = ""
         wrapper.style.zIndex = ""
         if (moved) {
-            placeDraggedMedia(wrapper, trailingBreak, event.clientX, event.clientY)
             queueSnapshot()
         }
         state.dragState = null
@@ -187,15 +234,21 @@ export const createMediaHandlers = (context) => {
         const normalizedSource = String(src || "").trim()
         if (type !== "image" || !isSupportedImageSource(normalizedSource)) return
         const id = Utils.generateId()
+        const page = getActivePageElement()
+        if (!page) return
+        const position = resolveInsertPosition()
         const html = `
-        <div class="media-wrapper media-draggable-item" id="${id}" contenteditable="false" draggable="true">
+        <div class="media-wrapper media-draggable-item media-floating" id="${id}" contenteditable="false" draggable="true" data-left="${position.left}" data-top="${position.top}">
             <img src="${Utils.escapeHtml(normalizedSource)}" alt="">
             <span class="media-resize-handle" aria-hidden="true"></span>
-        </div><br>
+        </div>
     `
-        insertHtmlAtSelection(html)
+        page.insertAdjacentHTML("beforeend", html)
+        const wrapper = page.querySelector(`#${id}`)
+        ensureFloatingMediaPosition(wrapper, { fallbackX: position.left, fallbackY: position.top })
         makeMediaDraggable()
         syncMediaSizes()
+        if (wrapper) selectMedia(wrapper)
     }
 
     const makeMediaDraggable = () => {
@@ -204,6 +257,7 @@ export const createMediaHandlers = (context) => {
             w.setAttribute("draggable", state.drawingState?.active ? "false" : "true")
             w.style.pointerEvents = state.drawingState?.active ? "none" : ""
             w.contentEditable = "false"
+            ensureFloatingMediaPosition(w, { fallbackX: 16, fallbackY: 16 })
         })
     }
 
@@ -314,9 +368,7 @@ export const createMediaHandlers = (context) => {
     const deleteSelectedMedia = () => {
         const selectedElement = state.selectedMediaElement
         if (!selectedElement) return
-        const siblingBreak = selectedElement.nextSibling
         selectedElement.remove()
-        if (siblingBreak && siblingBreak.nodeName === "BR") siblingBreak.remove()
         deselectMedia()
         queueSnapshot()
     }
@@ -330,60 +382,6 @@ export const createMediaHandlers = (context) => {
         document.removeEventListener("pointermove", handleMediaDragMove)
         document.removeEventListener("pointerup", handleMediaDragEnd)
         document.removeEventListener("pointercancel", handleMediaDragEnd)
-    }
-
-
-    const resolveDropTargetWrapper = (x, y, draggedWrapper) => {
-        const element = document.elementFromPoint(x, y)
-        const targetWrapper = element?.closest?.(".media-wrapper") || null
-        if (!targetWrapper || targetWrapper === draggedWrapper) return null
-        if (!elements.content.contains(targetWrapper)) return null
-        return targetWrapper
-    }
-
-    const insertMediaFragmentAtRange = (wrapper, trailingBreak, range) => {
-        const fragment = document.createDocumentFragment()
-        fragment.appendChild(wrapper)
-        if (trailingBreak) fragment.appendChild(trailingBreak)
-        range.insertNode(fragment)
-    }
-
-    const placeDraggedMedia = (wrapper, trailingBreak, clientX, clientY) => {
-        const targetWrapper = resolveDropTargetWrapper(clientX, clientY, wrapper)
-        if (targetWrapper) {
-            const targetRect = targetWrapper.getBoundingClientRect()
-            const insertBeforeTarget = clientY < (targetRect.top + targetRect.height / 2)
-            if (insertBeforeTarget) targetWrapper.before(wrapper)
-            else targetWrapper.after(wrapper)
-            if (trailingBreak) wrapper.after(trailingBreak)
-            return
-        }
-        const range = getDropRange(clientX, clientY)
-        if (range && elements.content.contains(range.commonAncestorContainer)) {
-            insertMediaFragmentAtRange(wrapper, trailingBreak, range)
-            return
-        }
-        const activePage = getPages()[state.pageIndex]
-        if (activePage && elements.content.contains(activePage)) {
-            activePage.appendChild(wrapper)
-            if (trailingBreak) activePage.appendChild(trailingBreak)
-            return
-        }
-        elements.content.appendChild(wrapper)
-        if (trailingBreak) elements.content.appendChild(trailingBreak)
-    }
-
-    const getDropRange = (x, y) => {
-        if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y)
-        if (document.caretPositionFromPoint) {
-            const pos = document.caretPositionFromPoint(x, y)
-            if (!pos) return null
-            const range = document.createRange()
-            range.setStart(pos.offsetNode, pos.offset)
-            range.collapse(true)
-            return range
-        }
-        return null
     }
 
     return {
