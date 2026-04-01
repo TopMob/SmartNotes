@@ -436,12 +436,9 @@ export function createAuthManager({ auth }) {
                 await this._startSessionWhenReady(normalizedUser)
                 if (window.ExternalMediaService?.handleSignedInUser) {
                     try {
-                        const shouldSyncExternalMediaStatus = typeof window.ExternalMediaService.hasOAuthRedirectFlag === "function"
-                            ? window.ExternalMediaService.hasOAuthRedirectFlag()
-                            : false
                         await window.ExternalMediaService.handleSignedInUser(normalizedUser, {
                             interactiveAllowed: state.driveInteractiveAllowed,
-                            syncStatus: shouldSyncExternalMediaStatus
+                            syncStatus: true
                         })
                     } catch (error) {
                         if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
