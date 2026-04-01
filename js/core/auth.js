@@ -430,12 +430,6 @@ export function createAuthManager({ auth }) {
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) {
-                    if (window.ExternalMediaService?.handleSignedInUser) {
-                        window.ExternalMediaService.handleSignedInUser(normalizedUser, {
-                            interactiveAllowed: state.driveInteractiveAllowed,
-                            syncStatus: true
-                        }).catch(() => {})
-                    }
                     state.driveInteractiveAllowed = false
                     return
                 }
@@ -453,7 +447,9 @@ export function createAuthManager({ auth }) {
                     }
                 }
 
-            window.ExternalMediaService?.handleSignedOutUser?.()
+            if (window.ExternalMediaService && typeof window.ExternalMediaService.handleSignedOutUser === "function") {
+                window.ExternalMediaService.handleSignedOutUser()
+            }
             this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()
