@@ -52,10 +52,6 @@ export const createMediaHandlers = (context) => {
         if (typeof mediaService.handleSignedInUser === "function") {
             await mediaService.handleSignedInUser(currentUser, { syncStatus: true, interactiveAllowed: false })
         }
-        const status = typeof mediaService.getStatus === "function" ? mediaService.getStatus() : null
-        if (status && status.checked === true && (status.connected !== true || status.linked !== true)) {
-            throw new Error("external-storage-unlinked")
-        }
         const imageDataUrl = await new Promise((resolve, reject) => {
             const reader = new FileReader()
             reader.onload = () => resolve(String(reader.result || ""))
@@ -129,6 +125,10 @@ export const createMediaHandlers = (context) => {
             })
             page.querySelectorAll(".media-wrapper").forEach(wrapper => {
                 ensureResizeHandle(wrapper)
+                const trailingBreak = wrapper.nextSibling
+                if (trailingBreak && trailingBreak.nodeType === Node.ELEMENT_NODE && trailingBreak.nodeName === "BR") {
+                    trailingBreak.remove()
+                }
                 const fallbackLeft = Math.max(8, wrapper.offsetLeft || 16)
                 const fallbackTop = Math.max(8, wrapper.offsetTop || 16)
                 ensureFloatingMediaPosition(wrapper, { fallbackX: fallbackLeft, fallbackY: fallbackTop })
