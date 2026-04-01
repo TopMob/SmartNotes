@@ -175,6 +175,7 @@ export const EditorAPI = (() => {
         if (!mediaService || typeof mediaService.uploadDataUrl !== "function") return false
         const status = typeof mediaService.getStatus === "function" ? mediaService.getStatus() : null
         if (!status) return true
+        if (status.checked !== true) return true
         return status.linked === true && status.connected === true
     }
 

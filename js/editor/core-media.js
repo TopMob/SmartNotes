@@ -11,6 +11,7 @@ export const createMediaHandlers = (context) => {
         if (!service || typeof service.uploadDataUrl !== "function") return false
         const status = typeof service.getStatus === "function" ? service.getStatus() : null
         if (!status) return true
+        if (status.checked !== true) return true
         return status.linked === true && status.connected === true
     }
 
