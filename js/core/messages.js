@@ -33,3 +33,4 @@ window.AppMessages = {
     APP_MESSAGES,
     getAppMessage
 }
+

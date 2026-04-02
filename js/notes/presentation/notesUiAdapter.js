@@ -32,3 +32,4 @@ const NotesUIAdapter = (() => {
     }
     return { render }
 })()
+

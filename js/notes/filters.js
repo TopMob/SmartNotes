@@ -18,3 +18,4 @@ function getLockedNotes() {
     const currentState = StateStore.read()
     return (currentState.notes || []).filter(note => !!(note && note.lock && note.lock.hidden))
 }
+

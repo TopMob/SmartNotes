@@ -18,3 +18,4 @@ export const createHistoryHandlers = (context) => {
 
     return { undo, redo }
 }
+

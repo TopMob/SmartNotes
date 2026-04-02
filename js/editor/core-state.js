@@ -29,3 +29,4 @@ export const createEditorState = () => ({
         ? { active: false, isDrawing: false }
         : EditorDrawing.state
 })
+

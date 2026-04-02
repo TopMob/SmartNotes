@@ -52,3 +52,4 @@ window.NoteHelpers = {
     buildNotePayload,
     buildNoteUpdatePayload
 }
+

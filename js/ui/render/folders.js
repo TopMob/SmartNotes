@@ -270,3 +270,4 @@ Object.assign(UI, {
         this.updateFolderLimitControls()
     }
 })
+

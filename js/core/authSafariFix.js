@@ -25,3 +25,4 @@ export async function setupAuthPersistence(auth) {
     if (!persistenceEnum) return null
     return setAuthPersistenceFromOrder(auth, [persistenceEnum.LOCAL])
 }
+

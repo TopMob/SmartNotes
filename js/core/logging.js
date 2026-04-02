@@ -78,3 +78,4 @@
 
     console.info("SmartNotes version:", window.APP_VERSION || "unknown")
 })()
+

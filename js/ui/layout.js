@@ -1431,3 +1431,4 @@ Object.assign(UI, {
         if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"
     }
 })
+

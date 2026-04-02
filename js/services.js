@@ -843,3 +843,4 @@ const CollaborationService = {
 
 window.CollaborationService = CollaborationService
 window.SaveStateService = SaveStateService
+

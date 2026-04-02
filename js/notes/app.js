@@ -175,3 +175,4 @@ const NotesApplication = (() => {
 
 window.initApp = () => NotesApplication.init()
 NotesApplication.initWhenDomReady()
+

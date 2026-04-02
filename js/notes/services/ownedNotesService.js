@@ -42,3 +42,4 @@ const OwnedNotesService = (() => {
     }
     return { subscribe, clear, loadMore, getNotes }
 })()
+

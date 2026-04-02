@@ -43,3 +43,4 @@ export const createMathHandlers = (context) => {
 
     return { confirmEquationAtCaret, confirmEquation }
 }
+

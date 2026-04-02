@@ -11,3 +11,4 @@ Object.assign(UI, {
         document.querySelectorAll(".modal-overlay.active").forEach(el => el.classList.remove("active"))
     }
 })
+

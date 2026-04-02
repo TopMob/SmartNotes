@@ -105,3 +105,4 @@ const StateStore = (() => {
 })()
 
 window.StateStore = StateStore
+

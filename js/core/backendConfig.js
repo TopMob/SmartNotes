@@ -36,3 +36,4 @@ if (typeof window !== "undefined") {
 }
 
 export { DEFAULT_BACKEND_BASE_URL, normalizeBaseUrl, resolveBackendBaseUrl, createApiEndpoint }
+

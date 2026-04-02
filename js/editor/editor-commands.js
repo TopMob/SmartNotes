@@ -411,3 +411,4 @@ export const createEditorCommands = (context) => {
         alignText
     }
 }
+

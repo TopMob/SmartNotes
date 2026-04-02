@@ -32,3 +32,4 @@ export const buildPageDrawingsRevision = (pageDrawings) => {
     }
     return `pdr:${drawings.length}:${hash >>> 0}`
 }
+

@@ -165,3 +165,4 @@ window.NoteExportService = {
     serializeFolderForExport,
     serializeExportDate
 }
+
