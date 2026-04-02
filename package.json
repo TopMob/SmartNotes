@@ -6,7 +6,9 @@
     "jsdom": "^29.0.1"
   },
   "scripts": {
-    "test": "node --test tests/stability.test.mjs"
+    "test": "node --test tests/stability.test.mjs",
+    "check:module-graph": "node scripts/check-unconnected-modules.mjs",
+    "check:domain-boundaries": "node scripts/check-domain-boundaries.mjs",
+    "check:unused-exports": "node scripts/check-unused-exports.mjs"
   }
 }
-

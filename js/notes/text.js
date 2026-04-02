@@ -1,4 +1,7 @@
-import { getCountLabel } from "../editor/core-utils.js"
+const getCountLabel = (count, singleKey, pluralKey) => {
+    if (count === 1) return UI.getText(singleKey, singleKey)
+    return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
+}
 
 const getCleanText = (html) => {
     const wrapper = document.createElement("div")
