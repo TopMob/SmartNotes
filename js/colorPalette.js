@@ -407,3 +407,4 @@ const ColorPalette = (() => {
 })()
 
 window.ColorPalette = ColorPalette
+

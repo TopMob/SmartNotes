@@ -242,3 +242,4 @@ startCore().catch(error => {
     console.error("[Core] Startup failed", error)
     showRuntimeErrorMessage("Не удалось запустить приложение. Перезагрузите страницу")
 })
+

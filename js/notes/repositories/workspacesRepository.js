@@ -36,3 +36,4 @@ const WorkspacesRepository = (() => {
         subscribeWorkspaceNotes
     }
 })()
+

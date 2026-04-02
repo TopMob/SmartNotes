@@ -121,3 +121,4 @@ Object.assign(UI, {
         updateSearchQuery(document.getElementById("search-input")?.value || "")
     }
 })
+

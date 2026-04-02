@@ -150,3 +150,4 @@ window.NotesStorage = {
     readCachedNotes,
     writeCachedNotes
 }
+

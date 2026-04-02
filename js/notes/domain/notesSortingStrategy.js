@@ -26,3 +26,4 @@ const NotesSortingStrategy = (() => {
     }
     return { sortOwnedNotes }
 })()
+

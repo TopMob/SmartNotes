@@ -1209,3 +1209,4 @@ export const EditorAPI = (() => {
         saveSnapshot: autosaveHandlers.queueSnapshot
     }
 })()
+

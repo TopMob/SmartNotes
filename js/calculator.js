@@ -256,3 +256,4 @@ const Calculator = (() => {
 })()
 
 window.Calculator = Calculator
+

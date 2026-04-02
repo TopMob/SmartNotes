@@ -35,3 +35,4 @@ const RemindersService = (() => {
     }
     return { start, stop }
 })()
+

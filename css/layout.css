@@ -702,3 +702,4 @@ body.platform-android .top-bar {
 .search-container input::placeholder {
     color: color-mix(in srgb, var(--text) 56%, transparent);
 }
+

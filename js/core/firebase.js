@@ -74,3 +74,4 @@ export function initFirebase() {
     console.info("[Firebase] db initialized", !!db)
     return firebaseSingleton
 }
+

@@ -17,3 +17,4 @@ test('resolveBackendBaseUrl falls back to default without browser globals', () =
 test('createApiEndpoint builds stable endpoint path', () => {
     assert.equal(createApiEndpoint('/drive/status', { backendBaseUrl: 'https://api.smartnotes.test/' }), 'https://api.smartnotes.test/api/drive/status')
 })
+

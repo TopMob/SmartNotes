@@ -264,3 +264,4 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         loginWithEmail
     }
 }
+

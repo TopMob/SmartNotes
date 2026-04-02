@@ -59,3 +59,4 @@ export function bootstrapCore({ ThemeManager, Auth }) {
     }
     boot()
 }
+

@@ -25,3 +25,4 @@ const SettingsRepository = (() => {
     }
     return { resolveReference, write, subscribe }
 })()
+

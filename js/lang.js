@@ -1070,3 +1070,4 @@ export const LANG = {
 }
 
 window.LANG = LANG
+

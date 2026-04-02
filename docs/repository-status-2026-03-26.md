@@ -31,3 +31,4 @@
 - Runtime override backend URL:
   - `window.__SMARTNOTES_BACKEND_URL__`
   - `localStorage['smartnotes.backendBaseUrl']`
+

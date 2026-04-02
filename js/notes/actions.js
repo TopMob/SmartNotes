@@ -292,3 +292,4 @@ window.moveNoteToFolder = moveNoteToFolder
 window.restoreFolderById = restoreFolderById
 window.deleteFolderPermanently = deleteFolderPermanently
 window.clearTrashPermanently = clearTrashPermanently
+

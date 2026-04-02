@@ -52,3 +52,4 @@ window.NoteText = {
     buildAutoTitle,
     buildPreviewText
 }
+

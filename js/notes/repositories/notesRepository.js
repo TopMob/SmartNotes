@@ -25,3 +25,4 @@ const NotesRepository = (() => {
     }
     return { subscribeOwnedNotes, loadMoreOwnedNotes, subscribeSharedEntries, subscribeSharedNote }
 })()
+

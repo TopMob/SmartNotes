@@ -45,3 +45,4 @@ const NotificationService = (() => {
 })()
 
 window.NotificationService = NotificationService
+
