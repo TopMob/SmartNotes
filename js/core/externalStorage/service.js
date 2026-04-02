@@ -43,9 +43,6 @@ export const createExternalStorageService = ({ providers = [], defaultProviderId
         handleSignedInUser(user, options = {}) {
             return getProvider().handleSignedInUser(user, options)
         },
-        hasOAuthRedirectFlag() {
-            return !!getProvider().hasOAuthRedirectFlag?.()
-        },
         handleSignedOutUser() {
             providerMap.forEach(provider => provider.handleSignedOutUser?.())
         },

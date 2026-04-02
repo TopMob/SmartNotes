@@ -167,7 +167,7 @@ export function createAuthManager({ auth }) {
         },
         async _attemptRedirectRecovery(error) {
             if (!this._canRecoverWithRedirect(error)) return false
-            const selectedPersistence = await this._preparePersistenceForMethod()
+            const selectedPersistence = await this._preparePersistenceForMethod("redirect")
             if (!selectedPersistence) return false
             try {
                 await this._signInWithMethod("redirect")
@@ -221,7 +221,7 @@ export function createAuthManager({ auth }) {
             let lastError = null
 
             for (const method of methods) {
-                const selectedPersistence = await this._preparePersistenceForMethod()
+                const selectedPersistence = await this._preparePersistenceForMethod(method)
                 if (!selectedPersistence) continue
 
                 try {
@@ -436,13 +436,7 @@ export function createAuthManager({ auth }) {
                 await this._startSessionWhenReady(normalizedUser)
                 if (window.ExternalMediaService?.handleSignedInUser) {
                     try {
-                        const shouldSyncExternalMediaStatus = typeof window.ExternalMediaService.hasOAuthRedirectFlag === "function"
-                            ? window.ExternalMediaService.hasOAuthRedirectFlag()
-                            : false
-                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, {
-                            interactiveAllowed: state.driveInteractiveAllowed,
-                            syncStatus: shouldSyncExternalMediaStatus
-                        })
+                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, { interactiveAllowed: state.driveInteractiveAllowed })
                     } catch (error) {
                         if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
                             UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))

@@ -140,9 +140,16 @@ const NotesApplication = (() => {
     async function initializeRuntime() {
         disableServiceWorkerCaching()
         if (typeof UI.init === "function") UI.init()
+        if (typeof window.SmartNotesEditor?.init === "function") {
+            window.SmartNotesEditor.init()
+        }
         startStateRendering()
         startUiEventListeners()
         bindNetworkLifecycle()
+        const user = StateStore.read().user
+        if (user?.uid) {
+            await SessionService.startUserSession(user)
+        }
         renderFromState()
     }
 
