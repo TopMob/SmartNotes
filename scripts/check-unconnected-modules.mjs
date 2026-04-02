@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
@@ -54,6 +54,15 @@ function extractIndexScripts(indexHtml) {
   return roots;
 }
 
+
+async function readOptionalFile(filePath) {
+  try {
+    await access(filePath);
+    return await readFile(filePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
 
 function extractRuntimeScripts(loaderSource) {
   const runtimeArrayMatch = loaderSource.match(/const\s+runtimeScripts\s*=\s*\[([\s\S]*?)\]/);
@@ -113,8 +122,8 @@ async function main() {
 
   const indexHtml = await readFile(indexHtmlPath, 'utf8');
   const loaderPath = path.join(repoRoot, 'js/editor/runtime-loader.js');
-  const runtimeLoaderSource = await readFile(loaderPath, 'utf8');
-  const runtimeRoots = extractRuntimeScripts(runtimeLoaderSource);
+  const runtimeLoaderSource = await readOptionalFile(loaderPath);
+  const runtimeRoots = runtimeLoaderSource ? extractRuntimeScripts(runtimeLoaderSource) : [];
   const rootModules = [...new Set([...extractIndexScripts(indexHtml), ...runtimeRoots])].filter((modulePath) => modules.has(modulePath));
   const reachableModules = resolveReachableModules(rootModules, importGraph);
   const unconnectedModules = jsFiles.filter((file) => !reachableModules.has(file));
