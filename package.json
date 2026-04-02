@@ -6,7 +6,7 @@
     "jsdom": "^29.0.1"
   },
   "scripts": {
-    "test": "node --test tests/stability.test.mjs"
+    "test": "node --test tests/stability.test.mjs",
+    "check:module-graph": "node scripts/check-unconnected-modules.mjs"
   }
 }
-
