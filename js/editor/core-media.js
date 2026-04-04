@@ -178,10 +178,12 @@ export const createMediaHandlers = (context) => {
         state.dragState.wrapper.style.pointerEvents = "none"
         state.dragState.wrapper.style.zIndex = "12"
         const placement = resolveMediaDropPlacement({
-            root: elements.content,
+            editorRoot: elements.content,
+            pages: getPages(),
+            activePage: getPages()[state.pageIndex] || elements.content,
             x: event.clientX,
             y: event.clientY,
-            draggedWrapper: state.dragState.wrapper
+            ignoredNodes: [state.dragState.wrapper, state.dragState.trailingBreak]
         })
         state.dragState.dropPlacement = placement
         updateDropMarker(placement)
@@ -360,10 +362,12 @@ export const createMediaHandlers = (context) => {
 
     const placeDraggedMedia = (wrapper, trailingBreak, clientX, clientY, cachedPlacement) => {
         const placement = cachedPlacement || resolveMediaDropPlacement({
-            root: elements.content,
+            editorRoot: elements.content,
+            pages: getPages(),
+            activePage: getPages()[state.pageIndex] || elements.content,
             x: clientX,
             y: clientY,
-            draggedWrapper: wrapper
+            ignoredNodes: [wrapper, trailingBreak]
         })
         insertMediaAtPlacement({
             wrapper,

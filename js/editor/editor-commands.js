@@ -380,23 +380,41 @@ export const createEditorCommands = (context) => {
 
     const alignText = (side) => {
         const normalizedSide = side === "left" || side === "right" || side === "center" ? side : "left"
-        const range = getValidRange()
-        if (!range) {
-            if (execCommandAdapter.isAvailable) {
-                const command = normalizedSide === "center" ? "justifyCenter" : normalizedSide === "right" ? "justifyRight" : "justifyLeft"
-                const changed = execCommandAdapter.runCommand(command)
-                if (changed) finalizeChange()
-                return changed
+        const command = normalizedSide === "center" ? "justifyCenter" : normalizedSide === "right" ? "justifyRight" : "justifyLeft"
+        if (execCommandAdapter.isAvailable) {
+            const changedByCommand = execCommandAdapter.runCommand(command)
+            if (changedByCommand) {
+                finalizeChange()
+                return true
             }
-            return false
         }
-        const blocks = collectBlocksInRange(range, resolveRoot())
-        if (!blocks.length) return false
-        blocks.forEach(block => {
-            block.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
-        })
-        finalizeChange()
-        return true
+        const range = getValidRange()
+        if (!range) return false
+        const root = resolveRoot()
+        if (!root) return false
+        const blocks = collectBlocksInRange(range, root)
+        if (blocks.length) {
+            blocks.forEach(block => {
+                block.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
+            })
+            finalizeChange()
+            return true
+        }
+        const fallbackBlock = getClosestEditableBlock(range.startContainer, root)
+        if (fallbackBlock) {
+            fallbackBlock.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
+            finalizeChange()
+            return true
+        }
+        const activePage = range.startContainer.nodeType === Node.ELEMENT_NODE
+            ? range.startContainer.closest(".note-page")
+            : range.startContainer.parentElement?.closest(".note-page")
+        if (activePage && root.contains(activePage)) {
+            activePage.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
+            finalizeChange()
+            return true
+        }
+        return false
     }
 
     return {
