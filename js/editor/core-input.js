@@ -130,9 +130,26 @@ export const createInputHandlers = (context) => {
         return fragment
     }
 
+    const collapseAlternatingEmptyRows = (rows) => {
+        if (!Array.isArray(rows) || rows.length < 3) return rows
+        let hasPattern = true
+        let hasEmptyRows = false
+        rows.forEach((row, index) => {
+            const isEmpty = row.trim() === ""
+            if (index % 2 === 1) {
+                if (!isEmpty) hasPattern = false
+                else hasEmptyRows = true
+                return
+            }
+            if (isEmpty) hasPattern = false
+        })
+        if (!hasPattern || !hasEmptyRows) return rows
+        return rows.filter((_, index) => index % 2 === 0)
+    }
+
     const normalizeClipboardPlainText = (value) => {
         const normalized = String(value || "").replace(/\r\n?/g, "\n")
-        const rows = normalized.split("\n")
+        const rows = collapseAlternatingEmptyRows(normalized.split("\n"))
         while (rows.length && rows[0].trim() === "") rows.shift()
         while (rows.length && rows[rows.length - 1].trim() === "") rows.pop()
         const compact = []
@@ -207,33 +224,6 @@ export const createInputHandlers = (context) => {
         return true
     }
 
-    const insertWithNativeCommand = ({ html = "", text = "" } = {}) => {
-        if (typeof document.execCommand !== "function") return false
-        const target = elements.content
-        if (!target) return false
-        restoreSelection()
-        target.focus()
-        if (html) {
-            try {
-                if (document.execCommand("insertHTML", false, html)) {
-                    storeSelection()
-                    return true
-                }
-            } catch {
-            }
-        }
-        if (text) {
-            try {
-                if (document.execCommand("insertText", false, text)) {
-                    storeSelection()
-                    return true
-                }
-            } catch {
-            }
-        }
-        return false
-    }
-
     const handlePaste = async (event) => {
         const items = Array.from(event.clipboardData?.items || [])
         const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
@@ -267,7 +257,7 @@ export const createInputHandlers = (context) => {
             }
         }
         const hasInsertedContent = plainText
-            ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText)))
+            ? insertFragmentAtSelection(plainTextToFragment(plainText))
             : false
         if (hasInsertedContent) queueSnapshot()
     }
@@ -280,7 +270,7 @@ export const createInputHandlers = (context) => {
         const fragment = range.cloneContents()
         const container = document.createElement("div")
         container.appendChild(fragment)
-        const plainText = fragmentToPlainText(fragment)
+        const plainText = normalizeClipboardPlainText(fragmentToPlainText(fragment))
         if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
@@ -584,6 +574,15 @@ export const createInputHandlers = (context) => {
         return paragraph
     }
 
+    const ensureEditableBlockContent = (block) => {
+        if (!block) return
+        const hasMedia = !!block.querySelector("img,audio,video,table,hr,.media-wrapper,.audio-block")
+        const textContent = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+        if (!hasMedia && !textContent && !block.querySelector("br")) {
+            block.appendChild(document.createElement("br"))
+        }
+    }
+
     const splitListForExit = (listItem) => {
         const list = listItem?.parentElement
         if (!list || !/^(UL|OL)$/.test(list.tagName)) return null
@@ -663,6 +662,41 @@ export const createInputHandlers = (context) => {
         }
     }
 
+    const handlePlainEnter = (event) => {
+        if (event.key !== "Enter") return
+        if (event.defaultPrevented) return
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+        const range = getActiveRangeInContent()
+        if (!range || !range.collapsed) return
+        let node = range.startContainer
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+        if (!node || !elements.content.contains(node)) return
+        if (node.closest("li")) return
+        event.preventDefault()
+        const activeBlock = getActiveBlock()
+        if (!activeBlock || !elements.content.contains(activeBlock)) {
+            const newParagraph = createEmptyParagraph()
+            range.deleteContents()
+            range.insertNode(newParagraph)
+            placeCaretAtStart(newParagraph)
+            queueSnapshot()
+            return
+        }
+        const splitRange = range.cloneRange()
+        splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
+        const trailingContent = splitRange.extractContents()
+        const nextParagraph = createEmptyParagraph()
+        if (trailingContent.childNodes.length) {
+            nextParagraph.innerHTML = ""
+            nextParagraph.appendChild(trailingContent)
+        }
+        ensureEditableBlockContent(activeBlock)
+        ensureEditableBlockContent(nextParagraph)
+        activeBlock.after(nextParagraph)
+        placeCaretAtStart(nextParagraph)
+        queueSnapshot()
+    }
+
     return {
         handlePaste,
         handleCopy,
@@ -684,7 +718,7 @@ export const createInputHandlers = (context) => {
         removeTag,
         renderTags,
         handleTagLineEnter,
-        handleListEnter
+        handleListEnter,
+        handlePlainEnter
     }
 }
-

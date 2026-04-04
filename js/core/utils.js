@@ -61,12 +61,13 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "source", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "strike", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "source", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
         const allowedClasses = new Set([
             "media-wrapper",
             "media-resize-handle",
             "align-left",
             "align-right",
+            "align-center",
             "audio-wrapper",
             "audio-player",
             "audio-icon",
@@ -93,7 +94,17 @@ export const Utils = {
         ])
         const allowAttrs = {
             a: new Set(["href", "target", "rel", "data-note-id"]),
-            img: new Set(["src", "alt"]),
+            img: new Set(["src", "alt", "width", "height"]),
+            div: new Set(["id", "contenteditable", "draggable", "data-width", "data-height", "data-align", "align", "style"]),
+            p: new Set(["data-align", "align", "style"]),
+            li: new Set(["data-align", "align", "style"]),
+            h1: new Set(["data-align", "align", "style"]),
+            h2: new Set(["data-align", "align", "style"]),
+            h3: new Set(["data-align", "align", "style"]),
+            h4: new Set(["data-align", "align", "style"]),
+            h5: new Set(["data-align", "align", "style"]),
+            h6: new Set(["data-align", "align", "style"]),
+            blockquote: new Set(["data-align", "align", "style"]),
             audio: new Set(["src", "controls", "preload"]),
             source: new Set(["src", "type"]),
             button: new Set(["type", "aria-label"]),
@@ -113,6 +124,47 @@ export const Utils = {
             if (v.startsWith("mailto:")) return true
             return false
         }
+        const normalizeStyle = (tag, styleValue) => {
+            const declarations = String(styleValue || "").split(";").map(part => part.trim()).filter(Boolean)
+            if (!declarations.length) return ""
+            const normalized = []
+            declarations.forEach(declaration => {
+                const separatorIndex = declaration.indexOf(":")
+                if (separatorIndex < 0) return
+                const property = declaration.slice(0, separatorIndex).trim().toLowerCase()
+                const value = declaration.slice(separatorIndex + 1).trim().toLowerCase()
+                const textAlignAllowedTags = new Set(["div", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"])
+                if (property === "text-align" && textAlignAllowedTags.has(tag) && ["left", "right", "center", "justify"].includes(value)) {
+                    normalized.push(`text-align:${value}`)
+                    return
+                }
+                if ((property === "width" || property === "height") && tag === "img") {
+                    if (/^\d+(\.\d+)?px$/.test(value)) normalized.push(`${property}:${value}`)
+                }
+            })
+            return normalized.join(";")
+        }
+
+        const sanitizeNumericDataAttribute = (element, attributeName) => {
+            const rawValue = element.getAttribute(attributeName)
+            if (rawValue === null) return
+            const parsed = Number.parseFloat(rawValue)
+            if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 5000) {
+                element.removeAttribute(attributeName)
+                return
+            }
+            element.setAttribute(attributeName, String(Math.round(parsed * 100) / 100))
+        }
+
+        const sanitizeTextAlignmentAttribute = (element, attributeName) => {
+            const value = String(element.getAttribute(attributeName) || "").trim().toLowerCase()
+            if (!["left", "right", "center", "justify"].includes(value)) {
+                element.removeAttribute(attributeName)
+                return
+            }
+            element.setAttribute(attributeName, value)
+        }
+
         const walk = (node) => {
             const children = Array.from(node.childNodes)
             children.forEach(child => {
@@ -125,7 +177,7 @@ export const Utils = {
                 }
                 Array.from(child.attributes).forEach(attr => {
                     const name = attr.name.toLowerCase()
-                    if (name.startsWith("on") || name === "style") {
+                    if (name.startsWith("on")) {
                         child.removeAttribute(attr.name)
                         return
                     }
@@ -140,6 +192,26 @@ export const Utils = {
                     const allowed = allowAttrs[tag]
                     if (!allowed || !allowed.has(name)) child.removeAttribute(attr.name)
                 })
+                if (child.hasAttribute("style")) {
+                    const normalizedStyle = normalizeStyle(tag, child.getAttribute("style"))
+                    if (normalizedStyle) child.setAttribute("style", normalizedStyle)
+                    else child.removeAttribute("style")
+                }
+                if (child.hasAttribute("align")) {
+                    sanitizeTextAlignmentAttribute(child, "align")
+                    const alignValue = child.getAttribute("align")
+                    if (alignValue) {
+                        const normalizedStyle = normalizeStyle(tag, `text-align:${alignValue}`)
+                        if (normalizedStyle) child.setAttribute("style", normalizedStyle)
+                    }
+                    child.removeAttribute("align")
+                }
+                if (tag === "div" && child.classList.contains("media-wrapper")) {
+                    sanitizeNumericDataAttribute(child, "data-width")
+                    sanitizeNumericDataAttribute(child, "data-height")
+                }
+                if (child.hasAttribute("data-align")) sanitizeTextAlignmentAttribute(child, "data-align")
+
                 if (tag === "a") {
                     const href = child.getAttribute("href")
                     if (!isSafeUrl(href) || String(href || "").startsWith("data:")) {
@@ -162,6 +234,10 @@ export const Utils = {
                     if (!isSafeUrl(s) || (s.startsWith("data:") && !s.startsWith("data:image")) || s.startsWith("http:")) {
                         child.removeAttribute("src")
                     }
+                    const width = Number.parseFloat(child.getAttribute("width") || "")
+                    const height = Number.parseFloat(child.getAttribute("height") || "")
+                    if (!Number.isFinite(width) || width <= 0 || width > 5000) child.removeAttribute("width")
+                    if (!Number.isFinite(height) || height <= 0 || height > 5000) child.removeAttribute("height")
                 }
                 if (tag === "audio") {
                     const src = child.getAttribute("src")
