@@ -406,7 +406,7 @@ export const createEditorCommands = (context) => {
         const normalizedSide = side === "left" || side === "right" || side === "center" ? side : "left"
         const range = getValidRange()
         const root = resolveRoot()
-        if (range && root) {
+        if (range && root && !range.collapsed) {
             const blocks = getHighestBlocks(collectBlocksInRange(range, root))
             if (blocks.length) {
                 blocks.forEach(block => {

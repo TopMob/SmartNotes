@@ -653,6 +653,36 @@ export const createInputHandlers = (context) => {
         }
     }
 
+    const handlePlainEnter = (event) => {
+        if (event.key !== "Enter") return
+        if (event.defaultPrevented) return
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+        const range = getActiveRangeInContent()
+        if (!range || !range.collapsed) return
+        let node = range.startContainer
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
+        if (!node || !elements.content.contains(node)) return
+        if (node.closest("li")) return
+        event.preventDefault()
+        const breakNode = document.createElement("br")
+        range.deleteContents()
+        range.insertNode(breakNode)
+        const duplicateBreak = breakNode.nextSibling
+        if (duplicateBreak && duplicateBreak.nodeType === Node.ELEMENT_NODE && duplicateBreak.tagName === "BR") {
+            duplicateBreak.remove()
+        }
+        const nextRange = document.createRange()
+        nextRange.setStartAfter(breakNode)
+        nextRange.collapse(true)
+        const selection = window.getSelection()
+        if (selection) {
+            selection.removeAllRanges()
+            selection.addRange(nextRange)
+        }
+        storeSelection()
+        queueSnapshot()
+    }
+
     return {
         handlePaste,
         handleCopy,
@@ -674,6 +704,7 @@ export const createInputHandlers = (context) => {
         removeTag,
         renderTags,
         handleTagLineEnter,
-        handleListEnter
+        handleListEnter,
+        handlePlainEnter
     }
 }

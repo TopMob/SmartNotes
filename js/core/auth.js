@@ -10,7 +10,6 @@ export function createAuthManager({ auth }) {
         currentUser: null,
         authActionElements: [],
         googleSignInPendingTimeoutId: null,
-        startupScreenTimeoutId: null,
         localAuthManager: null,
         persistenceReady: false,
         authStateResolved: false,
@@ -90,33 +89,8 @@ export function createAuthManager({ auth }) {
         _resolveStartupScreen() {
             if (state.authStateResolved) return
             state.authStateResolved = true
-            if (state.startupScreenTimeoutId) {
-                clearTimeout(state.startupScreenTimeoutId)
-                state.startupScreenTimeoutId = null
-            }
             if (typeof window.hideSplashScreen === "function") {
                 window.hideSplashScreen()
-            }
-        },
-        _scheduleStartupScreenFallback() {
-            if (state.startupScreenTimeoutId) return
-            state.startupScreenTimeoutId = setTimeout(() => {
-                state.startupScreenTimeoutId = null
-                this._resolveStartupScreen()
-            }, 9000)
-        },
-        async _withTimeout(promise, timeoutMs) {
-            const safeTimeoutMs = Math.max(1, Number(timeoutMs) || 1)
-            let timeoutId = null
-            try {
-                return await Promise.race([
-                    Promise.resolve(promise),
-                    new Promise((resolve) => {
-                        timeoutId = setTimeout(() => resolve(null), safeTimeoutMs)
-                    })
-                ])
-            } finally {
-                if (timeoutId) clearTimeout(timeoutId)
             }
         },
         handleAuthError(err) {
@@ -481,11 +455,10 @@ export function createAuthManager({ auth }) {
         async init() {
             if (!auth || state.initialized) return
             state.initialized = true
-            this._scheduleStartupScreenFallback()
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
-            await this._withTimeout(this._ensureLocalPersistence(), 3500)
+            await this._ensureLocalPersistence()
 
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
@@ -522,3 +495,4 @@ export function createAuthManager({ auth }) {
 
     return manager
 }
+
