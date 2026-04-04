@@ -514,7 +514,6 @@ export const EditorAPI = (() => {
             boundElements.content.addEventListener("keydown", inputHandlers.handleTagLineEnter, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handlePlainEnter, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleLeadingSpace, { signal })
             boundElements.content.addEventListener("keydown", (event) => {
                 if (event.altKey) return
                 const hasPrimaryModifier = event.ctrlKey || event.metaKey

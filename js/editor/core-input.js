@@ -667,9 +667,12 @@ export const createInputHandlers = (context) => {
         const breakNode = document.createElement("br")
         range.deleteContents()
         range.insertNode(breakNode)
-        const duplicateBreak = breakNode.nextSibling
-        if (duplicateBreak && duplicateBreak.nodeType === Node.ELEMENT_NODE && duplicateBreak.tagName === "BR") {
-            duplicateBreak.remove()
+        const nextNode = breakNode.nextSibling
+        const requiresTrailingBreak = !nextNode || (nextNode.nodeType === Node.ELEMENT_NODE && nextNode.tagName === "BR")
+        if (requiresTrailingBreak) {
+            const trailingBreak = document.createElement("br")
+            if (nextNode) breakNode.parentNode?.insertBefore(trailingBreak, nextNode)
+            else breakNode.parentNode?.appendChild(trailingBreak)
         }
         const nextRange = document.createRange()
         nextRange.setStartAfter(breakNode)
@@ -681,50 +684,6 @@ export const createInputHandlers = (context) => {
         }
         storeSelection()
         queueSnapshot()
-    }
-
-    const isCaretAtLineStart = (range) => {
-        if (!range || !range.collapsed || !elements.content) return false
-        const probe = document.createRange()
-        probe.selectNodeContents(elements.content)
-        try {
-            probe.setEnd(range.startContainer, range.startOffset)
-        } catch {
-            return false
-        }
-        const textBeforeCaret = probe.toString()
-        if (!textBeforeCaret) return true
-        const lastCharacter = textBeforeCaret.slice(-1)
-        return lastCharacter === "\n"
-    }
-
-    const insertTextAtRange = (range, textValue) => {
-        if (!range) return false
-        range.deleteContents()
-        const textNode = document.createTextNode(textValue)
-        range.insertNode(textNode)
-        const nextRange = document.createRange()
-        nextRange.setStartAfter(textNode)
-        nextRange.collapse(true)
-        const selection = window.getSelection()
-        if (selection) {
-            selection.removeAllRanges()
-            selection.addRange(nextRange)
-        }
-        storeSelection()
-        queueSnapshot()
-        return true
-    }
-
-    const handleLeadingSpace = (event) => {
-        if (event.key !== " ") return
-        if (event.defaultPrevented) return
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-        const range = getActiveRangeInContent()
-        if (!range || !range.collapsed) return
-        if (!isCaretAtLineStart(range)) return
-        event.preventDefault()
-        insertTextAtRange(range, "\u00a0")
     }
 
     return {
@@ -749,7 +708,6 @@ export const createInputHandlers = (context) => {
         renderTags,
         handleTagLineEnter,
         handleListEnter,
-        handlePlainEnter,
-        handleLeadingSpace
+        handlePlainEnter
     }
 }
