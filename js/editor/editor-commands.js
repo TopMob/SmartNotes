@@ -200,6 +200,22 @@ const createExecCommandAdapter = (options = {}) => {
     }
 }
 
+const sortNodesByDocumentOrder = (nodes) => [...nodes].sort((a, b) => {
+    if (a === b) return 0
+    const position = a.compareDocumentPosition(b)
+    if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1
+    if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1
+    return 0
+})
+
+const getHighestBlocks = (blocks) => {
+    const sortedBlocks = sortNodesByDocumentOrder(blocks)
+    return sortedBlocks.filter((block, index) => {
+        if (!block?.parentElement) return false
+        return !sortedBlocks.some((candidate, candidateIndex) => candidateIndex !== index && candidate.contains(block))
+    })
+}
+
 export const createEditorCommands = (context) => {
     const { getRoot, getActiveRangeInContent, storeSelection, queueSnapshot, fallback } = context
     const execCommandAdapter = createExecCommandAdapter(fallback)
@@ -223,6 +239,32 @@ export const createEditorCommands = (context) => {
         const range = getValidRange()
         const fallbackCommand = formatDefinition?.fallbackCommand
 
+        const root = resolveRoot()
+        if (range && !range.collapsed && root) {
+            const toggleTagNames = normalizeTagNameList(formatDefinition?.toggleTagNames)
+            const wrapperTagName = normalizeTagName(formatDefinition?.wrapperTagName)
+            if (!toggleTagNames.length || !wrapperTagName) return false
+
+            const startElement = getNearestElement(range.startContainer)
+            const endElement = getNearestElement(range.endContainer)
+            const startTag = getClosestByTagNames(startElement, toggleTagNames, root)
+            const endTag = getClosestByTagNames(endElement, toggleTagNames, root)
+            const singleWrappedContainer = startTag && startTag === endTag && rangeFullyInsideNode(range, startTag)
+            const fullWrappedRange = isRangeFullyWrappedWithTagNames(range, toggleTagNames, root)
+
+            if (singleWrappedContainer || fullWrappedRange) {
+                const fragment = range.extractContents()
+                removeTagsFromFragment(fragment, toggleTagNames)
+                insertFragmentAndReselect(range, fragment)
+                finalizeChange()
+                return true
+            }
+
+            surroundRangeWithTag(range, wrapperTagName)
+            finalizeChange()
+            return true
+        }
+
         if (execCommandAdapter.isAvailable && fallbackCommand) {
             const changed = execCommandAdapter.runCommand(fallbackCommand)
             if (changed) {
@@ -231,33 +273,7 @@ export const createEditorCommands = (context) => {
             }
         }
 
-        if (!range || range.collapsed) return false
-
-        const root = resolveRoot()
-        if (!root) return false
-
-        const toggleTagNames = normalizeTagNameList(formatDefinition?.toggleTagNames)
-        const wrapperTagName = normalizeTagName(formatDefinition?.wrapperTagName)
-        if (!toggleTagNames.length || !wrapperTagName) return false
-
-        const startElement = getNearestElement(range.startContainer)
-        const endElement = getNearestElement(range.endContainer)
-        const startTag = getClosestByTagNames(startElement, toggleTagNames, root)
-        const endTag = getClosestByTagNames(endElement, toggleTagNames, root)
-        const singleWrappedContainer = startTag && startTag === endTag && rangeFullyInsideNode(range, startTag)
-        const fullWrappedRange = isRangeFullyWrappedWithTagNames(range, toggleTagNames, root)
-
-        if (singleWrappedContainer || fullWrappedRange) {
-            const fragment = range.extractContents()
-            removeTagsFromFragment(fragment, toggleTagNames)
-            insertFragmentAndReselect(range, fragment)
-            finalizeChange()
-            return true
-        }
-
-        surroundRangeWithTag(range, wrapperTagName)
-        finalizeChange()
-        return true
+        return false
     }
 
     const convertListType = (existingList, nextListTagName) => {
@@ -319,7 +335,7 @@ export const createEditorCommands = (context) => {
         }
 
         const root = resolveRoot()
-        const blocks = collectBlocksInRange(range, root)
+        const blocks = getHighestBlocks(collectBlocksInRange(range, root))
         if (!blocks.length) return false
 
         const list = document.createElement(listTagName)
@@ -337,6 +353,18 @@ export const createEditorCommands = (context) => {
 
     const clearFormatting = () => {
         const range = getValidRange()
+        const root = resolveRoot()
+        if (range && !range.collapsed && root) {
+            const fragment = range.extractContents()
+            removeInlineTagsFromFragment(fragment)
+            insertFragmentAndMoveCaret(range, fragment)
+            const blocks = getHighestBlocks(collectBlocksInRange(range, root))
+            blocks.forEach(block => {
+                if (block?.style) block.style.textAlign = ""
+            })
+            finalizeChange()
+            return true
+        }
         if (execCommandAdapter.isAvailable) {
             const unlinked = execCommandAdapter.runCommand("unlink")
             const removed = execCommandAdapter.runCommand("removeFormat")
@@ -345,13 +373,7 @@ export const createEditorCommands = (context) => {
                 return true
             }
         }
-        if (!range || range.collapsed) return false
-
-        const fragment = range.extractContents()
-        removeInlineTagsFromFragment(fragment)
-        insertFragmentAndMoveCaret(range, fragment)
-        finalizeChange()
-        return true
+        return false
     }
 
     const insertLink = (value, options = {}) => {
@@ -382,39 +404,41 @@ export const createEditorCommands = (context) => {
 
     const alignText = (side) => {
         const normalizedSide = side === "left" || side === "right" || side === "center" ? side : "left"
-        const command = normalizedSide === "center" ? "justifyCenter" : normalizedSide === "right" ? "justifyRight" : "justifyLeft"
+        const range = getValidRange()
+        const root = resolveRoot()
+        if (range && root) {
+            const blocks = getHighestBlocks(collectBlocksInRange(range, root))
+            if (blocks.length) {
+                blocks.forEach(block => {
+                    block.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
+                })
+                finalizeChange()
+                return true
+            }
+        }
+        if (range && root) {
+            const fallbackBlock = getClosestEditableBlock(range.startContainer, root)
+            if (fallbackBlock) {
+                fallbackBlock.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
+                finalizeChange()
+                return true
+            }
+            const activePage = range.startContainer.nodeType === Node.ELEMENT_NODE
+                ? range.startContainer.closest(".note-page")
+                : range.startContainer.parentElement?.closest(".note-page")
+            if (activePage && root.contains(activePage)) {
+                activePage.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
+                finalizeChange()
+                return true
+            }
+        }
         if (execCommandAdapter.isAvailable) {
+            const command = normalizedSide === "center" ? "justifyCenter" : normalizedSide === "right" ? "justifyRight" : "justifyLeft"
             const changedByCommand = execCommandAdapter.runCommand(command)
             if (changedByCommand) {
                 finalizeChange()
                 return true
             }
-        }
-        const range = getValidRange()
-        if (!range) return false
-        const root = resolveRoot()
-        if (!root) return false
-        const blocks = collectBlocksInRange(range, root)
-        if (blocks.length) {
-            blocks.forEach(block => {
-                block.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
-            })
-            finalizeChange()
-            return true
-        }
-        const fallbackBlock = getClosestEditableBlock(range.startContainer, root)
-        if (fallbackBlock) {
-            fallbackBlock.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
-            finalizeChange()
-            return true
-        }
-        const activePage = range.startContainer.nodeType === Node.ELEMENT_NODE
-            ? range.startContainer.closest(".note-page")
-            : range.startContainer.parentElement?.closest(".note-page")
-        if (activePage && root.contains(activePage)) {
-            activePage.style.textAlign = normalizedSide === "left" ? "" : normalizedSide
-            finalizeChange()
-            return true
         }
         return false
     }
@@ -431,4 +455,3 @@ export const createEditorCommands = (context) => {
         alignText
     }
 }
-
