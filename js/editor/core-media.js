@@ -1,4 +1,5 @@
 import { CONFIG } from "./core-state.js"
+import { createMediaHtml, resolveMediaDropPlacement, insertMediaAtPlacement, getMarkerRectFromPlacement } from "./media-placement.js"
 
 export const createMediaHandlers = (context) => {
     const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText, restoreSelection } = context
@@ -139,6 +140,33 @@ export const createMediaHandlers = (context) => {
         document.addEventListener("pointercancel", handleMediaDragEnd, { once: true })
     }
 
+    const ensureDropMarker = () => {
+        if (state.dropMarkerElement && document.body.contains(state.dropMarkerElement)) return state.dropMarkerElement
+        const marker = document.createElement("div")
+        marker.className = "media-drop-marker"
+        document.body.appendChild(marker)
+        state.dropMarkerElement = marker
+        return marker
+    }
+
+    const clearDropMarker = () => {
+        if (!state.dropMarkerElement) return
+        state.dropMarkerElement.remove()
+        state.dropMarkerElement = null
+    }
+
+    const updateDropMarker = (placement) => {
+        const markerRect = getMarkerRectFromPlacement(placement)
+        if (!markerRect) {
+            clearDropMarker()
+            return
+        }
+        const marker = ensureDropMarker()
+        marker.style.left = `${markerRect.left}px`
+        marker.style.top = `${markerRect.top}px`
+        marker.style.width = `${markerRect.width}px`
+    }
+
     const handleMediaDragMove = (event) => {
         if (!state.dragState) return
         const dx = event.clientX - state.dragState.startX
@@ -149,20 +177,29 @@ export const createMediaHandlers = (context) => {
         state.dragState.wrapper.style.transform = `translate(${dx}px, ${dy}px)`
         state.dragState.wrapper.style.pointerEvents = "none"
         state.dragState.wrapper.style.zIndex = "12"
+        const placement = resolveMediaDropPlacement({
+            root: elements.content,
+            x: event.clientX,
+            y: event.clientY,
+            draggedWrapper: state.dragState.wrapper
+        })
+        state.dragState.dropPlacement = placement
+        updateDropMarker(placement)
         event.preventDefault()
     }
 
     const handleMediaDragEnd = (event) => {
         if (!state.dragState) return
-        const { wrapper, trailingBreak, moved } = state.dragState
+        const { wrapper, trailingBreak, moved, dropPlacement } = state.dragState
         wrapper.classList.remove("dragging")
         wrapper.style.transform = ""
         wrapper.style.pointerEvents = ""
         wrapper.style.zIndex = ""
         if (moved) {
-            placeDraggedMedia(wrapper, trailingBreak, event.clientX, event.clientY)
+            placeDraggedMedia(wrapper, trailingBreak, event.clientX, event.clientY, dropPlacement)
             queueSnapshot()
         }
+        clearDropMarker()
         state.dragState = null
         document.removeEventListener("pointermove", handleMediaDragMove)
     }
@@ -176,12 +213,10 @@ export const createMediaHandlers = (context) => {
         const normalizedSource = String(src || "").trim()
         if (type !== "image" || !/^https:\/\//i.test(normalizedSource) && !/^data:image\//i.test(normalizedSource)) return
         const id = Utils.generateId()
-        const html = `
-        <div class="media-wrapper media-draggable-item" id="${id}" contenteditable="false" draggable="true">
-            <img src="${Utils.escapeHtml(normalizedSource)}" alt="">
-            <span class="media-resize-handle" aria-hidden="true"></span>
-        </div><br>
-    `
+        const html = createMediaHtml({
+            id,
+            src: Utils.escapeHtml(normalizedSource)
+        })
         insertHtmlAtSelection(html)
         makeMediaDraggable()
         syncMediaSizes()
@@ -313,6 +348,7 @@ export const createMediaHandlers = (context) => {
     const cleanupPointerInteractions = () => {
         state.resizeState = null
         state.dragState = null
+        clearDropMarker()
         document.removeEventListener("pointermove", handleResizeMove)
         document.removeEventListener("pointerup", handleResizeEnd)
         document.removeEventListener("pointercancel", handleResizeEnd)
@@ -322,57 +358,19 @@ export const createMediaHandlers = (context) => {
     }
 
 
-    const resolveDropTargetWrapper = (x, y, draggedWrapper) => {
-        const element = document.elementFromPoint(x, y)
-        const targetWrapper = element?.closest?.(".media-wrapper") || null
-        if (!targetWrapper || targetWrapper === draggedWrapper) return null
-        if (!elements.content.contains(targetWrapper)) return null
-        return targetWrapper
-    }
-
-    const insertMediaFragmentAtRange = (wrapper, trailingBreak, range) => {
-        const fragment = document.createDocumentFragment()
-        fragment.appendChild(wrapper)
-        if (trailingBreak) fragment.appendChild(trailingBreak)
-        range.insertNode(fragment)
-    }
-
-    const placeDraggedMedia = (wrapper, trailingBreak, clientX, clientY) => {
-        const targetWrapper = resolveDropTargetWrapper(clientX, clientY, wrapper)
-        if (targetWrapper) {
-            const targetRect = targetWrapper.getBoundingClientRect()
-            const insertBeforeTarget = clientY < (targetRect.top + targetRect.height / 2)
-            if (insertBeforeTarget) targetWrapper.before(wrapper)
-            else targetWrapper.after(wrapper)
-            if (trailingBreak) wrapper.after(trailingBreak)
-            return
-        }
-        const range = getDropRange(clientX, clientY)
-        if (range && elements.content.contains(range.commonAncestorContainer)) {
-            insertMediaFragmentAtRange(wrapper, trailingBreak, range)
-            return
-        }
-        const activePage = getPages()[state.pageIndex]
-        if (activePage && elements.content.contains(activePage)) {
-            activePage.appendChild(wrapper)
-            if (trailingBreak) activePage.appendChild(trailingBreak)
-            return
-        }
-        elements.content.appendChild(wrapper)
-        if (trailingBreak) elements.content.appendChild(trailingBreak)
-    }
-
-    const getDropRange = (x, y) => {
-        if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y)
-        if (document.caretPositionFromPoint) {
-            const pos = document.caretPositionFromPoint(x, y)
-            if (!pos) return null
-            const range = document.createRange()
-            range.setStart(pos.offsetNode, pos.offset)
-            range.collapse(true)
-            return range
-        }
-        return null
+    const placeDraggedMedia = (wrapper, trailingBreak, clientX, clientY, cachedPlacement) => {
+        const placement = cachedPlacement || resolveMediaDropPlacement({
+            root: elements.content,
+            x: clientX,
+            y: clientY,
+            draggedWrapper: wrapper
+        })
+        insertMediaAtPlacement({
+            wrapper,
+            trailingBreak,
+            placement,
+            fallbackRoot: getPages()[state.pageIndex] || elements.content
+        })
     }
 
     return {

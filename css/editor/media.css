@@ -201,6 +201,17 @@
     outline-offset: 4px;
 }
 
+
+.media-drop-marker {
+    position: fixed;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(var(--primary-rgb), 0.92);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+    z-index: calc(var(--z-editor) + 8);
+    pointer-events: none;
+}
+
 .media-wrapper.dragging {
     opacity: 0.7;
 }
