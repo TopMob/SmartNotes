@@ -61,7 +61,7 @@ export const Utils = {
         return Date.now()
     },
     sanitizeHtml: (html) => {
-        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "source", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
+        const allowedTags = new Set(["b", "strong", "i", "em", "u", "s", "del", "strike", "br", "hr", "p", "div", "ul", "ol", "li", "span", "img", "a", "audio", "source", "button", "input", "table", "thead", "tbody", "tfoot", "tr", "td", "th"])
         const allowedClasses = new Set([
             "media-wrapper",
             "media-resize-handle",
@@ -95,16 +95,16 @@ export const Utils = {
         const allowAttrs = {
             a: new Set(["href", "target", "rel", "data-note-id"]),
             img: new Set(["src", "alt", "width", "height"]),
-            div: new Set(["id", "contenteditable", "draggable", "data-width", "data-height", "data-align", "style"]),
-            p: new Set(["data-align", "style"]),
-            li: new Set(["data-align", "style"]),
-            h1: new Set(["data-align", "style"]),
-            h2: new Set(["data-align", "style"]),
-            h3: new Set(["data-align", "style"]),
-            h4: new Set(["data-align", "style"]),
-            h5: new Set(["data-align", "style"]),
-            h6: new Set(["data-align", "style"]),
-            blockquote: new Set(["data-align", "style"]),
+            div: new Set(["id", "contenteditable", "draggable", "data-width", "data-height", "data-align", "align", "style"]),
+            p: new Set(["data-align", "align", "style"]),
+            li: new Set(["data-align", "align", "style"]),
+            h1: new Set(["data-align", "align", "style"]),
+            h2: new Set(["data-align", "align", "style"]),
+            h3: new Set(["data-align", "align", "style"]),
+            h4: new Set(["data-align", "align", "style"]),
+            h5: new Set(["data-align", "align", "style"]),
+            h6: new Set(["data-align", "align", "style"]),
+            blockquote: new Set(["data-align", "align", "style"]),
             audio: new Set(["src", "controls", "preload"]),
             source: new Set(["src", "type"]),
             button: new Set(["type", "aria-label"]),
@@ -196,6 +196,15 @@ export const Utils = {
                     const normalizedStyle = normalizeStyle(tag, child.getAttribute("style"))
                     if (normalizedStyle) child.setAttribute("style", normalizedStyle)
                     else child.removeAttribute("style")
+                }
+                if (child.hasAttribute("align")) {
+                    sanitizeTextAlignmentAttribute(child, "align")
+                    const alignValue = child.getAttribute("align")
+                    if (alignValue) {
+                        const normalizedStyle = normalizeStyle(tag, `text-align:${alignValue}`)
+                        if (normalizedStyle) child.setAttribute("style", normalizedStyle)
+                    }
+                    child.removeAttribute("align")
                 }
                 if (tag === "div" && child.classList.contains("media-wrapper")) {
                     sanitizeNumericDataAttribute(child, "data-width")

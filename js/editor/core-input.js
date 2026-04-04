@@ -130,9 +130,26 @@ export const createInputHandlers = (context) => {
         return fragment
     }
 
+    const collapseAlternatingEmptyRows = (rows) => {
+        if (!Array.isArray(rows) || rows.length < 3) return rows
+        let hasPattern = true
+        let hasEmptyRows = false
+        rows.forEach((row, index) => {
+            const isEmpty = row.trim() === ""
+            if (index % 2 === 1) {
+                if (!isEmpty) hasPattern = false
+                else hasEmptyRows = true
+                return
+            }
+            if (isEmpty) hasPattern = false
+        })
+        if (!hasPattern || !hasEmptyRows) return rows
+        return rows.filter((_, index) => index % 2 === 0)
+    }
+
     const normalizeClipboardPlainText = (value) => {
         const normalized = String(value || "").replace(/\r\n?/g, "\n")
-        const rows = normalized.split("\n")
+        const rows = collapseAlternatingEmptyRows(normalized.split("\n"))
         while (rows.length && rows[0].trim() === "") rows.shift()
         while (rows.length && rows[rows.length - 1].trim() === "") rows.pop()
         const compact = []
@@ -253,7 +270,7 @@ export const createInputHandlers = (context) => {
         const fragment = range.cloneContents()
         const container = document.createElement("div")
         container.appendChild(fragment)
-        const plainText = normalizeClipboardPlainText(container.innerText || fragmentToPlainText(fragment))
+        const plainText = normalizeClipboardPlainText(fragmentToPlainText(fragment))
         if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
@@ -660,4 +677,3 @@ export const createInputHandlers = (context) => {
         handleListEnter
     }
 }
-
