@@ -574,6 +574,15 @@ export const createInputHandlers = (context) => {
         return paragraph
     }
 
+    const ensureEditableBlockContent = (block) => {
+        if (!block) return
+        const hasMedia = !!block.querySelector("img,audio,video,table,hr,.media-wrapper,.audio-block")
+        const textContent = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+        if (!hasMedia && !textContent && !block.querySelector("br")) {
+            block.appendChild(document.createElement("br"))
+        }
+    }
+
     const splitListForExit = (listItem) => {
         const list = listItem?.parentElement
         if (!list || !/^(UL|OL)$/.test(list.tagName)) return null
@@ -664,25 +673,27 @@ export const createInputHandlers = (context) => {
         if (!node || !elements.content.contains(node)) return
         if (node.closest("li")) return
         event.preventDefault()
-        const breakNode = document.createElement("br")
-        range.deleteContents()
-        range.insertNode(breakNode)
-        const nextNode = breakNode.nextSibling
-        const requiresTrailingBreak = !nextNode || (nextNode.nodeType === Node.ELEMENT_NODE && nextNode.tagName === "BR")
-        if (requiresTrailingBreak) {
-            const trailingBreak = document.createElement("br")
-            if (nextNode) breakNode.parentNode?.insertBefore(trailingBreak, nextNode)
-            else breakNode.parentNode?.appendChild(trailingBreak)
+        const activeBlock = getActiveBlock()
+        if (!activeBlock || !elements.content.contains(activeBlock)) {
+            const newParagraph = createEmptyParagraph()
+            range.deleteContents()
+            range.insertNode(newParagraph)
+            placeCaretAtStart(newParagraph)
+            queueSnapshot()
+            return
         }
-        const nextRange = document.createRange()
-        nextRange.setStartAfter(breakNode)
-        nextRange.collapse(true)
-        const selection = window.getSelection()
-        if (selection) {
-            selection.removeAllRanges()
-            selection.addRange(nextRange)
+        const splitRange = range.cloneRange()
+        splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
+        const trailingContent = splitRange.extractContents()
+        const nextParagraph = createEmptyParagraph()
+        if (trailingContent.childNodes.length) {
+            nextParagraph.innerHTML = ""
+            nextParagraph.appendChild(trailingContent)
         }
-        storeSelection()
+        ensureEditableBlockContent(activeBlock)
+        ensureEditableBlockContent(nextParagraph)
+        activeBlock.after(nextParagraph)
+        placeCaretAtStart(nextParagraph)
         queueSnapshot()
     }
 
