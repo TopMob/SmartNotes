@@ -207,33 +207,6 @@ export const createInputHandlers = (context) => {
         return true
     }
 
-    const insertWithNativeCommand = ({ html = "", text = "" } = {}) => {
-        if (typeof document.execCommand !== "function") return false
-        const target = elements.content
-        if (!target) return false
-        restoreSelection()
-        target.focus()
-        if (html) {
-            try {
-                if (document.execCommand("insertHTML", false, html)) {
-                    storeSelection()
-                    return true
-                }
-            } catch {
-            }
-        }
-        if (text) {
-            try {
-                if (document.execCommand("insertText", false, text)) {
-                    storeSelection()
-                    return true
-                }
-            } catch {
-            }
-        }
-        return false
-    }
-
     const handlePaste = async (event) => {
         const items = Array.from(event.clipboardData?.items || [])
         const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
@@ -267,7 +240,7 @@ export const createInputHandlers = (context) => {
             }
         }
         const hasInsertedContent = plainText
-            ? (insertWithNativeCommand({ text: plainText }) || insertFragmentAtSelection(plainTextToFragment(plainText)))
+            ? insertFragmentAtSelection(plainTextToFragment(plainText))
             : false
         if (hasInsertedContent) queueSnapshot()
     }
@@ -280,7 +253,7 @@ export const createInputHandlers = (context) => {
         const fragment = range.cloneContents()
         const container = document.createElement("div")
         container.appendChild(fragment)
-        const plainText = fragmentToPlainText(fragment)
+        const plainText = normalizeClipboardPlainText(container.innerText || fragmentToPlainText(fragment))
         if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
