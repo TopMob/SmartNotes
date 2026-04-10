@@ -237,10 +237,10 @@ export const EditorAPI = (() => {
 
     const ensureEditablePageHtml = (htmlValue) => {
         const html = String(htmlValue || "").trim()
-        if (!html) return "<p><br></p>"
+        if (!html) return "<div><br></div>"
         const plainText = Utils.stripHtml(html).replace(/\u00a0/g, " ").trim()
         const hasMedia = /<(img|audio|video|table|hr|iframe|canvas|svg)\b/i.test(html)
-        if (!plainText && !hasMedia) return "<p><br></p>"
+        if (!plainText && !hasMedia) return "<div><br></div>"
         return html
     }
 

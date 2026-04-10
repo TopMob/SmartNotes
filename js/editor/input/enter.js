@@ -1,3 +1,9 @@
+const resolveEditableBlockTag = (node, fallbackTag = "div") => {
+    const tagName = String(node?.tagName || "").toLowerCase()
+    if (["div", "p", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tagName)) return tagName
+    return fallbackTag
+}
+
 export const createEnterHandlers = (context) => {
     const {
         elements,
@@ -7,10 +13,10 @@ export const createEnterHandlers = (context) => {
         placeCaretAtStart
     } = context
 
-    const createEmptyParagraph = () => {
-        const paragraph = document.createElement("p")
-        paragraph.appendChild(document.createElement("br"))
-        return paragraph
+    const createEmptyBlock = (tagName = "div") => {
+        const block = document.createElement(resolveEditableBlockTag({ tagName }))
+        block.appendChild(document.createElement("br"))
+        return block
     }
 
     const ensureEditableBlockContent = (block) => {
@@ -36,9 +42,7 @@ export const createEnterHandlers = (context) => {
         if (!listItem) return
         const textContent = (listItem.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
         const hasMedia = !!listItem.querySelector("img,audio,video,table,hr")
-        if (!textContent && !hasMedia && !listItem.querySelector("br")) {
-            listItem.appendChild(document.createElement("br"))
-        }
+        if (!textContent && !hasMedia && !listItem.querySelector("br")) listItem.appendChild(document.createElement("br"))
     }
 
     const isListItemVisuallyEmpty = (listItem) => {
@@ -71,17 +75,17 @@ export const createEnterHandlers = (context) => {
     const exitCurrentListItem = (listItem) => {
         const splitResult = splitListForExit(listItem)
         if (!splitResult) return false
-        const paragraph = createEmptyParagraph()
+        const block = createEmptyBlock("div")
         if (splitResult.hasLeadingItems) {
-            splitResult.list.after(paragraph)
-            if (splitResult.hasTrailingItems) paragraph.after(splitResult.trailingList)
+            splitResult.list.after(block)
+            if (splitResult.hasTrailingItems) block.after(splitResult.trailingList)
         } else if (splitResult.hasTrailingItems) {
-            splitResult.list.replaceWith(paragraph)
-            paragraph.after(splitResult.trailingList)
+            splitResult.list.replaceWith(block)
+            block.after(splitResult.trailingList)
         } else {
-            splitResult.list.replaceWith(paragraph)
+            splitResult.list.replaceWith(block)
         }
-        placeCaretAtStart(paragraph)
+        placeCaretAtStart(block)
         return true
     }
 
@@ -107,7 +111,7 @@ export const createEnterHandlers = (context) => {
         else block.classList.remove("tag-line")
     }
 
-    const insertParagraphBreak = (range) => {
+    const insertBlockBreak = (range) => {
         let node = range.startContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (!node || !elements.content.contains(node)) return false
@@ -115,25 +119,26 @@ export const createEnterHandlers = (context) => {
 
         const activeBlock = getActiveBlock()
         if (!activeBlock || !elements.content.contains(activeBlock)) {
-            const newParagraph = createEmptyParagraph()
+            const newBlock = createEmptyBlock("div")
             range.deleteContents()
-            range.insertNode(newParagraph)
-            placeCaretAtStart(newParagraph)
+            range.insertNode(newBlock)
+            placeCaretAtStart(newBlock)
             return true
         }
 
+        const nextTagName = resolveEditableBlockTag(activeBlock, "div")
         const splitRange = range.cloneRange()
         splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
         const trailingContent = splitRange.extractContents()
-        const nextParagraph = createEmptyParagraph()
+        const nextBlock = createEmptyBlock(nextTagName)
         if (trailingContent.childNodes.length) {
-            nextParagraph.innerHTML = ""
-            nextParagraph.appendChild(trailingContent)
+            nextBlock.innerHTML = ""
+            nextBlock.appendChild(trailingContent)
         }
         ensureEditableBlockContent(activeBlock)
-        ensureEditableBlockContent(nextParagraph)
-        activeBlock.after(nextParagraph)
-        placeCaretAtStart(nextParagraph)
+        ensureEditableBlockContent(nextBlock)
+        activeBlock.after(nextBlock)
+        placeCaretAtStart(nextBlock)
         return true
     }
 
@@ -143,7 +148,7 @@ export const createEnterHandlers = (context) => {
         const listItem = getActiveListItem(range)
         const handled = listItem
             ? (isListItemVisuallyEmpty(listItem) ? exitCurrentListItem(listItem) : insertListItemBreak(listItem, range))
-            : insertParagraphBreak(range)
+            : insertBlockBreak(range)
         if (!handled) return false
         applyTagLineMode()
         queueSnapshot()
