@@ -65,8 +65,7 @@ export const createInputHandlers = (context) => {
         addTag: tagHandlers.addTag,
         removeTag: tagHandlers.removeTag,
         renderTags: tagHandlers.renderTags,
-        handleTagLineEnter: enterHandlers.handleTagLineEnter,
-        handleListEnter: enterHandlers.handleListEnter,
-        handlePlainEnter: enterHandlers.handlePlainEnter
+        handleBeforeInput: enterHandlers.handleBeforeInput,
+        handleEnterKeydown: enterHandlers.handleListEnter
     }
 }

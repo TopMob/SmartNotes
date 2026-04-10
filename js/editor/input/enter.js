@@ -91,9 +91,7 @@ export const createEnterHandlers = (context) => {
         splitRange.setEndAfter(listItem.lastChild || listItem)
         const trailingContent = splitRange.extractContents()
         const nextItem = document.createElement("li")
-        if (trailingContent.childNodes.length) {
-            nextItem.appendChild(trailingContent)
-        }
+        if (trailingContent.childNodes.length) nextItem.appendChild(trailingContent)
         ensureEditableListItemContent(listItem)
         ensureEditableListItemContent(nextItem)
         listItem.after(nextItem)
@@ -101,53 +99,29 @@ export const createEnterHandlers = (context) => {
         return true
     }
 
-    const handleListEnter = (event) => {
-        if (event.key !== "Enter") return
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-        const range = getActiveRangeInContent()
-        const listItem = getActiveListItem(range)
-        if (!listItem) return
-        event.preventDefault()
-        const handled = isListItemVisuallyEmpty(listItem)
-            ? exitCurrentListItem(listItem)
-            : insertListItemBreak(listItem, range)
-        if (!handled) return
-        queueSnapshot()
-    }
-
-    const handleTagLineEnter = (event) => {
-        if (event.key !== "Enter") return
+    const applyTagLineMode = () => {
         const block = getActiveBlock()
         if (!block || !elements.content.contains(block)) return
         const text = block.textContent.trim()
-        if (/^#\S+$/.test(text)) {
-            event.preventDefault()
-            block.classList.add("tag-line")
-        } else {
-            block.classList.remove("tag-line")
-        }
+        if (/^#\S+$/.test(text)) block.classList.add("tag-line")
+        else block.classList.remove("tag-line")
     }
 
-    const handlePlainEnter = (event) => {
-        if (event.key !== "Enter") return
-        if (event.defaultPrevented) return
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-        const range = getActiveRangeInContent()
-        if (!range || !range.collapsed) return
+    const insertParagraphBreak = (range) => {
         let node = range.startContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || !elements.content.contains(node)) return
-        if (node.closest("li")) return
-        event.preventDefault()
+        if (!node || !elements.content.contains(node)) return false
+        if (node.closest("li")) return false
+
         const activeBlock = getActiveBlock()
         if (!activeBlock || !elements.content.contains(activeBlock)) {
             const newParagraph = createEmptyParagraph()
             range.deleteContents()
             range.insertNode(newParagraph)
             placeCaretAtStart(newParagraph)
-            queueSnapshot()
-            return
+            return true
         }
+
         const splitRange = range.cloneRange()
         splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
         const trailingContent = splitRange.extractContents()
@@ -160,12 +134,39 @@ export const createEnterHandlers = (context) => {
         ensureEditableBlockContent(nextParagraph)
         activeBlock.after(nextParagraph)
         placeCaretAtStart(nextParagraph)
+        return true
+    }
+
+    const executeEnter = () => {
+        const range = getActiveRangeInContent()
+        if (!range || !range.collapsed) return false
+        const listItem = getActiveListItem(range)
+        const handled = listItem
+            ? (isListItemVisuallyEmpty(listItem) ? exitCurrentListItem(listItem) : insertListItemBreak(listItem, range))
+            : insertParagraphBreak(range)
+        if (!handled) return false
+        applyTagLineMode()
         queueSnapshot()
+        return true
+    }
+
+    const handleBeforeInput = (event) => {
+        if (event.defaultPrevented) return
+        if (event.inputType !== "insertParagraph") return
+        event.preventDefault()
+        executeEnter()
+    }
+
+    const handleListEnter = (event) => {
+        if (event.key !== "Enter") return
+        if (event.defaultPrevented) return
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+        event.preventDefault()
+        executeEnter()
     }
 
     return {
-        handleListEnter,
-        handleTagLineEnter,
-        handlePlainEnter
+        handleBeforeInput,
+        handleListEnter
     }
 }
