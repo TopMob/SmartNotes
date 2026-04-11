@@ -14,14 +14,41 @@ export const createInputHandlers = (context) => {
     } = context
 
     const selectionHandlers = createSelectionHandlers({ elements, state })
+
     const normalizeActivePage = () => {
         const page = selectionHandlers.getActivePage()
         if (!page) return false
         return normalizeParagraphModel(page)
     }
 
+    const normalizeActivePageWithCaretRestore = () => {
+        const page = selectionHandlers.getActivePage()
+        const range = selectionHandlers.getActiveRangeInContent()
+        if (!page || !range || !range.collapsed) return normalizeActivePage()
+        const activeBlock = selectionHandlers.getBlockFromRange(range)
+        const caretOffset = activeBlock ? selectionHandlers.getCaretOffsetInBlock(activeBlock, range) : null
+        const sourceBlocks = selectionHandlers.getEditableBlocks(page)
+        const blockIndex = activeBlock ? sourceBlocks.indexOf(activeBlock) : -1
+        const changed = normalizeParagraphModel(page)
+        if (!changed) return false
+        if (blockIndex < 0) {
+            selectionHandlers.storeSelection()
+            return true
+        }
+        const normalizedBlocks = selectionHandlers.getEditableBlocks(page)
+        const targetBlock = normalizedBlocks[Math.min(blockIndex, normalizedBlocks.length - 1)]
+        if (!targetBlock) {
+            selectionHandlers.storeSelection()
+            return true
+        }
+        if (!selectionHandlers.placeCaretInBlockAtOffset(targetBlock, caretOffset ?? 0)) {
+            selectionHandlers.storeSelection()
+        }
+        return true
+    }
+
     const handleInput = () => {
-        if (normalizeActivePage()) selectionHandlers.storeSelection()
+        normalizeActivePageWithCaretRestore()
         queueSnapshot()
     }
 

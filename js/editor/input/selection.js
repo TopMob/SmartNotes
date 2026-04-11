@@ -1,5 +1,3 @@
-import { ensureRangeWithinParagraphModel, normalizeParagraphModel } from "./paragraph-model.js"
-
 export const createSelectionHandlers = (context) => {
     const { elements, state } = context
     const blockSelector = "p,li,blockquote,pre,h1,h2,h3,h4,h5,h6"
@@ -24,15 +22,20 @@ export const createSelectionHandlers = (context) => {
         return nodes
     }
 
+    const getEditableBlocks = (page) => Array.from(page?.querySelectorAll?.(blockSelector) || [])
+
     const resolveSafeRange = (range) => {
         if (!range || !elements.content) return null
+        if (!elements.content.contains(range.commonAncestorContainer)) return null
         const page = resolvePageFromNode(range.startContainer)
-        if (page && elements.content.contains(page)) {
-            const normalizedRange = ensureRangeWithinParagraphModel(page, range)
-            return normalizedRange
-        }
-        if (elements.content.contains(range.commonAncestorContainer)) return range
-        return null
+        if (!page || !elements.content.contains(page)) return range
+        if (page.contains(range.startContainer) && page.contains(range.endContainer)) return range
+
+        const fallback = document.createRange()
+        const firstBlock = getEditableBlocks(page)[0] || page
+        fallback.selectNodeContents(firstBlock)
+        fallback.collapse(true)
+        return fallback
     }
 
     const getActiveRangeInContent = () => {
@@ -48,6 +51,16 @@ export const createSelectionHandlers = (context) => {
         return null
     }
 
+    const setSelectionRange = (range) => {
+        if (!range) return false
+        const selection = window.getSelection()
+        if (!selection) return false
+        selection.removeAllRanges()
+        selection.addRange(range)
+        state.savedSelectionRange = range.cloneRange()
+        return true
+    }
+
     const storeSelection = () => {
         const selection = window.getSelection()
         if (!selection || selection.rangeCount === 0) return
@@ -58,32 +71,21 @@ export const createSelectionHandlers = (context) => {
 
     const restoreSelection = () => {
         if (!elements.content) return null
-        const selection = window.getSelection()
         let range = getActiveRangeInContent()
         if (!range) {
             const activePage = elements.content.querySelector(".note-page.is-active") || elements.content.querySelector(".note-page")
             if (activePage) {
-                normalizeParagraphModel(activePage)
-                const firstBlock = activePage.firstElementChild
+                const firstBlock = getEditableBlocks(activePage)[0] || activePage
                 range = document.createRange()
-                if (firstBlock) {
-                    range.selectNodeContents(firstBlock)
-                    range.collapse(true)
-                } else {
-                    range.selectNodeContents(activePage)
-                    range.collapse(true)
-                }
+                range.selectNodeContents(firstBlock)
+                range.collapse(true)
             } else {
                 range = document.createRange()
                 range.selectNodeContents(elements.content)
                 range.collapse(false)
             }
         }
-        if (selection && range) {
-            selection.removeAllRanges()
-            selection.addRange(range)
-        }
-        state.savedSelectionRange = range ? range.cloneRange() : null
+        setSelectionRange(range)
         return range
     }
 
@@ -125,6 +127,18 @@ export const createSelectionHandlers = (context) => {
         return range
     }
 
+    const placeCaretInBlockAtOffset = (block, offset) => {
+        if (!block) return false
+        const textLength = (block.textContent || "").length
+        const safeOffset = Math.max(0, Math.min(Number(offset) || 0, textLength))
+        const range = createRangeFromOffsets(block, safeOffset, safeOffset)
+        if (range) return setSelectionRange(range)
+        const fallback = document.createRange()
+        fallback.selectNodeContents(block)
+        fallback.collapse(true)
+        return setSelectionRange(fallback)
+    }
+
     const getBlockFromRange = (range) => {
         let node = range.startContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
@@ -151,24 +165,17 @@ export const createSelectionHandlers = (context) => {
 
     const placeCaretAtStart = (node) => {
         if (!node) return
-        const selection = window.getSelection()
-        if (!selection) return
         const range = document.createRange()
         range.selectNodeContents(node)
         range.collapse(true)
-        selection.removeAllRanges()
-        selection.addRange(range)
-        state.savedSelectionRange = range.cloneRange()
+        setSelectionRange(range)
     }
 
     const focusEditable = (node) => {
-        const selection = window.getSelection()
-        if (!selection) return
         const range = document.createRange()
         range.selectNodeContents(node)
         range.collapse(true)
-        selection.removeAllRanges()
-        selection.addRange(range)
+        setSelectionRange(range)
         elements.content?.focus()
     }
 
@@ -176,21 +183,13 @@ export const createSelectionHandlers = (context) => {
         if (!elements.content || !contentNode) return false
         const range = restoreSelection()
         if (!range) return false
-        const page = resolvePageFromNode(range.startContainer)
-        if (page) normalizeParagraphModel(page)
         const anchorNode = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? contentNode.lastChild : contentNode
         if (!anchorNode) return false
         range.deleteContents()
         range.insertNode(contentNode)
         range.setStartAfter(anchorNode)
         range.collapse(true)
-        const selection = window.getSelection()
-        if (selection) {
-            selection.removeAllRanges()
-            selection.addRange(range)
-        }
-        state.savedSelectionRange = range.cloneRange()
-        return true
+        return setSelectionRange(range)
     }
 
     const insertHtmlAtSelection = (html) => insertFragmentAtSelection(createFragmentFromHtml(html))
@@ -214,6 +213,9 @@ export const createSelectionHandlers = (context) => {
         getActiveBlock,
         getActivePage,
         placeCaretAtStart,
+        placeCaretInBlockAtOffset,
+        getEditableBlocks,
+        setSelectionRange,
         insertHtmlAtSelection,
         insertNodeAtSelection,
         insertHorizontalRule

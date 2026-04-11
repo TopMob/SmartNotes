@@ -51,3 +51,34 @@ test('clipboard plain text preserves single empty lines without doubling', () =>
 
     assert.equal(handlers.fragmentToPlainText(fragment), '1\n\n2')
 })
+
+
+test('clipboard plain text does not add blank lines for non-empty paragraphs with sentinel br', () => {
+    installDom()
+    const handlers = createClipboardHandlers({
+        elements: {},
+        queueSnapshot: () => {},
+        fileToDataUrl: async () => '',
+        insertMedia: () => {},
+        insertFragmentAtSelection: () => false,
+        createFragmentFromHtml: (html) => {
+            const template = document.createElement('template')
+            template.innerHTML = html
+            return template.content.cloneNode(true)
+        },
+        getActiveRangeInContent: () => null,
+        restoreSelection: () => null,
+        storeSelection: () => {},
+        normalizeActivePage: () => false
+    })
+
+    const fragment = document.createDocumentFragment()
+    for (const value of ['1', '2', '3', '4', '5']) {
+        const p = document.createElement('p')
+        p.appendChild(document.createTextNode(value))
+        p.appendChild(document.createElement('br'))
+        fragment.appendChild(p)
+    }
+
+    assert.equal(handlers.fragmentToPlainText(fragment), '1\n2\n3\n4\n5')
+})

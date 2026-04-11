@@ -140,24 +140,37 @@ export const createClipboardHandlers = (context) => {
         const container = document.createElement("div")
         container.appendChild(fragment.cloneNode(true))
         const normalized = normalizeFragmentParagraphModel(container)
+        const blocks = Array.from(normalized.childNodes || [])
         const lines = []
 
-        const flattenInlineText = (node) => {
+        const collectNodeText = (node, options = {}) => {
             if (!node) return ""
             if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
             if (node.nodeType !== Node.ELEMENT_NODE) return ""
             const tag = String(node.tagName || "").toLowerCase()
-            if (tag === "br") return "\n"
-            const content = Array.from(node.childNodes || []).map(flattenInlineText).join("")
-            return tag === "li" ? `• ${content}` : content
+            if (tag === "br") return options.ignoreSentinelBr ? "" : "\n"
+            const children = Array.from(node.childNodes || [])
+            const content = children.map((child, index) => {
+                if (
+                    options.ignoreSentinelBr
+                    && tag === "p"
+                    && child.nodeType === Node.ELEMENT_NODE
+                    && String(child.tagName || "").toLowerCase() === "br"
+                    && index === children.length - 1
+                    && (node.textContent || "").replace(/[\s\u200b\u00a0]+/g, "") !== ""
+                ) return ""
+                return collectNodeText(child, options)
+            }).join("")
+            if (tag === "li") return `• ${content}`
+            return content
         }
 
-        Array.from(normalized.childNodes || []).forEach(node => {
-            if (node.nodeType === Node.TEXT_NODE) {
-                lines.push(node.textContent || "")
+        blocks.forEach(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                const raw = (node.textContent || "").trim()
+                if (raw) lines.push(raw)
                 return
             }
-            if (node.nodeType !== Node.ELEMENT_NODE) return
             const tag = String(node.tagName || "").toLowerCase()
             if (tag === "hr") {
                 lines.push("─")
@@ -165,20 +178,20 @@ export const createClipboardHandlers = (context) => {
             }
             if (tag === "ul" || tag === "ol") {
                 Array.from(node.children).forEach((li, index) => {
-                    const text = flattenInlineText(li).replace(/\n/g, " ").trim()
+                    const text = collectNodeText(li, { ignoreSentinelBr: true }).replace(/\n+/g, " ").trim()
                     if (!text) return
                     if (tag === "ol") lines.push(`${index + 1}. ${text.replace(/^•\s*/, "")}`)
                     else lines.push(`• ${text.replace(/^•\s*/, "")}`)
                 })
                 return
             }
-            if (rootBlockTags.has(tag)) {
-                const text = flattenInlineText(node)
-                text.split("\n").forEach(line => lines.push(line))
+            const blockText = collectNodeText(node, { ignoreSentinelBr: true })
+            const splitLines = blockText.split("\n")
+            if (splitLines.length === 1 && splitLines[0] === "") {
+                lines.push("")
                 return
             }
-            const text = flattenInlineText(node)
-            if (text) text.split("\n").forEach(line => lines.push(line))
+            splitLines.forEach(line => lines.push(line))
         })
 
         return normalizeClipboardPlainText(lines.join("\n"))
