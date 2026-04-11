@@ -126,10 +126,46 @@ test('handleCopy preserves a real single empty line', () => {
     selection.addRange(range)
 
     const copyEvent = createClipboardMockEvent()
-    selection.toString = () => '1\n\n2'
     handlers.handleCopy(copyEvent)
 
     assert.equal(copyEvent.clipboardData.getData('text/plain'), '1\n\n2')
+})
+
+test('handleCopy ignores trailing caret paragraph', () => {
+    installDom('<!doctype html><html><body><div id="note-content-editable"><div class="note-page" contenteditable="true"><p>1</p><p>2</p><p>3</p><p><br></p></div></div></body></html>')
+    const content = document.getElementById('note-content-editable')
+    const page = content.querySelector('.note-page')
+    const handlers = createClipboardHandlers({
+        elements: { content },
+        queueSnapshot: () => {},
+        fileToDataUrl: async () => '',
+        insertMedia: () => {},
+        insertFragmentAtSelection: () => false,
+        createFragmentFromHtml: (html) => {
+            const template = document.createElement('template')
+            template.innerHTML = html
+            return template.content.cloneNode(true)
+        },
+        getActiveRangeInContent: () => {
+            const selection = window.getSelection()
+            return selection.rangeCount ? selection.getRangeAt(0) : null
+        },
+        restoreSelection: () => null,
+        storeSelection: () => {},
+        normalizeActivePage: () => false
+    })
+
+    const range = document.createRange()
+    range.setStartBefore(page.firstElementChild)
+    range.setEndAfter(page.lastElementChild)
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(range)
+
+    const copyEvent = createClipboardMockEvent()
+    handlers.handleCopy(copyEvent)
+
+    assert.equal(copyEvent.clipboardData.getData('text/plain'), '1\n2\n3')
 })
 
 test('plain text paste keeps separate paragraphs for single newlines', async () => {
