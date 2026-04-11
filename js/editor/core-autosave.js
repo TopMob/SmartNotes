@@ -1,6 +1,5 @@
 import { CONFIG } from "./core-state.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
-import { normalizeEditableHtmlForStorage } from "./input/content-normalizer.js"
 
 export const createAutosaveHandlers = (context) => {
     const {
@@ -11,7 +10,14 @@ export const createAutosaveHandlers = (context) => {
         updateSnapshotFrame
     } = context
 
-    const normalizeEditorContentForStorage = (contentValue) => normalizeEditableHtmlForStorage(contentValue)
+    const normalizeEditorContentForStorage = (contentValue) => {
+        const html = String(contentValue || "").trim()
+        if (!html) return ""
+        const plainText = Utils.stripHtml(html).replace(/\u00a0/g, " ").trim()
+        const hasMedia = /<(img|audio|video|table|hr|iframe|canvas|svg)\b/i.test(html)
+        if (!plainText && !hasMedia) return ""
+        return html
+    }
 
     const captureSnapshot = () => {
         const currentNote = StateStore.read().currentNote

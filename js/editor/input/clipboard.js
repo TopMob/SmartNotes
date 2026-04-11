@@ -12,7 +12,7 @@ export const createClipboardHandlers = (context) => {
     } = context
 
     const removableWrapperTags = new Set(["div", "section", "article", "main"])
-    const structuralTags = new Set(["p", "div", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
+    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
     const blockLikeTags = new Set(["p", "div", "section", "article", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"])
 
     const resolveExternalMediaMessage = (error, options = {}) => {
@@ -80,7 +80,7 @@ export const createClipboardHandlers = (context) => {
             if (sourceTag === "br") return document.createElement("br")
             if (sourceTag === "hr") return document.createElement("hr")
 
-            const normalizedTag = sourceTag
+            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
             const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
             const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
 

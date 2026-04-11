@@ -8,7 +8,6 @@ import { createAutosaveHandlers } from "./core-autosave.js"
 import { createEditorLayoutHandlers } from "./core-layout.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
-import { normalizeEditableHtmlForStorage } from "./input/content-normalizer.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -238,15 +237,24 @@ export const EditorAPI = (() => {
 
     const ensureEditablePageHtml = (htmlValue) => {
         const html = String(htmlValue || "").trim()
-        if (!html) return "<div><br></div>"
+        if (!html) return "<p><br></p>"
         const plainText = Utils.stripHtml(html).replace(/\u00a0/g, " ").trim()
         const hasMedia = /<(img|audio|video|table|hr|iframe|canvas|svg)\b/i.test(html)
-        if (!plainText && !hasMedia) return "<div><br></div>"
+        if (!plainText && !hasMedia) return "<p><br></p>"
         return html
     }
 
 
-    const normalizeEditorHtml = (htmlValue) => normalizeEditableHtmlForStorage(htmlValue)
+    const normalizeEditorHtml = (htmlValue) => {
+        const htmlText = String(htmlValue || "")
+            .replace(/\s+/g, " ")
+            .replace(/>\s+</g, "><")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/<p>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/p>/gi, "")
+            .replace(/<div>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/div>/gi, "")
+            .trim()
+        return htmlText
+    }
 
     const serializeEditorStateSnapshot = (note) => JSON.stringify({
         title: String(note?.title || ""),

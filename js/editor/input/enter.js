@@ -1,6 +1,7 @@
-const resolveEditableBlockTag = (node, fallbackTag = "div") => {
+const resolveEditableBlockTag = (node, fallbackTag = "p") => {
     const tagName = String(node?.tagName || "").toLowerCase()
-    if (["div", "p", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tagName)) return tagName
+    if (tagName === "div") return "p"
+    if (["p", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tagName)) return tagName
     return fallbackTag
 }
 
@@ -13,7 +14,7 @@ export const createEnterHandlers = (context) => {
         placeCaretAtStart
     } = context
 
-    const createEmptyBlock = (tagName = "div") => {
+    const createEmptyBlock = (tagName = "p") => {
         const block = document.createElement(resolveEditableBlockTag({ tagName }))
         block.appendChild(document.createElement("br"))
         return block
@@ -75,7 +76,7 @@ export const createEnterHandlers = (context) => {
     const exitCurrentListItem = (listItem) => {
         const splitResult = splitListForExit(listItem)
         if (!splitResult) return false
-        const block = createEmptyBlock("div")
+        const block = createEmptyBlock("p")
         if (splitResult.hasLeadingItems) {
             splitResult.list.after(block)
             if (splitResult.hasTrailingItems) block.after(splitResult.trailingList)
@@ -119,14 +120,14 @@ export const createEnterHandlers = (context) => {
 
         const activeBlock = getActiveBlock()
         if (!activeBlock || !elements.content.contains(activeBlock)) {
-            const newBlock = createEmptyBlock("div")
+            const newBlock = createEmptyBlock("p")
             range.deleteContents()
             range.insertNode(newBlock)
             placeCaretAtStart(newBlock)
             return true
         }
 
-        const nextTagName = resolveEditableBlockTag(activeBlock, "div")
+        const nextTagName = resolveEditableBlockTag(activeBlock, "p")
         const splitRange = range.cloneRange()
         splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
         const trailingContent = splitRange.extractContents()
