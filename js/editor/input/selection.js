@@ -129,6 +129,16 @@ export const createSelectionHandlers = (context) => {
         }
         : null
 
+    const ensureCaretBlock = (page) => {
+        if (!page) return null
+        const blocks = getEditableBlocks(page)
+        if (blocks.length) return blocks[0]
+        const paragraph = document.createElement("p")
+        paragraph.appendChild(document.createElement("br"))
+        page.appendChild(paragraph)
+        return paragraph
+    }
+
     const buildSelectionBookmark = (range) => {
         if (!range || !elements.content) return null
         const page = resolvePageFromNode(range.startContainer)
@@ -138,7 +148,8 @@ export const createSelectionHandlers = (context) => {
         if (pageIndex < 0) return null
         const block = getBlockFromRange(range)
         const blocks = getEditableBlocks(page)
-        const blockIndex = block ? blocks.indexOf(block) : -1
+        const resolvedBlockIndex = block ? blocks.indexOf(block) : -1
+        const blockIndex = resolvedBlockIndex >= 0 ? resolvedBlockIndex : (blocks.length ? 0 : -1)
         const caretOffset = range.collapsed && block ? (getCaretOffsetInBlock(block, range) ?? 0) : 0
         return {
             pageIndex,
@@ -155,7 +166,9 @@ export const createSelectionHandlers = (context) => {
         const page = pages[bookmark.pageIndex]
         if (!page) return null
         const blocks = getEditableBlocks(page)
-        const targetBlock = blocks[Math.max(0, Math.min(bookmark.blockIndex, blocks.length - 1))] || page
+        const targetBlock = blocks.length
+            ? (blocks[Math.max(0, Math.min(bookmark.blockIndex, blocks.length - 1))] || blocks[0])
+            : ensureCaretBlock(page)
         const offset = Math.max(0, Number(bookmark.caretOffset) || 0)
         const offsetRange = createRangeFromOffsets(targetBlock, offset, offset)
         if (offsetRange) return offsetRange
@@ -212,7 +225,7 @@ export const createSelectionHandlers = (context) => {
         let range = getActiveRangeInContent()
         if (!range) {
             const activePage = elements.content.querySelector(".note-page.is-active") || elements.content.querySelector(".note-page")
-            const firstBlock = getEditableBlocks(activePage)[0] || activePage || elements.content
+            const firstBlock = ensureCaretBlock(activePage) || elements.content
             range = document.createRange()
             range.selectNodeContents(firstBlock)
             range.collapse(true)
