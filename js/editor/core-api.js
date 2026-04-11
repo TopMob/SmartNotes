@@ -1,5 +1,6 @@
 import { createEditorState, CONFIG } from "./core-state.js"
 import { createInputHandlers } from "./core-input.js"
+import { normalizeParagraphModel } from "./input/paragraph-model.js"
 import { createMediaHandlers } from "./core-media.js"
 import { createLinkHandlers } from "./core-links.js"
 import { createMathHandlers } from "./core-math.js"
@@ -250,8 +251,6 @@ export const EditorAPI = (() => {
             .replace(/\s+/g, " ")
             .replace(/>\s+</g, "><")
             .replace(/&nbsp;/gi, " ")
-            .replace(/<p>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/p>/gi, "")
-            .replace(/<div>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/div>/gi, "")
             .trim()
         return htmlText
     }
@@ -718,6 +717,7 @@ export const EditorAPI = (() => {
         const label = document.getElementById("note-content-editable")?.getAttribute("aria-label")
         if (label) page.setAttribute("aria-label", label)
         page.innerHTML = ensureEditablePageHtml(html)
+        normalizeParagraphModel(page)
         return page
     }
 
@@ -783,6 +783,7 @@ export const EditorAPI = (() => {
                 page.setAttribute("role", "textbox")
                 page.setAttribute("aria-multiline", "true")
                 page.innerHTML = ensureEditablePageHtml(page.innerHTML)
+                normalizeParagraphModel(page)
             })
         }
         const updatedPages = getPages()

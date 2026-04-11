@@ -2,7 +2,6 @@ const supportsBeforeInputParagraph = typeof InputEvent !== "undefined" && "input
 
 const resolveEditableBlockTag = (node, fallbackTag = "p") => {
     const tagName = String(node?.tagName || "").toLowerCase()
-    if (tagName === "div") return "p"
     if (["p", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tagName)) return tagName
     return fallbackTag
 }
@@ -13,7 +12,8 @@ export const createEnterHandlers = (context) => {
         queueSnapshot,
         getActiveRangeInContent,
         getActiveBlock,
-        placeCaretAtStart
+        placeCaretAtStart,
+        normalizeActivePage
     } = context
 
     const createEmptyBlock = (tagName = "p") => {
@@ -153,6 +153,7 @@ export const createEnterHandlers = (context) => {
             ? (isListItemVisuallyEmpty(listItem) ? exitCurrentListItem(listItem) : insertListItemBreak(listItem, range))
             : insertBlockBreak(range)
         if (!handled) return false
+        normalizeActivePage()
         applyTagLineMode()
         queueSnapshot()
         return true

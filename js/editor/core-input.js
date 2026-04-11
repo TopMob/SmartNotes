@@ -2,6 +2,7 @@ import { createSelectionHandlers } from "./input/selection.js"
 import { createClipboardHandlers } from "./input/clipboard.js"
 import { createTagHandlers } from "./input/tags.js"
 import { createEnterHandlers } from "./input/enter.js"
+import { normalizeParagraphModel } from "./input/paragraph-model.js"
 
 export const createInputHandlers = (context) => {
     const {
@@ -13,6 +14,11 @@ export const createInputHandlers = (context) => {
     } = context
 
     const selectionHandlers = createSelectionHandlers({ elements, state })
+    const normalizeActivePage = () => {
+        const page = selectionHandlers.getActivePage()
+        if (!page) return false
+        return normalizeParagraphModel(page)
+    }
 
     const clipboardHandlers = createClipboardHandlers({
         elements,
@@ -22,8 +28,10 @@ export const createInputHandlers = (context) => {
         insertFragmentAtSelection: selectionHandlers.insertFragmentAtSelection,
         createFragmentFromHtml: selectionHandlers.createFragmentFromHtml,
         getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
+        getActivePage: selectionHandlers.getActivePage,
         restoreSelection: selectionHandlers.restoreSelection,
-        storeSelection: selectionHandlers.storeSelection
+        storeSelection: selectionHandlers.storeSelection,
+        normalizeActivePage
     })
 
     const tagHandlers = createTagHandlers({
@@ -36,7 +44,8 @@ export const createInputHandlers = (context) => {
         queueSnapshot,
         getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
         getActiveBlock: selectionHandlers.getActiveBlock,
-        placeCaretAtStart: selectionHandlers.placeCaretAtStart
+        placeCaretAtStart: selectionHandlers.placeCaretAtStart,
+        normalizeActivePage
     })
 
     const handleEquationConfirmKeyDown = (event) => {

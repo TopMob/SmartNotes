@@ -1,5 +1,9 @@
 export const createSelectionHandlers = (context) => {
     const { elements, state } = context
+    const blockSelector = "p,li,blockquote,pre,h1,h2,h3,h4,h5,h6"
+    const resolvePageFromNode = (node) => node?.nodeType === Node.ELEMENT_NODE
+        ? node.closest(".note-page")
+        : node?.parentElement?.closest(".note-page")
 
     const createFragmentFromHtml = (html) => {
         const template = document.createElement("template")
@@ -103,7 +107,7 @@ export const createSelectionHandlers = (context) => {
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (!node || node === elements.content) return null
         if (node.classList?.contains("note-page")) return null
-        const block = node.closest("div, p")
+        const block = node.closest(blockSelector)
         if (block?.classList?.contains("note-page")) return null
         return block
     }
@@ -116,9 +120,17 @@ export const createSelectionHandlers = (context) => {
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (!node || node === elements.content) return null
         if (node.classList?.contains("note-page")) return null
-        const block = node.closest("div, p")
+        const block = node.closest(blockSelector)
         if (block?.classList?.contains("note-page")) return null
         return block
+    }
+
+    const getActivePage = () => {
+        const range = getActiveRangeInContent()
+        if (!range) return null
+        const page = resolvePageFromNode(range.startContainer)
+        if (!page || !elements.content?.contains(page)) return null
+        return page
     }
 
     const placeCaretAtStart = (node) => {
@@ -187,6 +199,7 @@ export const createSelectionHandlers = (context) => {
         getCaretOffsetInBlock,
         createRangeFromOffsets,
         getActiveBlock,
+        getActivePage,
         placeCaretAtStart,
         insertHtmlAtSelection,
         insertNodeAtSelection,

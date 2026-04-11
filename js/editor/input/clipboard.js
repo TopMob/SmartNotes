@@ -1,3 +1,5 @@
+import { normalizeFragmentParagraphModel } from "./paragraph-model.js"
+
 export const createClipboardHandlers = (context) => {
     const {
         elements,
@@ -8,7 +10,8 @@ export const createClipboardHandlers = (context) => {
         createFragmentFromHtml,
         getActiveRangeInContent,
         restoreSelection,
-        storeSelection
+        storeSelection,
+        normalizeActivePage
     } = context
 
     const removableWrapperTags = new Set(["div", "section", "article", "main"])
@@ -39,12 +42,6 @@ export const createClipboardHandlers = (context) => {
                 while (span.firstChild) span.parentNode?.insertBefore(span.firstChild, span)
                 span.remove()
             }
-        })
-
-        Array.from(container.querySelectorAll("p,div")).forEach(block => {
-            const hasMedia = !!block.querySelector("img,audio,video,table,hr,br")
-            const text = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
-            if (!hasMedia && !text) block.remove()
         })
 
         ;["html", "body"].forEach(selector => {
@@ -80,8 +77,8 @@ export const createClipboardHandlers = (context) => {
             if (sourceTag === "br") return document.createElement("br")
             if (sourceTag === "hr") return document.createElement("hr")
 
-            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
-            const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
+                const normalizedTag = sourceTag === "div" ? "p" : sourceTag
+                const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
             const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
 
             if (keepTag === "a") {
@@ -114,7 +111,7 @@ export const createClipboardHandlers = (context) => {
             const sanitizedNode = sanitizeNode(child)
             if (sanitizedNode) output.appendChild(sanitizedNode)
         })
-        return output
+        return normalizeFragmentParagraphModel(output)
     }
 
     const normalizeClipboardPlainText = (value) => {
@@ -218,13 +215,17 @@ export const createClipboardHandlers = (context) => {
             if (sanitizedHtml) {
                 const fragment = sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml))
                 if (hasRenderableNodes(fragment) && insertFragmentAtSelection(fragment)) {
+                    normalizeActivePage()
                     queueSnapshot()
                     return
                 }
             }
         }
 
-        if (plainText && insertFragmentAtSelection(plainTextToFragment(plainText))) queueSnapshot()
+        if (plainText && insertFragmentAtSelection(plainTextToFragment(plainText))) {
+            normalizeActivePage()
+            queueSnapshot()
+        }
     }
 
     const handleCopy = (event) => {
@@ -259,6 +260,7 @@ export const createClipboardHandlers = (context) => {
             }
         })()
         if (!removedWithNative) range.deleteContents()
+        normalizeActivePage()
         storeSelection()
         queueSnapshot()
     }
