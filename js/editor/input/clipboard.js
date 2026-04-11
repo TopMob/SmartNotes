@@ -117,32 +117,16 @@ export const createClipboardHandlers = (context) => {
         return output
     }
 
-    const collapseAlternatingEmptyRows = (rows) => {
-        if (!Array.isArray(rows) || rows.length < 3) return rows
-        let hasPattern = true
-        let hasEmptyRows = false
-        rows.forEach((row, index) => {
-            const isEmpty = row.trim() === ""
-            if (index % 2 === 1) {
-                if (!isEmpty) hasPattern = false
-                else hasEmptyRows = true
-                return
-            }
-            if (isEmpty) hasPattern = false
-        })
-        if (!hasPattern || !hasEmptyRows) return rows
-        return rows.filter((_, index) => index % 2 === 0)
-    }
-
     const normalizeClipboardPlainText = (value) => {
         const normalized = String(value || "").replace(/\r\n?/g, "\n")
-        const rows = collapseAlternatingEmptyRows(normalized.split("\n"))
-        while (rows.length && rows[0].trim() === "") rows.shift()
-        while (rows.length && rows[rows.length - 1].trim() === "") rows.pop()
+        const rows = normalized.split("\n")
+        const isVisualEmptyRow = (row) => row.replace(/[\s\u200b\u00a0]+/g, "") === ""
+        while (rows.length && isVisualEmptyRow(rows[0])) rows.shift()
+        while (rows.length && isVisualEmptyRow(rows[rows.length - 1])) rows.pop()
         const compact = []
         let previousWasEmpty = false
         rows.forEach(row => {
-            const isEmpty = row.trim() === ""
+            const isEmpty = isVisualEmptyRow(row)
             if (isEmpty && previousWasEmpty) return
             compact.push(row)
             previousWasEmpty = isEmpty
@@ -150,52 +134,37 @@ export const createClipboardHandlers = (context) => {
         return compact.join("\n")
     }
 
-    const isTrailingBreakInBlock = (node) => {
-        if (!node || node.nodeType !== Node.ELEMENT_NODE) return false
-        if (String(node.tagName || "").toLowerCase() !== "br") return false
-        const parent = node.parentElement
-        if (!parent) return false
-        const parentTag = String(parent.tagName || "").toLowerCase()
-        if (!blockLikeTags.has(parentTag)) return false
-        const siblings = Array.from(parent.childNodes || []).filter((child) => {
-            if (child.nodeType === Node.TEXT_NODE) return (child.textContent || "").replace(/[\s\u200b\u00a0]+/g, "") !== ""
-            if (child.nodeType !== Node.ELEMENT_NODE) return false
-            return true
-        })
-        if (!siblings.length) return false
-        return siblings[siblings.length - 1] === node
-    }
-
     const fragmentToPlainText = (fragment) => {
-        const output = []
-        const append = (value) => {
-            if (!value) return
-            output.push(value)
+        if (!fragment) return ""
+        const lines = [""]
+        const pushNewLine = (force = false) => {
+            const currentLine = lines[lines.length - 1]
+            if (!force && currentLine === "") return
+            lines.push("")
         }
-        const appendLineBreak = () => {
-            if (!output.length) return
-            const last = output[output.length - 1]
-            if (last === "\n") return
-            output.push("\n")
+        const appendText = (value) => {
+            if (!value) return
+            lines[lines.length - 1] += value
         }
         const visit = (node) => {
             if (!node) return
             if (node.nodeType === Node.TEXT_NODE) {
-                append(node.textContent || "")
+                appendText(node.textContent || "")
                 return
             }
             if (node.nodeType !== Node.ELEMENT_NODE) return
             const tag = String(node.tagName || "").toLowerCase()
             if (tag === "br") {
-                if (!isTrailingBreakInBlock(node)) appendLineBreak()
+                pushNewLine(true)
                 return
             }
-            if (tag === "li") append("• ")
+            const isBlock = blockLikeTags.has(tag)
+            if (tag === "li") appendText("• ")
             Array.from(node.childNodes || []).forEach(visit)
-            if (blockLikeTags.has(tag)) appendLineBreak()
+            if (isBlock && lines[lines.length - 1] !== "") pushNewLine(true)
         }
         Array.from(fragment.childNodes || []).forEach(visit)
-        return normalizeClipboardPlainText(output.join(""))
+        return normalizeClipboardPlainText(lines.join("\n"))
     }
 
     const plainTextToFragment = (plainText) => {
