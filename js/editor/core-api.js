@@ -412,7 +412,8 @@ export const EditorAPI = (() => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle: inputHandlers.syncAutoTitle,
-        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn }
+        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
+        getSelectionBookmark: inputHandlers.getSelectionBookmark
     })
 
     captureSnapshot = autosaveHandlers.captureSnapshot
@@ -431,7 +432,11 @@ export const EditorAPI = (() => {
             pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
         })
         renderState()
+        if (!inputHandlers.restoreSelectionFromBookmark(snap.selectionBookmark)) {
+            inputHandlers.restoreSelection()
+        }
     }
+
 
     const historyHandlers = createHistoryHandlers({
         state,

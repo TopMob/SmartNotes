@@ -7,7 +7,8 @@ export const createAutosaveHandlers = (context) => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle,
-        updateSnapshotFrame
+        updateSnapshotFrame,
+        getSelectionBookmark
     } = context
 
     const normalizeEditorContentForStorage = (contentValue) => {
@@ -37,7 +38,8 @@ export const createAutosaveHandlers = (context) => {
                 tags: [...(currentNote?.tags || [])],
                 pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
                 pageDrawings: fallbackPageDrawings,
-                pageDrawingsRevision: currentNote?.pageDrawingsRevision || ""
+                pageDrawingsRevision: currentNote?.pageDrawingsRevision || "",
+                selectionBookmark: typeof getSelectionBookmark === "function" ? getSelectionBookmark() : null
             }
         }
         let drawings = []
@@ -60,7 +62,8 @@ export const createAutosaveHandlers = (context) => {
             tags: [...(currentNote?.tags || [])],
             pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
             pageDrawings: drawings,
-            pageDrawingsRevision
+            pageDrawingsRevision,
+            selectionBookmark: typeof getSelectionBookmark === "function" ? getSelectionBookmark() : null
         }
     }
 

@@ -106,6 +106,8 @@ export const createInputHandlers = (context) => {
         focusEditable: selectionHandlers.focusEditable,
         storeSelection: selectionHandlers.storeSelection,
         restoreSelection: selectionHandlers.restoreSelection,
+        getSelectionBookmark: selectionHandlers.getSelectionBookmark,
+        restoreSelectionFromBookmark: selectionHandlers.restoreSelectionFromBookmark,
         getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
         getBlockFromRange: selectionHandlers.getBlockFromRange,
         getCaretOffsetInBlock: selectionHandlers.getCaretOffsetInBlock,
