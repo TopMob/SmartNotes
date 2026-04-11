@@ -69,6 +69,12 @@ Responsibilities:
 Rules:
 - may use `js/core`, `js/notes`, `js/editor`
 
+### UI feature modules (`js/ui/modules`)
+
+- `js/ui/modules/noteActionsExport.js`
+  - Isolates note export helpers (TXT/PDF/print-window construction).
+  - Shared by UI note-actions layer without embedding export logic into large layout modules.
+
 ## Startup sequence
 
 1. Core and domain scripts load from `index.html`.
