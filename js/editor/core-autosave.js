@@ -39,7 +39,7 @@ export const createAutosaveHandlers = (context) => {
                 pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
                 pageDrawings: fallbackPageDrawings,
                 pageDrawingsRevision: currentNote?.pageDrawingsRevision || "",
-                selectionBookmark: typeof getSelectionBookmark === "function" ? getSelectionBookmark() : null
+                selectionBookmark: getSelectionBookmark()
             }
         }
         let drawings = []
@@ -63,7 +63,7 @@ export const createAutosaveHandlers = (context) => {
             pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
             pageDrawings: drawings,
             pageDrawingsRevision,
-            selectionBookmark: typeof getSelectionBookmark === "function" ? getSelectionBookmark() : null
+            selectionBookmark: getSelectionBookmark()
         }
     }
 
