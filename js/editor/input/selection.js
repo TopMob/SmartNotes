@@ -24,82 +24,17 @@ export const createSelectionHandlers = (context) => {
 
     const getEditableBlocks = (page) => Array.from(page?.querySelectorAll?.(blockSelector) || [])
 
-    const resolveSafeRange = (range) => {
-        if (!range || !elements.content) return null
-        if (!elements.content.contains(range.commonAncestorContainer)) return null
-        const page = resolvePageFromNode(range.startContainer)
-        if (!page || !elements.content.contains(page)) return range
-        if (page.contains(range.startContainer) && page.contains(range.endContainer)) return range
-
-        const fallback = document.createRange()
-        const firstBlock = getEditableBlocks(page)[0] || page
-        fallback.selectNodeContents(firstBlock)
-        fallback.collapse(true)
-        return fallback
+    const getBlockFromNode = (node) => {
+        let resolved = node
+        if (resolved?.nodeType === Node.TEXT_NODE) resolved = resolved.parentElement
+        if (!resolved || resolved === elements.content) return null
+        if (resolved.classList?.contains("note-page")) return null
+        const block = resolved.closest(blockSelector)
+        if (block?.classList?.contains("note-page")) return null
+        return block
     }
 
-    const getActiveRangeInContent = () => {
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount) {
-            const range = resolveSafeRange(selection.getRangeAt(0))
-            if (range) return range
-        }
-        if (state.savedSelectionRange) {
-            const range = resolveSafeRange(state.savedSelectionRange)
-            if (range) return range
-        }
-        return null
-    }
-
-    const setSelectionRange = (range) => {
-        if (!range) return false
-        const selection = window.getSelection()
-        if (!selection) return false
-        selection.removeAllRanges()
-        selection.addRange(range)
-        state.savedSelectionRange = range.cloneRange()
-        return true
-    }
-
-    const storeSelection = () => {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return
-        const range = getActiveRangeInContent()
-        if (!range) return
-        state.savedSelectionRange = range.cloneRange()
-    }
-
-    const restoreSelection = () => {
-        if (!elements.content) return null
-        let range = getActiveRangeInContent()
-        if (!range) {
-            const activePage = elements.content.querySelector(".note-page.is-active") || elements.content.querySelector(".note-page")
-            if (activePage) {
-                const firstBlock = getEditableBlocks(activePage)[0] || activePage
-                range = document.createRange()
-                range.selectNodeContents(firstBlock)
-                range.collapse(true)
-            } else {
-                range = document.createRange()
-                range.selectNodeContents(elements.content)
-                range.collapse(false)
-            }
-        }
-        setSelectionRange(range)
-        return range
-    }
-
-    const getCaretOffsetInBlock = (block, range) => {
-        const targetRange = range || getActiveRangeInContent()
-        if (!targetRange || !targetRange.collapsed) return null
-        const nodes = getTextNodes(block)
-        let offset = 0
-        for (const node of nodes) {
-            if (node === targetRange.startContainer) return offset + targetRange.startOffset
-            offset += node.textContent?.length || 0
-        }
-        return null
-    }
+    const getBlockFromRange = (range) => getBlockFromNode(range?.startContainer)
 
     const createRangeFromOffsets = (root, start, end) => {
         const range = document.createRange()
@@ -127,6 +62,109 @@ export const createSelectionHandlers = (context) => {
         return range
     }
 
+    const getCaretOffsetInBlock = (block, range) => {
+        const targetRange = range || getActiveRangeInContent()
+        if (!targetRange || !targetRange.collapsed || !block) return null
+        const nodes = getTextNodes(block)
+        let offset = 0
+        for (const node of nodes) {
+            if (node === targetRange.startContainer) return offset + targetRange.startOffset
+            offset += node.textContent?.length || 0
+        }
+        return null
+    }
+
+    const buildSelectionBookmark = (range) => {
+        if (!range || !elements.content) return null
+        const page = resolvePageFromNode(range.startContainer)
+        if (!page || !elements.content.contains(page)) return null
+        const pages = Array.from(elements.content.querySelectorAll(".note-page"))
+        const pageIndex = pages.indexOf(page)
+        if (pageIndex < 0) return null
+        const block = getBlockFromRange(range)
+        const blocks = getEditableBlocks(page)
+        const blockIndex = block ? blocks.indexOf(block) : -1
+        const caretOffset = range.collapsed && block ? (getCaretOffsetInBlock(block, range) ?? 0) : 0
+        return {
+            pageIndex,
+            blockIndex,
+            caretOffset,
+            collapsed: !!range.collapsed
+        }
+    }
+
+    const restoreRangeFromBookmark = () => {
+        const bookmark = state.savedSelectionBookmark
+        if (!bookmark || !elements.content) return null
+        const pages = Array.from(elements.content.querySelectorAll(".note-page"))
+        const page = pages[bookmark.pageIndex]
+        if (!page) return null
+        const blocks = getEditableBlocks(page)
+        const targetBlock = blocks[Math.max(0, Math.min(bookmark.blockIndex, blocks.length - 1))] || page
+        const offset = Math.max(0, Number(bookmark.caretOffset) || 0)
+        const offsetRange = createRangeFromOffsets(targetBlock, offset, offset)
+        if (offsetRange) return offsetRange
+        const fallback = document.createRange()
+        fallback.selectNodeContents(targetBlock)
+        fallback.collapse(true)
+        return fallback
+    }
+
+    const resolveSafeRange = (range) => {
+        if (!range || !elements.content) return null
+        if (elements.content.contains(range.commonAncestorContainer)
+            && elements.content.contains(range.startContainer)
+            && elements.content.contains(range.endContainer)) return range
+        return restoreRangeFromBookmark()
+    }
+
+    const getActiveRangeInContent = () => {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount) {
+            const range = resolveSafeRange(selection.getRangeAt(0))
+            if (range) return range
+        }
+        if (state.savedSelectionRange) {
+            const range = resolveSafeRange(state.savedSelectionRange)
+            if (range) return range
+        }
+        return restoreRangeFromBookmark()
+    }
+
+    const setSelectionRange = (range) => {
+        if (!range) return false
+        const selection = window.getSelection()
+        if (!selection) return false
+        selection.removeAllRanges()
+        selection.addRange(range)
+        state.savedSelectionRange = range.cloneRange()
+        state.savedSelectionBookmark = buildSelectionBookmark(range)
+        return true
+    }
+
+    const storeSelection = () => {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return
+        const range = getActiveRangeInContent()
+        if (!range) return
+        state.savedSelectionRange = range.cloneRange()
+        state.savedSelectionBookmark = buildSelectionBookmark(range)
+    }
+
+    const restoreSelection = () => {
+        if (!elements.content) return null
+        let range = getActiveRangeInContent()
+        if (!range) {
+            const activePage = elements.content.querySelector(".note-page.is-active") || elements.content.querySelector(".note-page")
+            const firstBlock = getEditableBlocks(activePage)[0] || activePage || elements.content
+            range = document.createRange()
+            range.selectNodeContents(firstBlock)
+            range.collapse(true)
+        }
+        setSelectionRange(range)
+        return range
+    }
+
     const placeCaretInBlockAtOffset = (block, offset) => {
         if (!block) return false
         const textLength = (block.textContent || "").length
@@ -137,16 +175,6 @@ export const createSelectionHandlers = (context) => {
         fallback.selectNodeContents(block)
         fallback.collapse(true)
         return setSelectionRange(fallback)
-    }
-
-    const getBlockFromRange = (range) => {
-        let node = range.startContainer
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || node === elements.content) return null
-        if (node.classList?.contains("note-page")) return null
-        const block = node.closest(blockSelector)
-        if (block?.classList?.contains("note-page")) return null
-        return block
     }
 
     const getActiveBlock = () => {

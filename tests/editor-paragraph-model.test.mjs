@@ -82,3 +82,34 @@ test('clipboard plain text does not add blank lines for non-empty paragraphs wit
 
     assert.equal(handlers.fragmentToPlainText(fragment), '1\n2\n3\n4\n5')
 })
+
+
+test('clipboard plain text ignores technical root br between paragraphs', () => {
+    installDom()
+    const handlers = createClipboardHandlers({
+        elements: {},
+        queueSnapshot: () => {},
+        fileToDataUrl: async () => '',
+        insertMedia: () => {},
+        insertFragmentAtSelection: () => false,
+        createFragmentFromHtml: (html) => {
+            const template = document.createElement('template')
+            template.innerHTML = html
+            return template.content.cloneNode(true)
+        },
+        getActiveRangeInContent: () => null,
+        restoreSelection: () => null,
+        storeSelection: () => {},
+        normalizeActivePage: () => false
+    })
+
+    const fragment = document.createDocumentFragment()
+    const p1 = document.createElement('p')
+    p1.textContent = '1'
+    const br = document.createElement('br')
+    const p2 = document.createElement('p')
+    p2.textContent = '2'
+    fragment.append(p1, br, p2)
+
+    assert.equal(handlers.fragmentToPlainText(fragment), '1\n2')
+})

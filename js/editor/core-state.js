@@ -16,6 +16,7 @@ export const createEditorState = () => ({
     abortController: null,
     recordingStream: null,
     savedSelectionRange: null,
+    savedSelectionBookmark: null,
     alignMenuTarget: null,
     pageIndex: 0,
     titleTouched: false,

@@ -137,63 +137,95 @@ export const createClipboardHandlers = (context) => {
 
     const fragmentToPlainText = (fragment) => {
         if (!fragment) return ""
-        const container = document.createElement("div")
-        container.appendChild(fragment.cloneNode(true))
-        const normalized = normalizeFragmentParagraphModel(container)
-        const blocks = Array.from(normalized.childNodes || [])
-        const lines = []
+        const lines = [""]
 
-        const collectNodeText = (node, options = {}) => {
-            if (!node) return ""
-            if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
-            if (node.nodeType !== Node.ELEMENT_NODE) return ""
-            const tag = String(node.tagName || "").toLowerCase()
-            if (tag === "br") return options.ignoreSentinelBr ? "" : "\n"
-            const children = Array.from(node.childNodes || [])
-            const content = children.map((child, index) => {
-                if (
-                    options.ignoreSentinelBr
-                    && tag === "p"
-                    && child.nodeType === Node.ELEMENT_NODE
-                    && String(child.tagName || "").toLowerCase() === "br"
-                    && index === children.length - 1
-                    && (node.textContent || "").replace(/[\s\u200b\u00a0]+/g, "") !== ""
-                ) return ""
-                return collectNodeText(child, options)
-            }).join("")
-            if (tag === "li") return `• ${content}`
-            return content
+        const pushLine = () => {
+            if (lines[lines.length - 1] !== "") lines.push("")
         }
 
-        blocks.forEach(node => {
-            if (node.nodeType !== Node.ELEMENT_NODE) {
-                const raw = (node.textContent || "").trim()
-                if (raw) lines.push(raw)
+        const appendText = (value) => {
+            if (!value) return
+            lines[lines.length - 1] += value
+        }
+
+        const isSentinelBreak = (node) => {
+            if (!node || node.nodeType !== Node.ELEMENT_NODE || String(node.tagName || "").toLowerCase() !== "br") return false
+            const parent = node.parentElement
+            if (!parent) return false
+            const tag = String(parent.tagName || "").toLowerCase()
+            if (tag !== "p" && tag !== "li") return false
+            if (node !== parent.lastElementChild) return false
+            const hasVisibleText = (parent.textContent || "").replace(/[\s\u200b\u00a0]+/g, "") !== ""
+            return hasVisibleText
+        }
+
+        const visit = (node, context = {}) => {
+            if (!node) return
+            if (node.nodeType === Node.TEXT_NODE) {
+                appendText(node.textContent || "")
                 return
             }
+            if (node.nodeType !== Node.ELEMENT_NODE) return
             const tag = String(node.tagName || "").toLowerCase()
+
+            if (tag === "br") {
+                if (isSentinelBreak(node)) return
+                if (context.inBlock) {
+                    lines.push("")
+                }
+                return
+            }
+
             if (tag === "hr") {
-                lines.push("─")
-                return
-            }
-            if (tag === "ul" || tag === "ol") {
-                Array.from(node.children).forEach((li, index) => {
-                    const text = collectNodeText(li, { ignoreSentinelBr: true }).replace(/\n+/g, " ").trim()
-                    if (!text) return
-                    if (tag === "ol") lines.push(`${index + 1}. ${text.replace(/^•\s*/, "")}`)
-                    else lines.push(`• ${text.replace(/^•\s*/, "")}`)
-                })
-                return
-            }
-            const blockText = collectNodeText(node, { ignoreSentinelBr: true })
-            const splitLines = blockText.split("\n")
-            if (splitLines.length === 1 && splitLines[0] === "") {
+                pushLine()
+                appendText("─")
                 lines.push("")
                 return
             }
-            splitLines.forEach(line => lines.push(line))
-        })
 
+            if (tag === "ul" || tag === "ol") {
+                pushLine()
+                Array.from(node.children).forEach((li, index) => {
+                    const textBuffer = [""]
+                    const append = (value) => {
+                        if (!value) return
+                        textBuffer[textBuffer.length - 1] += value
+                    }
+                    const liVisit = (liNode) => {
+                        if (!liNode) return
+                        if (liNode.nodeType === Node.TEXT_NODE) {
+                            append(liNode.textContent || "")
+                            return
+                        }
+                        if (liNode.nodeType !== Node.ELEMENT_NODE) return
+                        const liTag = String(liNode.tagName || "").toLowerCase()
+                        if (liTag === "br") {
+                            if (!isSentinelBreak(liNode)) textBuffer.push("")
+                            return
+                        }
+                        Array.from(liNode.childNodes || []).forEach(liVisit)
+                    }
+                    Array.from(li.childNodes || []).forEach(liVisit)
+                    const merged = textBuffer.join(" ").replace(/\s+/g, " ").trim()
+                    if (!merged) return
+                    appendText(tag === "ol" ? `${index + 1}. ${merged}` : `• ${merged}`)
+                    lines.push("")
+                })
+                return
+            }
+
+            const isBlock = rootBlockTags.has(tag)
+            const isEmptyParagraph = tag === "p" && (node.textContent || "").replace(/[\s\u200b\u00a0]+/g, "") === "" && !!node.querySelector("br")
+            if (isBlock) pushLine()
+            if (isEmptyParagraph) {
+                lines.push("")
+                return
+            }
+            Array.from(node.childNodes || []).forEach(child => visit(child, { ...context, inBlock: context.inBlock || isBlock }))
+            if (isBlock) lines.push("")
+        }
+
+        Array.from(fragment.childNodes || []).forEach(child => visit(child, { inBlock: false }))
         return normalizeClipboardPlainText(lines.join("\n"))
     }
 
