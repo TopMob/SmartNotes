@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
 import { normalizeParagraphModel } from '../js/editor/input/paragraph-model.js'
 import { createClipboardHandlers } from '../js/editor/input/clipboard.js'
+import { createSelectionHandlers } from '../js/editor/input/selection.js'
 
 const installDom = (html = '<!doctype html><html><body><div id="root"></div></body></html>') => {
     const dom = new JSDOM(html)
@@ -30,6 +31,21 @@ const createClipboardMockEvent = () => {
         }
     }
 }
+
+const createPasteEvent = (plainText, html = '') => ({
+    defaultPrevented: false,
+    preventDefault() {
+        this.defaultPrevented = true
+    },
+    clipboardData: {
+        getData(type) {
+            if (type === 'text/plain') return plainText
+            if (type === 'text/html') return html
+            return ''
+        },
+        items: []
+    }
+})
 
 test('normalizeParagraphModel converts root div/text/br into p-only blocks', () => {
     installDom()
@@ -114,4 +130,62 @@ test('handleCopy preserves a real single empty line', () => {
     handlers.handleCopy(copyEvent)
 
     assert.equal(copyEvent.clipboardData.getData('text/plain'), '1\n\n2')
+})
+
+test('plain text paste keeps separate paragraphs for single newlines', async () => {
+    installDom('<!doctype html><html><body><div id="note-content-editable"><div class="note-page is-active" contenteditable="true"><p><br></p></div></div></body></html>')
+    const content = document.getElementById('note-content-editable')
+    const page = content.querySelector('.note-page')
+    const state = { savedSelectionRange: null, savedSelectionBookmark: null }
+    const selectionHandlers = createSelectionHandlers({ elements: { content }, state })
+    const range = document.createRange()
+    range.selectNodeContents(page.firstElementChild)
+    range.collapse(true)
+    selectionHandlers.setSelectionRange(range)
+
+    const handlers = createClipboardHandlers({
+        elements: { content },
+        queueSnapshot: () => {},
+        fileToDataUrl: async () => '',
+        insertMedia: () => {},
+        insertFragmentAtSelection: selectionHandlers.insertFragmentAtSelection,
+        createFragmentFromHtml: selectionHandlers.createFragmentFromHtml,
+        getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
+        restoreSelection: selectionHandlers.restoreSelection,
+        storeSelection: selectionHandlers.storeSelection,
+        normalizeActivePage: () => normalizeParagraphModel(page)
+    })
+
+    await handlers.handlePaste(createPasteEvent('1\n2\n3'))
+
+    assert.equal(page.innerHTML, '<p>1</p><p>2</p><p>3</p>')
+})
+
+test('plain text paste preserves single empty paragraph between lines', async () => {
+    installDom('<!doctype html><html><body><div id="note-content-editable"><div class="note-page is-active" contenteditable="true"><p><br></p></div></div></body></html>')
+    const content = document.getElementById('note-content-editable')
+    const page = content.querySelector('.note-page')
+    const state = { savedSelectionRange: null, savedSelectionBookmark: null }
+    const selectionHandlers = createSelectionHandlers({ elements: { content }, state })
+    const range = document.createRange()
+    range.selectNodeContents(page.firstElementChild)
+    range.collapse(true)
+    selectionHandlers.setSelectionRange(range)
+
+    const handlers = createClipboardHandlers({
+        elements: { content },
+        queueSnapshot: () => {},
+        fileToDataUrl: async () => '',
+        insertMedia: () => {},
+        insertFragmentAtSelection: selectionHandlers.insertFragmentAtSelection,
+        createFragmentFromHtml: selectionHandlers.createFragmentFromHtml,
+        getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
+        restoreSelection: selectionHandlers.restoreSelection,
+        storeSelection: selectionHandlers.storeSelection,
+        normalizeActivePage: () => normalizeParagraphModel(page)
+    })
+
+    await handlers.handlePaste(createPasteEvent('1\n\n2'))
+
+    assert.equal(page.innerHTML, '<p>1</p><p><br></p><p>2</p>')
 })

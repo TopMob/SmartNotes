@@ -1,6 +1,7 @@
 export const createSelectionHandlers = (context) => {
     const { elements, state } = context
     const blockSelector = "p,li,blockquote,pre,h1,h2,h3,h4,h5,h6"
+    const rootBlockSelector = "p,ul,ol,li,blockquote,pre,h1,h2,h3,h4,h5,h6,hr,table,.media-wrapper"
     const resolvePageFromNode = (node) => node?.nodeType === Node.ELEMENT_NODE
         ? node.closest(".note-page")
         : node?.parentElement?.closest(".note-page")
@@ -35,6 +36,20 @@ export const createSelectionHandlers = (context) => {
     }
 
     const getBlockFromRange = (range) => getBlockFromNode(range?.startContainer)
+
+    const hasRootBlocksInNode = (node) => {
+        if (!node) return false
+        if (node.nodeType === Node.ELEMENT_NODE && node.matches?.(rootBlockSelector)) return true
+        if (node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE && node.nodeType !== Node.ELEMENT_NODE) return false
+        return Array.from(node.childNodes || []).some(child => child?.nodeType === Node.ELEMENT_NODE && child.matches?.(rootBlockSelector))
+    }
+
+    const isEffectivelyEmptyBlock = (block) => {
+        if (!block || block.nodeType !== Node.ELEMENT_NODE) return true
+        const text = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+        if (text) return false
+        return !block.querySelector("img,audio,video,table,hr,.media-wrapper")
+    }
 
     const createRangeFromOffsets = (root, start, end) => {
         const range = document.createRange()
@@ -221,9 +236,58 @@ export const createSelectionHandlers = (context) => {
         if (!elements.content || !contentNode) return false
         const range = restoreSelection()
         if (!range) return false
+        const blockInsertion = hasRootBlocksInNode(contentNode)
+        const activeBlock = blockInsertion ? getBlockFromRange(range) : null
+        const activeBlockTag = String(activeBlock?.tagName || "").toLowerCase()
+        const canSplitActiveBlock = !!activeBlock && activeBlockTag === "p"
         const anchorNode = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? contentNode.lastChild : contentNode
         if (!anchorNode) return false
         range.deleteContents()
+
+        if (blockInsertion && canSplitActiveBlock) {
+            const targetBlock = getBlockFromRange(range) || activeBlock
+            if (targetBlock && targetBlock.parentNode) {
+                const parent = targetBlock.parentNode
+                const insertionPoint = targetBlock.nextSibling
+                const wasEmptyBlock = isEffectivelyEmptyBlock(targetBlock)
+                const trailingRange = document.createRange()
+                trailingRange.selectNodeContents(targetBlock)
+                trailingRange.setStart(range.startContainer, range.startOffset)
+                const trailingContent = trailingRange.extractContents()
+                const insertedNodes = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+                    ? Array.from(contentNode.childNodes)
+                    : [contentNode]
+
+                if (wasEmptyBlock) targetBlock.remove()
+
+                parent.insertBefore(contentNode, insertionPoint)
+                const lastInserted = insertedNodes[insertedNodes.length - 1] || null
+
+                if (!wasEmptyBlock && trailingContent.childNodes.length) {
+                    const trailingBlock = document.createElement(activeBlockTag || "p")
+                    trailingBlock.appendChild(trailingContent)
+                    if (lastInserted?.parentNode === parent) {
+                        parent.insertBefore(trailingBlock, lastInserted.nextSibling)
+                    } else {
+                        parent.insertBefore(trailingBlock, insertionPoint)
+                    }
+                }
+
+                const selectionRange = document.createRange()
+                if (lastInserted?.parentNode) {
+                    selectionRange.setStartAfter(lastInserted)
+                } else if (parent.childNodes.length) {
+                    selectionRange.selectNodeContents(parent)
+                    selectionRange.collapse(false)
+                } else {
+                    selectionRange.selectNodeContents(elements.content)
+                    selectionRange.collapse(false)
+                }
+                selectionRange.collapse(true)
+                return setSelectionRange(selectionRange)
+            }
+        }
+
         range.insertNode(contentNode)
         range.setStartAfter(anchorNode)
         range.collapse(true)
