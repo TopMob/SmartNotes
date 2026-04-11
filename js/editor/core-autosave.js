@@ -7,7 +7,8 @@ export const createAutosaveHandlers = (context) => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle,
-        updateSnapshotFrame
+        updateSnapshotFrame,
+        getSelectionBookmark
     } = context
 
     const normalizeEditorContentForStorage = (contentValue) => {
@@ -37,7 +38,9 @@ export const createAutosaveHandlers = (context) => {
                 tags: [...(currentNote?.tags || [])],
                 pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
                 pageDrawings: fallbackPageDrawings,
-                pageDrawingsRevision: currentNote?.pageDrawingsRevision || ""
+                pageDrawingsRevision: currentNote?.pageDrawingsRevision || "",
+                selectionBookmark: getSelectionBookmark(),
+                activePageIndex: state.pageIndex
             }
         }
         let drawings = []
@@ -60,7 +63,9 @@ export const createAutosaveHandlers = (context) => {
             tags: [...(currentNote?.tags || [])],
             pageTitles: Array.isArray(currentNote?.pageTitles) ? currentNote.pageTitles.map(value => String(value || "")) : [],
             pageDrawings: drawings,
-            pageDrawingsRevision
+            pageDrawingsRevision,
+            selectionBookmark: getSelectionBookmark(),
+            activePageIndex: state.pageIndex
         }
     }
 
@@ -131,7 +136,9 @@ export const createAutosaveHandlers = (context) => {
         })
     }
 
-    const queueSnapshot = Utils.debounce(() => {
+    const queueSnapshotFrame = Utils.debounce((token) => {
+        if (state.isApplyingSnapshot) return
+        if (token !== state.snapshotToken) return
         syncAutoTitle()
         const previousSnapshot = state.history[state.history.length - 1]
         const currentSnapshot = captureSnapshot()
@@ -151,6 +158,10 @@ export const createAutosaveHandlers = (context) => {
         scheduleAutoSave()
     }, CONFIG.SNAPSHOT_DELAY)
 
+    const queueSnapshot = () => {
+        queueSnapshotFrame(state.snapshotToken)
+    }
+
     const scheduleAutoSave = Utils.debounce(() => {
         const currentNote = StateStore.read().currentNote
         if (!currentNote || !StateStore.read().editorDirty) return
@@ -162,7 +173,7 @@ export const createAutosaveHandlers = (context) => {
     }, 1600)
 
     const scheduleSnapshotFrame = () => {
-        if (state.isRenderingState) return
+        if (state.isRenderingState || state.isApplyingSnapshot) return
         if (state.snapshotFrame) return
         state.snapshotFrame = requestAnimationFrame(() => {
             state.snapshotFrame = null

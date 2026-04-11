@@ -117,7 +117,9 @@ export const EditorAPI = (() => {
         queueSnapshot: (...args) => queueSnapshot(...args),
         fileToDataUrl: (...args) => fileToDataUrl(...args),
         insertMedia: (...args) => insertMedia(...args),
-        confirmEquationAtCaret: (...args) => confirmEquationAtCaret(...args)
+        confirmEquationAtCaret: (...args) => confirmEquationAtCaret(...args),
+        undo: (...args) => undo(...args),
+        redo: (...args) => redo(...args)
     })
 
     const handlePaste = (event) => inputHandlers.handlePaste(event)
@@ -410,7 +412,8 @@ export const EditorAPI = (() => {
         getPages,
         updateNotePageDrawings,
         syncAutoTitle: inputHandlers.syncAutoTitle,
-        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn }
+        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
+        getSelectionBookmark: inputHandlers.getSelectionBookmark
     })
 
     captureSnapshot = autosaveHandlers.captureSnapshot
@@ -418,18 +421,30 @@ export const EditorAPI = (() => {
 
     const applySnapshot = (snap) => {
         if (!snap) return
-        const note = StateStore.read().currentNote
-        StateStore.update("currentNote", {
-            ...note,
-            title: snap.title,
-            content: snap.content,
-            tags: snap.tags,
-            pageTitles: snap.pageTitles,
-            pageDrawings: snap.pageDrawings,
-            pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
-        })
-        renderState()
+        state.isApplyingSnapshot = true
+        state.snapshotToken += 1
+        try {
+            const note = StateStore.read().currentNote
+            const nextPageIndex = Number.isFinite(Number(snap.activePageIndex)) ? Number(snap.activePageIndex) : state.pageIndex
+            state.pageIndex = Math.max(0, nextPageIndex)
+            StateStore.update("currentNote", {
+                ...note,
+                title: snap.title,
+                content: snap.content,
+                tags: snap.tags,
+                pageTitles: snap.pageTitles,
+                pageDrawings: snap.pageDrawings,
+                pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
+            })
+            renderState()
+            if (!inputHandlers.restoreSelectionFromBookmark(snap.selectionBookmark)) {
+                inputHandlers.restoreSelection()
+            }
+        } finally {
+            state.isApplyingSnapshot = false
+        }
     }
+
 
     const historyHandlers = createHistoryHandlers({
         state,
@@ -513,25 +528,7 @@ export const EditorAPI = (() => {
             boundElements.content.addEventListener("keydown", inputHandlers.handleEnterKeydown, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
             boundElements.content.addEventListener("input", inputHandlers.handleInput, { signal })
-            boundElements.content.addEventListener("keydown", (event) => {
-                if (event.altKey) return
-                const hasPrimaryModifier = event.ctrlKey || event.metaKey
-                if (!hasPrimaryModifier) return
-                const key = String(event.key || "").toLowerCase()
-                if (key === "z") {
-                    event.preventDefault()
-                    if (event.shiftKey) {
-                        redo()
-                    } else {
-                        undo()
-                    }
-                    return
-                }
-                if (key === "y") {
-                    event.preventDefault()
-                    redo()
-                }
-            }, { signal })
+            boundElements.content.addEventListener("keydown", inputHandlers.handleHistoryKeydown, { signal })
             boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
@@ -1147,7 +1144,7 @@ export const EditorAPI = (() => {
         state.future = []
     }
 
-    const undo = () => {
+    function undo() {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
             EditorDrawing.undo?.()
             return
@@ -1156,7 +1153,7 @@ export const EditorAPI = (() => {
         historyHandlers.undo()
     }
 
-    const redo = () => {
+    function redo() {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
             EditorDrawing.redo?.()
             return

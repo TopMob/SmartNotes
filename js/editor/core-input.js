@@ -2,6 +2,7 @@ import { createSelectionHandlers } from "./input/selection.js"
 import { createClipboardHandlers } from "./input/clipboard.js"
 import { createTagHandlers } from "./input/tags.js"
 import { createEnterHandlers } from "./input/enter.js"
+import { createEditingHistoryHandlers } from "./input/editing-history.js"
 import { normalizeParagraphModel } from "./input/paragraph-model.js"
 
 export const createInputHandlers = (context) => {
@@ -10,7 +11,9 @@ export const createInputHandlers = (context) => {
         state,
         queueSnapshot,
         fileToDataUrl,
-        insertMedia
+        insertMedia,
+        undo,
+        redo
     } = context
 
     const selectionHandlers = createSelectionHandlers({ elements, state })
@@ -48,12 +51,12 @@ export const createInputHandlers = (context) => {
     }
 
     const handleInput = () => {
+        if (state.isApplyingSnapshot) return
         normalizeActivePageWithCaretRestore()
         queueSnapshot()
     }
 
     const clipboardHandlers = createClipboardHandlers({
-        elements,
         queueSnapshot,
         fileToDataUrl,
         insertMedia,
@@ -71,6 +74,11 @@ export const createInputHandlers = (context) => {
         queueSnapshot
     })
 
+    const editingHistoryHandlers = createEditingHistoryHandlers({
+        undo,
+        redo
+    })
+
     const enterHandlers = createEnterHandlers({
         elements,
         queueSnapshot,
@@ -86,6 +94,11 @@ export const createInputHandlers = (context) => {
         if (context.confirmEquationAtCaret()) event.preventDefault()
     }
 
+    const handleBeforeInput = (event) => {
+        if (editingHistoryHandlers.handleBeforeInput(event)) return
+        enterHandlers.handleBeforeInput(event)
+    }
+
     return {
         handlePaste: clipboardHandlers.handlePaste,
         handleCopy: clipboardHandlers.handleCopy,
@@ -94,6 +107,8 @@ export const createInputHandlers = (context) => {
         focusEditable: selectionHandlers.focusEditable,
         storeSelection: selectionHandlers.storeSelection,
         restoreSelection: selectionHandlers.restoreSelection,
+        getSelectionBookmark: selectionHandlers.getSelectionBookmark,
+        restoreSelectionFromBookmark: selectionHandlers.restoreSelectionFromBookmark,
         getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
         getBlockFromRange: selectionHandlers.getBlockFromRange,
         getCaretOffsetInBlock: selectionHandlers.getCaretOffsetInBlock,
@@ -106,8 +121,9 @@ export const createInputHandlers = (context) => {
         addTag: tagHandlers.addTag,
         removeTag: tagHandlers.removeTag,
         renderTags: tagHandlers.renderTags,
-        handleBeforeInput: enterHandlers.handleBeforeInput,
+        handleBeforeInput,
         handleEnterKeydown: enterHandlers.handleEnter,
+        handleHistoryKeydown: editingHistoryHandlers.handleKeydown,
         handleInput
     }
 }

@@ -120,6 +120,15 @@ export const createSelectionHandlers = (context) => {
         }
     }
 
+    const cloneSelectionBookmark = (bookmark) => bookmark
+        ? {
+            pageIndex: Number(bookmark.pageIndex) || 0,
+            blockIndex: Number(bookmark.blockIndex) || 0,
+            caretOffset: Math.max(0, Number(bookmark.caretOffset) || 0),
+            collapsed: bookmark.collapsed !== false
+        }
+        : null
+
     const buildSelectionBookmark = (range) => {
         if (!range || !elements.content) return null
         const page = resolvePageFromNode(range.startContainer)
@@ -139,8 +148,8 @@ export const createSelectionHandlers = (context) => {
         }
     }
 
-    const restoreRangeFromBookmark = () => {
-        const bookmark = state.savedSelectionBookmark
+    const restoreRangeFromBookmark = (bookmarkValue = state.savedSelectionBookmark) => {
+        const bookmark = cloneSelectionBookmark(bookmarkValue)
         if (!bookmark || !elements.content) return null
         const pages = Array.from(elements.content.querySelectorAll(".note-page"))
         const page = pages[bookmark.pageIndex]
@@ -189,6 +198,7 @@ export const createSelectionHandlers = (context) => {
     }
 
     const storeSelection = () => {
+        if (state.isApplyingSnapshot) return
         const selection = window.getSelection()
         if (!selection || selection.rangeCount === 0) return
         const range = getActiveRangeInContent()
@@ -311,6 +321,19 @@ export const createSelectionHandlers = (context) => {
         insertNodeAtSelection(hr)
     }
 
+    const getSelectionBookmark = () => {
+        const range = getActiveRangeInContent()
+        const bookmark = range ? buildSelectionBookmark(range) : state.savedSelectionBookmark
+        return cloneSelectionBookmark(bookmark)
+    }
+
+    const restoreSelectionFromBookmark = (bookmark) => {
+        if (!bookmark) return false
+        const range = restoreRangeFromBookmark(bookmark)
+        if (!range) return false
+        return setSelectionRange(range)
+    }
+
     return {
         createFragmentFromHtml,
         insertFragmentAtSelection,
@@ -327,6 +350,8 @@ export const createSelectionHandlers = (context) => {
         placeCaretInBlockAtOffset,
         getEditableBlocks,
         setSelectionRange,
+        getSelectionBookmark,
+        restoreSelectionFromBookmark,
         insertHtmlAtSelection,
         insertNodeAtSelection,
         insertHorizontalRule
