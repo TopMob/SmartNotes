@@ -65,13 +65,23 @@ export const createSelectionHandlers = (context) => {
     const getCaretOffsetInBlock = (block, range) => {
         const targetRange = range || getActiveRangeInContent()
         if (!targetRange || !targetRange.collapsed || !block) return null
+        if (!block.contains(targetRange.startContainer) && targetRange.startContainer !== block) return null
+
         const nodes = getTextNodes(block)
         let offset = 0
         for (const node of nodes) {
             if (node === targetRange.startContainer) return offset + targetRange.startOffset
             offset += node.textContent?.length || 0
         }
-        return null
+
+        try {
+            const preCaretRange = document.createRange()
+            preCaretRange.selectNodeContents(block)
+            preCaretRange.setEnd(targetRange.startContainer, targetRange.startOffset)
+            return preCaretRange.toString().length
+        } catch {
+            return null
+        }
     }
 
     const buildSelectionBookmark = (range) => {
