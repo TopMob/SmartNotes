@@ -1,6 +1,6 @@
-const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at"
+const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at";
 
-(() => {
+;(() => {
 const noteActionsPanel = window.UINoteActionsPanel
 if (noteActionsPanel && typeof noteActionsPanel === "object") Object.assign(UI, noteActionsPanel)
 
