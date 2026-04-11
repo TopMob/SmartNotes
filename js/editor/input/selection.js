@@ -178,11 +178,35 @@ export const createSelectionHandlers = (context) => {
         return fallback
     }
 
+    const normalizeRangeToEditableRange = (range) => {
+        if (!range || !elements.content) return null
+        const directBlock = getBlockFromRange(range)
+        if (directBlock) return range
+        const page = resolvePageFromNode(range.startContainer)
+            || (range.startContainer?.nodeType === Node.ELEMENT_NODE ? range.startContainer.closest?.(".note-page") : null)
+            || elements.content.querySelector(".note-page.is-active")
+            || elements.content.querySelector(".note-page")
+        if (!page || !elements.content.contains(page)) return null
+        const blocks = getEditableBlocks(page)
+        const hasBlocks = blocks.length > 0
+        const offset = Number(range.startOffset) || 0
+        const targetBlock = hasBlocks
+            ? blocks[Math.max(0, Math.min(offset, blocks.length - 1))] || blocks[0]
+            : ensureCaretBlock(page)
+        if (!targetBlock) return null
+        const normalizedRange = document.createRange()
+        normalizedRange.selectNodeContents(targetBlock)
+        normalizedRange.collapse(true)
+        return normalizedRange
+    }
+
     const resolveSafeRange = (range) => {
         if (!range || !elements.content) return null
         if (elements.content.contains(range.commonAncestorContainer)
             && elements.content.contains(range.startContainer)
-            && elements.content.contains(range.endContainer)) return range
+            && elements.content.contains(range.endContainer)) {
+            return normalizeRangeToEditableRange(range)
+        }
         return restoreRangeFromBookmark()
     }
 
@@ -200,13 +224,14 @@ export const createSelectionHandlers = (context) => {
     }
 
     const setSelectionRange = (range) => {
-        if (!range) return false
+        const nextRange = resolveSafeRange(range)
+        if (!nextRange) return false
         const selection = window.getSelection()
         if (!selection) return false
         selection.removeAllRanges()
-        selection.addRange(range)
-        state.savedSelectionRange = range.cloneRange()
-        state.savedSelectionBookmark = buildSelectionBookmark(range)
+        selection.addRange(nextRange)
+        state.savedSelectionRange = nextRange.cloneRange()
+        state.savedSelectionBookmark = buildSelectionBookmark(nextRange)
         return true
     }
 
