@@ -1,3 +1,5 @@
+const supportsBeforeInputParagraph = typeof InputEvent !== "undefined" && "inputType" in InputEvent.prototype
+
 const resolveEditableBlockTag = (node, fallbackTag = "p") => {
     const tagName = String(node?.tagName || "").toLowerCase()
     if (tagName === "div") return "p"
@@ -164,6 +166,7 @@ export const createEnterHandlers = (context) => {
     }
 
     const handleListEnter = (event) => {
+        if (supportsBeforeInputParagraph) return
         if (event.key !== "Enter") return
         if (event.defaultPrevented) return
         if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
