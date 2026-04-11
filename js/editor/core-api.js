@@ -8,6 +8,7 @@ import { createAutosaveHandlers } from "./core-autosave.js"
 import { createEditorLayoutHandlers } from "./core-layout.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
 import { createEditorCommands } from "./editor-commands.js"
+import { normalizeEditableHtmlForStorage } from "./input/content-normalizer.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -245,16 +246,7 @@ export const EditorAPI = (() => {
     }
 
 
-    const normalizeEditorHtml = (htmlValue) => {
-        const htmlText = String(htmlValue || "")
-            .replace(/\s+/g, " ")
-            .replace(/>\s+</g, "><")
-            .replace(/&nbsp;/gi, " ")
-            .replace(/<p>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/p>/gi, "")
-            .replace(/<div>\s*(<br\s*\/?>|\s|&nbsp;|&#160;)*<\/div>/gi, "")
-            .trim()
-        return htmlText
-    }
+    const normalizeEditorHtml = (htmlValue) => normalizeEditableHtmlForStorage(htmlValue)
 
     const serializeEditorStateSnapshot = (note) => JSON.stringify({
         title: String(note?.title || ""),
