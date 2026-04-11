@@ -56,7 +56,6 @@ export const createInputHandlers = (context) => {
     }
 
     const clipboardHandlers = createClipboardHandlers({
-        elements,
         queueSnapshot,
         fileToDataUrl,
         insertMedia,
