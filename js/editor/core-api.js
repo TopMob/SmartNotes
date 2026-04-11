@@ -117,7 +117,9 @@ export const EditorAPI = (() => {
         queueSnapshot: (...args) => queueSnapshot(...args),
         fileToDataUrl: (...args) => fileToDataUrl(...args),
         insertMedia: (...args) => insertMedia(...args),
-        confirmEquationAtCaret: (...args) => confirmEquationAtCaret(...args)
+        confirmEquationAtCaret: (...args) => confirmEquationAtCaret(...args),
+        undo: (...args) => undo(...args),
+        redo: (...args) => redo(...args)
     })
 
     const handlePaste = (event) => inputHandlers.handlePaste(event)
@@ -513,25 +515,7 @@ export const EditorAPI = (() => {
             boundElements.content.addEventListener("keydown", inputHandlers.handleEnterKeydown, { signal })
             boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
             boundElements.content.addEventListener("input", inputHandlers.handleInput, { signal })
-            boundElements.content.addEventListener("keydown", (event) => {
-                if (event.altKey) return
-                const hasPrimaryModifier = event.ctrlKey || event.metaKey
-                if (!hasPrimaryModifier) return
-                const key = String(event.key || "").toLowerCase()
-                if (key === "z") {
-                    event.preventDefault()
-                    if (event.shiftKey) {
-                        redo()
-                    } else {
-                        undo()
-                    }
-                    return
-                }
-                if (key === "y") {
-                    event.preventDefault()
-                    redo()
-                }
-            }, { signal })
+            boundElements.content.addEventListener("keydown", inputHandlers.handleHistoryKeydown, { signal })
             boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
             boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
@@ -1147,7 +1131,7 @@ export const EditorAPI = (() => {
         state.future = []
     }
 
-    const undo = () => {
+    function undo() {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
             EditorDrawing.undo?.()
             return
@@ -1156,7 +1140,7 @@ export const EditorAPI = (() => {
         historyHandlers.undo()
     }
 
-    const redo = () => {
+    function redo() {
         if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
             EditorDrawing.redo?.()
             return

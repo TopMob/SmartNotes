@@ -2,6 +2,7 @@ import { createSelectionHandlers } from "./input/selection.js"
 import { createClipboardHandlers } from "./input/clipboard.js"
 import { createTagHandlers } from "./input/tags.js"
 import { createEnterHandlers } from "./input/enter.js"
+import { createEditingHistoryHandlers } from "./input/editing-history.js"
 import { normalizeParagraphModel } from "./input/paragraph-model.js"
 
 export const createInputHandlers = (context) => {
@@ -10,7 +11,9 @@ export const createInputHandlers = (context) => {
         state,
         queueSnapshot,
         fileToDataUrl,
-        insertMedia
+        insertMedia,
+        undo,
+        redo
     } = context
 
     const selectionHandlers = createSelectionHandlers({ elements, state })
@@ -71,6 +74,11 @@ export const createInputHandlers = (context) => {
         queueSnapshot
     })
 
+    const editingHistoryHandlers = createEditingHistoryHandlers({
+        undo,
+        redo
+    })
+
     const enterHandlers = createEnterHandlers({
         elements,
         queueSnapshot,
@@ -84,6 +92,11 @@ export const createInputHandlers = (context) => {
         if (event.key !== "Enter") return
         if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
         if (context.confirmEquationAtCaret()) event.preventDefault()
+    }
+
+    const handleBeforeInput = (event) => {
+        if (editingHistoryHandlers.handleBeforeInput(event)) return
+        enterHandlers.handleBeforeInput(event)
     }
 
     return {
@@ -106,8 +119,9 @@ export const createInputHandlers = (context) => {
         addTag: tagHandlers.addTag,
         removeTag: tagHandlers.removeTag,
         renderTags: tagHandlers.renderTags,
-        handleBeforeInput: enterHandlers.handleBeforeInput,
+        handleBeforeInput,
         handleEnterKeydown: enterHandlers.handleEnter,
+        handleHistoryKeydown: editingHistoryHandlers.handleKeydown,
         handleInput
     }
 }

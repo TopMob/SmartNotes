@@ -232,17 +232,8 @@ export const createClipboardHandlers = (context) => {
         if (!range || range.collapsed) return
         handleCopy(event)
         if (!event.defaultPrevented) event.preventDefault()
-        const removedWithNative = (() => {
-            if (typeof document.execCommand !== "function") return false
-            try {
-                restoreSelection()
-                elements.content?.focus()
-                return document.execCommand("delete", false, null)
-            } catch {
-                return false
-            }
-        })()
-        if (!removedWithNative) range.deleteContents()
+        const activeRange = restoreSelection() || range
+        activeRange.deleteContents()
         normalizeActivePage()
         storeSelection()
         queueSnapshot()
