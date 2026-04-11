@@ -7,6 +7,12 @@ const isMediaWrapper = (node) => node?.nodeType === Node.ELEMENT_NODE
     && node.classList?.contains("media-wrapper")
     && node.getAttribute("contenteditable") === "false"
 
+const isRootBlock = (node) => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false
+    const tag = String(node.tagName || "").toLowerCase()
+    return isMediaWrapper(node) || BLOCK_TAGS.has(tag)
+}
+
 const createParagraph = () => {
     const paragraph = document.createElement("p")
     paragraph.appendChild(document.createElement("br"))
@@ -14,80 +20,114 @@ const createParagraph = () => {
 }
 
 const ensureParagraphContent = (paragraph) => {
-    if (!paragraph) return
+    if (!paragraph || String(paragraph.tagName || "").toLowerCase() !== "p") return
     const hasMedia = !!paragraph.querySelector("img,audio,video,table,hr,.media-wrapper")
     const text = (paragraph.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
     if (!hasMedia && !text && !paragraph.querySelector("br")) paragraph.appendChild(document.createElement("br"))
+    if ((text || hasMedia) && paragraph.childNodes.length > 1) {
+        Array.from(paragraph.querySelectorAll("br")).forEach(br => {
+            if (br.parentNode === paragraph) br.remove()
+        })
+    }
 }
 
-const transformNodeToRootBlock = (node) => {
-    if (!node) return null
-    if (isWhitespaceText(node)) return null
-    if (node.nodeType === Node.TEXT_NODE) {
-        const paragraph = document.createElement("p")
-        paragraph.textContent = node.textContent || ""
-        ensureParagraphContent(paragraph)
-        return paragraph
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return null
-    const tag = String(node.tagName || "").toLowerCase()
-    if (isMediaWrapper(node)) return node
-    if (tag === "div") {
-        const paragraph = document.createElement("p")
-        while (node.firstChild) paragraph.appendChild(node.firstChild)
-        ensureParagraphContent(paragraph)
-        return paragraph
-    }
-    if (tag === "br") return createParagraph()
-    if (BLOCK_TAGS.has(tag)) {
-        if (tag === "p") ensureParagraphContent(node)
-        return node
-    }
-    if (INLINE_TAGS.has(tag) || tag === "img" || tag === "audio" || tag === "video" || tag === "iframe" || tag === "canvas" || tag === "svg") {
-        const paragraph = document.createElement("p")
-        paragraph.appendChild(node)
-        ensureParagraphContent(paragraph)
-        return paragraph
-    }
+const wrapInlineToParagraph = (node) => {
     const paragraph = document.createElement("p")
-    while (node.firstChild) paragraph.appendChild(node.firstChild)
+    paragraph.appendChild(node)
     ensureParagraphContent(paragraph)
     return paragraph
 }
 
-export const normalizeParagraphModel = (container) => {
-    if (!container) return false
-    const nodes = Array.from(container.childNodes || [])
-    const normalized = []
-    let changed = false
+const transformNodeToRootBlocks = (node) => {
+    if (!node) return []
+    if (isWhitespaceText(node)) return []
+    if (node.nodeType === Node.TEXT_NODE) {
+        return [wrapInlineToParagraph(document.createTextNode(node.textContent || ""))]
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return []
+    if (isMediaWrapper(node)) return [node]
 
-    nodes.forEach(node => {
-        if (node.nodeType === Node.TEXT_NODE && !isWhitespaceText(node)) {
-            const previous = normalized[normalized.length - 1]
-            if (previous?.nodeType === Node.ELEMENT_NODE && String(previous.tagName || "").toLowerCase() === "p") {
-                previous.appendChild(document.createTextNode(node.textContent || ""))
-                changed = true
+    const tag = String(node.tagName || "").toLowerCase()
+
+    if (tag === "br") return [createParagraph()]
+
+    if (tag === "div" || tag === "section" || tag === "article" || tag === "main") {
+        if (!node.childNodes.length) return [createParagraph()]
+        const blocks = []
+        let paragraphBuffer = null
+        const flushParagraphBuffer = () => {
+            if (!paragraphBuffer) return
+            ensureParagraphContent(paragraphBuffer)
+            blocks.push(paragraphBuffer)
+            paragraphBuffer = null
+        }
+        Array.from(node.childNodes).forEach(child => {
+            if (isRootBlock(child)) {
+                flushParagraphBuffer()
+                blocks.push(...transformNodeToRootBlocks(child))
                 return
             }
-        }
-        const transformed = transformNodeToRootBlock(node)
-        if (!transformed) {
-            if (node.parentNode === container) node.remove()
-            changed = true
-            return
-        }
-        if (transformed !== node) changed = true
-        normalized.push(transformed)
-    })
-
-    if (!normalized.length) {
-        container.replaceChildren(createParagraph())
-        return true
+            if (child.nodeType === Node.ELEMENT_NODE && String(child.tagName || "").toLowerCase() === "br") {
+                if (!paragraphBuffer) {
+                    blocks.push(createParagraph())
+                } else {
+                    flushParagraphBuffer()
+                }
+                return
+            }
+            if (!paragraphBuffer) paragraphBuffer = document.createElement("p")
+            paragraphBuffer.appendChild(child)
+        })
+        flushParagraphBuffer()
+        return blocks.length ? blocks : [createParagraph()]
     }
 
-    const sameLength = normalized.length === nodes.length
-    const sameOrder = sameLength && normalized.every((node, index) => node === nodes[index])
-    if (!changed && sameOrder) return false
+    if (BLOCK_TAGS.has(tag)) {
+        if (tag === "p") ensureParagraphContent(node)
+        return [node]
+    }
+
+    if (INLINE_TAGS.has(tag) || ["img", "audio", "video", "iframe", "canvas", "svg"].includes(tag)) {
+        return [wrapInlineToParagraph(node)]
+    }
+
+    const paragraph = document.createElement("p")
+    while (node.firstChild) paragraph.appendChild(node.firstChild)
+    ensureParagraphContent(paragraph)
+    return [paragraph]
+}
+
+const normalizeParagraphChildren = (node) => {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return
+    if (String(node.tagName || "").toLowerCase() !== "p") return
+    const children = Array.from(node.childNodes)
+    children.forEach(child => {
+        if (child.nodeType !== Node.ELEMENT_NODE) return
+        const childTag = String(child.tagName || "").toLowerCase()
+        if (childTag === "p") {
+            while (child.firstChild) node.insertBefore(child.firstChild, child)
+            child.remove()
+        }
+    })
+    ensureParagraphContent(node)
+}
+
+export const normalizeParagraphModel = (container) => {
+    if (!container) return false
+    const sourceNodes = Array.from(container.childNodes || [])
+    const normalized = []
+
+    sourceNodes.forEach(node => {
+        normalized.push(...transformNodeToRootBlocks(node))
+    })
+
+    if (!normalized.length) normalized.push(createParagraph())
+
+    normalized.forEach(node => normalizeParagraphChildren(node))
+
+    const sameLength = normalized.length === sourceNodes.length
+    const sameOrder = sameLength && normalized.every((node, index) => node === sourceNodes[index])
+    if (sameOrder) return false
 
     const fragment = document.createDocumentFragment()
     normalized.forEach(node => fragment.appendChild(node))
@@ -103,4 +143,22 @@ export const normalizeFragmentParagraphModel = (fragment) => {
     const output = document.createDocumentFragment()
     while (container.firstChild) output.appendChild(container.firstChild)
     return output
+}
+
+export const ensureRangeWithinParagraphModel = (container, range) => {
+    if (!container || !range) return null
+    normalizeParagraphModel(container)
+    const startNode = range.startContainer
+    if (container.contains(startNode)) return range
+
+    const fallback = document.createRange()
+    const firstBlock = container.firstElementChild
+    if (!firstBlock) {
+        fallback.selectNodeContents(container)
+        fallback.collapse(true)
+        return fallback
+    }
+    fallback.selectNodeContents(firstBlock)
+    fallback.collapse(true)
+    return fallback
 }

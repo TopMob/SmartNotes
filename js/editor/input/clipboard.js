@@ -15,8 +15,8 @@ export const createClipboardHandlers = (context) => {
     } = context
 
     const removableWrapperTags = new Set(["div", "section", "article", "main"])
-    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
-    const blockLikeTags = new Set(["p", "div", "section", "article", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"])
+    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre", "hr", "table", "tbody", "thead", "tr", "td", "th"])
+    const rootBlockTags = new Set(["p", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table", "hr"])
 
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
@@ -77,8 +77,8 @@ export const createClipboardHandlers = (context) => {
             if (sourceTag === "br") return document.createElement("br")
             if (sourceTag === "hr") return document.createElement("hr")
 
-                const normalizedTag = sourceTag === "div" ? "p" : sourceTag
-                const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
+            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
+            const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
             const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
 
             if (keepTag === "a") {
@@ -98,8 +98,8 @@ export const createClipboardHandlers = (context) => {
             if (keepTag && normalizedTag !== "br") {
                 const text = (container.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
                 const hasMeaningfulChildren = !!container.querySelector("img,audio,video,table,hr,br,li,ul,ol")
-                if (!text && !hasMeaningfulChildren && normalizedTag !== "p" && normalizedTag !== "li") return null
-                if ((normalizedTag === "p" || normalizedTag === "li") && !text && !hasMeaningfulChildren) {
+                if (!text && !hasMeaningfulChildren && !["p", "li", "td", "th"].includes(normalizedTag)) return null
+                if (["p", "li"].includes(normalizedTag) && !text && !hasMeaningfulChildren) {
                     container.appendChild(document.createElement("br"))
                 }
             }
@@ -121,46 +121,66 @@ export const createClipboardHandlers = (context) => {
         while (rows.length && isVisualEmptyRow(rows[0])) rows.shift()
         while (rows.length && isVisualEmptyRow(rows[rows.length - 1])) rows.pop()
         const compact = []
-        let previousWasEmpty = false
+        let emptyStreak = 0
         rows.forEach(row => {
-            const isEmpty = isVisualEmptyRow(row)
-            if (isEmpty && previousWasEmpty) return
+            if (isVisualEmptyRow(row)) {
+                emptyStreak += 1
+                if (emptyStreak > 1) return
+                compact.push("")
+                return
+            }
+            emptyStreak = 0
             compact.push(row)
-            previousWasEmpty = isEmpty
         })
         return compact.join("\n")
     }
 
     const fragmentToPlainText = (fragment) => {
         if (!fragment) return ""
-        const lines = [""]
-        const pushNewLine = (force = false) => {
-            const currentLine = lines[lines.length - 1]
-            if (!force && currentLine === "") return
-            lines.push("")
+        const container = document.createElement("div")
+        container.appendChild(fragment.cloneNode(true))
+        const normalized = normalizeFragmentParagraphModel(container)
+        const lines = []
+
+        const flattenInlineText = (node) => {
+            if (!node) return ""
+            if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
+            if (node.nodeType !== Node.ELEMENT_NODE) return ""
+            const tag = String(node.tagName || "").toLowerCase()
+            if (tag === "br") return "\n"
+            const content = Array.from(node.childNodes || []).map(flattenInlineText).join("")
+            return tag === "li" ? `• ${content}` : content
         }
-        const appendText = (value) => {
-            if (!value) return
-            lines[lines.length - 1] += value
-        }
-        const visit = (node) => {
-            if (!node) return
+
+        Array.from(normalized.childNodes || []).forEach(node => {
             if (node.nodeType === Node.TEXT_NODE) {
-                appendText(node.textContent || "")
+                lines.push(node.textContent || "")
                 return
             }
             if (node.nodeType !== Node.ELEMENT_NODE) return
             const tag = String(node.tagName || "").toLowerCase()
-            if (tag === "br") {
-                pushNewLine(true)
+            if (tag === "hr") {
+                lines.push("─")
                 return
             }
-            const isBlock = blockLikeTags.has(tag)
-            if (tag === "li") appendText("• ")
-            Array.from(node.childNodes || []).forEach(visit)
-            if (isBlock && lines[lines.length - 1] !== "") pushNewLine(true)
-        }
-        Array.from(fragment.childNodes || []).forEach(visit)
+            if (tag === "ul" || tag === "ol") {
+                Array.from(node.children).forEach((li, index) => {
+                    const text = flattenInlineText(li).replace(/\n/g, " ").trim()
+                    if (!text) return
+                    if (tag === "ol") lines.push(`${index + 1}. ${text.replace(/^•\s*/, "")}`)
+                    else lines.push(`• ${text.replace(/^•\s*/, "")}`)
+                })
+                return
+            }
+            if (rootBlockTags.has(tag)) {
+                const text = flattenInlineText(node)
+                text.split("\n").forEach(line => lines.push(line))
+                return
+            }
+            const text = flattenInlineText(node)
+            if (text) text.split("\n").forEach(line => lines.push(line))
+        })
+
         return normalizeClipboardPlainText(lines.join("\n"))
     }
 
@@ -168,9 +188,11 @@ export const createClipboardHandlers = (context) => {
         const fragment = document.createDocumentFragment()
         const normalizedText = String(plainText || "").replace(/\r\n?/g, "\n")
         const rows = normalizedText.split("\n")
-        rows.forEach((line, index) => {
-            if (index > 0) fragment.appendChild(document.createElement("br"))
-            fragment.appendChild(document.createTextNode(line))
+        rows.forEach(line => {
+            const paragraph = document.createElement("p")
+            if (line) paragraph.textContent = line
+            else paragraph.appendChild(document.createElement("br"))
+            fragment.appendChild(paragraph)
         })
         return fragment
     }
@@ -179,7 +201,7 @@ export const createClipboardHandlers = (context) => {
         if (!fragment) return false
         const text = (fragment.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
         if (text) return true
-        if (fragment.querySelector && fragment.querySelector("br,hr,p,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote")) return true
+        if (fragment.querySelector && fragment.querySelector("br,hr,p,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote,table")) return true
         return false
     }
 
@@ -222,7 +244,7 @@ export const createClipboardHandlers = (context) => {
             }
         }
 
-        if (plainText && insertFragmentAtSelection(plainTextToFragment(plainText))) {
+        if (insertFragmentAtSelection(plainTextToFragment(plainText))) {
             normalizeActivePage()
             queueSnapshot()
         }

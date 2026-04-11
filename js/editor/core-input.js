@@ -20,6 +20,11 @@ export const createInputHandlers = (context) => {
         return normalizeParagraphModel(page)
     }
 
+    const handleInput = () => {
+        if (normalizeActivePage()) selectionHandlers.storeSelection()
+        queueSnapshot()
+    }
+
     const clipboardHandlers = createClipboardHandlers({
         elements,
         queueSnapshot,
@@ -75,6 +80,7 @@ export const createInputHandlers = (context) => {
         removeTag: tagHandlers.removeTag,
         renderTags: tagHandlers.renderTags,
         handleBeforeInput: enterHandlers.handleBeforeInput,
-        handleEnterKeydown: enterHandlers.handleListEnter
+        handleEnterKeydown: enterHandlers.handleListEnter,
+        handleInput
     }
 }

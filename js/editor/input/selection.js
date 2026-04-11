@@ -1,3 +1,5 @@
+import { ensureRangeWithinParagraphModel, normalizeParagraphModel } from "./paragraph-model.js"
+
 export const createSelectionHandlers = (context) => {
     const { elements, state } = context
     const blockSelector = "p,li,blockquote,pre,h1,h2,h3,h4,h5,h6"
@@ -22,14 +24,26 @@ export const createSelectionHandlers = (context) => {
         return nodes
     }
 
+    const resolveSafeRange = (range) => {
+        if (!range || !elements.content) return null
+        const page = resolvePageFromNode(range.startContainer)
+        if (page && elements.content.contains(page)) {
+            const normalizedRange = ensureRangeWithinParagraphModel(page, range)
+            return normalizedRange
+        }
+        if (elements.content.contains(range.commonAncestorContainer)) return range
+        return null
+    }
+
     const getActiveRangeInContent = () => {
         const selection = window.getSelection()
         if (selection && selection.rangeCount) {
-            const range = selection.getRangeAt(0)
-            if (elements.content && elements.content.contains(range.commonAncestorContainer)) return range
+            const range = resolveSafeRange(selection.getRangeAt(0))
+            if (range) return range
         }
-        if (state.savedSelectionRange && elements.content && elements.content.contains(state.savedSelectionRange.commonAncestorContainer)) {
-            return state.savedSelectionRange
+        if (state.savedSelectionRange) {
+            const range = resolveSafeRange(state.savedSelectionRange)
+            if (range) return range
         }
         return null
     }
@@ -37,28 +51,39 @@ export const createSelectionHandlers = (context) => {
     const storeSelection = () => {
         const selection = window.getSelection()
         if (!selection || selection.rangeCount === 0) return
-        const range = selection.getRangeAt(0)
-        if (!elements.content || !elements.content.contains(range.commonAncestorContainer)) return
+        const range = getActiveRangeInContent()
+        if (!range) return
         state.savedSelectionRange = range.cloneRange()
     }
 
     const restoreSelection = () => {
         if (!elements.content) return null
         const selection = window.getSelection()
-        let range = null
-        if (state.savedSelectionRange && elements.content.contains(state.savedSelectionRange.commonAncestorContainer)) {
-            range = state.savedSelectionRange
-        } else if (selection && selection.rangeCount && elements.content.contains(selection.getRangeAt(0).commonAncestorContainer)) {
-            range = selection.getRangeAt(0)
-        } else {
-            range = document.createRange()
-            range.selectNodeContents(elements.content)
-            range.collapse(false)
+        let range = getActiveRangeInContent()
+        if (!range) {
+            const activePage = elements.content.querySelector(".note-page.is-active") || elements.content.querySelector(".note-page")
+            if (activePage) {
+                normalizeParagraphModel(activePage)
+                const firstBlock = activePage.firstElementChild
+                range = document.createRange()
+                if (firstBlock) {
+                    range.selectNodeContents(firstBlock)
+                    range.collapse(true)
+                } else {
+                    range.selectNodeContents(activePage)
+                    range.collapse(true)
+                }
+            } else {
+                range = document.createRange()
+                range.selectNodeContents(elements.content)
+                range.collapse(false)
+            }
         }
-        if (selection) {
+        if (selection && range) {
             selection.removeAllRanges()
             selection.addRange(range)
         }
+        state.savedSelectionRange = range ? range.cloneRange() : null
         return range
     }
 
@@ -68,9 +93,7 @@ export const createSelectionHandlers = (context) => {
         const nodes = getTextNodes(block)
         let offset = 0
         for (const node of nodes) {
-            if (node === targetRange.startContainer) {
-                return offset + targetRange.startOffset
-            }
+            if (node === targetRange.startContainer) return offset + targetRange.startOffset
             offset += node.textContent?.length || 0
         }
         return null
@@ -113,16 +136,9 @@ export const createSelectionHandlers = (context) => {
     }
 
     const getActiveBlock = () => {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return null
-        let node = selection.anchorNode
-        if (!node) return null
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || node === elements.content) return null
-        if (node.classList?.contains("note-page")) return null
-        const block = node.closest(blockSelector)
-        if (block?.classList?.contains("note-page")) return null
-        return block
+        const range = getActiveRangeInContent()
+        if (!range) return null
+        return getBlockFromRange(range)
     }
 
     const getActivePage = () => {
@@ -142,7 +158,7 @@ export const createSelectionHandlers = (context) => {
         range.collapse(true)
         selection.removeAllRanges()
         selection.addRange(range)
-        storeSelection()
+        state.savedSelectionRange = range.cloneRange()
     }
 
     const focusEditable = (node) => {
@@ -158,14 +174,12 @@ export const createSelectionHandlers = (context) => {
 
     const insertFragmentAtSelection = (contentNode) => {
         if (!elements.content || !contentNode) return false
+        const range = restoreSelection()
+        if (!range) return false
+        const page = resolvePageFromNode(range.startContainer)
+        if (page) normalizeParagraphModel(page)
         const anchorNode = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? contentNode.lastChild : contentNode
         if (!anchorNode) return false
-        const range = restoreSelection()
-        if (!range) {
-            elements.content.appendChild(contentNode)
-            storeSelection()
-            return true
-        }
         range.deleteContents()
         range.insertNode(contentNode)
         range.setStartAfter(anchorNode)
@@ -175,12 +189,11 @@ export const createSelectionHandlers = (context) => {
             selection.removeAllRanges()
             selection.addRange(range)
         }
-        storeSelection()
+        state.savedSelectionRange = range.cloneRange()
         return true
     }
 
     const insertHtmlAtSelection = (html) => insertFragmentAtSelection(createFragmentFromHtml(html))
-
     const insertNodeAtSelection = (node) => insertFragmentAtSelection(node)
 
     const insertHorizontalRule = () => {
