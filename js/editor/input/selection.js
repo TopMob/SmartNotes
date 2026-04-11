@@ -51,6 +51,27 @@ export const createSelectionHandlers = (context) => {
         return !block.querySelector("img,audio,video,table,hr,.media-wrapper")
     }
 
+    const getInsertedNodes = (node) => node?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+        ? Array.from(node.childNodes)
+        : (node ? [node] : [])
+
+    const createCollapsedRangeAfterNode = (parent, node) => {
+        const range = document.createRange()
+        if (node?.parentNode) {
+            range.setStartAfter(node)
+            range.collapse(true)
+            return range
+        }
+        if (parent?.childNodes?.length) {
+            range.selectNodeContents(parent)
+            range.collapse(false)
+            return range
+        }
+        range.selectNodeContents(elements.content)
+        range.collapse(false)
+        return range
+    }
+
     const createRangeFromOffsets = (root, start, end) => {
         const range = document.createRange()
         const nodes = getTextNodes(root)
@@ -254,9 +275,7 @@ export const createSelectionHandlers = (context) => {
                 trailingRange.selectNodeContents(targetBlock)
                 trailingRange.setStart(range.startContainer, range.startOffset)
                 const trailingContent = trailingRange.extractContents()
-                const insertedNodes = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
-                    ? Array.from(contentNode.childNodes)
-                    : [contentNode]
+                const insertedNodes = getInsertedNodes(contentNode)
 
                 if (wasEmptyBlock) targetBlock.remove()
 
@@ -273,17 +292,7 @@ export const createSelectionHandlers = (context) => {
                     }
                 }
 
-                const selectionRange = document.createRange()
-                if (lastInserted?.parentNode) {
-                    selectionRange.setStartAfter(lastInserted)
-                } else if (parent.childNodes.length) {
-                    selectionRange.selectNodeContents(parent)
-                    selectionRange.collapse(false)
-                } else {
-                    selectionRange.selectNodeContents(elements.content)
-                    selectionRange.collapse(false)
-                }
-                selectionRange.collapse(true)
+                const selectionRange = createCollapsedRangeAfterNode(parent, lastInserted)
                 return setSelectionRange(selectionRange)
             }
         }

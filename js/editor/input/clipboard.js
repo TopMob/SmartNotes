@@ -121,12 +121,9 @@ export const createClipboardHandlers = (context) => {
 
     const paragraphToText = (paragraph) => {
         if (!paragraph || paragraph.nodeType !== Node.ELEMENT_NODE) return ""
-        const text = String(paragraph.textContent || "")
+        return String(paragraph.textContent || "")
             .replace(/\u200b/g, "")
             .trim()
-        if (text) return text
-        const hasMedia = !!paragraph.querySelector("img,video,audio,table,hr,.media-wrapper")
-        return hasMedia ? text : ""
     }
 
     const serializeParagraphs = (container) => {
@@ -145,6 +142,8 @@ export const createClipboardHandlers = (context) => {
         container.appendChild(node.cloneNode(true))
         return normalizeClipboardPlainText(serializeParagraphs(container))
     }
+
+    const hasRichContentWithoutText = (container) => !!container?.querySelector?.("img,audio,video,table,hr")
 
     const plainTextToFragment = (plainText) => {
         const fragment = document.createDocumentFragment()
@@ -221,7 +220,7 @@ export const createClipboardHandlers = (context) => {
         const container = document.createElement("div")
         container.appendChild(fragment)
         const plainText = fragmentToPlainText(container)
-        if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
+        if (!plainText.trim() && !hasRichContentWithoutText(container)) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
         event.clipboardData?.setData("text/html", container.innerHTML)
