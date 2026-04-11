@@ -1,7 +1,8 @@
-const { DRIVE_LAST_MANUAL_BACKUP_AT_KEY } = window.UINoteActionsExport
+const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at"
 
 (() => {
-Object.assign(UI, window.UINoteActionsPanel)
+const noteActionsPanel = window.UINoteActionsPanel
+if (noteActionsPanel && typeof noteActionsPanel === "object") Object.assign(UI, noteActionsPanel)
 
 Object.assign(UI, {
     updateSidebarLayout() {

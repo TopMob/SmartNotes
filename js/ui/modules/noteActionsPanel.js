@@ -1,11 +1,4 @@
 (() => {
-const {
-    buildExportFileName,
-    buildNoteTextExport,
-    buildPrintableNoteHtml,
-    openPrintWindow
-} = window.UINoteActionsExport
-
 window.UINoteActionsPanel = {
 
     renderNoteActions(noteId) {
@@ -165,11 +158,13 @@ window.UINoteActionsPanel = {
             this.showToast(this.getText("lock_download_blocked", "Note is locked"))
             return
         }
-        const text = buildNoteTextExport(note)
+        const exportApi = window.UINoteActionsExport
+        if (!exportApi || typeof exportApi.buildNoteTextExport !== "function" || typeof exportApi.buildExportFileName !== "function") return
+        const text = exportApi.buildNoteTextExport(note)
         const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
         const link = document.createElement("a")
         link.href = URL.createObjectURL(blob)
-        link.download = buildExportFileName(note, "txt")
+        link.download = exportApi.buildExportFileName(note, "txt")
         link.click()
         URL.revokeObjectURL(link.href)
         this.showToast(this.getText("download_success", "File saved"))
@@ -184,8 +179,10 @@ window.UINoteActionsPanel = {
             return
         }
         const dict = LANG[StateStore.read().config.lang] || LANG.ru
-        const printableDocument = buildPrintableNoteHtml(note, dict)
-        openPrintWindow(printableDocument, dict)
+        const exportApi = window.UINoteActionsExport
+        if (!exportApi || typeof exportApi.buildPrintableNoteHtml !== "function" || typeof exportApi.openPrintWindow !== "function") return
+        const printableDocument = exportApi.buildPrintableNoteHtml(note, dict)
+        exportApi.openPrintWindow(printableDocument, dict)
         this.closeModal("note-actions-modal")
     },
 }
