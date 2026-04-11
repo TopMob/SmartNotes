@@ -23,6 +23,7 @@ export const createEditorState = () => ({
     autoSaveSnapshot: null,
     initialEditorState: null,
     isRenderingState: false,
+    isApplyingSnapshot: false,
     snapshotFrame: null,
     manualSaveInProgress: false,
     isSaving: false,

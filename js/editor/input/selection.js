@@ -198,6 +198,7 @@ export const createSelectionHandlers = (context) => {
     }
 
     const storeSelection = () => {
+        if (state.isApplyingSnapshot) return
         const selection = window.getSelection()
         if (!selection || selection.rangeCount === 0) return
         const range = getActiveRangeInContent()

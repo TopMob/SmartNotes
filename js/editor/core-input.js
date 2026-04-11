@@ -51,6 +51,7 @@ export const createInputHandlers = (context) => {
     }
 
     const handleInput = () => {
+        if (state.isApplyingSnapshot) return
         normalizeActivePageWithCaretRestore()
         queueSnapshot()
     }

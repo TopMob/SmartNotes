@@ -421,19 +421,26 @@ export const EditorAPI = (() => {
 
     const applySnapshot = (snap) => {
         if (!snap) return
-        const note = StateStore.read().currentNote
-        StateStore.update("currentNote", {
-            ...note,
-            title: snap.title,
-            content: snap.content,
-            tags: snap.tags,
-            pageTitles: snap.pageTitles,
-            pageDrawings: snap.pageDrawings,
-            pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
-        })
-        renderState()
-        if (!inputHandlers.restoreSelectionFromBookmark(snap.selectionBookmark)) {
-            inputHandlers.restoreSelection()
+        state.isApplyingSnapshot = true
+        try {
+            const note = StateStore.read().currentNote
+            const nextPageIndex = Number.isFinite(Number(snap.activePageIndex)) ? Number(snap.activePageIndex) : state.pageIndex
+            state.pageIndex = Math.max(0, nextPageIndex)
+            StateStore.update("currentNote", {
+                ...note,
+                title: snap.title,
+                content: snap.content,
+                tags: snap.tags,
+                pageTitles: snap.pageTitles,
+                pageDrawings: snap.pageDrawings,
+                pageDrawingsRevision: snap.pageDrawingsRevision || buildPageDrawingsRevision(snap.pageDrawings)
+            })
+            renderState()
+            if (!inputHandlers.restoreSelectionFromBookmark(snap.selectionBookmark)) {
+                inputHandlers.restoreSelection()
+            }
+        } finally {
+            state.isApplyingSnapshot = false
         }
     }
 
