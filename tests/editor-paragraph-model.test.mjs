@@ -4,13 +4,31 @@ import { JSDOM } from 'jsdom'
 import { normalizeParagraphModel } from '../js/editor/input/paragraph-model.js'
 import { createClipboardHandlers } from '../js/editor/input/clipboard.js'
 
-const installDom = () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>')
+const installDom = (html = '<!doctype html><html><body><div id="root"></div></body></html>') => {
+    const dom = new JSDOM(html)
     global.window = dom.window
     global.document = dom.window.document
     global.Node = dom.window.Node
     global.NodeFilter = dom.window.NodeFilter
     global.InputEvent = dom.window.InputEvent
+}
+
+const createClipboardMockEvent = () => {
+    const data = new Map()
+    return {
+        defaultPrevented: false,
+        preventDefault() {
+            this.defaultPrevented = true
+        },
+        clipboardData: {
+            setData(type, value) {
+                data.set(type, value)
+            },
+            getData(type) {
+                return data.get(type) || ''
+            }
+        }
+    }
 }
 
 test('normalizeParagraphModel converts root div/text/br into p-only blocks', () => {
@@ -21,10 +39,12 @@ test('normalizeParagraphModel converts root div/text/br into p-only blocks', () 
     assert.equal(root.innerHTML, '<p>alpha</p><p><br></p><p>beta</p><p><br></p><p><span>gamma</span></p>')
 })
 
-test('clipboard plain text preserves single empty lines without doubling', () => {
-    installDom()
+test('handleCopy writes browser-like text/plain for sequential paragraphs', () => {
+    installDom('<!doctype html><html><body><div id="note-content-editable"><div class="note-page" contenteditable="true"><p>1</p><p>2</p><p>3</p></div></div></body></html>')
+    const content = document.getElementById('note-content-editable')
+    const page = content.querySelector('.note-page')
     const handlers = createClipboardHandlers({
-        elements: {},
+        elements: { content },
         queueSnapshot: () => {},
         fileToDataUrl: async () => '',
         insertMedia: () => {},
@@ -34,29 +54,36 @@ test('clipboard plain text preserves single empty lines without doubling', () =>
             template.innerHTML = html
             return template.content.cloneNode(true)
         },
-        getActiveRangeInContent: () => null,
+        getActiveRangeInContent: () => {
+            const selection = window.getSelection()
+            return selection.rangeCount ? selection.getRangeAt(0) : null
+        },
         restoreSelection: () => null,
         storeSelection: () => {},
         normalizeActivePage: () => false
     })
 
-    const fragment = document.createDocumentFragment()
-    const p1 = document.createElement('p')
-    p1.textContent = '1'
-    const p2 = document.createElement('p')
-    p2.appendChild(document.createElement('br'))
-    const p3 = document.createElement('p')
-    p3.textContent = '2'
-    fragment.append(p1, p2, p3)
+    const range = document.createRange()
+    range.setStartBefore(page.firstElementChild)
+    range.setEndAfter(page.lastElementChild)
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(range)
 
-    assert.equal(handlers.fragmentToPlainText(fragment), '1\n\n2')
+    const copyEvent = createClipboardMockEvent()
+    selection.toString = () => '1\n2\n3'
+    handlers.handleCopy(copyEvent)
+
+    assert.equal(copyEvent.defaultPrevented, true)
+    assert.equal(copyEvent.clipboardData.getData('text/plain'), '1\n2\n3')
 })
 
-
-test('clipboard plain text does not add blank lines for non-empty paragraphs with sentinel br', () => {
-    installDom()
+test('handleCopy preserves a real single empty line', () => {
+    installDom('<!doctype html><html><body><div id="note-content-editable"><div class="note-page" contenteditable="true"><p>1</p><p><br></p><p>2</p></div></div></body></html>')
+    const content = document.getElementById('note-content-editable')
+    const page = content.querySelector('.note-page')
     const handlers = createClipboardHandlers({
-        elements: {},
+        elements: { content },
         queueSnapshot: () => {},
         fileToDataUrl: async () => '',
         insertMedia: () => {},
@@ -66,50 +93,25 @@ test('clipboard plain text does not add blank lines for non-empty paragraphs wit
             template.innerHTML = html
             return template.content.cloneNode(true)
         },
-        getActiveRangeInContent: () => null,
-        restoreSelection: () => null,
-        storeSelection: () => {},
-        normalizeActivePage: () => false
-    })
-
-    const fragment = document.createDocumentFragment()
-    for (const value of ['1', '2', '3', '4', '5']) {
-        const p = document.createElement('p')
-        p.appendChild(document.createTextNode(value))
-        p.appendChild(document.createElement('br'))
-        fragment.appendChild(p)
-    }
-
-    assert.equal(handlers.fragmentToPlainText(fragment), '1\n2\n3\n4\n5')
-})
-
-
-test('clipboard plain text ignores technical root br between paragraphs', () => {
-    installDom()
-    const handlers = createClipboardHandlers({
-        elements: {},
-        queueSnapshot: () => {},
-        fileToDataUrl: async () => '',
-        insertMedia: () => {},
-        insertFragmentAtSelection: () => false,
-        createFragmentFromHtml: (html) => {
-            const template = document.createElement('template')
-            template.innerHTML = html
-            return template.content.cloneNode(true)
+        getActiveRangeInContent: () => {
+            const selection = window.getSelection()
+            return selection.rangeCount ? selection.getRangeAt(0) : null
         },
-        getActiveRangeInContent: () => null,
         restoreSelection: () => null,
         storeSelection: () => {},
         normalizeActivePage: () => false
     })
 
-    const fragment = document.createDocumentFragment()
-    const p1 = document.createElement('p')
-    p1.textContent = '1'
-    const br = document.createElement('br')
-    const p2 = document.createElement('p')
-    p2.textContent = '2'
-    fragment.append(p1, br, p2)
+    const range = document.createRange()
+    range.setStartBefore(page.firstElementChild)
+    range.setEndAfter(page.lastElementChild)
+    const selection = window.getSelection()
+    selection.removeAllRanges()
+    selection.addRange(range)
 
-    assert.equal(handlers.fragmentToPlainText(fragment), '1\n2')
+    const copyEvent = createClipboardMockEvent()
+    selection.toString = () => '1\n\n2'
+    handlers.handleCopy(copyEvent)
+
+    assert.equal(copyEvent.clipboardData.getData('text/plain'), '1\n\n2')
 })
