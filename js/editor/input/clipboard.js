@@ -150,6 +150,22 @@ export const createClipboardHandlers = (context) => {
         return compact.join("\n")
     }
 
+    const isTrailingBreakInBlock = (node) => {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return false
+        if (String(node.tagName || "").toLowerCase() !== "br") return false
+        const parent = node.parentElement
+        if (!parent) return false
+        const parentTag = String(parent.tagName || "").toLowerCase()
+        if (!blockLikeTags.has(parentTag)) return false
+        const siblings = Array.from(parent.childNodes || []).filter((child) => {
+            if (child.nodeType === Node.TEXT_NODE) return (child.textContent || "").replace(/[\s\u200b\u00a0]+/g, "") !== ""
+            if (child.nodeType !== Node.ELEMENT_NODE) return false
+            return true
+        })
+        if (!siblings.length) return false
+        return siblings[siblings.length - 1] === node
+    }
+
     const fragmentToPlainText = (fragment) => {
         const output = []
         const append = (value) => {
@@ -171,7 +187,7 @@ export const createClipboardHandlers = (context) => {
             if (node.nodeType !== Node.ELEMENT_NODE) return
             const tag = String(node.tagName || "").toLowerCase()
             if (tag === "br") {
-                appendLineBreak()
+                if (!isTrailingBreakInBlock(node)) appendLineBreak()
                 return
             }
             if (tag === "li") append("• ")
