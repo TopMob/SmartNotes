@@ -144,21 +144,3 @@ export const normalizeFragmentParagraphModel = (fragment) => {
     while (container.firstChild) output.appendChild(container.firstChild)
     return output
 }
-
-export const ensureRangeWithinParagraphModel = (container, range) => {
-    if (!container || !range) return null
-    normalizeParagraphModel(container)
-    const startNode = range.startContainer
-    if (container.contains(startNode)) return range
-
-    const fallback = document.createRange()
-    const firstBlock = container.firstElementChild
-    if (!firstBlock) {
-        fallback.selectNodeContents(container)
-        fallback.collapse(true)
-        return fallback
-    }
-    fallback.selectNodeContents(firstBlock)
-    fallback.collapse(true)
-    return fallback
-}
