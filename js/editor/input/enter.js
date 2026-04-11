@@ -13,7 +13,7 @@ export const createEnterHandlers = (context) => {
         getActiveRangeInContent,
         getActiveBlock,
         placeCaretAtStart,
-        normalizeActivePage
+        setSelectionRange
     } = context
 
     const createEmptyBlock = (tagName = "p") => {
@@ -114,6 +114,23 @@ export const createEnterHandlers = (context) => {
         else block.classList.remove("tag-line")
     }
 
+    const setCaretAtBlockStart = (block) => {
+        if (!block) return false
+        const range = document.createRange()
+        range.selectNodeContents(block)
+        range.collapse(true)
+        if (typeof setSelectionRange === "function") return setSelectionRange(range)
+        placeCaretAtStart(block)
+        return true
+    }
+
+    const extractTrailingContent = (block, range) => {
+        const trailingRange = document.createRange()
+        trailingRange.selectNodeContents(block)
+        trailingRange.setStart(range.startContainer, range.startOffset)
+        return trailingRange.extractContents()
+    }
+
     const insertBlockBreak = (range) => {
         let node = range.startContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
@@ -130,18 +147,16 @@ export const createEnterHandlers = (context) => {
         }
 
         const nextTagName = resolveEditableBlockTag(activeBlock, "p")
-        const splitRange = range.cloneRange()
-        splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
-        const trailingContent = splitRange.extractContents()
+        const trailingContent = extractTrailingContent(activeBlock, range)
         const nextBlock = createEmptyBlock(nextTagName)
         if (trailingContent.childNodes.length) {
-            nextBlock.innerHTML = ""
+            while (nextBlock.firstChild) nextBlock.removeChild(nextBlock.firstChild)
             nextBlock.appendChild(trailingContent)
         }
         ensureEditableBlockContent(activeBlock)
         ensureEditableBlockContent(nextBlock)
         activeBlock.after(nextBlock)
-        placeCaretAtStart(nextBlock)
+        setCaretAtBlockStart(nextBlock)
         return true
     }
 
@@ -153,7 +168,6 @@ export const createEnterHandlers = (context) => {
             ? (isListItemVisuallyEmpty(listItem) ? exitCurrentListItem(listItem) : insertListItemBreak(listItem, range))
             : insertBlockBreak(range)
         if (!handled) return false
-        normalizeActivePage()
         applyTagLineMode()
         queueSnapshot()
         return true
@@ -166,7 +180,7 @@ export const createEnterHandlers = (context) => {
         executeEnter()
     }
 
-    const handleListEnter = (event) => {
+    const handleEnter = (event) => {
         if (supportsBeforeInputParagraph) return
         if (event.key !== "Enter") return
         if (event.defaultPrevented) return
@@ -177,6 +191,7 @@ export const createEnterHandlers = (context) => {
 
     return {
         handleBeforeInput,
-        handleListEnter
+        handleEnter,
+        handleListEnter: handleEnter
     }
 }

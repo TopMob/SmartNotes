@@ -77,7 +77,7 @@ export const createInputHandlers = (context) => {
         getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
         getActiveBlock: selectionHandlers.getActiveBlock,
         placeCaretAtStart: selectionHandlers.placeCaretAtStart,
-        normalizeActivePage
+        setSelectionRange: selectionHandlers.setSelectionRange
     })
 
     const handleEquationConfirmKeyDown = (event) => {
@@ -107,7 +107,7 @@ export const createInputHandlers = (context) => {
         removeTag: tagHandlers.removeTag,
         renderTags: tagHandlers.renderTags,
         handleBeforeInput: enterHandlers.handleBeforeInput,
-        handleEnterKeydown: enterHandlers.handleListEnter,
+        handleEnterKeydown: enterHandlers.handleEnter,
         handleInput
     }
 }
