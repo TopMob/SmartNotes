@@ -1,3 +1,9 @@
+import { createSelectionHandlers } from "./input/selection.js"
+import { createClipboardHandlers } from "./input/clipboard.js"
+import { createTagHandlers } from "./input/tags.js"
+import { createEnterHandlers } from "./input/enter.js"
+import { normalizeParagraphModel } from "./input/paragraph-model.js"
+
 export const createInputHandlers = (context) => {
     const {
         elements,
@@ -7,296 +13,40 @@ export const createInputHandlers = (context) => {
         insertMedia
     } = context
 
-    const removableWrapperTags = new Set(["div", "section", "article", "main"])
-
-    const stripOfficeNamespaces = (value) => String(value || "")
-        .replace(/<\/?(?:o|v|w|m):[^>]*>/gi, "")
-        .replace(/\s+xmlns(?::\w+)?="[^"]*"/gi, "")
-
-    const normalizePastedHtml = (html) => {
-        const container = document.createElement("div")
-        container.innerHTML = stripOfficeNamespaces(html)
-
-        Array.from(container.querySelectorAll("meta,link,style,script,title,xml")).forEach(node => node.remove())
-
-        Array.from(container.querySelectorAll("span")).forEach(span => {
-            const text = span.textContent || ""
-            if (span.attributes.length === 0 && !text.includes("\u00a0")) {
-                while (span.firstChild) span.parentNode?.insertBefore(span.firstChild, span)
-                span.remove()
-            }
-        })
-
-        Array.from(container.querySelectorAll("p,div")).forEach(block => {
-            const hasMedia = !!block.querySelector("img,audio,video,table,hr,br")
-            const text = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
-            if (!hasMedia && !text) block.remove()
-        })
-
-        const wrappers = ["html", "body"]
-        wrappers.forEach(selector => {
-            const wrapper = container.querySelector(selector)
-            if (!wrapper) return
-            const fragment = document.createDocumentFragment()
-            while (wrapper.firstChild) fragment.appendChild(wrapper.firstChild)
-            wrapper.replaceWith(fragment)
-        })
-
-        const unwrapSingleWrapper = () => {
-            if (container.childNodes.length !== 1) return
-            const onlyChild = container.firstChild
-            if (!onlyChild || onlyChild.nodeType !== Node.ELEMENT_NODE) return
-            const tagName = onlyChild.tagName.toLowerCase()
-            if (!removableWrapperTags.has(tagName)) return
-            if (onlyChild.attributes.length > 0) return
-            const fragment = document.createDocumentFragment()
-            while (onlyChild.firstChild) fragment.appendChild(onlyChild.firstChild)
-            onlyChild.replaceWith(fragment)
-        }
-
-        unwrapSingleWrapper()
-        return container.innerHTML
+    const selectionHandlers = createSelectionHandlers({ elements, state })
+    const normalizeActivePage = () => {
+        const page = selectionHandlers.getActivePage()
+        if (!page) return false
+        return normalizeParagraphModel(page)
     }
 
-    const resolveExternalMediaMessage = (error, options = {}) => {
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
-        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
-    }
+    const clipboardHandlers = createClipboardHandlers({
+        elements,
+        queueSnapshot,
+        fileToDataUrl,
+        insertMedia,
+        insertFragmentAtSelection: selectionHandlers.insertFragmentAtSelection,
+        createFragmentFromHtml: selectionHandlers.createFragmentFromHtml,
+        getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
+        getActivePage: selectionHandlers.getActivePage,
+        restoreSelection: selectionHandlers.restoreSelection,
+        storeSelection: selectionHandlers.storeSelection,
+        normalizeActivePage
+    })
 
-    const createFragmentFromHtml = (html) => {
-        const template = document.createElement("template")
-        template.innerHTML = html
-        return template.content.cloneNode(true)
-    }
+    const tagHandlers = createTagHandlers({
+        elements,
+        queueSnapshot
+    })
 
-    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
-
-    const sanitizePastedFragment = (fragment) => {
-        const sanitizeNode = (node) => {
-            if (!node) return null
-            if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || "")
-            if (node.nodeType !== Node.ELEMENT_NODE) return null
-
-            const sourceTag = String(node.tagName || "").toLowerCase()
-            if (sourceTag === "br") return document.createElement("br")
-            if (sourceTag === "hr") return document.createElement("hr")
-
-            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
-            const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
-            const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
-
-            if (keepTag === "a") {
-                const href = String(node.getAttribute("href") || "").trim()
-                if (/^(https?:|mailto:|tel:)/i.test(href)) {
-                    container.setAttribute("href", href)
-                    container.setAttribute("target", "_blank")
-                    container.setAttribute("rel", "noopener noreferrer")
-                }
-            }
-
-            Array.from(node.childNodes || []).forEach(child => {
-                const sanitizedChild = sanitizeNode(child)
-                if (sanitizedChild) container.appendChild(sanitizedChild)
-            })
-
-            if (keepTag && normalizedTag !== "br") {
-                const text = (container.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
-                const hasMeaningfulChildren = !!container.querySelector("img,audio,video,table,hr,br,li,ul,ol")
-                if (!text && !hasMeaningfulChildren && normalizedTag !== "p" && normalizedTag !== "li") return null
-                if ((normalizedTag === "p" || normalizedTag === "li") && !text && !hasMeaningfulChildren) {
-                    container.appendChild(document.createElement("br"))
-                }
-            }
-            return container
-        }
-
-        const output = document.createDocumentFragment()
-        Array.from(fragment.childNodes || []).forEach(child => {
-            const sanitizedNode = sanitizeNode(child)
-            if (sanitizedNode) output.appendChild(sanitizedNode)
-        })
-        return output
-    }
-
-    const plainTextToFragment = (plainText) => {
-        const fragment = document.createDocumentFragment()
-        const normalizedText = String(plainText || "").replace(/\r\n?/g, "\n")
-        const paragraphs = normalizedText.split("\n")
-        paragraphs.forEach((line, index) => {
-            if (index > 0) fragment.appendChild(document.createElement("br"))
-            fragment.appendChild(document.createTextNode(line))
-        })
-        return fragment
-    }
-
-    const collapseAlternatingEmptyRows = (rows) => {
-        if (!Array.isArray(rows) || rows.length < 3) return rows
-        let hasPattern = true
-        let hasEmptyRows = false
-        rows.forEach((row, index) => {
-            const isEmpty = row.trim() === ""
-            if (index % 2 === 1) {
-                if (!isEmpty) hasPattern = false
-                else hasEmptyRows = true
-                return
-            }
-            if (isEmpty) hasPattern = false
-        })
-        if (!hasPattern || !hasEmptyRows) return rows
-        return rows.filter((_, index) => index % 2 === 0)
-    }
-
-    const normalizeClipboardPlainText = (value) => {
-        const normalized = String(value || "").replace(/\r\n?/g, "\n")
-        const rows = collapseAlternatingEmptyRows(normalized.split("\n"))
-        while (rows.length && rows[0].trim() === "") rows.shift()
-        while (rows.length && rows[rows.length - 1].trim() === "") rows.pop()
-        const compact = []
-        let previousWasEmpty = false
-        rows.forEach(row => {
-            const isEmpty = row.trim() === ""
-            if (isEmpty && previousWasEmpty) return
-            compact.push(row)
-            previousWasEmpty = isEmpty
-        })
-        return compact.join("\n")
-    }
-
-    const blockLikeTags = new Set(["p", "div", "section", "article", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"])
-
-    const fragmentToPlainText = (fragment) => {
-        const output = []
-        const append = (value) => {
-            if (!value) return
-            output.push(value)
-        }
-        const appendLineBreak = () => {
-            if (!output.length) return
-            const last = output[output.length - 1]
-            if (last === "\n") return
-            output.push("\n")
-        }
-        const visit = (node) => {
-            if (!node) return
-            if (node.nodeType === Node.TEXT_NODE) {
-                append(node.textContent || "")
-                return
-            }
-            if (node.nodeType !== Node.ELEMENT_NODE) return
-            const tag = String(node.tagName || "").toLowerCase()
-            if (tag === "br") {
-                appendLineBreak()
-                return
-            }
-            if (tag === "li") {
-                append("• ")
-            }
-            Array.from(node.childNodes || []).forEach(visit)
-            if (blockLikeTags.has(tag)) appendLineBreak()
-        }
-        Array.from(fragment.childNodes || []).forEach(visit)
-        return normalizeClipboardPlainText(output.join(""))
-    }
-
-    const insertFragmentAtSelection = (contentNode) => {
-        if (!elements.content || !contentNode) return false
-        const nodeToAnchor = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
-            ? contentNode.lastChild
-            : contentNode
-        if (!nodeToAnchor) return false
-        const range = restoreSelection()
-        if (!range) {
-            elements.content.appendChild(contentNode)
-            storeSelection()
-            return true
-        }
-        range.deleteContents()
-        range.insertNode(contentNode)
-        range.setStartAfter(nodeToAnchor)
-        range.collapse(true)
-        const selection = window.getSelection()
-        if (selection) {
-            selection.removeAllRanges()
-            selection.addRange(range)
-        }
-        storeSelection()
-        return true
-    }
-
-    const handlePaste = async (event) => {
-        const items = Array.from(event.clipboardData?.items || [])
-        const imageItem = items.find(item => item.type && item.type.startsWith("image/"))
-        if (imageItem) {
-            event.preventDefault()
-            const file = imageItem.getAsFile()
-            if (!file) return
-            try {
-                const url = await fileToDataUrl(file)
-                insertMedia(url, "image")
-            } catch (error) {
-                const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
-                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    return
-                }
-                throw error
-            }
-            return
-        }
-
-        event.preventDefault()
-        const html = event.clipboardData?.getData("text/html") || ""
-        let plainText = normalizeClipboardPlainText(event.clipboardData?.getData("text/plain") || "")
-        if (!plainText && html) {
-            const normalizedHtml = normalizePastedHtml(html)
-            const sanitizedHtml = normalizedHtml ? Utils.sanitizeHtml(normalizedHtml) : ""
-            if (sanitizedHtml) {
-                const fragment = sanitizePastedFragment(createFragmentFromHtml(sanitizedHtml))
-                plainText = fragmentToPlainText(fragment)
-            }
-        }
-        const hasInsertedContent = plainText
-            ? insertFragmentAtSelection(plainTextToFragment(plainText))
-            : false
-        if (hasInsertedContent) queueSnapshot()
-    }
-
-    const handleCopy = (event) => {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
-        const range = getActiveRangeInContent()
-        if (!range) return
-        const fragment = range.cloneContents()
-        const container = document.createElement("div")
-        container.appendChild(fragment)
-        const plainText = normalizeClipboardPlainText(fragmentToPlainText(fragment))
-        if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
-        event.preventDefault()
-        event.clipboardData?.setData("text/plain", plainText)
-        event.clipboardData?.setData("text/html", container.innerHTML)
-        event.clipboardData?.setData("application/x-smartnotes-html", container.innerHTML)
-    }
-
-    const handleCut = (event) => {
-        const range = getActiveRangeInContent()
-        if (!range || range.collapsed) return
-        handleCopy(event)
-        if (!event.defaultPrevented) event.preventDefault()
-        const removedWithNative = (() => {
-            if (typeof document.execCommand !== "function") return false
-            try {
-                restoreSelection()
-                elements.content?.focus()
-                return document.execCommand("delete", false, null)
-            } catch {
-                return false
-            }
-        })()
-        if (!removedWithNative) range.deleteContents()
-        storeSelection()
-        queueSnapshot()
-    }
+    const enterHandlers = createEnterHandlers({
+        elements,
+        queueSnapshot,
+        getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
+        getActiveBlock: selectionHandlers.getActiveBlock,
+        placeCaretAtStart: selectionHandlers.placeCaretAtStart,
+        normalizeActivePage
+    })
 
     const handleEquationConfirmKeyDown = (event) => {
         if (event.key !== "Enter") return
@@ -304,421 +54,27 @@ export const createInputHandlers = (context) => {
         if (context.confirmEquationAtCaret()) event.preventDefault()
     }
 
-    const focusEditable = (el) => {
-        const sel = window.getSelection()
-        if (!sel) return
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        range.collapse(true)
-        sel.removeAllRanges()
-        sel.addRange(range)
-        elements.content?.focus()
-    }
-
-    const storeSelection = () => {
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return
-        const range = sel.getRangeAt(0)
-        if (!elements.content || !elements.content.contains(range.commonAncestorContainer)) return
-        state.savedSelectionRange = range.cloneRange()
-    }
-
-    const getTextNodes = (root) => {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
-        const nodes = []
-        let current = walker.nextNode()
-        while (current) {
-            nodes.push(current)
-            current = walker.nextNode()
-        }
-        return nodes
-    }
-
-    const getActiveRangeInContent = () => {
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount) {
-            const range = sel.getRangeAt(0)
-            if (elements.content && elements.content.contains(range.commonAncestorContainer)) return range
-        }
-        if (state.savedSelectionRange && elements.content && elements.content.contains(state.savedSelectionRange.commonAncestorContainer)) {
-            return state.savedSelectionRange
-        }
-        return null
-    }
-
-    const getCaretOffsetInBlock = (block, range) => {
-        const targetRange = range || getActiveRangeInContent()
-        if (!targetRange || !targetRange.collapsed) return null
-        const nodes = getTextNodes(block)
-        let offset = 0
-        for (const node of nodes) {
-            if (node === targetRange.startContainer) {
-                return offset + targetRange.startOffset
-            }
-            offset += node.textContent?.length || 0
-        }
-        return null
-    }
-
-    const createRangeFromOffsets = (root, start, end) => {
-        const range = document.createRange()
-        const nodes = getTextNodes(root)
-        let offset = 0
-        let startNode = null
-        let startOffset = 0
-        let endNode = null
-        let endOffset = 0
-        for (const node of nodes) {
-            const len = node.textContent?.length || 0
-            if (!startNode && start <= offset + len) {
-                startNode = node
-                startOffset = Math.max(0, start - offset)
-            }
-            if (!endNode && end <= offset + len) {
-                endNode = node
-                endOffset = Math.max(0, end - offset)
-            }
-            offset += len
-        }
-        if (!startNode || !endNode) return null
-        range.setStart(startNode, startOffset)
-        range.setEnd(endNode, endOffset)
-        return range
-    }
-
-    const getBlockFromRange = (range) => {
-        let node = range.startContainer
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || node === elements.content) return null
-        if (node.classList?.contains("note-page")) return null
-        const block = node.closest("div, p")
-        if (block?.classList?.contains("note-page")) return null
-        return block
-    }
-
-    const restoreSelection = () => {
-        if (!elements.content) return null
-        const sel = window.getSelection()
-        let range = null
-        if (state.savedSelectionRange && elements.content.contains(state.savedSelectionRange.commonAncestorContainer)) {
-            range = state.savedSelectionRange
-        } else if (sel && sel.rangeCount && elements.content.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-            range = sel.getRangeAt(0)
-        } else {
-            range = document.createRange()
-            range.selectNodeContents(elements.content)
-            range.collapse(false)
-        }
-        if (sel) {
-            sel.removeAllRanges()
-            sel.addRange(range)
-        }
-        return range
-    }
-
-    const insertHtmlAtSelection = (html) => insertFragmentAtSelection(createFragmentFromHtml(html))
-
-    const insertNodeAtSelection = (node) => insertFragmentAtSelection(node)
-
-    const insertHorizontalRule = () => {
-        const hr = document.createElement("hr")
-        insertNodeAtSelection(hr)
-    }
-
-    const extractHashtags = (value) => {
-        const res = new Set()
-        const text = String(value || "")
-        for (const match of text.matchAll(/#([\p{L}\p{N}_-]{2,})/gu)) {
-            const tag = match[1]?.trim()
-            if (tag) res.add(tag)
-        }
-        return [...res]
-    }
-
-    const collectSuggestedTags = (title, content) => {
-        const text = `${title || ""} ${Utils.stripHtml(content || "")}`
-        const fromSmart = SmartSearch.suggestTags(title || "", content || "")
-        const fromHash = extractHashtags(text)
-        return [...new Set([...fromSmart, ...fromHash])]
-    }
-
-    const syncAutoTitle = () => {
-        if (!elements.title) return
-        elements.title.classList.toggle("title-has-value", !!elements.title.value.trim())
-    }
-
-    const updateCurrentNoteTags = (nextTags) => {
-        const currentState = StateStore.read()
-        const currentNote = currentState.currentNote
-        if (!currentNote) return
-        const normalizedTags = [...new Set((Array.isArray(nextTags) ? nextTags : []).map(value => String(value || "").trim()).filter(Boolean))]
-        const updatedNote = { ...currentNote, tags: normalizedTags }
-        StateStore.set(previousState => ({
-            ...previousState,
-            currentNote: updatedNote,
-            notes: previousState.notes.map(noteItem => noteItem.id === updatedNote.id ? { ...noteItem, tags: [...normalizedTags] } : noteItem),
-            editorDirty: true
-        }))
-        renderTags()
-        queueSnapshot()
-    }
-
-    const addTag = (tag) => {
-        const normalizedTag = String(tag || "").trim().replace(/^#+/, "")
-        if (!normalizedTag) return
-        const currentNote = StateStore.read().currentNote
-        if (!currentNote) return
-        const currentTags = Array.isArray(currentNote.tags) ? [...currentNote.tags] : []
-        if (currentTags.some(existingTag => existingTag.toLowerCase() === normalizedTag.toLowerCase())) return
-        currentTags.push(normalizedTag)
-        updateCurrentNoteTags(currentTags)
-    }
-
-    const removeTag = (tag) => {
-        const normalizedTag = String(tag || "").trim().toLowerCase()
-        if (!normalizedTag) return
-        const currentNote = StateStore.read().currentNote
-        if (!currentNote) return
-        const currentTags = Array.isArray(currentNote.tags) ? currentNote.tags : []
-        const filteredTags = currentTags.filter(existingTag => String(existingTag || "").trim().toLowerCase() !== normalizedTag)
-        updateCurrentNoteTags(filteredTags)
-    }
-
-    const renderTags = () => {
-        const note = StateStore.read().currentNote
-        if (!note || !elements.tagsContainer) return
-        const tags = note.tags || []
-
-        elements.tagsContainer.innerHTML = tags.map(t => `
-            <span class="tag-chip" data-action="remove-tag" data-tag="${encodeURIComponent(t)}">
-                <i class="material-icons-round" aria-hidden="true">tag</i>
-                <span>${Utils.escapeHtml(t)}</span>
-            </span>
-        `).join("")
-
-        const suggestions = collectSuggestedTags(note.title, note.content)
-            .filter(x => !tags.some(t => t.toLowerCase() === x.toLowerCase()))
-            .slice(0, 5)
-
-        if (suggestions.length) {
-            const wrap = document.createElement("div")
-            wrap.style.cssText = "display:flex; flex-wrap:wrap; gap:8px;"
-            suggestions.forEach(t => {
-                const b = document.createElement("span")
-                b.className = "tag-suggest"
-                b.textContent = `#${t}`
-                b.dataset.action = "add-tag"
-                b.dataset.tag = encodeURIComponent(t)
-                wrap.appendChild(b)
-            })
-            elements.tagsContainer.appendChild(wrap)
-        }
-    }
-
-    const getActiveBlock = () => {
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return null
-        let node = sel.anchorNode
-        if (!node) return null
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || node === elements.content) return null
-        if (node.classList?.contains("note-page")) return null
-        const block = node.closest("div, p")
-        if (block?.classList?.contains("note-page")) return null
-        return block
-    }
-
-
-    const getActiveListItem = (range) => {
-        const targetRange = range || getActiveRangeInContent()
-        if (!targetRange || !targetRange.collapsed) return null
-        let node = targetRange.startContainer
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        const listItem = node?.closest("li")
-        if (!listItem || !elements.content?.contains(listItem)) return null
-        return listItem
-    }
-
-    const placeCaretAtStart = (node) => {
-        if (!node) return
-        const selection = window.getSelection()
-        if (!selection) return
-        const range = document.createRange()
-        range.selectNodeContents(node)
-        range.collapse(true)
-        selection.removeAllRanges()
-        selection.addRange(range)
-        storeSelection()
-    }
-
-    const ensureEditableListItemContent = (listItem) => {
-        if (!listItem) return
-        const textContent = (listItem.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
-        const hasMedia = !!listItem.querySelector("img,audio,video,table,hr")
-        if (!textContent && !hasMedia && !listItem.querySelector("br")) {
-            listItem.appendChild(document.createElement("br"))
-        }
-    }
-
-    const isListItemVisuallyEmpty = (listItem) => {
-        if (!listItem) return false
-        if (listItem.querySelector("img,audio,video,table,hr")) return false
-        const nestedList = listItem.querySelector("ul,ol")
-        if (nestedList && nestedList.parentElement === listItem) return false
-        return !(listItem.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
-    }
-
-    const createEmptyParagraph = () => {
-        const paragraph = document.createElement("p")
-        paragraph.appendChild(document.createElement("br"))
-        return paragraph
-    }
-
-    const ensureEditableBlockContent = (block) => {
-        if (!block) return
-        const hasMedia = !!block.querySelector("img,audio,video,table,hr,.media-wrapper,.audio-block")
-        const textContent = (block.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
-        if (!hasMedia && !textContent && !block.querySelector("br")) {
-            block.appendChild(document.createElement("br"))
-        }
-    }
-
-    const splitListForExit = (listItem) => {
-        const list = listItem?.parentElement
-        if (!list || !/^(UL|OL)$/.test(list.tagName)) return null
-        const trailingList = list.cloneNode(false)
-        let sibling = listItem.nextElementSibling
-        while (sibling) {
-            const nextSibling = sibling.nextElementSibling
-            trailingList.appendChild(sibling)
-            sibling = nextSibling
-        }
-        listItem.remove()
-        return {
-            list,
-            trailingList,
-            hasLeadingItems: list.children.length > 0,
-            hasTrailingItems: trailingList.children.length > 0
-        }
-    }
-
-    const exitCurrentListItem = (listItem) => {
-        const splitResult = splitListForExit(listItem)
-        if (!splitResult) return false
-        const paragraph = createEmptyParagraph()
-        if (splitResult.hasLeadingItems) {
-            splitResult.list.after(paragraph)
-            if (splitResult.hasTrailingItems) paragraph.after(splitResult.trailingList)
-        } else if (splitResult.hasTrailingItems) {
-            splitResult.list.replaceWith(paragraph)
-            paragraph.after(splitResult.trailingList)
-        } else {
-            splitResult.list.replaceWith(paragraph)
-        }
-        placeCaretAtStart(paragraph)
-        return true
-    }
-
-    const insertListItemBreak = (listItem, range) => {
-        if (!listItem || !range) return false
-        const splitRange = range.cloneRange()
-        splitRange.setEndAfter(listItem.lastChild || listItem)
-        const trailingContent = splitRange.extractContents()
-        const nextItem = document.createElement("li")
-        if (trailingContent.childNodes.length) {
-            nextItem.appendChild(trailingContent)
-        }
-        ensureEditableListItemContent(listItem)
-        ensureEditableListItemContent(nextItem)
-        listItem.after(nextItem)
-        placeCaretAtStart(nextItem)
-        return true
-    }
-
-    const handleListEnter = (event) => {
-        if (event.key !== "Enter") return
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-        const range = getActiveRangeInContent()
-        const listItem = getActiveListItem(range)
-        if (!listItem) return
-        event.preventDefault()
-        const handled = isListItemVisuallyEmpty(listItem)
-            ? exitCurrentListItem(listItem)
-            : insertListItemBreak(listItem, range)
-        if (!handled) return
-        queueSnapshot()
-    }
-
-    const handleTagLineEnter = (event) => {
-        if (event.key !== "Enter") return
-        const block = getActiveBlock()
-        if (!block || !elements.content.contains(block)) return
-        const text = block.textContent.trim()
-        if (/^#\S+$/.test(text)) {
-            event.preventDefault()
-            block.classList.add("tag-line")
-        } else {
-            block.classList.remove("tag-line")
-        }
-    }
-
-    const handlePlainEnter = (event) => {
-        if (event.key !== "Enter") return
-        if (event.defaultPrevented) return
-        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-        const range = getActiveRangeInContent()
-        if (!range || !range.collapsed) return
-        let node = range.startContainer
-        if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
-        if (!node || !elements.content.contains(node)) return
-        if (node.closest("li")) return
-        event.preventDefault()
-        const activeBlock = getActiveBlock()
-        if (!activeBlock || !elements.content.contains(activeBlock)) {
-            const newParagraph = createEmptyParagraph()
-            range.deleteContents()
-            range.insertNode(newParagraph)
-            placeCaretAtStart(newParagraph)
-            queueSnapshot()
-            return
-        }
-        const splitRange = range.cloneRange()
-        splitRange.setEndAfter(activeBlock.lastChild || activeBlock)
-        const trailingContent = splitRange.extractContents()
-        const nextParagraph = createEmptyParagraph()
-        if (trailingContent.childNodes.length) {
-            nextParagraph.innerHTML = ""
-            nextParagraph.appendChild(trailingContent)
-        }
-        ensureEditableBlockContent(activeBlock)
-        ensureEditableBlockContent(nextParagraph)
-        activeBlock.after(nextParagraph)
-        placeCaretAtStart(nextParagraph)
-        queueSnapshot()
-    }
-
     return {
-        handlePaste,
-        handleCopy,
-        handleCut,
+        handlePaste: clipboardHandlers.handlePaste,
+        handleCopy: clipboardHandlers.handleCopy,
+        handleCut: clipboardHandlers.handleCut,
         handleEquationConfirmKeyDown,
-        focusEditable,
-        storeSelection,
-        restoreSelection,
-        getActiveRangeInContent,
-        getBlockFromRange,
-        getCaretOffsetInBlock,
-        createRangeFromOffsets,
-        insertHtmlAtSelection,
-        insertNodeAtSelection,
-        insertHorizontalRule,
-        collectSuggestedTags,
-        syncAutoTitle,
-        addTag,
-        removeTag,
-        renderTags,
-        handleTagLineEnter,
-        handleListEnter,
-        handlePlainEnter
+        focusEditable: selectionHandlers.focusEditable,
+        storeSelection: selectionHandlers.storeSelection,
+        restoreSelection: selectionHandlers.restoreSelection,
+        getActiveRangeInContent: selectionHandlers.getActiveRangeInContent,
+        getBlockFromRange: selectionHandlers.getBlockFromRange,
+        getCaretOffsetInBlock: selectionHandlers.getCaretOffsetInBlock,
+        createRangeFromOffsets: selectionHandlers.createRangeFromOffsets,
+        insertHtmlAtSelection: selectionHandlers.insertHtmlAtSelection,
+        insertNodeAtSelection: selectionHandlers.insertNodeAtSelection,
+        insertHorizontalRule: selectionHandlers.insertHorizontalRule,
+        collectSuggestedTags: tagHandlers.collectSuggestedTags,
+        syncAutoTitle: tagHandlers.syncAutoTitle,
+        addTag: tagHandlers.addTag,
+        removeTag: tagHandlers.removeTag,
+        renderTags: tagHandlers.renderTags,
+        handleBeforeInput: enterHandlers.handleBeforeInput,
+        handleEnterKeydown: enterHandlers.handleListEnter
     }
 }
