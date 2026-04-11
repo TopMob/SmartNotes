@@ -74,6 +74,9 @@ Rules:
 - `js/ui/modules/noteActionsExport.js`
   - Isolates note export helpers (TXT/PDF/print-window construction).
   - Shared by UI note-actions layer without embedding export logic into large layout modules.
+- `js/ui/modules/noteActionsPanel.js`
+  - Contains note action modal methods (lock/archive/move/export).
+  - Keeps `js/ui/layout.js` focused on layout/application flows instead of note-actions feature internals.
 
 ## Startup sequence
 
