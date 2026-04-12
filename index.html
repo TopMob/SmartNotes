@@ -11,18 +11,11 @@
     <title>SmartNotes</title>
 
     <script>window.APP_VERSION = "2026-02-22-1e1b181"</script>
-    <script src="js/core/backendConfig.js?v=2026-03-26-config" type="module"></script>
     <script src="js/core/logging.js?v=2026-02-22-1e1b181" defer></script>
 
     <link rel="icon" type="image/x-icon" href="favicon.ico?v=2026-02-22-1e1b181">
     <link rel="apple-touch-icon" href="Logo.png?v=2026-02-22-1e1b181">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://www.gstatic.com">
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <link rel="stylesheet" href="css/base.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/layout.css?v=2026-02-22-1e1b181">
@@ -99,64 +92,6 @@
         <h1>SmartNotes</h1>
         <p>AI-organized thinking</p>
         <div class="loader" aria-hidden="true"></div>
-    </div>
-
-    <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
-        <div class="login-box">
-            <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
-            <p class="subtext" data-lang="login">Вход в систему</p>
-            <div class="auth-panel-switch" role="tablist" aria-label="Email authentication" data-lang-aria="email_authentication">
-                <button type="button" class="btn-auth-tab active" id="email-signin-tab" data-auth-mode="signin" data-lang="email_signin_tab">Вход</button>
-                <button type="button" class="btn-auth-tab" id="email-signup-tab" data-auth-mode="signup" data-lang="email_signup_tab">Регистрация</button>
-            </div>
-
-            <form id="email-signin-form" class="auth-form" novalidate>
-                <label class="auth-field" for="email-signin-input">
-                    <span data-lang="email_label">Email</span>
-                    <input id="email-signin-input" type="email" autocomplete="email" required>
-                </label>
-                <label class="auth-field" for="password-signin-input">
-                    <span data-lang="password_label">Пароль</span>
-                    <div class="auth-password-row">
-                        <input id="password-signin-input" type="password" autocomplete="current-password" required>
-                        <button type="button" class="btn-auth-toggle-password" data-toggle-target="password-signin-input" data-lang="show_password">Показать</button>
-                    </div>
-                </label>
-                <button type="button" class="btn-auth-link" data-auth-action="forgot-password" data-lang="forgot_password">Забыли пароль?</button>
-                <button type="submit" class="btn-auth primary" data-lang="email_signin_button">Войти по email</button>
-            </form>
-
-            <form id="email-signup-form" class="auth-form hidden" novalidate>
-                <label class="auth-field" for="email-signup-input">
-                    <span data-lang="email_label">Email</span>
-                    <input id="email-signup-input" type="email" autocomplete="email" required>
-                </label>
-                <label class="auth-field" for="password-signup-input">
-                    <span data-lang="password_label">Пароль</span>
-                    <div class="auth-password-row">
-                        <input id="password-signup-input" type="password" autocomplete="new-password" required>
-                        <button type="button" class="btn-auth-toggle-password" data-toggle-target="password-signup-input" data-lang="show_password">Показать</button>
-                    </div>
-                </label>
-                <label class="auth-field" for="password-signup-repeat-input">
-                    <span data-lang="password_repeat_label">Повторите пароль</span>
-                    <div class="auth-password-row">
-                        <input id="password-signup-repeat-input" type="password" autocomplete="new-password" required>
-                        <button type="button" class="btn-auth-toggle-password" data-toggle-target="password-signup-repeat-input" data-lang="show_password">Показать</button>
-                    </div>
-                </label>
-                <button type="submit" class="btn-auth primary" data-lang="email_signup_button">Зарегистрироваться</button>
-            </form>
-
-            <div id="email-auth-feedback" class="auth-feedback" role="status" aria-live="polite"></div>
-
-            <div class="auth-buttons-group">
-                <button type="button" class="btn-auth google" data-action="login">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="" width="20" height="20">
-                    <span data-lang="login_google">Войти через Google</span>
-                </button>
-            </div>
-        </div>
     </div>
 
     <div id="app" class="app-layout" aria-hidden="false">
@@ -742,11 +677,7 @@
                     <li class="team-member name-minyaev">Миняев Иван</li>
                 </ul>
                 <div class="bot-link-wrapper">
-                    <span class="bot-link-label" data-lang="contact_us">Связаться с нами:</span>
-                    <a href="https://t.me/SmartNotesInfo_bot" target="_blank" rel="noopener noreferrer" class="btn-primary telegram-btn">
-                        <i class="material-icons-round" aria-hidden="true">smart_toy</i>
-                        @SmartNotesInfo_bot
-                    </a>
+                    <span class="bot-link-label" data-lang="contact_us">Локальный режим: внешние контакты отключены</span>
                 </div>
             </div>
         </div>

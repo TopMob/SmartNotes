@@ -938,43 +938,11 @@ Object.assign(UI, {
     },
 
     getAnalysisApiEndpoint() {
-        const config = window.SmartNotesBackendConfig
-        if (config && typeof config.createApiEndpoint === "function") {
-            return config.createApiEndpoint("analyze")
-        }
-        return "https://backendfornmartnotes.vercel.app/api/analyze"
+        return "local://analysis-disabled"
     },
 
-    async requestAnalysis({ secretToken = "", requestVariant = "pending" } = {}) {
-        const requestHeaders = {
-            "Content-Type": "application/json"
-        }
-        if (secretToken) {
-            requestHeaders["x-secret"] = secretToken
-        }
-
-        let endpoint = this.getAnalysisApiEndpoint()
-        let requestBody = {}
-
-        if (requestVariant === "reindex_query") {
-            endpoint = `${endpoint}?reindexAll=true`
-            requestBody = null
-        } else if (requestVariant === "reindex_body") {
-            requestBody = { reindexAll: true }
-        } else if (requestVariant === "reindex_force") {
-            requestBody = { forceReindex: true }
-        }
-
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: requestHeaders,
-            body: requestBody === null ? null : JSON.stringify(requestBody)
-        })
-        if (!response.ok) {
-            throw new Error(`Analysis request failed with status ${response.status}`)
-        }
-        const responseData = await response.json().catch(() => ({}))
-        return responseData
+    async requestAnalysis() {
+        throw new Error("Analysis is unavailable in local-only mode")
     },
 
     hasSmartNotesFolderAccess() {
