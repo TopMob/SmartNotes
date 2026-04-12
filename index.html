@@ -31,9 +31,22 @@
     <script src="js/stateActions.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/core/dataPath.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/colorPalette.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/lang.js?v=2026-02-22-1e1b181" type="module"></script>
-    <script src="js/theme.js?v=2026-02-22-1e1b181" type="module"></script>
-    <script src="js/core.js?v=2026-02-22-1e1b181" type="module"></script>
+    <script>
+        (function(){
+            if (String(window.location && window.location.protocol || "") === "file:") return
+            var moduleScripts = [
+                "js/lang.js?v=2026-02-22-1e1b181",
+                "js/theme.js?v=2026-02-22-1e1b181",
+                "js/core.js?v=2026-02-22-1e1b181"
+            ]
+            for (var i=0;i<moduleScripts.length;i+=1){
+                var script=document.createElement("script")
+                script.type="module"
+                script.src=moduleScripts[i]
+                document.head.appendChild(script)
+            }
+        })()
+    </script>
     <script src="js/presets/runtime.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/presets/active.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/services.js?v=2026-02-22-1e1b181" defer></script>
@@ -52,7 +65,15 @@
     <script src="js/ui/render/shared-access.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/feedback.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/storage.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
+    <script>
+        (function(){
+            if (String(window.location && window.location.protocol || "") === "file:") return
+            var script=document.createElement("script")
+            script.type="module"
+            script.src="js/notes/text.js?v=2026-02-22-1e1b181"
+            document.head.appendChild(script)
+        })()
+    </script>
     <script src="js/notes/renderer.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/foldersRepository.js?v=2026-02-22-1e1b181" defer></script>
@@ -77,13 +98,28 @@
     <script src="js/editor/drawing-engine.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/editor/drawing.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/calculator.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/editor/core.js?v=2026-02-22-1e1b181" type="module"></script>
+    <script>
+        (function(){
+            if (String(window.location && window.location.protocol || "") === "file:") return
+            var script=document.createElement("script")
+            script.type="module"
+            script.src="js/editor/core.js?v=2026-02-22-1e1b181"
+            document.head.appendChild(script)
+        })()
+    </script>
     <script src="js/app/runtime/stateRenderer.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/app/runtime/uiEvents.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/app/runtime/networkLifecycle.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/app/runtime/runtimeInitializer.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/notes/app.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/fileFallback.js?v=2026-04-12-local-file" defer></script>
+    <template id="module-root-manifest">
+        <script src="js/lang.js?v=2026-02-22-1e1b181"></script>
+        <script src="js/theme.js?v=2026-02-22-1e1b181"></script>
+        <script src="js/core.js?v=2026-02-22-1e1b181"></script>
+        <script src="js/notes/text.js?v=2026-02-22-1e1b181"></script>
+        <script src="js/editor/core.js?v=2026-02-22-1e1b181"></script>
+    </template>
 </head>
 
 <body>

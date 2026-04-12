@@ -9,17 +9,129 @@
 
     const ensureThemeManager = () => {
         if (window.ThemeManager) return
+        const storageKey = "app-theme"
+        const customPresetStorageKey = "app-theme-custom-presets"
+        const defaultSettings = { preset: "oled", p: "#2563EB", bg: "#000000", t: "#FFFFFF", uiOpacity: 0.78, cardsOpacity: 0.9, mainBackgroundUrl: "", sidebarBackgroundUrl: "", mainBackgroundImage: "", sidebarBackgroundImage: "" }
+        const getLocalJson = (key, fallback) => {
+            try {
+                const raw = localStorage.getItem(key)
+                if (!raw) return fallback
+                return JSON.parse(raw)
+            } catch {
+                return fallback
+            }
+        }
+        const setLocalJson = (key, value) => {
+            try {
+                localStorage.setItem(key, JSON.stringify(value))
+            } catch {}
+        }
+        const normalizeHex = value => {
+            const source = String(value || "").trim()
+            return /^#[0-9a-f]{6}$/i.test(source) ? source.toUpperCase() : "#2563EB"
+        }
+        const normalizeSettings = settings => {
+            const source = settings && typeof settings === "object" ? settings : {}
+            return {
+                preset: String(source.preset || defaultSettings.preset),
+                p: normalizeHex(source.p),
+                bg: normalizeHex(source.bg || "#000000"),
+                t: normalizeHex(source.t || "#FFFFFF"),
+                uiOpacity: Number.isFinite(Number(source.uiOpacity)) ? Math.min(1, Math.max(0.4, Number(source.uiOpacity))) : 0.78,
+                cardsOpacity: Number.isFinite(Number(source.cardsOpacity)) ? Math.min(1, Math.max(0.5, Number(source.cardsOpacity))) : 0.9,
+                mainBackgroundUrl: typeof source.mainBackgroundUrl === "string" ? source.mainBackgroundUrl : "",
+                sidebarBackgroundUrl: typeof source.sidebarBackgroundUrl === "string" ? source.sidebarBackgroundUrl : "",
+                mainBackgroundImage: typeof source.mainBackgroundImage === "string" ? source.mainBackgroundImage : "",
+                sidebarBackgroundImage: typeof source.sidebarBackgroundImage === "string" ? source.sidebarBackgroundImage : ""
+            }
+        }
         window.ThemeManager = {
             maxCustomPresets: 5,
-            init() {},
-            normalizeHex(value) {
-                const source = String(value || "").trim()
-                return /^#[0-9a-f]{6}$/i.test(source) ? source.toUpperCase() : "#2563EB"
+            storageKey,
+            customPresetStorageKey,
+            init() {
+                this.applySettings(this.getSavedSettings())
+            },
+            normalizeHex,
+            getDefaultSettings() {
+                return { ...defaultSettings }
             },
             getSavedSettings() {
-                return { preset: "oled", p: "#2563EB", bg: "#000000", t: "#FFFFFF", uiOpacity: 0.78, cardsOpacity: 0.9 }
+                return normalizeSettings(getLocalJson(storageKey, defaultSettings))
             },
-            applySettings() {}
+            saveSettings(settings) {
+                setLocalJson(storageKey, normalizeSettings(settings))
+            },
+            getCustomPresets() {
+                const presets = getLocalJson(customPresetStorageKey, [])
+                if (!Array.isArray(presets)) return []
+                return presets
+                    .filter(item => item && typeof item === "object")
+                    .slice(0, this.maxCustomPresets)
+                    .map(item => ({
+                        key: String(item.key || window.Utils?.generateId?.() || Math.random().toString(36).slice(2, 10)),
+                        p: normalizeHex(item.p),
+                        bg: normalizeHex(item.bg || "#000000"),
+                        t: normalizeHex(item.t || "#FFFFFF"),
+                        uiOpacity: Number.isFinite(Number(item.uiOpacity)) ? Math.min(1, Math.max(0.4, Number(item.uiOpacity))) : 0.78,
+                        cardsOpacity: Number.isFinite(Number(item.cardsOpacity)) ? Math.min(1, Math.max(0.5, Number(item.cardsOpacity))) : 0.9,
+                        mainBackgroundUrl: typeof item.mainBackgroundUrl === "string" ? item.mainBackgroundUrl : "",
+                        sidebarBackgroundUrl: typeof item.sidebarBackgroundUrl === "string" ? item.sidebarBackgroundUrl : "",
+                        mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
+                        sidebarBackgroundImage: typeof item.sidebarBackgroundImage === "string" ? item.sidebarBackgroundImage : ""
+                    }))
+            },
+            saveCustomPresets(presets) {
+                const normalized = Array.isArray(presets) ? presets.slice(0, this.maxCustomPresets) : []
+                setLocalJson(customPresetStorageKey, normalized)
+            },
+            addCustomPreset(colors) {
+                const presets = this.getCustomPresets()
+                if (presets.length >= this.maxCustomPresets) return { ok: false, reason: "limit" }
+                const preset = {
+                    key: window.Utils?.generateId?.() || Math.random().toString(36).slice(2, 10),
+                    p: normalizeHex(colors?.p),
+                    bg: normalizeHex(colors?.bg || "#000000"),
+                    t: normalizeHex(colors?.t || "#FFFFFF"),
+                    uiOpacity: Number.isFinite(Number(colors?.uiOpacity)) ? Math.min(1, Math.max(0.4, Number(colors.uiOpacity))) : 0.78,
+                    cardsOpacity: Number.isFinite(Number(colors?.cardsOpacity)) ? Math.min(1, Math.max(0.5, Number(colors.cardsOpacity))) : 0.9,
+                    mainBackgroundUrl: typeof colors?.mainBackgroundUrl === "string" ? colors.mainBackgroundUrl : "",
+                    sidebarBackgroundUrl: typeof colors?.sidebarBackgroundUrl === "string" ? colors.sidebarBackgroundUrl : "",
+                    mainBackgroundImage: typeof colors?.mainBackgroundImage === "string" ? colors.mainBackgroundImage : "",
+                    sidebarBackgroundImage: typeof colors?.sidebarBackgroundImage === "string" ? colors.sidebarBackgroundImage : ""
+                }
+                this.saveCustomPresets([...presets, preset])
+                return { ok: true, key: `custom:${preset.key}` }
+            },
+            updateCustomPreset(presetKey, updates) {
+                if (!String(presetKey || "").startsWith("custom:")) return false
+                const id = String(presetKey).slice(7)
+                const presets = this.getCustomPresets().map(item => item.key === id ? {
+                    ...item,
+                    p: normalizeHex(updates?.p ?? item.p),
+                    bg: normalizeHex(updates?.bg ?? item.bg),
+                    t: normalizeHex(updates?.t ?? item.t),
+                    uiOpacity: Number.isFinite(Number(updates?.uiOpacity)) ? Math.min(1, Math.max(0.4, Number(updates.uiOpacity))) : item.uiOpacity,
+                    cardsOpacity: Number.isFinite(Number(updates?.cardsOpacity)) ? Math.min(1, Math.max(0.5, Number(updates.cardsOpacity))) : item.cardsOpacity
+                } : item)
+                this.saveCustomPresets(presets)
+                return true
+            },
+            removeCustomPreset(presetKey) {
+                if (!String(presetKey || "").startsWith("custom:")) return false
+                const id = String(presetKey).slice(7)
+                const presets = this.getCustomPresets().filter(item => item.key !== id)
+                this.saveCustomPresets(presets)
+                return true
+            },
+            applySettings(settings) {
+                const normalized = normalizeSettings(settings)
+                document.documentElement.style.setProperty("--theme-bg", normalized.bg)
+                document.documentElement.style.setProperty("--theme-text", normalized.t)
+                document.documentElement.style.setProperty("--theme-primary", normalized.p)
+                this.saveSettings(normalized)
+                return normalized
+            }
         }
     }
 
@@ -317,7 +429,7 @@
             async init() {
                 const user = window.auth.currentUser
                 StateActions.setUser(user)
-                if (typeof SessionService !== "undefined" && typeof SessionService.startUserSession === "function") await SessionService.startUserSession(user)
+                if (typeof window.StateStore?.update === "function") window.StateStore.update("isOnline", false)
                 applySignedInUi(user)
             },
             async login() { return true },
