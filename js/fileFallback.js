@@ -548,7 +548,21 @@
         }
         window.SmartNotesEditor = {
             init() {},
-            async open() {},
+            async open() {
+                const state = StateStore.read()
+                const user = state.user || window.auth.currentUser
+                if (!user?.uid) return
+                const note = window.NoteHelpers.buildNotePayload({ note: { title: "", content: "" }, user })
+                await DataPath.getUserNotesCollection(user).doc(note.id).set(note, { merge: true })
+                StateStore.update("currentNote", note)
+                StateStore.update("isEditing", true)
+                const title = document.getElementById("note-title")
+                const content = document.getElementById("note-content-editable")
+                if (title) title.value = note.title || ""
+                if (content) content.innerHTML = note.content || ""
+                const wrapper = document.getElementById("note-editor")
+                if (wrapper) wrapper.classList.add("active")
+            },
             async openFromList(note) {
                 if (!note) return
                 StateStore.update("currentNote", note)
