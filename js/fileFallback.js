@@ -46,11 +46,15 @@
             }
         }
         window.ThemeManager = {
+            themes: {
+                oled: { p: "#2563EB", bg: "#000000", t: "#FFFFFF" },
+                standard_light: { p: "#2563EB", bg: "#FFFFFF", t: "#000000" }
+            },
             maxCustomPresets: 5,
             storageKey,
             customPresetStorageKey,
             init() {
-                this.applySettings(this.getSavedSettings())
+                this.applySettings(this.getSavedSettings(), false)
             },
             normalizeHex,
             getDefaultSettings() {
@@ -85,6 +89,19 @@
                 const normalized = Array.isArray(presets) ? presets.slice(0, this.maxCustomPresets) : []
                 setLocalJson(customPresetStorageKey, normalized)
             },
+            setCustomPresets(presets) {
+                this.saveCustomPresets(presets)
+            },
+            getCustomPresetByKey(key) {
+                if (!String(key || "").startsWith("custom:")) return null
+                const id = String(key).slice(7)
+                return this.getCustomPresets().find(item => item.key === id) || null
+            },
+            resolvePreset(key) {
+                const normalized = String(key || "oled")
+                if (normalized.startsWith("custom:")) return this.getCustomPresetByKey(normalized)
+                return this.themes[normalized] || this.themes.oled
+            },
             addCustomPreset(colors) {
                 const presets = this.getCustomPresets()
                 if (presets.length >= this.maxCustomPresets) return { ok: false, reason: "limit" }
@@ -112,7 +129,11 @@
                     bg: normalizeHex(updates?.bg ?? item.bg),
                     t: normalizeHex(updates?.t ?? item.t),
                     uiOpacity: Number.isFinite(Number(updates?.uiOpacity)) ? Math.min(1, Math.max(0.4, Number(updates.uiOpacity))) : item.uiOpacity,
-                    cardsOpacity: Number.isFinite(Number(updates?.cardsOpacity)) ? Math.min(1, Math.max(0.5, Number(updates.cardsOpacity))) : item.cardsOpacity
+                    cardsOpacity: Number.isFinite(Number(updates?.cardsOpacity)) ? Math.min(1, Math.max(0.5, Number(updates.cardsOpacity))) : item.cardsOpacity,
+                    mainBackgroundUrl: typeof updates?.mainBackgroundUrl === "string" ? updates.mainBackgroundUrl : item.mainBackgroundUrl,
+                    sidebarBackgroundUrl: typeof updates?.sidebarBackgroundUrl === "string" ? updates.sidebarBackgroundUrl : item.sidebarBackgroundUrl,
+                    mainBackgroundImage: typeof updates?.mainBackgroundImage === "string" ? updates.mainBackgroundImage : item.mainBackgroundImage,
+                    sidebarBackgroundImage: typeof updates?.sidebarBackgroundImage === "string" ? updates.sidebarBackgroundImage : item.sidebarBackgroundImage
                 } : item)
                 this.saveCustomPresets(presets)
                 return true
@@ -124,13 +145,66 @@
                 this.saveCustomPresets(presets)
                 return true
             },
-            applySettings(settings) {
+            mergeCloudSettingsWithLocalSettings(localSettings, cloudSettings) {
+                const local = localSettings && typeof localSettings === "object" ? localSettings : {}
+                const cloud = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
+                return normalizeSettings({ ...local, ...cloud })
+            },
+            mergeCloudPresetsWithLocalPresets(localPresets, cloudPresets) {
+                const merged = []
+                const seen = new Set()
+                const append = (item) => {
+                    if (!item || typeof item !== "object") return
+                    const key = String(item.key || "")
+                    if (!key || seen.has(key)) return
+                    seen.add(key)
+                    merged.push(item)
+                }
+                ;(Array.isArray(cloudPresets) ? cloudPresets : []).forEach(append)
+                ;(Array.isArray(localPresets) ? localPresets : []).forEach(append)
+                return merged.slice(0, this.maxCustomPresets)
+            },
+            pickRuntimeBackgroundValue(urlValue, localImageValue) {
+                const source = typeof urlValue === "string" && urlValue.trim() ? urlValue.trim() : ""
+                if (source && /^https?:\/\//i.test(source)) return source
+                if (typeof localImageValue === "string" && localImageValue.trim()) return localImageValue.trim()
+                return ""
+            },
+            syncInputs(p, bg, t) {
+                const primary = document.getElementById("theme-primary")
+                const background = document.getElementById("theme-bg")
+                const textColor = document.getElementById("theme-text")
+                if (primary) primary.value = normalizeHex(p)
+                if (background) background.value = normalizeHex(bg)
+                if (textColor) textColor.value = normalizeHex(t)
+            },
+            setupColorInputs(onChange) {
+                const wire = (id, type) => {
+                    const input = document.getElementById(id)
+                    if (!input || typeof onChange !== "function") return
+                    input.oninput = () => onChange(type, input.value)
+                    input.onchange = () => onChange(type, input.value)
+                }
+                wire("theme-primary", "p")
+                wire("theme-bg", "bg")
+                wire("theme-text", "t")
+            },
+            renderPicker() {
+                return true
+            },
+            updatePresetPreviewDot() {
+                return true
+            },
+            applySettings(settings, persist = true) {
                 const normalized = normalizeSettings(settings)
                 document.documentElement.style.setProperty("--theme-bg", normalized.bg)
                 document.documentElement.style.setProperty("--theme-text", normalized.t)
                 document.documentElement.style.setProperty("--theme-primary", normalized.p)
-                this.saveSettings(normalized)
+                if (persist !== false) this.saveSettings(normalized)
                 return normalized
+            },
+            revertToLastSaved() {
+                return this.applySettings(this.getSavedSettings(), false)
             }
         }
     }
@@ -527,12 +601,13 @@
         }
     }
 
+    ensureLang()
+    ensureThemeManager()
+    ensureUtils()
+    ensureHelpers()
+    ensureNoteText()
+
     const bootstrapFallback = async () => {
-        ensureLang()
-        ensureThemeManager()
-        ensureUtils()
-        ensureHelpers()
-        ensureNoteText()
         ensureBackend()
         ensureAuthAndCore()
         ensureEditor()
