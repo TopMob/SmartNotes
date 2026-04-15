@@ -578,7 +578,10 @@ Object.assign(UI, {
             spaceUnit: Number(sourceTheme.spaceUnit ?? 12),
             editorPadding: Number(sourceTheme.editorPadding ?? 30),
             editorLineHeight: Number(sourceTheme.editorLineHeight ?? 1.72),
-            editorLetterSpacing: Number(String(sourceTheme.editorLetterSpacing ?? "0px").replace("px", ""))
+            editorLetterSpacing: Number(String(sourceTheme.editorLetterSpacing ?? "0px").replace("px", "")),
+            frameBorder: typeof sourceTheme.frameBorder === "string" ? sourceTheme.frameBorder : "",
+            effect: typeof sourceTheme.effect === "string" ? sourceTheme.effect : "none",
+            surface: typeof sourceTheme.surface === "string" ? sourceTheme.surface : ""
         })
     },
 
@@ -605,7 +608,10 @@ Object.assign(UI, {
             spaceUnit: Math.min(20, Math.max(8, Number(draft.spaceUnit ?? 12))),
             editorPadding: Math.min(52, Math.max(16, Number(draft.editorPadding ?? 30))),
             editorLineHeight: Math.min(2.1, Math.max(1.3, Number(draft.editorLineHeight ?? 1.72))),
-            editorLetterSpacing: Math.min(8, Math.max(-1, Number(draft.editorLetterSpacing ?? 0)))
+            editorLetterSpacing: Math.min(8, Math.max(-1, Number(draft.editorLetterSpacing ?? 0))),
+            frameBorder: typeof draft.frameBorder === "string" ? draft.frameBorder : "",
+            effect: typeof draft.effect === "string" ? draft.effect : "none",
+            surface: typeof draft.surface === "string" ? draft.surface : ""
         }
         if (JSON.stringify(normalizedDraft) !== JSON.stringify(draft)) {
             draft = normalizedDraft
@@ -628,6 +634,7 @@ Object.assign(UI, {
             } else {
                 const preset = ThemeManager.resolvePreset(key)
                 const customPreset = ThemeManager.getCustomPresetByKey(key)
+                const specialPreset = ThemeManager.getSpecialPresetByKey?.(key)
                 nextDraft = {
                     preset: key,
                     p: preset.p,
@@ -639,19 +646,51 @@ Object.assign(UI, {
                     sidebarBackgroundUrl: customPreset ? (customPreset.sidebarBackgroundUrl || "") : (draft.sidebarBackgroundUrl || ""),
                     mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
                     sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || ""),
-                    uiOpacity: customPreset && typeof customPreset.uiOpacity === "number" ? customPreset.uiOpacity : (typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78),
-                    cardsOpacity: customPreset && typeof customPreset.cardsOpacity === "number" ? customPreset.cardsOpacity : (typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9),
-                    radius: customPreset && typeof customPreset.radius === "number" ? customPreset.radius : (typeof draft.radius === "number" ? draft.radius : 12),
-                    blur: customPreset && typeof customPreset.blur === "number" ? customPreset.blur : (typeof draft.blur === "number" ? draft.blur : 12),
-                    density: customPreset && typeof customPreset.density === "number" ? customPreset.density : (typeof draft.density === "number" ? draft.density : 1),
-                    fontBase: customPreset && typeof customPreset.fontBase === "number" ? customPreset.fontBase : (typeof draft.fontBase === "number" ? draft.fontBase : 16),
-                    typeScale: customPreset && typeof customPreset.typeScale === "number" ? customPreset.typeScale : (typeof draft.typeScale === "number" ? draft.typeScale : 1),
-                    spaceUnit: customPreset && typeof customPreset.spaceUnit === "number" ? customPreset.spaceUnit : (typeof draft.spaceUnit === "number" ? draft.spaceUnit : 12),
-                    editorPadding: customPreset && typeof customPreset.editorPadding === "number" ? customPreset.editorPadding : (typeof draft.editorPadding === "number" ? draft.editorPadding : 30),
-                    editorLineHeight: customPreset && typeof customPreset.editorLineHeight === "number" ? customPreset.editorLineHeight : (typeof draft.editorLineHeight === "number" ? draft.editorLineHeight : 1.72),
+                    uiOpacity: (customPreset && typeof customPreset.uiOpacity === "number")
+                        ? customPreset.uiOpacity
+                        : (specialPreset && typeof specialPreset.uiOpacity === "number" ? specialPreset.uiOpacity : (typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78)),
+                    cardsOpacity: (customPreset && typeof customPreset.cardsOpacity === "number")
+                        ? customPreset.cardsOpacity
+                        : (specialPreset && typeof specialPreset.cardsOpacity === "number" ? specialPreset.cardsOpacity : (typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9)),
+                    radius: (customPreset && typeof customPreset.radius === "number")
+                        ? customPreset.radius
+                        : (specialPreset && typeof specialPreset.radius === "number" ? specialPreset.radius : (typeof draft.radius === "number" ? draft.radius : 12)),
+                    blur: (customPreset && typeof customPreset.blur === "number")
+                        ? customPreset.blur
+                        : (specialPreset && typeof specialPreset.blur === "number" ? specialPreset.blur : (typeof draft.blur === "number" ? draft.blur : 12)),
+                    density: (customPreset && typeof customPreset.density === "number")
+                        ? customPreset.density
+                        : (specialPreset && typeof specialPreset.density === "number" ? specialPreset.density : (typeof draft.density === "number" ? draft.density : 1)),
+                    fontBase: (customPreset && typeof customPreset.fontBase === "number")
+                        ? customPreset.fontBase
+                        : (specialPreset && typeof specialPreset.fontBase === "number" ? specialPreset.fontBase : (typeof draft.fontBase === "number" ? draft.fontBase : 16)),
+                    typeScale: (customPreset && typeof customPreset.typeScale === "number")
+                        ? customPreset.typeScale
+                        : (specialPreset && typeof specialPreset.typeScale === "number" ? specialPreset.typeScale : (typeof draft.typeScale === "number" ? draft.typeScale : 1)),
+                    spaceUnit: (customPreset && typeof customPreset.spaceUnit === "number")
+                        ? customPreset.spaceUnit
+                        : (specialPreset && typeof specialPreset.spaceUnit === "number" ? specialPreset.spaceUnit : (typeof draft.spaceUnit === "number" ? draft.spaceUnit : 12)),
+                    editorPadding: (customPreset && typeof customPreset.editorPadding === "number")
+                        ? customPreset.editorPadding
+                        : (specialPreset && typeof specialPreset.editorPadding === "number" ? specialPreset.editorPadding : (typeof draft.editorPadding === "number" ? draft.editorPadding : 30)),
+                    editorLineHeight: (customPreset && typeof customPreset.editorLineHeight === "number")
+                        ? customPreset.editorLineHeight
+                        : (specialPreset && typeof specialPreset.editorLineHeight === "number" ? specialPreset.editorLineHeight : (typeof draft.editorLineHeight === "number" ? draft.editorLineHeight : 1.72)),
                     editorLetterSpacing: customPreset && typeof customPreset.editorLetterSpacing === "string"
                         ? Number(String(customPreset.editorLetterSpacing).replace("px", ""))
+                        : (specialPreset && typeof specialPreset.editorLetterSpacing === "string"
+                            ? Number(String(specialPreset.editorLetterSpacing).replace("px", ""))
                         : (typeof draft.editorLetterSpacing === "number" ? draft.editorLetterSpacing : 0)
+                        ),
+                    frameBorder: (customPreset && typeof customPreset.frameBorder === "string")
+                        ? customPreset.frameBorder
+                        : (specialPreset && typeof specialPreset.frameBorder === "string" ? specialPreset.frameBorder : (draft.frameBorder || "")),
+                    effect: (customPreset && typeof customPreset.effect === "string")
+                        ? customPreset.effect
+                        : (specialPreset && typeof specialPreset.effect === "string" ? specialPreset.effect : (draft.effect || "none")),
+                    surface: (customPreset && typeof customPreset.surface === "string")
+                        ? customPreset.surface
+                        : (specialPreset && typeof specialPreset.surface === "string" ? specialPreset.surface : (draft.surface || ""))
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -688,7 +727,10 @@ Object.assign(UI, {
                 editorLineHeight: typeof createdPreset.editorLineHeight === "number" ? createdPreset.editorLineHeight : (typeof currentDraft.editorLineHeight === "number" ? currentDraft.editorLineHeight : 1.72),
                 editorLetterSpacing: typeof createdPreset.editorLetterSpacing === "string"
                     ? Number(String(createdPreset.editorLetterSpacing).replace("px", ""))
-                    : (typeof currentDraft.editorLetterSpacing === "number" ? currentDraft.editorLetterSpacing : 0)
+                    : (typeof currentDraft.editorLetterSpacing === "number" ? currentDraft.editorLetterSpacing : 0),
+                frameBorder: typeof createdPreset.frameBorder === "string" ? createdPreset.frameBorder : String(currentDraft.frameBorder || ""),
+                effect: typeof createdPreset.effect === "string" ? createdPreset.effect : String(currentDraft.effect || "none"),
+                surface: typeof createdPreset.surface === "string" ? createdPreset.surface : String(currentDraft.surface || "")
             }
             this.applyAppearanceDraft(nextDraft)
             this.renderAppearanceDraft()
@@ -746,7 +788,10 @@ Object.assign(UI, {
                 spaceUnit: Number(nextDraft.spaceUnit ?? 12),
                 editorPadding: Number(nextDraft.editorPadding ?? 30),
                 editorLineHeight: Number(nextDraft.editorLineHeight ?? 1.72),
-                editorLetterSpacing: `${Number(nextDraft.editorLetterSpacing ?? 0)}px`
+                editorLetterSpacing: `${Number(nextDraft.editorLetterSpacing ?? 0)}px`,
+                frameBorder: String(nextDraft.frameBorder || ""),
+                effect: String(nextDraft.effect || "none"),
+                surface: String(nextDraft.surface || "")
             },
             backgroundType: (nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage) ? "image" : "none",
             backgroundValue: nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage || ""
@@ -778,7 +823,10 @@ Object.assign(UI, {
             spaceUnit: Number(defaults.spaceUnit ?? 12),
             editorPadding: Number(defaults.editorPadding ?? 30),
             editorLineHeight: Number(defaults.editorLineHeight ?? 1.72),
-            editorLetterSpacing: Number(String(defaults.editorLetterSpacing ?? "0px").replace("px", ""))
+            editorLetterSpacing: Number(String(defaults.editorLetterSpacing ?? "0px").replace("px", "")),
+            frameBorder: String(defaults.frameBorder || ""),
+            effect: String(defaults.effect || "none"),
+            surface: String(defaults.surface || "")
         }
         this.applyAppearanceDraft(draft)
         this.renderAppearanceDraft()

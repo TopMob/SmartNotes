@@ -23,7 +23,10 @@ const SettingsSyncService = (() => {
                 spaceUnit: typeof cachedThemeSettings.spaceUnit === "number" ? cachedThemeSettings.spaceUnit : 12,
                 editorPadding: typeof cachedThemeSettings.editorPadding === "number" ? cachedThemeSettings.editorPadding : 30,
                 editorLineHeight: typeof cachedThemeSettings.editorLineHeight === "number" ? cachedThemeSettings.editorLineHeight : 1.72,
-                editorLetterSpacing: typeof cachedThemeSettings.editorLetterSpacing === "string" ? cachedThemeSettings.editorLetterSpacing : "0px"
+                editorLetterSpacing: typeof cachedThemeSettings.editorLetterSpacing === "string" ? cachedThemeSettings.editorLetterSpacing : "0px",
+                frameBorder: typeof cachedThemeSettings.frameBorder === "string" ? cachedThemeSettings.frameBorder : "",
+                effect: typeof cachedThemeSettings.effect === "string" ? cachedThemeSettings.effect : "none",
+                surface: typeof cachedThemeSettings.surface === "string" ? cachedThemeSettings.surface : ""
             },
             backgroundType: (cachedThemeSettings.mainBackgroundUrl || cachedThemeSettings.mainBackgroundImage) ? "image" : "none",
             backgroundValue: cachedThemeSettings.mainBackgroundUrl || cachedThemeSettings.mainBackgroundImage || "",
@@ -59,7 +62,10 @@ const SettingsSyncService = (() => {
             spaceUnit: Math.min(20, Math.max(8, Number(customThemeSource.spaceUnit ?? 12))),
             editorPadding: Math.min(52, Math.max(16, Number(customThemeSource.editorPadding ?? 30))),
             editorLineHeight: Math.min(2.1, Math.max(1.3, Number(customThemeSource.editorLineHeight ?? 1.72))),
-            editorLetterSpacing: `${Math.min(8, Math.max(-1, Number(String(customThemeSource.editorLetterSpacing ?? "0px").replace("px", ""))))}px`
+            editorLetterSpacing: `${Math.min(8, Math.max(-1, Number(String(customThemeSource.editorLetterSpacing ?? "0px").replace("px", ""))))}px`,
+            frameBorder: String(customThemeSource.frameBorder || ""),
+            effect: String(customThemeSource.effect || "none"),
+            surface: String(customThemeSource.surface || "")
         }
         return {
             notesPerPage,

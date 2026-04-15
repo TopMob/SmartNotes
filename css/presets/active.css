@@ -92,3 +92,24 @@
     --border: rgba(2, 6, 23, 0.12);
 }
 
+[data-theme-effect="glow"] .top-bar,
+[data-theme-effect="glow"] .sidebar-glass {
+    box-shadow: 0 0 18px rgba(var(--primary-rgb), 0.35);
+}
+
+[data-theme-effect="atomic-retro"] .bg-wrapper {
+    background: radial-gradient(circle at 20% 20%, rgba(166, 42, 42, 0.2), transparent 45%), radial-gradient(circle at 80% 70%, rgba(43, 37, 35, 0.24), transparent 40%);
+}
+
+[data-theme-effect="carbon"] .bg-wrapper {
+    background-image:
+        linear-gradient(45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%);
+    background-size: 10px 10px;
+}
+
+[data-theme-effect="brutal"] .top-bar,
+[data-theme-effect="brutal"] .sidebar-glass {
+    box-shadow: none;
+    filter: saturate(1.05) contrast(1.08);
+}

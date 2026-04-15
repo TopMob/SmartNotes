@@ -30,6 +30,23 @@ const normalizeEditorLetterSpacing = (value, fallback = baseTheme.editorLetterSp
     const parsedValue = typeof value === "string" ? Number.parseFloat(value.replace("px", "")) : value
     return `${normalizeNumberInRange(parsedValue, -1, 8, Number(String(fallback).replace("px", "")) || 0)}px`
 }
+const normalizeHexColor = (value, fallback = "#000000") => {
+    const source = String(value || "").trim()
+    if (/^#[0-9a-fA-F]{6}$/.test(source)) return source
+    if (/^[0-9a-fA-F]{6}$/.test(source)) return `#${source}`
+    return fallback
+}
+const normalizeFrameBorder = (value, fallback = "1px solid rgba(148, 163, 184, 0.24)") => {
+    const source = String(value || "").trim()
+    if (!source) return fallback
+    if (!/^\d+px\s+solid\s+(#[0-9a-fA-F]{6}|rgba?\([^)]+\))$/.test(source)) return fallback
+    return source
+}
+const allowedThemeEffects = new Set(["none", "atomic-retro", "glow", "brutal", "carbon", "ukiyoe", "construct", "nanotech", "lego", "halftone", "wasteland", "deco"])
+const normalizeThemeEffect = (value, fallback = "none") => {
+    const effect = String(value || "").trim().toLowerCase()
+    return allowedThemeEffects.has(effect) ? effect : fallback
+}
 const normalizeThemeStyleSettings = (source = {}, fallback = baseTheme) => ({
     radius: normalizeNumberInRange(source.radius, 6, 36, fallback.radius),
     blur: normalizeNumberInRange(source.blur, 0, 32, fallback.blur),
@@ -39,7 +56,12 @@ const normalizeThemeStyleSettings = (source = {}, fallback = baseTheme) => ({
     spaceUnit: normalizeNumberInRange(source.spaceUnit, 8, 20, fallback.spaceUnit),
     editorPadding: normalizeNumberInRange(source.editorPadding, 16, 52, fallback.editorPadding),
     editorLineHeight: normalizeNumberInRange(source.editorLineHeight, 1.3, 2.1, fallback.editorLineHeight),
-    editorLetterSpacing: normalizeEditorLetterSpacing(source.editorLetterSpacing, fallback.editorLetterSpacing)
+    editorLetterSpacing: normalizeEditorLetterSpacing(source.editorLetterSpacing, fallback.editorLetterSpacing),
+    frameBorder: normalizeFrameBorder(source.frameBorder, fallback.frameBorder || "1px solid rgba(148, 163, 184, 0.24)"),
+    effect: normalizeThemeEffect(source.effect, fallback.effect || "none"),
+    surface: /^#?[0-9a-fA-F]{6}$/.test(String(source.surface || "").trim())
+        ? normalizeHexColor(source.surface)
+        : (/^#?[0-9a-fA-F]{6}$/.test(String(fallback.surface || "").trim()) ? normalizeHexColor(fallback.surface) : "")
 })
 
 const normalizeLocalImageValue = (value, maxLength = 600000) => {
@@ -191,7 +213,20 @@ export const ThemeManager = {
     storageKey: "app-theme",
     customPresetStorageKey: "app-theme-custom-presets",
     maxCustomPresets: 5,
-    specialPresetDefinitions: [],
+    specialPresetDefinitions: [
+        { key: "atomic_heart_retro", name: "Atomic Heart Retro", family: "Советский футуризм", description: "Утопический индустриализм 50-х: металл, дерево и агит-эстетика", bg: "#F4F1EA", surface: "#E3DCC8", p: "#A62A2A", t: "#2B2523", radius: 18, frameBorder: "2px solid #2B2523", effect: "atomic-retro", previewColor: "#A62A2A" },
+        { key: "cyberpunk_neon", name: "Cyberpunk Neon", family: "Night City", description: "Неон, острые формы и максимальный контраст ночного мегаполиса", bg: "#0D0D0D", surface: "#1A1A1A", p: "#FCE205", t: "#E0E0E0", radius: 6, frameBorder: "2px solid #FCE205", effect: "glow", previewColor: "#FCE205" },
+        { key: "forest_fog", name: "Forest Fog", family: "Organic Matte", description: "Матовые натуральные оттенки с мягкой глубиной", bg: "#2D3632", surface: "#3E4A44", p: "#8DA399", t: "#C2C9C5", radius: 18, frameBorder: "1px solid #5B6B63", effect: "none", previewColor: "#8DA399" },
+        { key: "brutalism", name: "Brutalism", family: "Raw Web", description: "Толстые чёрные рамки, жёлтые плашки и нулевая декоративность", bg: "#FFFFFF", surface: "#FFFF00", p: "#000000", t: "#000000", radius: 6, frameBorder: "4px solid #000000", effect: "brutal", previewColor: "#000000" },
+        { key: "frozen_carbon", name: "Frozen Carbon", family: "Materiality", description: "Карбоновая текстура и холодный инженерный стиль", bg: "#121316", surface: "#1C1F24", p: "#5F6C7B", t: "#E1E4EA", radius: 10, frameBorder: "1px solid #2E343E", effect: "carbon", previewColor: "#5F6C7B" },
+        { key: "ukiyoe", name: "Ukiyo-e", family: "Art & History", description: "Японская гравюра, волны, бумага, красные акценты", bg: "#E8DDC9", surface: "#F5EBD9", p: "#B13A2A", t: "#223A53", radius: 14, frameBorder: "1px solid #3D6B88", effect: "ukiyoe", previewColor: "#B13A2A" },
+        { key: "soviet_constructivism", name: "Soviet Constructivism", family: "Art & History", description: "Диагонали и агрессивный красно-черный агитплакат", bg: "#F5EBDD", surface: "#FAF1E4", p: "#C1121F", t: "#121212", radius: 6, frameBorder: "3px solid #000000", effect: "construct", previewColor: "#C1121F" },
+        { key: "nanotech", name: "Nanotech", family: "Future UI", description: "Глянцевый черный и жидкие переходы состояний", bg: "#050505", surface: "#121212", p: "#7A7A7A", t: "#D8D8D8", radius: 22, frameBorder: "1px solid #3C3C3C", effect: "nanotech", previewColor: "#7A7A7A" },
+        { key: "lego_brick", name: "Lego Brick", family: "Mix", description: "Яркие цвета, блочная геометрия, эффект конструктора", bg: "#F7F7F7", surface: "#FFFFFF", p: "#E63946", t: "#1A1A1A", radius: 12, frameBorder: "3px solid #F5C400", effect: "lego", previewColor: "#E63946" },
+        { key: "manga_sketch", name: "Manga Sketch", family: "Halftone", description: "Чёрно-белая манга с полутонами и контуром", bg: "#FFFFFF", surface: "#FFFFFF", p: "#000000", t: "#111111", radius: 28, frameBorder: "2px solid #000000", effect: "halftone", previewColor: "#000000" },
+        { key: "post_apocalyptic", name: "Post-Apocalyptic", family: "Mix", description: "Ржавчина, пыль и разрушенные поверхности", bg: "#2A1F1A", surface: "#3B2C25", p: "#A34E2C", t: "#E2D2BE", radius: 14, frameBorder: "1px solid #A34E2C", effect: "wasteland", previewColor: "#A34E2C" },
+        { key: "art_deco", name: "Art Deco", family: "Art & History", description: "Черно-золотая геометрическая элегантность", bg: "#0B0A0A", surface: "#171414", p: "#D4AF37", t: "#F3E4BC", radius: 14, frameBorder: "1px solid #D4AF37", effect: "deco", previewColor: "#D4AF37" }
+    ],
     init() {
         this.applySettings(this.getSavedSettings(), false)
     },
@@ -325,6 +360,12 @@ export const ThemeManager = {
             ? this.specialPresetDefinitions.filter(item => item && typeof item === "object" && typeof item.key === "string" && item.key.trim())
             : []
     },
+    getSpecialPresetByKey(presetKey) {
+        const key = String(presetKey || "")
+        if (!key) return null
+        const normalizedKey = key.startsWith("special:") ? key.slice(8) : key
+        return this.getSpecialPresets().find(item => item.key === normalizedKey) || null
+    },
     resetLocalThemeCache() {
         SafeStorage.local.remove(this.storageKey)
         SafeStorage.local.remove(this.customPresetStorageKey)
@@ -392,6 +433,8 @@ export const ThemeManager = {
     resolvePreset(key) {
         const customPreset = this.getCustomPresetByKey(key)
         if (customPreset) return createPreset(customPreset.bg, customPreset.t, customPreset.p)
+        const specialPreset = this.getSpecialPresetByKey(key)
+        if (specialPreset) return createPreset(specialPreset.bg, specialPreset.t, specialPreset.p)
         return this.themes[key] || this.themes.oled
     },
     pickRuntimeBackgroundValue(urlValue, localImageValue) {
@@ -400,20 +443,23 @@ export const ThemeManager = {
     applySettings(settings, persist) {
         const presetKey = settings?.preset || "oled"
         const base = this.resolvePreset(presetKey)
-        const normalizedOpacity = normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78)
-        const normalizedCardsOpacity = normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
-        const styleSettings = normalizeThemeStyleSettings(settings, base)
+        const specialPreset = this.getSpecialPresetByKey(presetKey)
+        const source = specialPreset ? { ...specialPreset, ...settings } : settings
+        const normalizedOpacity = normalizeNumberInRange(source?.uiOpacity, 0.4, 1, 0.78)
+        const normalizedCardsOpacity = normalizeNumberInRange(source?.cardsOpacity, 0.5, 1, 0.9)
+        const styleSettings = normalizeThemeStyleSettings(source, { ...base, ...specialPreset })
         const mainBackgroundImage = this.pickRuntimeBackgroundValue(settings?.mainBackgroundUrl, settings?.mainBackgroundImage)
         const sidebarBackgroundImage = this.pickRuntimeBackgroundValue(settings?.sidebarBackgroundUrl, settings?.sidebarBackgroundImage)
-        const appliedPrimaryColor = settings?.p || base.p
-        const appliedBackgroundColor = settings?.bg || base.bg
-        const appliedTextColor = settings?.t || base.t
+        const appliedPrimaryColor = source?.p || base.p
+        const appliedBackgroundColor = source?.bg || base.bg
+        const appliedTextColor = source?.t || base.t
+        const appliedSurfaceColor = normalizeHexColor(source?.surface, "")
         const applied = {
             ...base,
             p: appliedPrimaryColor,
             bg: appliedBackgroundColor,
             t: appliedTextColor,
-            surface: `color-mix(in srgb, ${appliedBackgroundColor} 88%, ${appliedTextColor} 12%)`,
+            surface: appliedSurfaceColor || `color-mix(in srgb, ${appliedBackgroundColor} 88%, ${appliedTextColor} 12%)`,
             surfaceTransparent: `color-mix(in srgb, ${appliedBackgroundColor} 82%, ${appliedTextColor} 18%, transparent)`,
             border: `color-mix(in srgb, ${appliedPrimaryColor} 38%, ${appliedTextColor} 8%, transparent)`,
             toolbarBg: `color-mix(in srgb, ${appliedBackgroundColor} 80%, ${appliedPrimaryColor} 20%)`,
@@ -424,6 +470,7 @@ export const ThemeManager = {
         }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
+        document.documentElement.dataset.themeEffect = styleSettings.effect
         if (persist) {
             this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundUrl: normalizeThemeUrlValue(settings?.mainBackgroundUrl), sidebarBackgroundUrl: normalizeThemeUrlValue(settings?.sidebarBackgroundUrl), mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage), sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage), uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity, ...styleSettings })
         }
@@ -463,6 +510,7 @@ export const ThemeManager = {
         root.style.setProperty("--editor-toolbar-bg", theme.toolbarBg)
         root.style.setProperty("--editor-toolbar-border", theme.toolbarBorder)
         root.style.setProperty("--editor-toolbar-shadow", theme.toolbarShadow)
+        root.style.setProperty("--theme-frame-border", theme.frameBorder || "1px solid var(--border)")
         root.style.setProperty("--main-bg-image", theme.mainBackgroundImage || "none")
         root.style.setProperty("--sidebar-bg-image", theme.sidebarBackgroundImage || "none")
     },
@@ -498,17 +546,20 @@ export const ThemeManager = {
                 buttonElement.dataset.themeKey = key
                 if (activeKey === key) buttonElement.classList.add("active")
                 const isSpecialPreset = key.startsWith("special:")
-                if (isSpecialPreset) buttonElement.classList.add("theme-item-placeholder")
-                buttonElement.disabled = isSpecialPreset
                 const dotElement = document.createElement("span")
                 dotElement.className = "theme-dot"
                 const customPreset = this.getCustomPresetByKey(key)
                 const specialPreset = isSpecialPreset ? this.getSpecialPresets().find(item => `special:${item.key}` === key) : null
+                if (specialPreset) {
+                    const hint = [specialPreset.name, specialPreset.family, specialPreset.description].filter(Boolean).join(" • ")
+                    buttonElement.title = hint
+                    buttonElement.setAttribute("aria-label", hint)
+                }
                 dotElement.style.background = customPreset
                     ? `conic-gradient(${customPreset.p} 0deg 120deg, ${customPreset.bg} 120deg 240deg, ${customPreset.t} 240deg 360deg)`
                     : (specialPreset?.previewColor || this.resolvePreset(key).p)
                 buttonElement.appendChild(dotElement)
-                if (!isSpecialPreset) buttonElement.addEventListener("click", () => onSelect?.(key))
+                buttonElement.addEventListener("click", () => onSelect?.(key))
                 presetsGrid.appendChild(buttonElement)
             })
 
@@ -527,7 +578,7 @@ export const ThemeManager = {
                 leftLabel.textContent = formatThemeText("theme_custom_limit", "Custom themes left: {count} of {max}", { count: customThemesLeft, max: this.maxCustomPresets })
                 sectionElement.appendChild(leftLabel)
             }
-            if (group.id === "special") {
+            if (group.id === "special" && !group.items.length) {
                 const hintLabel = document.createElement("div")
                 hintLabel.className = "theme-custom-limit-label"
                 hintLabel.textContent = getThemeText("theme_special_coming_soon", "Special presets will appear here soon")

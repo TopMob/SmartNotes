@@ -20,7 +20,7 @@
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    border-right: 1px solid var(--border);
+    border-right: var(--theme-frame-border, 1px solid var(--border));
     backdrop-filter: blur(var(--blur-strength));
     position: fixed;
     top: 0;
@@ -72,7 +72,7 @@ body.platform-android .sidebar-glass {
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--theme-frame-border, 1px solid var(--border));
 }
 
 .sidebar-nav {
@@ -125,7 +125,7 @@ body.platform-android .sidebar-glass {
 
 .sidebar-footer {
     padding: 12px;
-    border-top: 1px solid var(--border);
+    border-top: var(--theme-frame-border, 1px solid var(--border));
     display: grid;
     gap: 8px;
 }
@@ -170,7 +170,7 @@ body.platform-android .sidebar-glass {
     justify-content: space-between;
     gap: 12px;
     padding: 0 18px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--theme-frame-border, 1px solid var(--border));
     background: var(--surface-transparent);
     backdrop-filter: blur(var(--blur-strength));
     position: sticky;
@@ -702,4 +702,3 @@ body.platform-android .top-bar {
 .search-container input::placeholder {
     color: color-mix(in srgb, var(--text) 56%, transparent);
 }
-
