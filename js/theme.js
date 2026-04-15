@@ -21,6 +21,26 @@ const baseTheme = {
 }
 
 const createPreset = (bg, t, p) => ({ ...baseTheme, bg, t, p, surface: `color-mix(in srgb, ${bg} 88%, ${t} 12%)`, surfaceTransparent: `color-mix(in srgb, ${bg} 82%, ${t} 18%, transparent)`, border: `color-mix(in srgb, ${p} 38%, ${t} 8%, transparent)`, toolbarBg: `color-mix(in srgb, ${bg} 80%, ${p} 20%)`, toolbarBorder: `color-mix(in srgb, ${p} 42%, transparent)` })
+const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
+    const parsedValue = Number(value)
+    if (!Number.isFinite(parsedValue)) return fallback
+    return Math.min(maximum, Math.max(minimum, parsedValue))
+}
+const normalizeEditorLetterSpacing = (value, fallback = baseTheme.editorLetterSpacing) => {
+    const parsedValue = typeof value === "string" ? Number.parseFloat(value.replace("px", "")) : value
+    return `${normalizeNumberInRange(parsedValue, -1, 8, Number(String(fallback).replace("px", "")) || 0)}px`
+}
+const normalizeThemeStyleSettings = (source = {}, fallback = baseTheme) => ({
+    radius: normalizeNumberInRange(source.radius, 6, 36, fallback.radius),
+    blur: normalizeNumberInRange(source.blur, 0, 32, fallback.blur),
+    density: normalizeNumberInRange(source.density, 0.8, 1.25, fallback.density),
+    fontBase: normalizeNumberInRange(source.fontBase, 14, 22, fallback.fontBase),
+    typeScale: normalizeNumberInRange(source.typeScale, 0.9, 1.2, fallback.typeScale),
+    spaceUnit: normalizeNumberInRange(source.spaceUnit, 8, 20, fallback.spaceUnit),
+    editorPadding: normalizeNumberInRange(source.editorPadding, 16, 52, fallback.editorPadding),
+    editorLineHeight: normalizeNumberInRange(source.editorLineHeight, 1.3, 2.1, fallback.editorLineHeight),
+    editorLetterSpacing: normalizeEditorLetterSpacing(source.editorLetterSpacing, fallback.editorLetterSpacing)
+})
 
 const normalizeLocalImageValue = (value, maxLength = 600000) => {
     if (typeof value !== "string") return ""
@@ -70,6 +90,7 @@ const mergeCloudSettingsWithLocalSettings = (localSettings, cloudSettings) => {
     const safeCloudSettings = cloudSettings && typeof cloudSettings === "object" ? cloudSettings : {}
     return {
         ...safeCloudSettings,
+        ...normalizeThemeStyleSettings(safeCloudSettings, { ...baseTheme, ...safeLocalSettings }),
         mainBackgroundUrl: normalizeThemeUrlValue(safeCloudSettings.mainBackgroundUrl),
         sidebarBackgroundUrl: normalizeThemeUrlValue(safeCloudSettings.sidebarBackgroundUrl),
         mainBackgroundImage: normalizeLocalImageValue(safeLocalSettings.mainBackgroundImage) || "",
@@ -102,6 +123,7 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
                 t: ThemeManager.normalizeHex(item.t),
                 uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
                 cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
+                ...normalizeThemeStyleSettings(item, localPreset || baseTheme),
                 mainBackgroundUrl: cloudMainBackgroundUrl || localMainBackgroundUrl,
                 sidebarBackgroundUrl: cloudSidebarBackgroundUrl || localSidebarBackgroundUrl,
                 mainBackgroundImage: normalizeLocalImageValue(localPreset?.mainBackgroundImage),
@@ -119,6 +141,7 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
             t: ThemeManager.normalizeHex(item?.t),
             uiOpacity: normalizeNumberInRange(item?.uiOpacity, 0.4, 1, 0.78),
             cardsOpacity: normalizeNumberInRange(item?.cardsOpacity, 0.5, 1, 0.9),
+            ...normalizeThemeStyleSettings(item, baseTheme),
             mainBackgroundUrl: normalizeThemeUrlValue(item?.mainBackgroundUrl),
             sidebarBackgroundUrl: normalizeThemeUrlValue(item?.sidebarBackgroundUrl),
             mainBackgroundImage: normalizeLocalImageValue(item?.mainBackgroundImage),
@@ -127,13 +150,6 @@ const mergeCloudPresetsWithLocalPresets = (localPresets, cloudPresets) => {
     })
     return mergedPresets.slice(0, ThemeManager.maxCustomPresets)
 }
-
-const normalizeNumberInRange = (value, minimum, maximum, fallback) => {
-    const parsedValue = Number(value)
-    if (!Number.isFinite(parsedValue)) return fallback
-    return Math.min(maximum, Math.max(minimum, parsedValue))
-}
-
 
 const buildThemeCloudPayload = (theme) => {
     const safeTheme = theme && typeof theme === "object" ? theme : {}
@@ -144,6 +160,7 @@ const buildThemeCloudPayload = (theme) => {
         t: ThemeManager.normalizeHex(safeTheme.t),
         uiOpacity: normalizeNumberInRange(safeTheme.uiOpacity, 0.4, 1, 0.78),
         cardsOpacity: normalizeNumberInRange(safeTheme.cardsOpacity, 0.5, 1, 0.9),
+        ...normalizeThemeStyleSettings(safeTheme, baseTheme),
         mainBackgroundUrl: normalizeThemeUrlValue(safeTheme.mainBackgroundUrl),
         sidebarBackgroundUrl: normalizeThemeUrlValue(safeTheme.sidebarBackgroundUrl)
     }
@@ -174,11 +191,12 @@ export const ThemeManager = {
     storageKey: "app-theme",
     customPresetStorageKey: "app-theme-custom-presets",
     maxCustomPresets: 5,
+    specialPresetDefinitions: [],
     init() {
         this.applySettings(this.getSavedSettings(), false)
     },
     getDefaultSettings() {
-        return { preset: "oled", mainBackgroundUrl: "", sidebarBackgroundUrl: "", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78, cardsOpacity: 0.9 }
+        return { preset: "oled", mainBackgroundUrl: "", sidebarBackgroundUrl: "", mainBackgroundImage: "", sidebarBackgroundImage: "", uiOpacity: 0.78, cardsOpacity: 0.9, ...normalizeThemeStyleSettings(baseTheme, baseTheme) }
     },
     getSavedSettings() {
         try {
@@ -200,6 +218,7 @@ export const ThemeManager = {
                     t: this.normalizeHex(item.t),
                     uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
                     cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
+                    ...normalizeThemeStyleSettings(item, baseTheme),
                     mainBackgroundUrl: normalizeThemeUrlValue(item.mainBackgroundUrl),
                     sidebarBackgroundUrl: normalizeThemeUrlValue(item.sidebarBackgroundUrl),
                     mainBackgroundImage: typeof item.mainBackgroundImage === "string" ? item.mainBackgroundImage : "",
@@ -218,6 +237,7 @@ export const ThemeManager = {
             t: this.normalizeHex(item?.t),
             uiOpacity: normalizeNumberInRange(item?.uiOpacity, 0.4, 1, 0.78),
             cardsOpacity: normalizeNumberInRange(item?.cardsOpacity, 0.5, 1, 0.9),
+            ...normalizeThemeStyleSettings(item || {}, baseTheme),
             mainBackgroundUrl: normalizeThemeUrlValue(item?.mainBackgroundUrl),
             sidebarBackgroundUrl: normalizeThemeUrlValue(item?.sidebarBackgroundUrl),
             mainBackgroundImage: normalizeLocalImageValue(item?.mainBackgroundImage),
@@ -237,6 +257,7 @@ export const ThemeManager = {
             t: this.normalizeHex(colors?.t),
             uiOpacity: normalizeNumberInRange(colors?.uiOpacity, 0.4, 1, 0.78),
             cardsOpacity: normalizeNumberInRange(colors?.cardsOpacity, 0.5, 1, 0.9),
+            ...normalizeThemeStyleSettings(colors || {}, baseTheme),
             mainBackgroundUrl: normalizeThemeUrlValue(colors?.mainBackgroundUrl),
             sidebarBackgroundUrl: normalizeThemeUrlValue(colors?.sidebarBackgroundUrl),
             mainBackgroundImage: normalizeLocalImageValue(colors?.mainBackgroundImage),
@@ -258,6 +279,7 @@ export const ThemeManager = {
                 t: this.normalizeHex(updates?.t ?? item.t),
                 uiOpacity: normalizeNumberInRange(updates?.uiOpacity ?? item.uiOpacity, 0.4, 1, 0.78),
                 cardsOpacity: normalizeNumberInRange(updates?.cardsOpacity ?? item.cardsOpacity, 0.5, 1, 0.9),
+                ...normalizeThemeStyleSettings({ ...item, ...updates }, item),
                 mainBackgroundUrl: normalizeThemeUrlValue(updates?.mainBackgroundUrl ?? item.mainBackgroundUrl),
                 sidebarBackgroundUrl: normalizeThemeUrlValue(updates?.sidebarBackgroundUrl ?? item.sidebarBackgroundUrl),
                 mainBackgroundImage: normalizeLocalImageValue(updates?.mainBackgroundImage ?? item.mainBackgroundImage),
@@ -292,10 +314,16 @@ export const ThemeManager = {
                 t: this.normalizeHex(item.t),
                 uiOpacity: normalizeNumberInRange(item.uiOpacity, 0.4, 1, 0.78),
                 cardsOpacity: normalizeNumberInRange(item.cardsOpacity, 0.5, 1, 0.9),
+                ...normalizeThemeStyleSettings(item, baseTheme),
                 mainBackgroundUrl: normalizeThemeUrlValue(item.mainBackgroundUrl),
                 sidebarBackgroundUrl: normalizeThemeUrlValue(item.sidebarBackgroundUrl)
             }))
             .filter(item => item.key)
+    },
+    getSpecialPresets() {
+        return Array.isArray(this.specialPresetDefinitions)
+            ? this.specialPresetDefinitions.filter(item => item && typeof item === "object" && typeof item.key === "string" && item.key.trim())
+            : []
     },
     resetLocalThemeCache() {
         SafeStorage.local.remove(this.storageKey)
@@ -340,7 +368,8 @@ export const ThemeManager = {
             mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage),
             sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage),
             uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
-            cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
+            cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9),
+            ...normalizeThemeStyleSettings(settings, baseTheme)
         }
         this.saveSettings(normalizedSettings)
         if (!reference) return
@@ -373,6 +402,7 @@ export const ThemeManager = {
         const base = this.resolvePreset(presetKey)
         const normalizedOpacity = normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78)
         const normalizedCardsOpacity = normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
+        const styleSettings = normalizeThemeStyleSettings(settings, base)
         const mainBackgroundImage = this.pickRuntimeBackgroundValue(settings?.mainBackgroundUrl, settings?.mainBackgroundImage)
         const sidebarBackgroundImage = this.pickRuntimeBackgroundValue(settings?.sidebarBackgroundUrl, settings?.sidebarBackgroundImage)
         const appliedPrimaryColor = settings?.p || base.p
@@ -389,12 +419,13 @@ export const ThemeManager = {
             toolbarBg: `color-mix(in srgb, ${appliedBackgroundColor} 80%, ${appliedPrimaryColor} 20%)`,
             toolbarBorder: `color-mix(in srgb, ${appliedPrimaryColor} 42%, transparent)`,
             uiOpacity: normalizedOpacity,
-            cardsOpacity: normalizedCardsOpacity
+            cardsOpacity: normalizedCardsOpacity,
+            ...styleSettings
         }
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
         if (persist) {
-            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundUrl: normalizeThemeUrlValue(settings?.mainBackgroundUrl), sidebarBackgroundUrl: normalizeThemeUrlValue(settings?.sidebarBackgroundUrl), mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage), sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage), uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity })
+            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundUrl: normalizeThemeUrlValue(settings?.mainBackgroundUrl), sidebarBackgroundUrl: normalizeThemeUrlValue(settings?.sidebarBackgroundUrl), mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage), sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage), uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity, ...styleSettings })
         }
     },
     applyToRoot(theme) {
@@ -439,11 +470,13 @@ export const ThemeManager = {
         const root = document.getElementById("theme-picker-root")
         if (!root) return
         const customPresetKeys = this.getCustomPresets().map(item => `custom:${item.key}`)
+        const specialPresetKeys = this.getSpecialPresets().map(item => `special:${item.key}`)
         const customThemesLeft = Math.max(0, this.maxCustomPresets - customPresetKeys.length)
         const groups = [
             { id: "dark", title: getThemeText("theme_group_dark", "Dark themes"), items: ["oled", "soft_slate", "midnight", "dark_forest", "wine_night", "deep_purple", "graphite", "terminal", "amber_accent"] },
             { id: "light", title: getThemeText("theme_group_light", "Light themes"), items: ["standard_light", "retro_typewriter", "ice_cloud", "spring_mint", "sticky_note", "warm_sunset", "soft_rose", "barbie_style", "lavender_dream", "silver"] },
-            { id: "custom", title: getThemeText("theme_group_custom", "Custom"), items: customPresetKeys }
+            { id: "custom", title: getThemeText("theme_group_custom", "Custom"), items: customPresetKeys },
+            { id: "special", title: getThemeText("theme_group_special", "Special presets"), items: specialPresetKeys }
         ]
         root.innerHTML = ""
         groups.forEach(group => {
@@ -464,14 +497,18 @@ export const ThemeManager = {
                 buttonElement.className = "theme-item-wrapper"
                 buttonElement.dataset.themeKey = key
                 if (activeKey === key) buttonElement.classList.add("active")
+                const isSpecialPreset = key.startsWith("special:")
+                if (isSpecialPreset) buttonElement.classList.add("theme-item-placeholder")
+                buttonElement.disabled = isSpecialPreset
                 const dotElement = document.createElement("span")
                 dotElement.className = "theme-dot"
                 const customPreset = this.getCustomPresetByKey(key)
+                const specialPreset = isSpecialPreset ? this.getSpecialPresets().find(item => `special:${item.key}` === key) : null
                 dotElement.style.background = customPreset
                     ? `conic-gradient(${customPreset.p} 0deg 120deg, ${customPreset.bg} 120deg 240deg, ${customPreset.t} 240deg 360deg)`
-                    : this.resolvePreset(key).p
+                    : (specialPreset?.previewColor || this.resolvePreset(key).p)
                 buttonElement.appendChild(dotElement)
-                buttonElement.addEventListener("click", () => onSelect?.(key))
+                if (!isSpecialPreset) buttonElement.addEventListener("click", () => onSelect?.(key))
                 presetsGrid.appendChild(buttonElement)
             })
 
@@ -489,6 +526,12 @@ export const ThemeManager = {
                 leftLabel.className = "theme-custom-limit-label"
                 leftLabel.textContent = formatThemeText("theme_custom_limit", "Custom themes left: {count} of {max}", { count: customThemesLeft, max: this.maxCustomPresets })
                 sectionElement.appendChild(leftLabel)
+            }
+            if (group.id === "special") {
+                const hintLabel = document.createElement("div")
+                hintLabel.className = "theme-custom-limit-label"
+                hintLabel.textContent = getThemeText("theme_special_coming_soon", "Special presets will appear here soon")
+                sectionElement.appendChild(hintLabel)
             }
 
             sectionElement.appendChild(presetsGrid)
@@ -561,4 +604,3 @@ export const ThemeManager = {
 
 window.ThemeManager = ThemeManager
 window.buildThemeCloudPayload = buildThemeCloudPayload
-

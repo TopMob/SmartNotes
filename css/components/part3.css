@@ -365,6 +365,12 @@ select.input-area optgroup {
     background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
+.theme-presets-row .theme-item-wrapper.theme-item-placeholder {
+    opacity: 0.45;
+    border-style: dashed;
+    cursor: not-allowed;
+}
+
 .theme-custom-add {
     width: 38px;
     height: 38px;
@@ -499,4 +505,3 @@ select.input-area optgroup {
         grid-template-columns: 1fr;
     }
 }
-

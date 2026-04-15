@@ -277,6 +277,54 @@ Object.assign(UI, {
                         </div>
                     </div>
                     <div class="settings-section">
+                        <div class="settings-section-title">${dict.settings_theme_fine_tuning || "Fine theme tuning"}</div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_radius || "Corner rounding"}</span>
+                            <input type="range" min="6" max="36" step="1" class="input-area" data-appearance-theme-tuning="radius">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="radius"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_blur || "Glass blur"}</span>
+                            <input type="range" min="0" max="32" step="1" class="input-area" data-appearance-theme-tuning="blur">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="blur"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_density || "Density"}</span>
+                            <input type="range" min="80" max="125" step="1" class="input-area" data-appearance-theme-tuning="density">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="density"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_font_size || "Base font size"}</span>
+                            <input type="range" min="14" max="22" step="1" class="input-area" data-appearance-theme-tuning="fontBase">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="fontBase"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_type_scale || "Type scale"}</span>
+                            <input type="range" min="90" max="120" step="1" class="input-area" data-appearance-theme-tuning="typeScale">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="typeScale"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_spacing || "Base spacing"}</span>
+                            <input type="range" min="8" max="20" step="1" class="input-area" data-appearance-theme-tuning="spaceUnit">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="spaceUnit"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_editor_padding || "Editor padding"}</span>
+                            <input type="range" min="16" max="52" step="1" class="input-area" data-appearance-theme-tuning="editorPadding">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="editorPadding"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_line_height || "Editor line height"}</span>
+                            <input type="range" min="130" max="210" step="1" class="input-area" data-appearance-theme-tuning="editorLineHeight">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="editorLineHeight"></span>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">${dict.settings_theme_letter_spacing || "Editor letter spacing"}</span>
+                            <input type="range" min="-1" max="8" step="1" class="input-area" data-appearance-theme-tuning="editorLetterSpacing">
+                            <span class="folder-meta" data-appearance-theme-tuning-value="editorLetterSpacing"></span>
+                        </div>
+                    </div>
+                    <div class="settings-section">
                         <div class="settings-section-title">${dict.settings_backgrounds || "Backgrounds"}</div>
                         <div class="settings-background-grid">
                             <div class="field">
@@ -521,7 +569,16 @@ Object.assign(UI, {
             mainBackgroundImage: sourceTheme.mainBackgroundImage || "",
             sidebarBackgroundImage: sourceTheme.sidebarBackgroundImage || "",
             uiOpacity: typeof sourceTheme.uiOpacity === "number" ? sourceTheme.uiOpacity : 0.78,
-            cardsOpacity: typeof sourceTheme.cardsOpacity === "number" ? sourceTheme.cardsOpacity : 0.9
+            cardsOpacity: typeof sourceTheme.cardsOpacity === "number" ? sourceTheme.cardsOpacity : 0.9,
+            radius: Number(sourceTheme.radius ?? 12),
+            blur: Number(sourceTheme.blur ?? 12),
+            density: Number(sourceTheme.density ?? 1),
+            fontBase: Number(sourceTheme.fontBase ?? 16),
+            typeScale: Number(sourceTheme.typeScale ?? 1),
+            spaceUnit: Number(sourceTheme.spaceUnit ?? 12),
+            editorPadding: Number(sourceTheme.editorPadding ?? 30),
+            editorLineHeight: Number(sourceTheme.editorLineHeight ?? 1.72),
+            editorLetterSpacing: Number(String(sourceTheme.editorLetterSpacing ?? "0px").replace("px", ""))
         })
     },
 
@@ -539,9 +596,18 @@ Object.assign(UI, {
             mainBackgroundImage: typeof draft.mainBackgroundImage === "string" ? draft.mainBackgroundImage : "",
             sidebarBackgroundImage: typeof draft.sidebarBackgroundImage === "string" ? draft.sidebarBackgroundImage : "",
             uiOpacity: Math.min(1, Math.max(0.4, Number(draft.uiOpacity ?? 0.78))),
-            cardsOpacity: Math.min(1, Math.max(0.5, Number(draft.cardsOpacity ?? 0.9)))
+            cardsOpacity: Math.min(1, Math.max(0.5, Number(draft.cardsOpacity ?? 0.9))),
+            radius: Math.min(36, Math.max(6, Number(draft.radius ?? 12))),
+            blur: Math.min(32, Math.max(0, Number(draft.blur ?? 12))),
+            density: Math.min(1.25, Math.max(0.8, Number(draft.density ?? 1))),
+            fontBase: Math.min(22, Math.max(14, Number(draft.fontBase ?? 16))),
+            typeScale: Math.min(1.2, Math.max(0.9, Number(draft.typeScale ?? 1))),
+            spaceUnit: Math.min(20, Math.max(8, Number(draft.spaceUnit ?? 12))),
+            editorPadding: Math.min(52, Math.max(16, Number(draft.editorPadding ?? 30))),
+            editorLineHeight: Math.min(2.1, Math.max(1.3, Number(draft.editorLineHeight ?? 1.72))),
+            editorLetterSpacing: Math.min(8, Math.max(-1, Number(draft.editorLetterSpacing ?? 0)))
         }
-        if (normalizedDraft.mainBackgroundUrl !== draft.mainBackgroundUrl || normalizedDraft.sidebarBackgroundUrl !== draft.sidebarBackgroundUrl || normalizedDraft.mainBackgroundImage !== draft.mainBackgroundImage || normalizedDraft.sidebarBackgroundImage !== draft.sidebarBackgroundImage) {
+        if (JSON.stringify(normalizedDraft) !== JSON.stringify(draft)) {
             draft = normalizedDraft
             StateStore.update("appearanceDraft", draft)
         }
@@ -549,6 +615,7 @@ Object.assign(UI, {
         ThemeManager.syncInputs(draft.p, draft.bg, draft.t)
         this.syncAppearanceBackgroundInputs(draft)
         this.syncAppearanceOpacityControl(draft)
+        this.syncAppearanceFineTuneControls(draft)
         const onSelect = (key) => {
             let nextDraft = null
             if (key === "manual") {
@@ -573,7 +640,18 @@ Object.assign(UI, {
                     mainBackgroundImage: customPreset ? customPreset.mainBackgroundImage : (draft.mainBackgroundImage || ""),
                     sidebarBackgroundImage: customPreset ? customPreset.sidebarBackgroundImage : (draft.sidebarBackgroundImage || ""),
                     uiOpacity: customPreset && typeof customPreset.uiOpacity === "number" ? customPreset.uiOpacity : (typeof draft.uiOpacity === "number" ? draft.uiOpacity : 0.78),
-                    cardsOpacity: customPreset && typeof customPreset.cardsOpacity === "number" ? customPreset.cardsOpacity : (typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9)
+                    cardsOpacity: customPreset && typeof customPreset.cardsOpacity === "number" ? customPreset.cardsOpacity : (typeof draft.cardsOpacity === "number" ? draft.cardsOpacity : 0.9),
+                    radius: customPreset && typeof customPreset.radius === "number" ? customPreset.radius : (typeof draft.radius === "number" ? draft.radius : 12),
+                    blur: customPreset && typeof customPreset.blur === "number" ? customPreset.blur : (typeof draft.blur === "number" ? draft.blur : 12),
+                    density: customPreset && typeof customPreset.density === "number" ? customPreset.density : (typeof draft.density === "number" ? draft.density : 1),
+                    fontBase: customPreset && typeof customPreset.fontBase === "number" ? customPreset.fontBase : (typeof draft.fontBase === "number" ? draft.fontBase : 16),
+                    typeScale: customPreset && typeof customPreset.typeScale === "number" ? customPreset.typeScale : (typeof draft.typeScale === "number" ? draft.typeScale : 1),
+                    spaceUnit: customPreset && typeof customPreset.spaceUnit === "number" ? customPreset.spaceUnit : (typeof draft.spaceUnit === "number" ? draft.spaceUnit : 12),
+                    editorPadding: customPreset && typeof customPreset.editorPadding === "number" ? customPreset.editorPadding : (typeof draft.editorPadding === "number" ? draft.editorPadding : 30),
+                    editorLineHeight: customPreset && typeof customPreset.editorLineHeight === "number" ? customPreset.editorLineHeight : (typeof draft.editorLineHeight === "number" ? draft.editorLineHeight : 1.72),
+                    editorLetterSpacing: customPreset && typeof customPreset.editorLetterSpacing === "string"
+                        ? Number(String(customPreset.editorLetterSpacing).replace("px", ""))
+                        : (typeof draft.editorLetterSpacing === "number" ? draft.editorLetterSpacing : 0)
                 }
             }
             this.applyAppearanceDraft(nextDraft)
@@ -599,7 +677,18 @@ Object.assign(UI, {
                 mainBackgroundImage: createdPreset.mainBackgroundImage || "",
                 sidebarBackgroundImage: createdPreset.sidebarBackgroundImage || "",
                 uiOpacity: typeof createdPreset.uiOpacity === "number" ? createdPreset.uiOpacity : (typeof currentDraft.uiOpacity === "number" ? currentDraft.uiOpacity : 0.78),
-                cardsOpacity: typeof createdPreset.cardsOpacity === "number" ? createdPreset.cardsOpacity : (typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9)
+                cardsOpacity: typeof createdPreset.cardsOpacity === "number" ? createdPreset.cardsOpacity : (typeof currentDraft.cardsOpacity === "number" ? currentDraft.cardsOpacity : 0.9),
+                radius: typeof createdPreset.radius === "number" ? createdPreset.radius : (typeof currentDraft.radius === "number" ? currentDraft.radius : 12),
+                blur: typeof createdPreset.blur === "number" ? createdPreset.blur : (typeof currentDraft.blur === "number" ? currentDraft.blur : 12),
+                density: typeof createdPreset.density === "number" ? createdPreset.density : (typeof currentDraft.density === "number" ? currentDraft.density : 1),
+                fontBase: typeof createdPreset.fontBase === "number" ? createdPreset.fontBase : (typeof currentDraft.fontBase === "number" ? currentDraft.fontBase : 16),
+                typeScale: typeof createdPreset.typeScale === "number" ? createdPreset.typeScale : (typeof currentDraft.typeScale === "number" ? currentDraft.typeScale : 1),
+                spaceUnit: typeof createdPreset.spaceUnit === "number" ? createdPreset.spaceUnit : (typeof currentDraft.spaceUnit === "number" ? currentDraft.spaceUnit : 12),
+                editorPadding: typeof createdPreset.editorPadding === "number" ? createdPreset.editorPadding : (typeof currentDraft.editorPadding === "number" ? currentDraft.editorPadding : 30),
+                editorLineHeight: typeof createdPreset.editorLineHeight === "number" ? createdPreset.editorLineHeight : (typeof currentDraft.editorLineHeight === "number" ? currentDraft.editorLineHeight : 1.72),
+                editorLetterSpacing: typeof createdPreset.editorLetterSpacing === "string"
+                    ? Number(String(createdPreset.editorLetterSpacing).replace("px", ""))
+                    : (typeof currentDraft.editorLetterSpacing === "number" ? currentDraft.editorLetterSpacing : 0)
             }
             this.applyAppearanceDraft(nextDraft)
             this.renderAppearanceDraft()
@@ -648,7 +737,16 @@ Object.assign(UI, {
                 mainBackgroundImage: nextDraft.mainBackgroundImage || "",
                 sidebarBackgroundImage: nextDraft.sidebarBackgroundImage || "",
                 uiOpacity: typeof nextDraft.uiOpacity === "number" ? nextDraft.uiOpacity : 0.78,
-                cardsOpacity: typeof nextDraft.cardsOpacity === "number" ? nextDraft.cardsOpacity : 0.9
+                cardsOpacity: typeof nextDraft.cardsOpacity === "number" ? nextDraft.cardsOpacity : 0.9,
+                radius: Number(nextDraft.radius ?? 12),
+                blur: Number(nextDraft.blur ?? 12),
+                density: Number(nextDraft.density ?? 1),
+                fontBase: Number(nextDraft.fontBase ?? 16),
+                typeScale: Number(nextDraft.typeScale ?? 1),
+                spaceUnit: Number(nextDraft.spaceUnit ?? 12),
+                editorPadding: Number(nextDraft.editorPadding ?? 30),
+                editorLineHeight: Number(nextDraft.editorLineHeight ?? 1.72),
+                editorLetterSpacing: `${Number(nextDraft.editorLetterSpacing ?? 0)}px`
             },
             backgroundType: (nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage) ? "image" : "none",
             backgroundValue: nextDraft.mainBackgroundUrl || nextDraft.mainBackgroundImage || ""
@@ -671,7 +769,16 @@ Object.assign(UI, {
             mainBackgroundImage: defaults.mainBackgroundImage || "",
             sidebarBackgroundImage: defaults.sidebarBackgroundImage || "",
             uiOpacity: typeof defaults.uiOpacity === "number" ? defaults.uiOpacity : 0.78,
-            cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9
+            cardsOpacity: typeof defaults.cardsOpacity === "number" ? defaults.cardsOpacity : 0.9,
+            radius: Number(defaults.radius ?? 12),
+            blur: Number(defaults.blur ?? 12),
+            density: Number(defaults.density ?? 1),
+            fontBase: Number(defaults.fontBase ?? 16),
+            typeScale: Number(defaults.typeScale ?? 1),
+            spaceUnit: Number(defaults.spaceUnit ?? 12),
+            editorPadding: Number(defaults.editorPadding ?? 30),
+            editorLineHeight: Number(defaults.editorLineHeight ?? 1.72),
+            editorLetterSpacing: Number(String(defaults.editorLetterSpacing ?? "0px").replace("px", ""))
         }
         this.applyAppearanceDraft(draft)
         this.renderAppearanceDraft()
@@ -951,6 +1058,42 @@ Object.assign(UI, {
         }
         if (opacityLabel) opacityLabel.textContent = `${Math.round(uiOpacity * 100)}%`
         if (cardsOpacityLabel) cardsOpacityLabel.textContent = `${Math.round(cardsOpacity * 100)}%`
+    },
+    syncAppearanceFineTuneControls(draft) {
+        const controlDefinitions = [
+            { key: "radius", toInput: value => String(Math.round(value)), toState: value => Math.min(36, Math.max(6, Number(value || 12))), toLabel: value => `${Math.round(value)}px` },
+            { key: "blur", toInput: value => String(Math.round(value)), toState: value => Math.min(32, Math.max(0, Number(value || 12))), toLabel: value => `${Math.round(value)}px` },
+            { key: "density", toInput: value => String(Math.round(value * 100)), toState: value => Math.min(1.25, Math.max(0.8, Number(value || 100) / 100)), toLabel: value => `${Math.round(value * 100)}%` },
+            { key: "fontBase", toInput: value => String(Math.round(value)), toState: value => Math.min(22, Math.max(14, Number(value || 16))), toLabel: value => `${Math.round(value)}px` },
+            { key: "typeScale", toInput: value => String(Math.round(value * 100)), toState: value => Math.min(1.2, Math.max(0.9, Number(value || 100) / 100)), toLabel: value => `${Math.round(value * 100)}%` },
+            { key: "spaceUnit", toInput: value => String(Math.round(value)), toState: value => Math.min(20, Math.max(8, Number(value || 12))), toLabel: value => `${Math.round(value)}px` },
+            { key: "editorPadding", toInput: value => String(Math.round(value)), toState: value => Math.min(52, Math.max(16, Number(value || 30))), toLabel: value => `${Math.round(value)}px` },
+            { key: "editorLineHeight", toInput: value => String(Math.round(value * 100)), toState: value => Math.min(2.1, Math.max(1.3, Number(value || 172) / 100)), toLabel: value => value.toFixed(2) },
+            { key: "editorLetterSpacing", toInput: value => String(Math.round(value)), toState: value => Math.min(8, Math.max(-1, Number(value || 0))), toLabel: value => `${Math.round(value)}px` }
+        ]
+        controlDefinitions.forEach(definition => {
+            const inputElement = document.querySelector(`[data-appearance-theme-tuning="${definition.key}"]`)
+            const valueLabel = document.querySelector(`[data-appearance-theme-tuning-value="${definition.key}"]`)
+            const draftValue = Number(draft[definition.key] ?? 0)
+            if (inputElement) {
+                inputElement.value = definition.toInput(draftValue)
+                if (!inputElement.dataset.bound) {
+                    inputElement.dataset.bound = "1"
+                    inputElement.addEventListener("input", event => {
+                        const currentDraft = StateStore.read().appearanceDraft || ThemeManager.getSavedSettings()
+                        const nextValue = definition.toState(event.target.value)
+                        const nextDraft = { ...currentDraft, [definition.key]: nextValue }
+                        if (String(currentDraft.preset || "").startsWith("custom:")) {
+                            ThemeManager.updateCustomPreset(currentDraft.preset, {
+                                [definition.key]: definition.key === "editorLetterSpacing" ? `${nextValue}px` : nextValue
+                            })
+                        }
+                        this.applyAppearanceDraft(nextDraft)
+                    })
+                }
+            }
+            if (valueLabel) valueLabel.textContent = definition.toLabel(draftValue)
+        })
     },
 
     showToast(msg, options = {}) {
@@ -1302,4 +1445,3 @@ Object.assign(UI, {
         })
     }
 })
-

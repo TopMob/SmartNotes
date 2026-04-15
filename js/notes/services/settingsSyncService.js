@@ -14,7 +14,16 @@ const SettingsSyncService = (() => {
                 mainBackgroundImage: cachedThemeSettings.mainBackgroundImage || "",
                 sidebarBackgroundImage: cachedThemeSettings.sidebarBackgroundImage || "",
                 uiOpacity: typeof cachedThemeSettings.uiOpacity === "number" ? cachedThemeSettings.uiOpacity : 0.78,
-                cardsOpacity: typeof cachedThemeSettings.cardsOpacity === "number" ? cachedThemeSettings.cardsOpacity : 0.9
+                cardsOpacity: typeof cachedThemeSettings.cardsOpacity === "number" ? cachedThemeSettings.cardsOpacity : 0.9,
+                radius: typeof cachedThemeSettings.radius === "number" ? cachedThemeSettings.radius : 12,
+                blur: typeof cachedThemeSettings.blur === "number" ? cachedThemeSettings.blur : 12,
+                density: typeof cachedThemeSettings.density === "number" ? cachedThemeSettings.density : 1,
+                fontBase: typeof cachedThemeSettings.fontBase === "number" ? cachedThemeSettings.fontBase : 16,
+                typeScale: typeof cachedThemeSettings.typeScale === "number" ? cachedThemeSettings.typeScale : 1,
+                spaceUnit: typeof cachedThemeSettings.spaceUnit === "number" ? cachedThemeSettings.spaceUnit : 12,
+                editorPadding: typeof cachedThemeSettings.editorPadding === "number" ? cachedThemeSettings.editorPadding : 30,
+                editorLineHeight: typeof cachedThemeSettings.editorLineHeight === "number" ? cachedThemeSettings.editorLineHeight : 1.72,
+                editorLetterSpacing: typeof cachedThemeSettings.editorLetterSpacing === "string" ? cachedThemeSettings.editorLetterSpacing : "0px"
             },
             backgroundType: (cachedThemeSettings.mainBackgroundUrl || cachedThemeSettings.mainBackgroundImage) ? "image" : "none",
             backgroundValue: cachedThemeSettings.mainBackgroundUrl || cachedThemeSettings.mainBackgroundImage || "",
@@ -41,7 +50,16 @@ const SettingsSyncService = (() => {
             mainBackgroundUrl: String(customThemeSource.mainBackgroundUrl || ""), sidebarBackgroundUrl: String(customThemeSource.sidebarBackgroundUrl || ""),
             mainBackgroundImage: String(customThemeSource.mainBackgroundImage || ""), sidebarBackgroundImage: String(customThemeSource.sidebarBackgroundImage || ""),
             uiOpacity: typeof customThemeSource.uiOpacity === "number" ? customThemeSource.uiOpacity : 0.78,
-            cardsOpacity: typeof customThemeSource.cardsOpacity === "number" ? customThemeSource.cardsOpacity : 0.9
+            cardsOpacity: typeof customThemeSource.cardsOpacity === "number" ? customThemeSource.cardsOpacity : 0.9,
+            radius: Math.min(36, Math.max(6, Number(customThemeSource.radius ?? 12))),
+            blur: Math.min(32, Math.max(0, Number(customThemeSource.blur ?? 12))),
+            density: Math.min(1.25, Math.max(0.8, Number(customThemeSource.density ?? 1))),
+            fontBase: Math.min(22, Math.max(14, Number(customThemeSource.fontBase ?? 16))),
+            typeScale: Math.min(1.2, Math.max(0.9, Number(customThemeSource.typeScale ?? 1))),
+            spaceUnit: Math.min(20, Math.max(8, Number(customThemeSource.spaceUnit ?? 12))),
+            editorPadding: Math.min(52, Math.max(16, Number(customThemeSource.editorPadding ?? 30))),
+            editorLineHeight: Math.min(2.1, Math.max(1.3, Number(customThemeSource.editorLineHeight ?? 1.72))),
+            editorLetterSpacing: `${Math.min(8, Math.max(-1, Number(String(customThemeSource.editorLetterSpacing ?? "0px").replace("px", ""))))}px`
         }
         return {
             notesPerPage,
@@ -132,4 +150,3 @@ const SettingsSyncService = (() => {
     function clear() { if (state.unsubscribe) state.unsubscribe(); state.unsubscribe = null; state.reference = null }
     return { initialize, clear, saveUserSettings, applyUserSettingsToRuntime: applyToRuntime, normalizeUserSettings }
 })()
-
