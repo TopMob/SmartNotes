@@ -118,28 +118,16 @@ export const createClipboardHandlers = (context) => {
         .replace(/^\n+/, "")
         .replace(/\n+$/, "")
 
-    const paragraphToText = (paragraph) => {
-        if (!paragraph || paragraph.nodeType !== Node.ELEMENT_NODE) return ""
-        return String(paragraph.textContent || "")
-            .replace(/\u200b/g, "")
-            .trim()
-    }
-
-    const serializeParagraphs = (container) => {
-        if (!container) return ""
-        const blocks = Array.from(container.querySelectorAll("p"))
-        if (!blocks.length) return normalizeClipboardPlainText(container.textContent || "")
-        const lines = blocks.map(paragraph => paragraphToText(paragraph))
-        while (lines.length && lines[0] === "") lines.shift()
-        while (lines.length && lines[lines.length - 1] === "") lines.pop()
-        return lines.join("\n")
-    }
-
     const fragmentToPlainText = (node) => {
         if (!node) return ""
         const container = document.createElement("div")
         container.appendChild(node.cloneNode(true))
-        return normalizeClipboardPlainText(serializeParagraphs(container))
+        const blocks = Array.from(container.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote"))
+        if (!blocks.length) return normalizeClipboardPlainText(container.textContent || "")
+        const lines = blocks.map(block => String(block.textContent || "").replace(/\u200b/g, "").trim())
+        while (lines.length && lines[0] === "") lines.shift()
+        while (lines.length && lines[lines.length - 1] === "") lines.pop()
+        return lines.join("\n")
     }
 
     const hasRichContentWithoutText = (container) => !!container?.querySelector?.("img,audio,video,table,hr")

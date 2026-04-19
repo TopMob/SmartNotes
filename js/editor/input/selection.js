@@ -2,6 +2,7 @@ export const createSelectionHandlers = (context) => {
     const { elements, state } = context
     const blockSelector = "p,li,blockquote,pre,h1,h2,h3,h4,h5,h6"
     const rootBlockSelector = "p,ul,ol,li,blockquote,pre,h1,h2,h3,h4,h5,h6,hr,table,.media-wrapper"
+    
     const resolvePageFromNode = (node) => node?.nodeType === Node.ELEMENT_NODE
         ? node.closest(".note-page")
         : node?.parentElement?.closest(".note-page")
@@ -202,10 +203,12 @@ export const createSelectionHandlers = (context) => {
 
     const resolveSafeRange = (range) => {
         if (!range || !elements.content) return null
-        if (elements.content.contains(range.commonAncestorContainer)
-            && elements.content.contains(range.startContainer)
-            && elements.content.contains(range.endContainer)) {
-            return normalizeRangeToEditableRange(range)
+        const isSafe = elements.content.contains(range.commonAncestorContainer) || elements.content === range.commonAncestorContainer
+        if (isSafe) {
+            if (range.collapsed && (range.startContainer === elements.content || range.startContainer.classList?.contains("note-page"))) {
+                return normalizeRangeToEditableRange(range)
+            }
+            return range
         }
         return restoreRangeFromBookmark()
     }
@@ -305,30 +308,44 @@ export const createSelectionHandlers = (context) => {
         if (!elements.content || !contentNode) return false
         const range = restoreSelection()
         if (!range) return false
+        
         const blockInsertion = hasRootBlocksInNode(contentNode)
-        const activeBlock = blockInsertion ? getBlockFromRange(range) : null
+        let activeBlock = blockInsertion ? getBlockFromRange(range) : null
+        
+        if (!range.collapsed) {
+            range.deleteContents()
+        }
+        
+        if (activeBlock && !elements.content.contains(activeBlock)) {
+            activeBlock = null
+        }
+
+        const insertedNodes = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+            ? Array.from(contentNode.childNodes)
+            : [contentNode]
+
+        if (insertedNodes.length === 0) return false
+
+        const lastInserted = insertedNodes[insertedNodes.length - 1]
+
         const activeBlockTag = String(activeBlock?.tagName || "").toLowerCase()
         const canSplitActiveBlock = !!activeBlock && activeBlockTag === "p"
-        const anchorNode = contentNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? contentNode.lastChild : contentNode
-        if (!anchorNode) return false
-        range.deleteContents()
 
         if (blockInsertion && canSplitActiveBlock) {
-            const targetBlock = getBlockFromRange(range) || activeBlock
+            const targetBlock = activeBlock
             if (targetBlock && targetBlock.parentNode) {
                 const parent = targetBlock.parentNode
                 const insertionPoint = targetBlock.nextSibling
                 const wasEmptyBlock = isEffectivelyEmptyBlock(targetBlock)
+                
                 const trailingRange = document.createRange()
                 trailingRange.selectNodeContents(targetBlock)
                 trailingRange.setStart(range.startContainer, range.startOffset)
                 const trailingContent = trailingRange.extractContents()
-                const insertedNodes = getInsertedNodes(contentNode)
 
                 if (wasEmptyBlock) targetBlock.remove()
 
                 parent.insertBefore(contentNode, insertionPoint)
-                const lastInserted = insertedNodes[insertedNodes.length - 1] || null
 
                 if (!wasEmptyBlock && trailingContent.childNodes.length) {
                     const trailingBlock = document.createElement(activeBlockTag || "p")
@@ -340,15 +357,30 @@ export const createSelectionHandlers = (context) => {
                     }
                 }
 
-                const selectionRange = createCollapsedRangeAfterNode(parent, lastInserted)
+                const selectionRange = document.createRange()
+                if (lastInserted.nodeType === Node.ELEMENT_NODE) {
+                    selectionRange.selectNodeContents(lastInserted)
+                    selectionRange.collapse(false)
+                } else {
+                    selectionRange.setStartAfter(lastInserted)
+                    selectionRange.collapse(true)
+                }
                 return setSelectionRange(selectionRange)
             }
         }
 
         range.insertNode(contentNode)
-        range.setStartAfter(anchorNode)
-        range.collapse(true)
-        return setSelectionRange(range)
+
+        const newRange = document.createRange()
+        if (lastInserted.nodeType === Node.ELEMENT_NODE) {
+            newRange.selectNodeContents(lastInserted)
+            newRange.collapse(false)
+        } else {
+            newRange.setStartAfter(lastInserted)
+            newRange.collapse(true)
+        }
+
+        return setSelectionRange(newRange)
     }
 
     const insertHtmlAtSelection = (html) => insertFragmentAtSelection(createFragmentFromHtml(html))

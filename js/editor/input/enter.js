@@ -1,5 +1,3 @@
-const supportsBeforeInputParagraph = typeof InputEvent !== "undefined" && "inputType" in InputEvent.prototype
-
 const resolveEditableBlockTag = (node, fallbackTag = "p") => {
     const tagName = String(node?.tagName || "").toLowerCase()
     if (["p", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tagName)) return tagName
@@ -45,7 +43,9 @@ export const createEnterHandlers = (context) => {
         if (!listItem) return
         const textContent = (listItem.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
         const hasMedia = !!listItem.querySelector("img,audio,video,table,hr")
-        if (!textContent && !hasMedia && !listItem.querySelector("br")) listItem.appendChild(document.createElement("br"))
+        if (!textContent && !hasMedia && !listItem.querySelector("br")) {
+            listItem.appendChild(document.createElement("br"))
+        }
     }
 
     const isListItemVisuallyEmpty = (listItem) => {
@@ -98,7 +98,9 @@ export const createEnterHandlers = (context) => {
         splitRange.setEndAfter(listItem.lastChild || listItem)
         const trailingContent = splitRange.extractContents()
         const nextItem = document.createElement("li")
-        if (trailingContent.childNodes.length) nextItem.appendChild(trailingContent)
+        if (trailingContent.childNodes.length) {
+            nextItem.appendChild(trailingContent)
+        }
         ensureEditableListItemContent(listItem)
         ensureEditableListItemContent(nextItem)
         listItem.after(nextItem)
@@ -119,7 +121,10 @@ export const createEnterHandlers = (context) => {
         const range = document.createRange()
         range.selectNodeContents(block)
         range.collapse(true)
-        if (typeof setSelectionRange === "function") return setSelectionRange(range)
+        if (typeof setSelectionRange === "function") {
+            setSelectionRange(range)
+            return true
+        }
         placeCaretAtStart(block)
         return true
     }
@@ -129,6 +134,14 @@ export const createEnterHandlers = (context) => {
         trailingRange.selectNodeContents(block)
         trailingRange.setStart(range.startContainer, range.startOffset)
         return trailingRange.extractContents()
+    }
+
+    const getNextTagName = (activeBlock, hasTrailingContent) => {
+        const currentTag = resolveEditableBlockTag(activeBlock, "p")
+        if (/^h[1-6]$/.test(currentTag) && !hasTrailingContent) {
+            return "p"
+        }
+        return currentTag
     }
 
     const insertBlockBreak = (range) => {
@@ -146,13 +159,19 @@ export const createEnterHandlers = (context) => {
             return true
         }
 
-        const nextTagName = resolveEditableBlockTag(activeBlock, "p")
         const trailingContent = extractTrailingContent(activeBlock, range)
+        const trailingText = (trailingContent.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
+        const hasTrailingMedia = !!trailingContent.querySelector("img,audio,video,table,hr")
+        const hasRealContent = !!trailingText || hasTrailingMedia
+
+        const nextTagName = getNextTagName(activeBlock, hasRealContent)
         const nextBlock = createEmptyBlock(nextTagName)
+
         if (trailingContent.childNodes.length) {
             while (nextBlock.firstChild) nextBlock.removeChild(nextBlock.firstChild)
             nextBlock.appendChild(trailingContent)
         }
+
         ensureEditableBlockContent(activeBlock)
         ensureEditableBlockContent(nextBlock)
         activeBlock.after(nextBlock)
@@ -167,6 +186,7 @@ export const createEnterHandlers = (context) => {
         const handled = listItem
             ? (isListItemVisuallyEmpty(listItem) ? exitCurrentListItem(listItem) : insertListItemBreak(listItem, range))
             : insertBlockBreak(range)
+        
         if (!handled) return false
         applyTagLineMode()
         queueSnapshot()
@@ -175,13 +195,13 @@ export const createEnterHandlers = (context) => {
 
     const handleBeforeInput = (event) => {
         if (event.defaultPrevented) return
-        if (event.inputType !== "insertParagraph") return
-        event.preventDefault()
-        executeEnter()
+        if (event.inputType === "insertParagraph" || event.inputType === "insertLineBreak") {
+            event.preventDefault()
+            executeEnter()
+        }
     }
 
     const handleEnter = (event) => {
-        if (supportsBeforeInputParagraph) return
         if (event.key !== "Enter") return
         if (event.defaultPrevented) return
         if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
