@@ -1,5 +1,5 @@
 export const createLinkHandlers = (context) => {
-    const { getActiveRangeInContent, openFromList, getEditorCommands } = context
+    const { getActiveRangeInContent, restoreSelection, openFromList, getEditorCommands } = context
 
     const normalizeUrl = (value) => {
         const url = String(value || "").trim()
@@ -13,6 +13,7 @@ export const createLinkHandlers = (context) => {
     const applyLink = (value) => {
         const url = normalizeUrl(value)
         if (!url) return
+        if (typeof restoreSelection === "function") restoreSelection()
         const range = getActiveRangeInContent()
         if (!range || range.collapsed) {
             UI.showToast(UI.getText("link_selection_required", "Select text to link"))

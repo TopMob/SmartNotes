@@ -130,6 +130,7 @@ export const EditorAPI = (() => {
             getRoot: () => document.getElementById("note-content-editable"),
             getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
             storeSelection: inputHandlers.storeSelection,
+            restoreSelection: inputHandlers.restoreSelection,
             queueSnapshot: (...args) => queueSnapshot(...args),
             fallback: {
                 enableFallback: StateStore.read().config?.editorExecCommandFallback !== false
@@ -606,22 +607,35 @@ export const EditorAPI = (() => {
                 if (!(targetElement instanceof HTMLInputElement)) return
                 const file = targetElement.files?.[0]
                 if (!file) return
-                const loadingLock = typeof UI.startLoading === "function"
-                    ? UI.startLoading(UI.getText("loading_image", "Загрузка изображения..."))
-                    : null
+                const previewUrl = URL.createObjectURL(file)
+                inputHandlers.restoreSelection()
+                const mediaId = mediaHandlers.insertMedia(previewUrl, "image")
+                if (mediaId) {
+                    UI.showToast(UI.getText("loading_image", "Загрузка изображения..."))
+                    queueSnapshot()
+                }
                 try {
                     const imageUrl = await fileToDataUrl(file)
-                    mediaHandlers.insertMedia(imageUrl, "image")
+                    if (mediaId) {
+                        mediaHandlers.replaceMediaSource(mediaId, imageUrl)
+                        queueSnapshot()
+                    } else {
+                        mediaHandlers.insertMedia(imageUrl, "image")
+                    }
                     targetElement.value = ""
                 } catch (error) {
                     const errorCode = error?.code || error?.message || "unknown"
+                    if (mediaId) {
+                        document.getElementById(mediaId)?.remove()
+                        queueSnapshot()
+                    }
                     if (String(errorCode).includes("external-") || String(errorCode).startsWith("drive-")) {
                         UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
                     } else {
                         UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
                     }
                 } finally {
-                    if (typeof UI.stopLoading === "function") UI.stopLoading(loadingLock)
+                    URL.revokeObjectURL(previewUrl)
                 }
             }, { signal })
         }

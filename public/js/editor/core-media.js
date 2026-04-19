@@ -213,7 +213,7 @@ export const createMediaHandlers = (context) => {
 
     const insertMedia = (src, type) => {
         const normalizedSource = String(src || "").trim()
-        if (type !== "image" || !/^https:\/\//i.test(normalizedSource) && !/^data:image\//i.test(normalizedSource)) return
+        if (type !== "image" || !/^https:\/\//i.test(normalizedSource) && !/^data:image\//i.test(normalizedSource)) return ""
         const id = Utils.generateId()
         const html = createMediaHtml({
             id,
@@ -222,6 +222,19 @@ export const createMediaHandlers = (context) => {
         insertHtmlAtSelection(html)
         makeMediaDraggable()
         syncMediaSizes()
+        return id
+    }
+
+    const replaceMediaSource = (mediaId, nextSource) => {
+        const normalizedId = String(mediaId || "").trim()
+        const normalizedSource = String(nextSource || "").trim()
+        if (!normalizedId || !normalizedSource) return false
+        const wrapper = document.getElementById(normalizedId)
+        if (!wrapper) return false
+        const imageElement = wrapper.querySelector("img")
+        if (!imageElement) return false
+        imageElement.src = normalizedSource
+        return true
     }
 
     const makeMediaDraggable = () => {
@@ -383,6 +396,7 @@ export const createMediaHandlers = (context) => {
         handleMediaDragStart,
         handleNativeDragStart,
         insertMedia,
+        replaceMediaSource,
         makeMediaDraggable,
         syncMediaSizes,
         selectMedia,
@@ -395,4 +409,3 @@ export const createMediaHandlers = (context) => {
         cleanupPointerInteractions
     }
 }
-

@@ -10,6 +10,7 @@ export const createFeatureEngine = (context) => {
     const commands = createEditorCommands(context.commands)
     const links = createLinkHandlers({
         getActiveRangeInContent: context.commands.getActiveRangeInContent,
+        restoreSelection: context.commands.restoreSelection,
         getEditorCommands: () => commands,
         openFromList: context.openFromList
     })
