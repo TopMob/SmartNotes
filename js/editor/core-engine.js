@@ -1,3 +1,5 @@
+"use strict";
+
 import { CONFIG, createEditorState } from "./core-state.js"
 import { createHistoryHandlers } from "./core-history.js"
 import { createAutosaveHandlers } from "./core-autosave.js"

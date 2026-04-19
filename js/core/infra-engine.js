@@ -1,3 +1,5 @@
+"use strict";
+
 import { initFirebase } from "./firebase.js"
 import { createAuthManager } from "./auth.js"
 

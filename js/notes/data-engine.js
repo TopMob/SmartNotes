@@ -1,3 +1,5 @@
+"use strict";
+
 const FAVORITES_STORAGE_KEY = "favorite-notes"
 const NOTES_FILTER_KEY = "notes-filter"
 const SAVED_NOTES_FILTERS_KEY = "saved-notes-filters"
@@ -472,25 +474,3 @@ window.moveNoteToFolder = moveNoteToFolder
 window.restoreFolderById = restoreFolderById
 window.deleteFolderPermanently = deleteFolderPermanently
 window.clearTrashPermanently = clearTrashPermanently
-
-
-
-window.NotesDataEngine = {
-    updateSearchQuery,
-    switchView,
-    getLockedNotes,
-    deleteFolder,
-    openNoteActions,
-    deleteNoteById,
-    restoreNoteById,
-    scheduleReminder,
-    clearReminder,
-    copyNoteTextById,
-    toggleFavorite,
-    togglePin,
-    toggleArchive,
-    moveNoteToFolder,
-    restoreFolderById,
-    deleteFolderPermanently,
-    clearTrashPermanently
-}

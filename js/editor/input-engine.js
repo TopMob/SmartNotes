@@ -1,3 +1,5 @@
+"use strict";
+
 import { createSelectionHandlers } from "./input/selection.js"
 import { createClipboardHandlers } from "./input/clipboard.js"
 import { createTagHandlers } from "./input/tags.js"

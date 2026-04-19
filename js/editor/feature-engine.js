@@ -1,3 +1,5 @@
+"use strict";
+
 import { createMediaHandlers } from "./core-media.js"
 import { createLinkHandlers } from "./core-links.js"
 import { createEditorCommands } from "./editor-commands.js"

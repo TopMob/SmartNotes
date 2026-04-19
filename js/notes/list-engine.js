@@ -1,3 +1,5 @@
+"use strict";
+
 const NotesListEngine = (() => {
     const cardCache = new Map()
     const runtime = {
@@ -257,4 +259,3 @@ const NotesListEngine = (() => {
 })()
 
 window.NotesRenderer = NotesListEngine
-window.NotesListEngine = NotesListEngine
