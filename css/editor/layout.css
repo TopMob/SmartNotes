@@ -65,6 +65,8 @@
 }
 
 .editor-scroll-area {
+    padding-bottom: 10px !important;
+    scroll-padding-bottom: 10px !important;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -72,8 +74,6 @@
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
     padding: var(--editor-padding);
-    padding-bottom: var(--editor-bottom-offset);
-    scroll-padding-bottom: var(--editor-bottom-offset);
     display: flex;
     flex-direction: column;
     gap: 8px;

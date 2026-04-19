@@ -1,5 +1,5 @@
 const MOBILE_QUERY = "(max-width: 760px)"
-const DESKTOP_BOTTOM_EXTRA = 20
+const DESKTOP_BOTTOM_EXTRA = 4
 const MOBILE_BOTTOM_EXTRA = 44
 
 export const createEditorLayoutHandlers = ({ elements }) => {
