@@ -7,31 +7,20 @@
     <meta name="theme-color" content="#ffffff">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
     <title>SmartNotes</title>
-
     <script>window.APP_VERSION = "2026-02-22-1e1b181"</script>
     <script src="js/core/backendConfig.js?v=2026-03-26-config" type="module"></script>
     <script src="js/core/infra-engine.js?v=2026-04-19-infra" type="module"></script>
     <script src="js/core/logging.js?v=2026-02-22-1e1b181" defer></script>
-
     <link rel="icon" type="image/x-icon" href="favicon.ico?v=2026-02-22-1e1b181">
     <link rel="apple-touch-icon" href="Logo.png?v=2026-02-22-1e1b181">
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://www.gstatic.com">
-
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
-
     <link rel="stylesheet" href="css/base.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/layout.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/editor/index.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/components.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/responsive.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/presets/active.css?v=2026-02-22-1e1b181">
-
-
     <script src="js/core/safeStorage.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/core/eventBus.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/state.js?v=2026-02-22-1e1b181" defer></script>
@@ -59,8 +48,8 @@
     <script src="js/ui/render/folders.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/shared-access.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/feedback.js?v=2026-02-22-1e1b181" defer></script>
-        <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
-        <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
+    <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/foldersRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/settingsRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/workspacesRepository.js?v=2026-02-22-1e1b181" defer></script>
@@ -78,7 +67,7 @@
     <script src="js/notes/services/notesQueryService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesPresenter.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesUiAdapter.js?v=2026-02-22-1e1b181" defer></script>
-                    <script src="js/calculator.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/calculator.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/editor/runtime-loader.js?v=2026-04-19-runtime-loader" defer></script>
     <script src="js/editor/core.js?v=2026-02-22-1e1b181" type="module"></script>
     <script src="js/app/runtime/stateRenderer.js?v=2026-04-10-app-runtime" defer></script>
@@ -87,16 +76,13 @@
     <script src="js/app/runtime/runtimeInitializer.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/notes/app.js?v=2026-04-10-app-runtime" defer></script>
 </head>
-
 <body>
     <div class="bg-wrapper" aria-hidden="true"></div>
-
     <div id="splash-screen" class="splash active" aria-live="polite">
         <h1>SmartNotes</h1>
         <p>AI-organized thinking</p>
         <div class="loader" aria-hidden="true"></div>
     </div>
-
     <div id="login-screen" class="modal-overlay active" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
         <div class="login-box">
             <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
@@ -105,7 +91,6 @@
                 <button type="button" class="btn-auth-tab active" id="email-signin-tab" data-auth-mode="signin" data-lang="email_signin_tab">Вход</button>
                 <button type="button" class="btn-auth-tab" id="email-signup-tab" data-auth-mode="signup" data-lang="email_signup_tab">Регистрация</button>
             </div>
-
             <form id="email-signin-form" class="auth-form" novalidate>
                 <label class="auth-field" for="email-signin-input">
                     <span data-lang="email_label">Email</span>
@@ -121,7 +106,6 @@
                 <button type="button" class="btn-auth-link" data-auth-action="forgot-password" data-lang="forgot_password">Забыли пароль?</button>
                 <button type="submit" class="btn-auth primary" data-lang="email_signin_button">Войти по email</button>
             </form>
-
             <form id="email-signup-form" class="auth-form hidden" novalidate>
                 <label class="auth-field" for="email-signup-input">
                     <span data-lang="email_label">Email</span>
@@ -143,18 +127,15 @@
                 </label>
                 <button type="submit" class="btn-auth primary" data-lang="email_signup_button">Зарегистрироваться</button>
             </form>
-
             <div id="email-auth-feedback" class="auth-feedback" role="status" aria-live="polite"></div>
-
             <div class="auth-buttons-group">
                 <button type="button" class="btn-auth google" data-action="login">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="" width="20" height="20">
+                    <img src="css/Glogo.svg" alt="" width="20" height="20">
                     <span data-lang="login_google">Войти через Google</span>
                 </button>
             </div>
         </div>
     </div>
-
     <div id="app" class="app-layout" aria-hidden="false">
         <aside id="sidebar" class="sidebar-glass" aria-label="Навигация" data-lang-aria="nav_aria">
             <header class="sidebar-header">
@@ -163,30 +144,24 @@
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
-
             <nav class="sidebar-nav scrollable" aria-label="Разделы" data-lang-aria="sections_aria">
                 <div class="nav-group">
                     <button type="button" class="nav-item active" data-action="switch-view" data-view="notes">
                         <i class="material-icons-round" aria-hidden="true">description</i>
                         <span data-lang="all_notes">Все записи</span>
                     </button>
-
                     <button type="button" class="nav-item" data-action="switch-view" data-view="favorites">
                         <i class="material-icons-round" aria-hidden="true">star</i>
                         <span data-lang="favorites">Важное</span>
                     </button>
-
                     <button type="button" class="nav-item" data-action="switch-view" data-view="archive">
                         <i class="material-icons-round" aria-hidden="true">archive</i>
                         <span data-lang="archive">Архив</span>
                     </button>
-
                     <button type="button" class="nav-item" data-action="switch-view" data-view="reminders">
                         <i class="material-icons-round" aria-hidden="true">schedule</i>
                         <span data-lang="reminder_notes">Напоминания</span>
                     </button>
-
-
                     <button type="button" class="nav-item" data-action="switch-view" data-view="trash">
                         <i class="material-icons-round" aria-hidden="true">delete</i>
                         <span data-lang="trash">Корзина</span>
@@ -195,23 +170,19 @@
                         <i class="material-icons-round" aria-hidden="true">folder</i>
                         <span data-lang="folders_overview">Папки</span>
                     </button>
-
                     <button type="button" class="nav-item" data-action="switch-view" data-view="shared_access">
                         <i class="material-icons-round" aria-hidden="true">groups</i>
                         <span data-lang="shared_access">Совместный доступ</span>
                     </button>
-
                     <button type="button" class="nav-item" data-action="create-folder">
                         <i class="material-icons-round" aria-hidden="true">create_new_folder</i>
                         <span data-lang="create_folder">Создать папку</span>
                     </button>
                 </div>
-
                 <div class="nav-group">
                     <div class="nav-title" data-lang="folders">ПАПКИ</div>
                     <div id="folder-list-root" class="folder-list-root"></div>
                 </div>
-
                 <div class="nav-group">
                     <div class="nav-title" data-lang="smart_features">УМНЫЕ ФУНКЦИИ</div>
                     <button type="button" class="nav-item" data-action="switch-view" data-view="locked">
@@ -228,7 +199,6 @@
                     </button>
                 </div>
             </nav>
-
             <footer class="sidebar-footer">
                 <button type="button" class="footer-link" data-action="open-modal" data-modal="feedback-menu-modal">
                     <i class="material-icons-round" aria-hidden="true">forum</i>
@@ -240,9 +210,7 @@
                 </button>
             </footer>
         </aside>
-
         <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
-
         <main class="main-content">
             <header class="top-bar" role="banner">
                 <div class="header-left">
@@ -299,12 +267,10 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="search-container" role="search">
                     <i class="material-icons-round search-icon" aria-hidden="true">search</i>
                     <input type="text" id="search-input" placeholder="Поиск..." data-lang-placeholder="search" autocomplete="off" aria-label="Поиск заметок" data-lang-aria="search_aria">
                 </div>
-
                 <div class="header-right">
                     <button type="button" id="clear-trash-button" class="btn-icon hidden" data-action="clear-trash" aria-label="Очистить корзину" data-lang-aria="clear_trash">
                         <i class="material-icons-round" aria-hidden="true">delete_sweep</i>
@@ -312,7 +278,6 @@
                     <button type="button" id="notes-filter-toggle" class="btn-icon" data-action="toggle-filter-menu" aria-label="Фильтры" data-lang-aria="filters">
                         <i class="material-icons-round" aria-hidden="true">filter_alt</i>
                     </button>
-
                     <div class="user-avatar-wrapper">
                         <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" class="header-avatar" data-action="toggle-user-menu">
                         <div id="user-dropdown" class="dropdown-menu" role="menu" aria-label="Пользователь" data-lang-aria="user_menu">
@@ -344,7 +309,6 @@
                     </div>
                 </div>
             </header>
-
             <div id="notes-filter-menu" class="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
                 <div class="filter-section" id="notes-filter-section-saved">
                     <label for="notes-saved-filter-select" data-lang="saved_filters">Сохранённые фильтры</label>
@@ -386,34 +350,28 @@
                     <div id="notes-folder-filters" class="filter-options"></div>
                 </div>
             </div>
-
             <section id="notes-content-area" class="content-scrollable scrollable" aria-label="Список заметок" data-lang-aria="notes_list_aria">
                 <div id="app-loader" class="loader-container hidden" aria-hidden="true">
                     <div class="spinner" aria-hidden="true"></div>
                 </div>
-
                 <div id="empty-state" class="empty-placeholder hidden" aria-live="polite">
                     <i class="material-icons-round" aria-hidden="true">note_add</i>
                     <p data-lang="empty">Здесь пока пусто</p>
                 </div>
-
                 <div id="notes-container" class="notes-grid" role="list"></div>
                 <button type="button" id="load-more-notes-button" class="btn-secondary load-more-notes hidden" data-action="load-more-notes" data-lang="load_more_notes">Загрузить ещё</button>
             </section>
-
             <button type="button" class="btn-fab" data-action="primary-action" aria-label="Создать заметку" data-lang-aria="create_note">
                 <i class="material-icons-round" aria-hidden="true">add</i>
             </button>
         </main>
     </div>
-
     <div id="note-editor" class="editor-overlay" role="dialog" aria-modal="true" aria-label="Редактор" data-lang-aria="editor">
         <div class="editor-container">
             <header class="editor-header-bar">
                 <button type="button" class="btn-icon" data-action="close-editor" aria-label="Назад" data-lang-aria="back">
                     <i class="material-icons-round" aria-hidden="true">arrow_back</i>
                 </button>
-
                 <div class="editor-tools" aria-label="Действия редактора" data-lang-aria="editor_actions">
                     <div class="editor-page-controls editor-page-controls-header" aria-label="Страницы" data-lang-aria="editor_pages">
                         <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
@@ -427,36 +385,29 @@
                             <i class="material-icons-round" aria-hidden="true">menu_book</i>
                         </button>
                     </div>
-
                     <div class="divider-vertical" aria-hidden="true"></div>
-
                     <button type="button" class="btn-icon" data-action="editor-undo" aria-label="Отменить" data-lang-aria="undo">
                         <i class="material-icons-round" aria-hidden="true">undo</i>
                     </button>
                     <button type="button" class="btn-icon" data-action="editor-redo" aria-label="Повторить" data-lang-aria="redo">
                         <i class="material-icons-round" aria-hidden="true">redo</i>
                     </button>
-
                     <div class="divider-vertical" aria-hidden="true"></div>
-
                     <button type="button" class="btn-icon" data-action="editor-note-actions" aria-label="Действия с заметкой" data-lang-aria="folder_actions">
                         <i class="material-icons-round" aria-hidden="true">more_vert</i>
                     </button>
-
                     <button type="button" class="btn-icon" id="toolbar-toggle" data-action="toggle-toolbar" aria-label="Скрыть панель инструментов" data-lang-aria="toolbar_hide">
                         <i class="material-icons-round" aria-hidden="true">expand_less</i>
                     </button>
                 </div>
             </header>
-
             <div class="editor-scroll-area scrollable">
                 <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
-
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
                 <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования" data-lang-aria="drawing_settings">
                     <div class="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
                         <button type="button" class="drawing-tool-btn is-active" data-drawing-tool="pen" data-lang="drawing_tool_pen">Перо</button>
-                                                <button type="button" class="drawing-tool-btn" data-drawing-tool="eraser" data-lang="drawing_tool_eraser">Ластик</button>
+                        <button type="button" class="drawing-tool-btn" data-drawing-tool="eraser" data-lang="drawing_tool_eraser">Ластик</button>
                     </div>
                     <label class="drawing-control">
                         <span class="drawing-control-label" data-lang="drawing_color">Цвет</span>
@@ -496,19 +447,15 @@
                         <input id="drawing-size" type="range" class="drawing-range" min="1" max="16" value="3" aria-label="Размер" data-lang-aria="drawing_size">
                     </label>
                 </div>
-
                 <div class="note-content-wrapper">
                     <div id="note-content-editable" class="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
                 </div>
-
             </div>
-
             <div class="editor-bottom-panel">
                 <div class="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
                     <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autocomplete="off">
                     <div id="note-tags-container" class="tags-container" aria-live="polite"></div>
                 </div>
-
                 <div class="editor-bottom-actions">
                     <button type="button" class="btn-primary" data-action="editor-save" aria-label="Сохранить" data-lang-aria="save_note">
                         <i class="material-icons-round" aria-hidden="true">save</i>
@@ -518,9 +465,6 @@
             </div>
         </div>
     </div>
-
-
-
     <div id="editor-pages-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Управление страницами" data-lang-aria="editor_pages_manage">
         <div class="modal-card">
             <div class="modal-header">
@@ -540,7 +484,6 @@
             </div>
         </div>
     </div>
-
     <div id="media-context-menu" class="media-context-menu hidden" role="menu" aria-label="Меню изображения" data-lang-aria="media_menu">
         <button type="button" class="btn-icon" data-action="media-reset" aria-label="Сбросить размер" data-lang-aria="reset_media">
             <i class="material-icons-round" aria-hidden="true">aspect_ratio</i>
@@ -555,7 +498,6 @@
             <i class="material-icons-round" aria-hidden="true">delete</i>
         </button>
     </div>
-
     <div id="editor-align-menu" class="context-menu hidden" role="menu" aria-label="Выравнивание" data-lang-aria="align_menu">
         <button type="button" data-action="editor-align" data-align="left" aria-label="По левому краю" data-lang-aria="align_left">
             <i class="material-icons-round" aria-hidden="true">format_align_left</i>
@@ -567,7 +509,6 @@
             <i class="material-icons-round" aria-hidden="true">format_align_right</i>
         </button>
     </div>
-
     <div id="confirm-modal" class="modal-overlay confirm-layer" role="dialog" aria-modal="true">
         <div class="confirm-box">
             <h3 id="confirm-title" data-lang="confirm_default">Подтвердите</h3>
@@ -577,7 +518,6 @@
             </div>
         </div>
     </div>
-
     <div id="prompt-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card confirm-box">
             <h3 id="prompt-title" data-lang="prompt_title">Ввод</h3>
@@ -591,7 +531,6 @@
             </div>
         </div>
     </div>
-
     <div id="note-actions-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
@@ -603,7 +542,6 @@
             <div class="modal-body" id="note-actions-content"></div>
         </div>
     </div>
-
     <div id="lock-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Блокировка заметки" data-lang-aria="lock_note">
         <div class="modal-card">
             <header class="modal-header">
@@ -621,7 +559,6 @@
             </div>
         </div>
     </div>
-
     <div id="lock-center-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Центр защиты" data-lang-aria="lock_center">
         <div class="modal-card">
             <header class="modal-header">
@@ -643,7 +580,6 @@
             </div>
         </div>
     </div>
-
     <div id="photo-editor-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card full-screen-modal">
             <header class="modal-header modal-header-tight">
@@ -688,7 +624,6 @@
             </footer>
         </div>
     </div>
-
     <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Настройки" data-lang-aria="settings">
         <div class="modal-card">
             <header class="modal-header">
@@ -703,7 +638,6 @@
             <div class="modal-body" id="settings-content"></div>
         </div>
     </div>
-
     <div id="feedback-menu-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
@@ -721,7 +655,6 @@
             </div>
         </div>
     </div>
-
     <div id="about-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
@@ -747,7 +680,6 @@
             </div>
         </div>
     </div>
-
     <div id="rate-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
@@ -771,7 +703,6 @@
             </footer>
         </div>
     </div>
-
     <div id="poll-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Опрос" data-lang-aria="poll_title">
         <div class="modal-card">
             <header class="modal-header">
@@ -799,27 +730,16 @@
             </footer>
         </div>
     </div>
-
-    
-
-        <div id="global-loading-overlay" class="global-loading-overlay hidden" aria-live="assertive" aria-busy="false">
-            <div class="global-loading-card">
-                <div class="global-loading-spinner" aria-hidden="true"></div>
-                <span id="global-loading-text">Загрузка...</span>
-            </div>
+    <div id="global-loading-overlay" class="global-loading-overlay hidden" aria-live="assertive" aria-busy="false">
+        <div class="global-loading-card">
+            <div class="global-loading-spinner" aria-hidden="true"></div>
+            <span id="global-loading-text">Загрузка...</span>
         </div>
-
-        <div id="toast-container" class="toast-container" aria-live="polite"></div>
-
+    </div>
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="avatar-upload-input" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
-
-
-
-
-    
-
     <div id="workspace-members-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Участники совместной папки" data-lang-aria="shared_members">
         <div class="modal-card" style="max-width:640px;">
             <h3 data-lang="shared_members">Участники</h3>
@@ -830,6 +750,5 @@
             </div>
         </div>
     </div>
-
 </body>
 </html>
