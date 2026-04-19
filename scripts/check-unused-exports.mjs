@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const repoRoot = process.cwd()
-const jsRoot = path.join(repoRoot, 'js')
+const jsRoot = path.join(repoRoot, 'public/js')
 
 const collectJsFiles = async (dirPath) => {
   const entries = await readdir(dirPath, { withFileTypes: true })

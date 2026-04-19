@@ -430,9 +430,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
                 const idToken = await requireIdToken()
                 const response = await fetch(connectUrlEndpoint, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${idToken}`
-                    }
+                    headers: createAuthorizedHeaders(idToken, true)
                 })
                 if (!response.ok) {
                     if (response.status === 401 || response.status === 403) throw createExternalMediaError(ERROR_CODES.UNLINKED)
@@ -458,7 +456,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
                 const idToken = await requireIdToken()
                 const response = await fetch(disconnectEndpoint, {
                     method: 'POST',
-                    headers: createAuthorizedHeaders(idToken)
+                    headers: createAuthorizedHeaders(idToken, true)
                 })
                 const rawResponseText = await response.text()
                 const parsedResponse = parseJsonSafe(rawResponseText)
@@ -528,4 +526,3 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
     }
     return providerApi
 }
-

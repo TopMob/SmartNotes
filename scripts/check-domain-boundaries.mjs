@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const repoRoot = process.cwd()
-const jsRoot = path.join(repoRoot, 'js')
+const jsRoot = path.join(repoRoot, 'public/js')
 
 const boundaryRules = [
   { from: 'core', forbidden: ['notes', 'editor', 'ui'], reason: 'core must stay independent from higher domains' },
@@ -36,8 +36,8 @@ const resolveImportTarget = (sourceFile, importPath) => {
 
 const getDomain = (filePath) => {
   const parts = filePath.split('/')
-  if (parts[0] !== 'js') return ''
-  return parts[1] || ''
+  if (parts[0] !== 'public' || parts[1] !== 'js') return ''
+  return parts[2] || ''
 }
 
 const extractLocalImports = (fileContent) => {

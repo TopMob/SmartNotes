@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { DEFAULT_BACKEND_BASE_URL, normalizeBaseUrl, resolveBackendBaseUrl, createApiEndpoint } from '../js/core/backendConfig.js'
+import { DEFAULT_BACKEND_BASE_URL, normalizeBaseUrl, resolveBackendBaseUrl, createApiEndpoint } from '../public/js/core/backendConfig.js'
 
 test('normalizeBaseUrl trims spaces and trailing slash', () => {
     assert.equal(normalizeBaseUrl(' https://example.com/// '), 'https://example.com')

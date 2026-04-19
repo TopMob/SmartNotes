@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
-import { normalizeParagraphModel, createClipboardHandlers, createSelectionHandlers } from '../js/editor/input-handlers.js'
+import { normalizeParagraphModel, createClipboardHandlers, createSelectionHandlers } from '../public/js/editor/input-handlers.js'
 
 const installDom = (html = '<!doctype html><html><body><div id="root"></div></body></html>') => {
     const dom = new JSDOM(html)
