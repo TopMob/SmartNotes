@@ -5,7 +5,8 @@ const scriptSources = [
   "https://cdn.jsdelivr.net",
   "https://unpkg.com",
   "https://cdnjs.cloudflare.com",
-  "https://accounts.google.com"
+  "https://accounts.google.com",
+  "https://apis.google.com"
 ]
 
 const imageSources = [
@@ -15,7 +16,8 @@ const imageSources = [
   "https://*.googleusercontent.com",
   "http://googleusercontent.com",
   "https://drive.google.com",
-  "https://ui-avatars.com"
+  "https://ui-avatars.com",
+  "https://www.gstatic.com"
 ]
 
 const cspParts = [
@@ -25,8 +27,9 @@ const cspParts = [
   "object-src 'none'",
   `img-src ${imageSources.join(" ")}`,
   "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com https://www.gstatic.com",
   "connect-src 'self' https: wss:",
+  "frame-src 'self' https://accounts.google.com https://smart-notes-f5733.firebaseapp.com",
   "script-src",
   "script-src-elem",
   "script-src-attr 'none'",
@@ -39,9 +42,7 @@ function normalizeCsp(value: string) {
 
 function toBase64(bytes: Uint8Array) {
   let binary = ""
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte)
-  })
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
   return btoa(binary)
 }
 
