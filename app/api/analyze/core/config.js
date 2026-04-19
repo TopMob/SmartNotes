@@ -1,5 +1,5 @@
 export const API_SECRET = process.env.API_SECRET
-export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://topmob.github.io"
+export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://smartnotess.vercel.app"
 export const ANALYZE_PROVIDER = process.env.ANALYZE_PROVIDER || "gemini"
 export const PROMPT_VERSION = "v3.1-balanced"
 
