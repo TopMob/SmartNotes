@@ -1,0 +1,92 @@
+export const runtime = "nodejs"
+
+import { getFirestoreDatabase } from "@/lib/firebaseAdmin"
+import { readJsonObject } from "@/lib/http/jsonBody"
+import { ANALYZE_PROVIDER, API_SECRET, CORS_HEADERS, PROMPT_VERSION } from "./core/config"
+import { processUserNotes } from "./core/processor"
+
+function toBoolean(value) {
+  if (typeof value === "boolean") {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim().toLowerCase()
+    return normalizedValue === "true" || normalizedValue === "1" || normalizedValue === "yes"
+  }
+
+  if (typeof value === "number") {
+    return value === 1
+  }
+
+  return false
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: CORS_HEADERS
+  })
+}
+
+export async function POST(request) {
+  const secret = request.headers.get("x-secret")
+
+  if (!API_SECRET || secret !== API_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: CORS_HEADERS
+    })
+  }
+
+  const requestUrl = new URL(request.url)
+  const requestPayload = await readJsonObject(request)
+  const reindexAll = toBoolean(
+    requestPayload.reindexAll ?? requestPayload.forceReindex ?? requestUrl.searchParams.get("reindexAll")
+  )
+
+  try {
+    const database = getFirestoreDatabase()
+    const usersSnapshot = await database.collection("users").get()
+    let processedCount = 0
+
+    for (const userDocument of usersSnapshot.docs) {
+      processedCount += await processUserNotes({
+        database,
+        uid: userDocument.id,
+        reindexAll
+      })
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        processed: processedCount,
+        provider: ANALYZE_PROVIDER,
+        reindexAll,
+        promptVersion: PROMPT_VERSION
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          ...CORS_HEADERS
+        }
+      }
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        error: "Analyze failed",
+        details: String(error?.message || error)
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          ...CORS_HEADERS
+        }
+      }
+    )
+  }
+}
