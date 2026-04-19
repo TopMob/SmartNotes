@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_BASE_URL = "https://backendfornmartnotes.vercel.app"
+const DEFAULT_BACKEND_BASE_URL = ""
 
 const normalizeBaseUrl = value => {
     const normalized = String(value || "").trim()
