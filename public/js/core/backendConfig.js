@@ -21,7 +21,7 @@ const resolveBackendBaseUrl = (overrides = {}) => {
 const createApiEndpoint = (path, overrides = {}) => {
     const baseUrl = resolveBackendBaseUrl(overrides)
     const normalizedPath = String(path || "").replace(/^\/+/, "")
-    return `${baseUrl}/api/${normalizedPath}`
+    return baseUrl ? `${baseUrl}/api/${normalizedPath}` : `/api/${normalizedPath}`
 }
 
 const backendConfigApi = {
@@ -36,4 +36,3 @@ if (typeof window !== "undefined") {
 }
 
 export { DEFAULT_BACKEND_BASE_URL, normalizeBaseUrl, resolveBackendBaseUrl, createApiEndpoint }
-

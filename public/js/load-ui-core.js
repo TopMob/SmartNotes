@@ -2295,7 +2295,7 @@ Object.assign(UI, {
         if (config && typeof config.createApiEndpoint === "function") {
             return config.createApiEndpoint("analyze")
         }
-        return "https://backendfornmartnotes.vercel.app/api/analyze"
+        return "/api/analyze"
     },
 
     async requestAnalysis({ secretToken = "", requestVariant = "pending" } = {}) {
