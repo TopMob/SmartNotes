@@ -1,15 +1,8 @@
 import { requireUidFromRequest } from "@/lib/drive/auth"
-import { getDriveCorsHeaders, jsonResponse } from "@/lib/drive/cors"
 import { getGoogleDriveIntegration } from "@/lib/drive/integrationStore"
 
 export const runtime = "nodejs"
-
-export async function OPTIONS(request) {
-  return new Response(null, {
-    status: 200,
-    headers: getDriveCorsHeaders(request, "GET, OPTIONS")
-  })
-}
+export const dynamic = "force-dynamic"
 
 export async function GET(request) {
   try {
@@ -17,8 +10,7 @@ export async function GET(request) {
     const integration = await getGoogleDriveIntegration(uid)
     const connected = Boolean(integration?.refreshToken)
 
-    return jsonResponse(
-      request,
+    return Response.json(
       {
         connected,
         email: connected ? integration?.email || "" : "",
@@ -27,12 +19,11 @@ export async function GET(request) {
           hasRefreshToken: Boolean(integration?.refreshToken)
         }
       },
-      200,
-      "GET, OPTIONS"
+      { status: 200 }
     )
   } catch (error) {
     if (String(error?.message || "") === "UNAUTHORIZED") {
-      return jsonResponse(request, { success: false, error: "UNAUTHORIZED" }, 401, "GET, OPTIONS")
+      return Response.json({ success: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
 
     console.error("[drive-status] failed", {
@@ -40,6 +31,6 @@ export async function GET(request) {
       stack: error?.stack
     })
 
-    return jsonResponse(request, { success: false, error: "INTERNAL_ERROR" }, 500, "GET, OPTIONS")
+    return Response.json({ success: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
 }

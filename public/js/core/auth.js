@@ -366,7 +366,7 @@ export function createAuthManager({ auth }) {
 
             if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
-            if (userUid) userUid.textContent = String(user.uid || "-")
+            if (userUid) userUid.textContent = "••••••"
 
             if (loginScreen) {
                 loginScreen.classList.remove("active")
@@ -495,4 +495,3 @@ export function createAuthManager({ auth }) {
 
     return manager
 }
-

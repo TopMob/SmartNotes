@@ -471,3 +471,4 @@ const DrawingSurfaceEngine = (() => {
     return { createEngine }
 })()
 
+window.DrawingSurfaceEngine = DrawingSurfaceEngine

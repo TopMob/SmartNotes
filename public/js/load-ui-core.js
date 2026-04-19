@@ -1099,57 +1099,24 @@ Object.assign(UI, {
     }
 
     const openPrintWindow = (printableDocument, dict) => {
-        const frame = document.createElement("iframe")
-        frame.style.position = "fixed"
-        frame.style.right = "0"
-        frame.style.bottom = "0"
-        frame.style.width = "0"
-        frame.style.height = "0"
-        frame.style.border = "0"
-        frame.style.opacity = "0"
-        frame.setAttribute("aria-hidden", "true")
-        frame.src = "about:blank"
-        document.body.appendChild(frame)
-        frame.addEventListener("load", () => {
-            const doc = frame.contentDocument
-            if (!doc) {
-                frame.remove()
-                UI.showToast(dict.popup_blocked || "Allow popups to print")
-                return
-            }
-            doc.documentElement.lang = printableDocument.language
-            doc.head.replaceChildren()
-            const metaCharset = doc.createElement("meta")
-            metaCharset.setAttribute("charset", "utf-8")
-            const documentTitle = doc.createElement("title")
-            documentTitle.textContent = printableDocument.printableTitle
-            const stylesElement = doc.createElement("style")
-            stylesElement.textContent = printableDocument.printableStyles
-            doc.head.append(metaCharset, documentTitle, stylesElement)
-            doc.body.replaceChildren()
-            const headerElement = doc.createElement("header")
-            const titleElement = doc.createElement("h1")
-            titleElement.textContent = printableDocument.printableTitle
-            const dateElement = doc.createElement("div")
-            dateElement.className = "note-date"
-            dateElement.textContent = printableDocument.printableDate
-            headerElement.append(titleElement, dateElement)
-            const contentElement = doc.createElement("main")
-            contentElement.className = "note-content"
-            contentElement.innerHTML = printableDocument.printableContentHtml
-            doc.body.append(headerElement, contentElement)
-            requestAnimationFrame(() => {
-                if (!frame.contentWindow) {
-                    UI.showToast(dict.popup_blocked || "Allow popups to print")
-                    frame.remove()
-                    return
-                }
-                frame.contentDocument.title = printableDocument.printableTitle
-                frame.contentWindow.focus()
-                frame.contentWindow.print()
-                setTimeout(() => frame.remove(), 1200)
-            })
-        }, { once: true })
+        const printWindow = window.open("", "_blank")
+        if (!printWindow || !printWindow.document) {
+            UI.showToast(dict.popup_blocked || "Allow popups to print")
+            return
+        }
+        const printableHtml = `<!doctype html><html lang="${Utils.escapeHtml(printableDocument.language)}"><head><meta charset="utf-8"><title>${Utils.escapeHtml(printableDocument.printableTitle)}</title><style>${printableDocument.printableStyles}</style></head><body><header><h1>${Utils.escapeHtml(printableDocument.printableTitle)}</h1><div class="note-date">${Utils.escapeHtml(printableDocument.printableDate)}</div></header><main class="note-content">${printableDocument.printableContentHtml}</main></body></html>`
+        printWindow.document.open()
+        printWindow.document.write(printableHtml)
+        printWindow.document.close()
+        const runPrint = () => {
+            printWindow.focus()
+            printWindow.print()
+        }
+        if (printWindow.document.readyState === "complete") {
+            runPrint()
+            return
+        }
+        printWindow.addEventListener("load", runPrint, { once: true })
     }
 
     window.UINoteActionsExport = {

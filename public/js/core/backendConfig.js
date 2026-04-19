@@ -9,12 +9,6 @@ const normalizeBaseUrl = value => {
 const resolveBackendBaseUrl = (overrides = {}) => {
     const explicit = overrides.backendBaseUrl
     if (explicit) return normalizeBaseUrl(explicit)
-    if (typeof window !== "undefined") {
-        const fromConfig = window.__SMARTNOTES_BACKEND_URL__
-        if (fromConfig) return normalizeBaseUrl(fromConfig)
-        const fromStorage = window.localStorage?.getItem?.("smartnotes.backendBaseUrl")
-        if (fromStorage) return normalizeBaseUrl(fromStorage)
-    }
     return DEFAULT_BACKEND_BASE_URL
 }
 

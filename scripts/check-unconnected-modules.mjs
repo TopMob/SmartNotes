@@ -2,8 +2,8 @@ import { access, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
-const jsRoot = path.join(repoRoot, 'js');
-const indexHtmlPath = path.join(repoRoot, 'index.html');
+const jsRoot = path.join(repoRoot, 'public/js');
+const indexHtmlPath = path.join(repoRoot, 'public/index.html');
 
 async function collectJsFiles(dirPath) {
   const entries = await readdir(dirPath, { withFileTypes: true });
@@ -48,7 +48,7 @@ function extractIndexScripts(indexHtml) {
   while ((match = scriptRegex.exec(indexHtml)) !== null) {
     const source = match[1].split('?')[0].replace(/^\.\//, '');
     if (source.startsWith('js/') && source.endsWith('.js')) {
-      roots.add(source);
+      roots.add(`public/${source}`);
     }
   }
   return roots;
@@ -70,7 +70,7 @@ function extractDrawingLoaderRoots(loaderSource) {
   let match;
   while ((match = re.exec(loaderSource)) !== null) {
     const rel = match[1].split('?')[0].replace(/^\.\//, '');
-    if (rel.startsWith('js/')) out.push(rel);
+    if (rel.startsWith('js/')) out.push(`public/${rel}`);
   }
   return out;
 }
@@ -125,7 +125,7 @@ async function main() {
   }
 
   const indexHtml = await readFile(indexHtmlPath, 'utf8');
-  const drawingLoaderPath = path.join(repoRoot, 'js/editor/drawing-loader.js');
+  const drawingLoaderPath = path.join(repoRoot, 'public/js/editor/drawing-loader.js');
   const drawingLoaderSource = await readOptionalFile(drawingLoaderPath);
   const runtimeRoots = drawingLoaderSource ? extractDrawingLoaderRoots(drawingLoaderSource) : [];
   const rootModules = [...new Set([...extractIndexScripts(indexHtml), ...runtimeRoots])].filter((modulePath) => modules.has(modulePath));

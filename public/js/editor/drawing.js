@@ -235,3 +235,4 @@ const EditorDrawing = (() => {
     }
 })()
 
+window.EditorDrawing = EditorDrawing
