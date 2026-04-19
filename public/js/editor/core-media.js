@@ -211,9 +211,13 @@ export const createMediaHandlers = (context) => {
         event.preventDefault()
     }
 
+    const isImageSourceAllowed = (source) => /^https:\/\//i.test(source)
+        || /^data:image\//i.test(source)
+        || /^blob:/i.test(source)
+
     const insertMedia = (src, type) => {
         const normalizedSource = String(src || "").trim()
-        if (type !== "image" || !/^https:\/\//i.test(normalizedSource) && !/^data:image\//i.test(normalizedSource)) return ""
+        if (type !== "image" || !isImageSourceAllowed(normalizedSource)) return ""
         const id = Utils.generateId()
         const html = createMediaHtml({
             id,
