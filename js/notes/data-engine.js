@@ -3,6 +3,8 @@ const NOTES_FILTER_KEY = "notes-filter"
 const SAVED_NOTES_FILTERS_KEY = "saved-notes-filters"
 const NOTES_CACHE_KEY = "notes-cache"
 
+const getRefs = () => window.InfraEngine?.getRefs?.() || window.DataPath
+
 const shrinkNoteForCache = (note) => {
     const normalizedNote = NoteIO.normalizeNote(note || {})
     return {
@@ -181,8 +183,8 @@ async function deleteFolder(folderId) {
     UI.confirm("delete_f", async () => {
         const user = StateStore.read().user
         if (!db || !user) return
-        const foldersCollection = DataPath.getUserFoldersCollection(user)
-        const notesCollection = DataPath.getUserNotesCollection(user)
+        const foldersCollection = getRefs().getUserFoldersCollection(user)
+        const notesCollection = getRefs().getUserNotesCollection(user)
         const movedAt = firebase.firestore.FieldValue.serverTimestamp()
         const folderRef = foldersCollection.doc(folderId)
         const notesSnapshot = await notesCollection.where("folderId", "==", folderId).get()
@@ -259,7 +261,7 @@ async function clearTrashPermanently() {
                     .map(note => getNoteReference(note, user))
                     .filter(Boolean)
                 const folderReferences = currentTrashedItems.folders
-                    .map(folder => DataPath.getUserFoldersCollection(user).doc(folder.id))
+                    .map(folder => getRefs().getUserFoldersCollection(user).doc(folder.id))
                     .filter(Boolean)
                 await commitPermanentDeletes([...noteReferences, ...folderReferences])
                 const deletedNoteIds = new Set(currentTrashedItems.notes.map(note => note.id))
@@ -286,7 +288,7 @@ const ensureManageAccess = (note) => {
 
 const getNoteReference = (note, user) => {
     if (typeof CollaborationService !== "undefined") return CollaborationService.getNoteReference(note, user)
-    return DataPath.getUserNotesCollection(user).doc(note.id)
+    return getRefs().getUserNotesCollection(user).doc(note.id)
 }
 
 function openNoteActions(noteId) {
@@ -442,7 +444,7 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
 async function restoreFolderById(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
-    await DataPath.getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null } : folder))
     UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
     refreshCurrentList()
@@ -451,7 +453,7 @@ async function restoreFolderById(folderId) {
 async function deleteFolderPermanently(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
-    await DataPath.getUserFoldersCollection(user).doc(folderId).delete()
+    await getRefs().getUserFoldersCollection(user).doc(folderId).delete()
     StateStore.update("folders", StateStore.read().folders.filter(folder => folder.id !== folderId))
     UI.showToast(UI.getText("folder_deleted_permanent", "Folder deleted permanently"))
     refreshCurrentList()

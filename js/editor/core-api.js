@@ -179,6 +179,8 @@ export const EditorAPI = (() => {
         return drawing
     }
 
+    const getRefs = () => window.InfraEngine?.getRefs?.() || window.DataPath
+
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
         const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
@@ -385,7 +387,7 @@ export const EditorAPI = (() => {
         const payload = window.NoteHelpers.buildNotePayload({ note, user, access })
 
         const ref = typeof CollaborationService === "undefined"
-            ? DataPath.getUserNotesCollection(user).doc(payload.id)
+            ? getRefs().getUserNotesCollection(user).doc(payload.id)
             : CollaborationService.getNoteReference(note, user)
 
         if (!ref) return
@@ -1173,7 +1175,7 @@ export const EditorAPI = (() => {
         UI.confirm("delete", async () => {
             if (!db || !StateStore.read().user) return
             const ref = typeof CollaborationService === "undefined"
-                ? DataPath.getUserNotesCollection(StateStore.read().user).doc(note.id)
+                ? getRefs().getUserNotesCollection(StateStore.read().user).doc(note.id)
                 : CollaborationService.getNoteReference(note, StateStore.read().user)
             if (!ref) return
             await ref.delete()
@@ -1199,14 +1201,14 @@ export const EditorAPI = (() => {
         resetMediaTransform: mediaHandlers.resetMediaTransform,
         alignMediaOrText: mediaHandlers.alignMediaOrText,
         deleteSelectedMedia: mediaHandlers.deleteSelectedMedia,
-        confirmEquation: mathHandlers.confirmEquation,
+        confirmEquation: confirmEquationAtCaret,
         addPage,
         deleteActivePage,
         selectPage,
         nextPage,
         prevPage,
         applyLink: linkHandlers.applyLink,
-        handlePaste,
+        handlePaste: inputHandlers.handlePaste,
         saveSnapshot: autosaveHandlers.queueSnapshot
     }
 })()
