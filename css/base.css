@@ -1,3 +1,10 @@
+@font-face {
+    font-family: 'Material Icons Round';
+    font-style: normal;
+    font-weight: 400;
+    src: url('./MaterialIconsRound.woff2') format('woff2');
+}
+
 :root {
     --primary: #00f2ff;
     --primary-rgb: 0, 242, 255;

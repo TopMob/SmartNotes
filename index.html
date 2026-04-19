@@ -12,6 +12,7 @@
 
     <script>window.APP_VERSION = "2026-02-22-1e1b181"</script>
     <script src="js/core/backendConfig.js?v=2026-03-26-config" type="module"></script>
+    <script src="js/core/infra-engine.js?v=2026-04-19-infra" type="module"></script>
     <script src="js/core/logging.js?v=2026-02-22-1e1b181" defer></script>
 
     <link rel="icon" type="image/x-icon" href="favicon.ico?v=2026-02-22-1e1b181">
@@ -22,7 +23,6 @@
     <link rel="preconnect" href="https://www.gstatic.com">
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <link rel="stylesheet" href="css/base.css?v=2026-02-22-1e1b181">
     <link rel="stylesheet" href="css/layout.css?v=2026-02-22-1e1b181">
@@ -36,7 +36,8 @@
     <script src="js/core/eventBus.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/state.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/stateActions.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/core/dataPath.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/notes/data-engine.js?v=2026-04-19-data-engine" defer></script>
+    <script src="js/notes/list-engine.js?v=2026-04-19-list-engine" defer></script>
     <script src="js/colorPalette.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/lang.js?v=2026-02-22-1e1b181" type="module"></script>
     <script src="js/theme.js?v=2026-02-22-1e1b181" type="module"></script>
@@ -58,10 +59,8 @@
     <script src="js/ui/render/folders.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/shared-access.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/ui/render/feedback.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/notes/storage.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
-    <script src="js/notes/renderer.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
+        <script src="js/notes/text.js?v=2026-02-22-1e1b181" type="module"></script>
+        <script src="js/notes/repositories/notesRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/foldersRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/settingsRepository.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/repositories/workspacesRepository.js?v=2026-02-22-1e1b181" defer></script>
@@ -79,11 +78,8 @@
     <script src="js/notes/services/notesQueryService.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesPresenter.js?v=2026-02-22-1e1b181" defer></script>
     <script src="js/notes/presentation/notesUiAdapter.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/notes/filters.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/notes/actions.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/editor/drawing-engine.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/editor/drawing.js?v=2026-02-22-1e1b181" defer></script>
-    <script src="js/calculator.js?v=2026-02-22-1e1b181" defer></script>
+                    <script src="js/calculator.js?v=2026-02-22-1e1b181" defer></script>
+    <script src="js/editor/runtime-loader.js?v=2026-04-19-runtime-loader" defer></script>
     <script src="js/editor/core.js?v=2026-02-22-1e1b181" type="module"></script>
     <script src="js/app/runtime/stateRenderer.js?v=2026-04-10-app-runtime" defer></script>
     <script src="js/app/runtime/uiEvents.js?v=2026-04-10-app-runtime" defer></script>

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "http-server . -p 3000 -a 127.0.0.1 --cors",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test": "node --test tests/*.test.mjs",
     "check:module-graph": "node scripts/check-unconnected-modules.mjs",
     "check:domain-boundaries": "node scripts/check-domain-boundaries.mjs",
     "check:unused-exports": "node scripts/check-unused-exports.mjs"
@@ -15,7 +15,6 @@
   },
   "devDependencies": {
     "http-server": "^14.1.1",
-    "jest": "^29.7.0",
     "jsdom": "^24.0.0"
   }
 }

@@ -1,8 +1,7 @@
 import { ThemeManager } from "./theme.js"
 import { LANG } from "./lang.js"
 import { Utils } from "./core/utils.js"
-import { initFirebase } from "./core/firebase.js"
-import { createAuthManager } from "./core/auth.js"
+import { InfraEngine } from "./core/infra-engine.js"
 import { bootstrapCore } from "./core/bootstrap.js"
 import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
 import { validateFolderName, validateFolderDescription, canAddFolder, canAddCustomTheme, canAssignToFolder, FOLDER_DESCRIPTION_SOFT_LIMIT, FOLDER_DESCRIPTION_HARD_LIMIT } from "./core/validators.js"
@@ -220,14 +219,14 @@ async function startCore() {
     }
 
     if (!core.auth || !core.db) {
-        const { auth, db } = initFirebase()
-        core.auth = auth
-        core.db = db
+        const infraState = InfraEngine.init()
+        core.auth = infraState.auth
+        core.db = infraState.db
         window.auth = core.auth
         window.db = core.db
     }
 
-    const authManager = createAuthManager({ auth: core.auth })
+    const authManager = InfraEngine.createAuth()
     core.Auth = authManager
     window.Auth = core.Auth
     resolveAuthReady(authManager)
