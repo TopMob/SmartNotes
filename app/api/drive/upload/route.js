@@ -10,6 +10,7 @@ import { ensurePublicReadPermission, uploadFileToDrive } from "@/lib/drive/uploa
 export const runtime = "nodejs"
 
 const MAX_UPLOAD_BYTES = Number(process.env.DRIVE_MAX_UPLOAD_BYTES || 10 * 1024 * 1024)
+const AUTHORIZATION_ERRORS = new Set(["RECONNECT_REQUIRED", "DRIVE_SCOPE_INSUFFICIENT"])
 
 async function readPayload(request) {
   try {
@@ -95,6 +96,10 @@ export async function POST(request) {
     }
 
     logUploadError(error, uploadContext)
+
+    if (mappedError && AUTHORIZATION_ERRORS.has(mappedError)) {
+      return Response.json(buildUploadErrorBody(error, mappedError), { status: 401 })
+    }
 
     const status = Number(error?.response?.status || 0)
     if (status >= 400 && status < 600) {
