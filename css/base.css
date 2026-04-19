@@ -1,4 +1,3 @@
-/* Иконки */
 @font-face {
     font-family: 'Material Icons Round';
     font-style: normal;
@@ -6,43 +5,48 @@
     src: url('MaterialIconsRound.woff2') format('woff2');
 }
 
-/* Inter - подключаем все веса, которые ты скачал */
 @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 200;
     src: url('fonts/inter-v20-latin-200.woff2') format('woff2');
 }
+
 @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 300;
     src: url('fonts/inter-v20-latin-300.woff2') format('woff2');
 }
+
 @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 400;
     src: url('fonts/inter-v20-latin-regular.woff2') format('woff2');
 }
+
 @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 500;
     src: url('fonts/inter-v20-latin-500.woff2') format('woff2');
 }
+
 @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 600;
     src: url('fonts/inter-v20-latin-600.woff2') format('woff2');
 }
+
 @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 700;
     src: url('fonts/inter-v20-latin-700.woff2') format('woff2');
 }
+
 @font-face {
     font-family: 'Inter';
     font-style: normal;
@@ -50,7 +54,6 @@
     src: url('fonts/inter-v20-latin-800.woff2') format('woff2');
 }
 
-/* JetBrains Mono */
 @font-face {
     font-family: 'JetBrains Mono';
     font-style: normal;
@@ -58,7 +61,6 @@
     src: url('fonts/jetbrains-mono-v24-latin-regular.woff2') format('woff2');
 }
 
-/* ЭТО ТО, ЧЕГО НЕ ХВАТАЛО! Мы говорим браузеру использовать шрифт для иконок */
 .material-icons-round {
     font-family: 'Material Icons Round' !important;
     font-weight: normal;
@@ -77,7 +79,6 @@
 
 :root {
     --primary: #00f2ff;
-    --primary: #00f2ff;
     --primary-rgb: 0, 242, 255;
     --bg: #050505;
     --surface: #0f0f11;
@@ -88,27 +89,21 @@
     --text-dim: rgba(255, 255, 255, 0.72);
     --border: rgba(255, 255, 255, 0.08);
     --danger: #ff3b30;
-
     --radius-sm: 10px;
     --radius-md: 14px;
     --radius-lg: 18px;
     --radius-xl: 24px;
-
     --font-base: 16px;
     --type-scale: 1;
     --hit-size: 44px;
-
     --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
     --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
-
     --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.12);
     --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-
     --density: 1;
     --blur-strength: 18px;
     --motion-enabled: 1;
     --animation-duration: 0.3s;
-
     --z-floating: 900;
     --z-header: 1500;
     --z-sidebar-overlay: 1900;
@@ -125,15 +120,12 @@
     --z-confirm: 14000;
     --z-voice: 5000;
     --z-toast: 15000;
-
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 20px);
-
-    --space-unit: 12px;
+    --space-unit: 8px;
     --editor-padding: 5px;
     --editor-line-height: 1.7;
     --editor-letter-spacing: 0px;
-
     --editor-toolbar-bg: rgba(255, 255, 255, 0.03);
     --editor-toolbar-border: var(--border);
     --editor-toolbar-shadow: none;
@@ -162,7 +154,6 @@ body {
     -webkit-font-smoothing: antialiased;
     font-size: calc(var(--font-base) * var(--type-scale));
 }
-
 
 body.platform-ios {
     min-height: -webkit-fill-available;
@@ -215,4 +206,3 @@ body.platform-android {
 .scrollable {
     scrollbar-gutter: stable;
 }
-
