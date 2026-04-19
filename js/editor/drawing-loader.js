@@ -26,8 +26,8 @@ const loadScript = (src) => new Promise((resolve, reject) => {
 export const ensureDrawingLoaded = async () => {
     if (!drawingReadyPromise) {
         drawingReadyPromise = (async () => {
-            await loadScript("js/editor/drawing-engine.js?v=2026-02-22-1e1b181")
-            await loadScript("js/editor/drawing.js?v=2026-02-22-1e1b181")
+            await loadScript("js/editor/drawing-engine.js?v=2026-04-19-final")
+            await loadScript("js/editor/drawing.js?v=2026-04-19-final")
             return window.EditorDrawing || null
         })()
     }

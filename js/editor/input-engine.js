@@ -1,11 +1,13 @@
 "use strict";
 
-import { createSelectionHandlers } from "./input/selection.js"
-import { createClipboardHandlers } from "./input/clipboard.js"
-import { createTagHandlers } from "./input/tags.js"
-import { createEnterHandlers } from "./input/enter.js"
-import { normalizeParagraphModel } from "./input/paragraph-model.js"
-import { createEditingHistoryHandlers } from "./input/editing-history.js"
+import {
+    createSelectionHandlers,
+    createClipboardHandlers,
+    createTagHandlers,
+    createEnterHandlers,
+    normalizeParagraphModel,
+    createEditingHistoryHandlers
+} from "./input-handlers.js"
 
 export const createInputEngine = (context) => {
     const { elements, state, queueSnapshot, fileToDataUrl, insertMedia, undo, redo, confirmEquationAtCaret } = context

@@ -64,11 +64,15 @@ async function readOptionalFile(filePath) {
   }
 }
 
-function extractRuntimeScripts(loaderSource) {
-  const runtimeArrayMatch = loaderSource.match(/const\s+runtimeScripts\s*=\s*\[([\s\S]*?)\]/);
-  if (!runtimeArrayMatch) return [];
-  const entries = runtimeArrayMatch[1].match(/"([^"]+\.js)"/g) || [];
-  return entries.map((value) => value.replace(/"/g, "")).map((fileName) => `js/editor/${fileName}`);
+function extractDrawingLoaderRoots(loaderSource) {
+  const out = [];
+  const re = /loadScript\(\s*["']([^"']+\.js)/g;
+  let match;
+  while ((match = re.exec(loaderSource)) !== null) {
+    const rel = match[1].split('?')[0].replace(/^\.\//, '');
+    if (rel.startsWith('js/')) out.push(rel);
+  }
+  return out;
 }
 
 function extractImportedModules(fileContent) {
@@ -121,9 +125,9 @@ async function main() {
   }
 
   const indexHtml = await readFile(indexHtmlPath, 'utf8');
-  const loaderPath = path.join(repoRoot, 'js/editor/runtime-loader.js');
-  const runtimeLoaderSource = await readOptionalFile(loaderPath);
-  const runtimeRoots = runtimeLoaderSource ? extractRuntimeScripts(runtimeLoaderSource) : [];
+  const drawingLoaderPath = path.join(repoRoot, 'js/editor/drawing-loader.js');
+  const drawingLoaderSource = await readOptionalFile(drawingLoaderPath);
+  const runtimeRoots = drawingLoaderSource ? extractDrawingLoaderRoots(drawingLoaderSource) : [];
   const rootModules = [...new Set([...extractIndexScripts(indexHtml), ...runtimeRoots])].filter((modulePath) => modules.has(modulePath));
   const reachableModules = resolveReachableModules(rootModules, importGraph);
   const unconnectedModules = jsFiles.filter((file) => !reachableModules.has(file));

@@ -1,9 +1,9 @@
 import { CONFIG, createEditorState, createCoreEngine } from "./core-engine.js"
 import { createInputEngine } from "./input-engine.js"
-import { normalizeParagraphModel } from "./input/paragraph-model.js"
+import { normalizeParagraphModel } from "./input-handlers.js"
 import { createFeatureEngine } from "./feature-engine.js"
 import { createEditorLayoutHandlers } from "./core-layout.js"
-import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
+import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-autosave.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()

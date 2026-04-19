@@ -1,3 +1,84 @@
+(() => {
+    const imageDataPrefixPattern = /^data:image\//i
+    const base64Marker = "base64,"
+    const maxStringLength = 2000
+    const maxStringPreviewLength = 200
+    const maxDepth = 3
+    const maxEntries = 200
+    const maxObjectKeys = 100
+    const consoleEntries = []
+
+    function sanitizeString(value) {
+        const text = String(value)
+        if (imageDataPrefixPattern.test(text) && text.includes(base64Marker)) {
+            return `[data:image;base64 omitted, length=${text.length}]`
+        }
+        if (text.length > maxStringLength) {
+            return `${text.slice(0, maxStringPreviewLength)}...[truncated length=${text.length}]`
+        }
+        return text
+    }
+
+    function sanitizeError(error, depth, visited) {
+        return {
+            name: sanitizeString(error?.name || "Error"),
+            message: sanitizeString(error?.message || ""),
+            stack: sanitizeString(error?.stack || "")
+        }
+    }
+
+    function sanitizeLogValue(value, depth = 0, visited = new WeakSet()) {
+        if (depth > maxDepth) return "[max-depth]"
+        if (value === null || value === undefined) return value
+        if (typeof value === "string") return sanitizeString(value)
+        if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return value
+        if (value instanceof Error) return sanitizeError(value, depth, visited)
+        if (typeof value !== "object") return sanitizeString(value)
+        if (visited.has(value)) return "[circular]"
+        visited.add(value)
+
+        if (Array.isArray(value)) {
+            return value.map(item => sanitizeLogValue(item, depth + 1, visited))
+        }
+
+        const sanitizedObject = {}
+        Object.keys(value).slice(0, maxObjectKeys).forEach(key => {
+            sanitizedObject[key] = sanitizeLogValue(value[key], depth + 1, visited)
+        })
+        return sanitizedObject
+    }
+
+    function saveEntry(level, args) {
+        const sanitizedArgs = args.map(argument => sanitizeLogValue(argument))
+        consoleEntries.push({ timestamp: Date.now(), level, args: sanitizedArgs })
+        if (consoleEntries.length > maxEntries) consoleEntries.shift()
+        return sanitizedArgs
+    }
+
+    function wrapConsoleMethod(level) {
+        const originalMethod = console[level]
+        if (typeof originalMethod !== "function") return
+        console[level] = (...args) => {
+            const sanitizedArgs = saveEntry(level, args)
+            originalMethod.apply(console, sanitizedArgs)
+        }
+    }
+
+    wrapConsoleMethod("log")
+    wrapConsoleMethod("info")
+    wrapConsoleMethod("warn")
+    wrapConsoleMethod("error")
+
+    window.sanitizeLogValue = sanitizeLogValue;
+    window.ConsoleLogStore = {
+        getEntries() {
+            return consoleEntries.slice()
+        }
+    };
+
+    console.info("SmartNotes version:", window.APP_VERSION || "unknown");
+})();
+
 function isQuotaError(error) {
     if (!error) return false
     const errorName = String(error.name || "")
@@ -372,7 +453,204 @@ if (typeof window !== "undefined") {
     window.SafeStorage = {
         local: safeLocalStorage,
         session: safeSessionStorage
-    }
-    window.safeStorage = safeLocalStorage
+    };
+    window.safeStorage = safeLocalStorage;
 }
 
+const EventBus = (() => {
+    const listenersByEvent = new Map()
+    function publish(eventName, payload) {
+        const listeners = listenersByEvent.get(String(eventName || "")) || new Set()
+        listeners.forEach(listener => listener(payload))
+    }
+    function subscribe(eventName, handler) {
+        const normalizedEventName = String(eventName || "")
+        if (!listenersByEvent.has(normalizedEventName)) listenersByEvent.set(normalizedEventName, new Set())
+        const listeners = listenersByEvent.get(normalizedEventName)
+        listeners.add(handler)
+        return () => listeners.delete(handler)
+    }
+    return { publish, subscribe }
+})();
+
+const StateStore = (() => {
+    const initialState = {
+        user: null,
+        notes: [],
+        folders: [],
+        view: "notes",
+        activeFolderId: null,
+        activeSharedWorkspaceId: null,
+        sharedWorkspaces: [],
+        searchQuery: "",
+        currentNote: null,
+        tempRating: 0,
+        config: { lang: "ru", folderViewMode: "compact", reduceMotion: false, editorTools: {}, interface: { showSavedFilters: true, showTagFilter: true, showUpdatedPeriodFilter: true }, notesFilter: { sort: "manual", folders: [] } },
+        recording: false,
+        mediaRecorder: null,
+        editorDirty: false,
+        isEditing: false,
+        isTyping: false,
+        orderHistory: [],
+        appearanceDraft: null,
+        originalUserSettings: null,
+        draftUserSettings: null,
+        saveStatus: { status: "idle", message: "", updatedAt: 0 },
+        pagination: {
+            displayLimit: 20,
+            renderStep: 20,
+            pageSize: 500,
+            hasMoreOwnedNotes: false,
+            loadingMoreOwnedNotes: false,
+            lastOwnedNoteDocument: null,
+            totalVisibleNotesCount: 0,
+            renderedVisibleNotesCount: 0,
+            searchActive: false
+        }
+    }
+
+    let state = { ...initialState, config: { ...initialState.config }, pagination: { ...initialState.pagination } }
+    const subscribers = new Set()
+
+    const notifySubscribers = (nextState, previousState) => {
+        subscribers.forEach(subscriber => {
+            subscriber(nextState, previousState)
+        })
+    }
+
+    const read = () => state
+
+    const set = (updater) => {
+        const previousState = state
+        const nextState = typeof updater === "function" ? updater(previousState) : { ...previousState, ...updater }
+        if (!nextState || typeof nextState !== "object") return state
+        if (nextState === previousState) return state
+        state = nextState
+        notifySubscribers(state, previousState)
+        return state
+    }
+
+    const update = (key, value) => set(previousState => ({ ...previousState, [key]: value }))
+
+    const updateConfig = (updates) => set(previousState => ({ ...previousState, config: { ...previousState.config, ...updates } }))
+
+    const resetSession = () => set(previousState => ({
+        ...previousState,
+        user: null,
+        notes: [],
+        folders: [],
+        view: "notes",
+        activeFolderId: null,
+        activeSharedWorkspaceId: null,
+        sharedWorkspaces: [],
+        searchQuery: "",
+        currentNote: null,
+        tempRating: 0,
+        recording: false,
+        mediaRecorder: null,
+        editorDirty: false,
+        isEditing: false,
+        isTyping: false,
+        orderHistory: [],
+        appearanceDraft: null,
+        originalUserSettings: null,
+        draftUserSettings: null,
+        saveStatus: { ...initialState.saveStatus },
+        pagination: { ...initialState.pagination, renderStep: previousState.pagination.renderStep, pageSize: previousState.pagination.pageSize },
+        config: { ...previousState.config }
+    }))
+
+    const subscribe = (subscriber) => {
+        if (typeof subscriber !== "function") return () => {}
+        subscribers.add(subscriber)
+        return () => {
+            subscribers.delete(subscriber)
+        }
+    }
+
+    return {
+        read,
+        set,
+        update,
+        updateConfig,
+        resetSession,
+        subscribe,
+        initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus }, pagination: { ...initialState.pagination } })
+    }
+})();
+
+window.StateStore = StateStore;
+
+const StateActions = {
+    setLanguage(lang) {
+        const next = lang === "en" ? "en" : "ru"
+        StateStore.updateConfig({ lang: next })
+        return next
+    },
+    setTempRating(val) {
+        StateStore.update("tempRating", val)
+    },
+    setSearchQuery(query) {
+        StateStore.update("searchQuery", String(query || ""))
+    },
+    setView(view, folderId = null) {
+        StateStore.set(prev => ({ ...prev, view, activeFolderId: folderId }))
+    },
+    setNotes(notes) {
+        StateStore.update("notes", notes)
+    },
+    setFolders(folders) {
+        StateStore.update("folders", folders)
+    },
+    setCurrentNote(note) {
+        StateStore.update("currentNote", note)
+    },
+    setEditorDirty(flag) {
+        StateStore.update("editorDirty", !!flag)
+    },
+    updateConfig(values) {
+        StateStore.updateConfig(values)
+    },
+    setOrderHistory(history) {
+        StateStore.update("orderHistory", history)
+    },
+    setUser(user) {
+        StateStore.update("user", user || null)
+    },
+    resetSession() {
+        StateStore.resetSession()
+    }
+}
+
+window.StateActions = StateActions;
+
+window.AppPresetConfig = {
+    cssVariables: {},
+    bodyClasses: [],
+    rootAttributes: {}
+};
+
+(() => {
+    const applyPresetConfig = () => {
+        const config = window.AppPresetConfig || {}
+        const root = document.documentElement
+        const cssVariables = config.cssVariables || {}
+        Object.keys(cssVariables).forEach(key => {
+            root.style.setProperty(key, cssVariables[key])
+        })
+        const rootAttributes = config.rootAttributes || {}
+        Object.keys(rootAttributes).forEach(key => {
+            root.setAttribute(key, rootAttributes[key])
+        })
+        const bodyClasses = config.bodyClasses || []
+        if (document.body) {
+            bodyClasses.forEach(name => document.body.classList.add(name))
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", applyPresetConfig)
+    } else {
+        applyPresetConfig()
+    }
+})();

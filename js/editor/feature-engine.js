@@ -1,7 +1,7 @@
 "use strict";
 
 import { createMediaHandlers } from "./core-media.js"
-import { createLinkHandlers } from "./core-links.js"
+import { createLinkHandlers, createMathHandlers } from "./links-math.js"
 import { createEditorCommands } from "./editor-commands.js"
 import { ensureDrawingLoaded } from "./drawing-loader.js"
 
@@ -18,8 +18,8 @@ export const createFeatureEngine = (context) => {
     let mathHandlers = null
     const loadMath = async () => {
         if (!mathHandlersPromise) {
-            mathHandlersPromise = import("./core-math.js").then(module => {
-                mathHandlers = module.createMathHandlers(context.math)
+            mathHandlersPromise = Promise.resolve().then(() => {
+                mathHandlers = createMathHandlers(context.math)
                 return mathHandlers
             })
         }

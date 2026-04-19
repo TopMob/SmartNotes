@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
-import { createSelectionHandlers } from '../js/editor/input/selection.js'
+import { createSelectionHandlers } from '../js/editor/input-handlers.js'
 
 const setup = () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="note-content-editable"><div class="note-page" contenteditable="true"><p><span>12</span><span>34</span></p></div></div></body></html>')
