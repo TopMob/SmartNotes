@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_BASE_URL = "https://backendfornmartnotes.vercel.app"
+const DEFAULT_BACKEND_BASE_URL = ""
 
 const normalizeBaseUrl = value => {
     const normalized = String(value || "").trim()
@@ -21,7 +21,7 @@ const resolveBackendBaseUrl = (overrides = {}) => {
 const createApiEndpoint = (path, overrides = {}) => {
     const baseUrl = resolveBackendBaseUrl(overrides)
     const normalizedPath = String(path || "").replace(/^\/+/, "")
-    return `${baseUrl}/api/${normalizedPath}`
+    return baseUrl ? `${baseUrl}/api/${normalizedPath}` : `/api/${normalizedPath}`
 }
 
 const backendConfigApi = {
@@ -36,4 +36,3 @@ if (typeof window !== "undefined") {
 }
 
 export { DEFAULT_BACKEND_BASE_URL, normalizeBaseUrl, resolveBackendBaseUrl, createApiEndpoint }
-
