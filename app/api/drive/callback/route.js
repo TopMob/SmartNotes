@@ -11,7 +11,7 @@ import { parseOAuthState } from "@/lib/drive/state"
 
 export const runtime = "nodejs"
 
-const DEFAULT_FRONTEND_URL = "https://topmob.github.io/SmartNotes/"
+const DEFAULT_FRONTEND_URL = "https://smartnotess.vercel.app/"
 
 function getFrontendBaseUrl() {
   const envUrl = process.env.FRONTEND_URL
