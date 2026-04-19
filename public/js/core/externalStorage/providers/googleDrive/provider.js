@@ -191,6 +191,13 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
         }
     }
 
+    const isConfiguredEndpoint = (value) => {
+        const endpoint = String(value || '').trim()
+        if (!endpoint) return false
+        if (/^https?:\/\//i.test(endpoint)) return true
+        return endpoint.startsWith('/')
+    }
+
     const normalizeStatusPayload = (payload) => {
         const normalizedPayload = payload && typeof payload === 'object' ? payload : {}
         const connected = normalizedPayload.connected === true || normalizedPayload.linked === true
@@ -203,7 +210,7 @@ export const createGoogleDriveProvider = ({ backendBaseUrl } = {}) => {
     }
 
     const getStatusSnapshot = () => {
-        const hasBackend = /^https?:\/\//i.test(uploadEndpoint)
+        const hasBackend = isConfiguredEndpoint(uploadEndpoint)
         return {
             providerId,
             configured: hasBackend,
