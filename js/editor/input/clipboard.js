@@ -2,7 +2,6 @@ import { normalizeFragmentParagraphModel } from "./paragraph-model.js"
 
 export const createClipboardHandlers = (context) => {
     const {
-        elements,
         queueSnapshot,
         fileToDataUrl,
         insertMedia,
@@ -15,8 +14,7 @@ export const createClipboardHandlers = (context) => {
     } = context
 
     const removableWrapperTags = new Set(["div", "section", "article", "main"])
-    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre"])
-    const blockLikeTags = new Set(["p", "div", "section", "article", "li", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6"])
+    const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre", "hr", "table", "tbody", "thead", "tr", "td", "th"])
 
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
@@ -77,8 +75,8 @@ export const createClipboardHandlers = (context) => {
             if (sourceTag === "br") return document.createElement("br")
             if (sourceTag === "hr") return document.createElement("hr")
 
-                const normalizedTag = sourceTag === "div" ? "p" : sourceTag
-                const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
+            const normalizedTag = sourceTag === "div" ? "p" : sourceTag
+            const keepTag = structuralTags.has(normalizedTag) ? normalizedTag : null
             const container = keepTag ? document.createElement(keepTag) : document.createDocumentFragment()
 
             if (keepTag === "a") {
@@ -98,8 +96,8 @@ export const createClipboardHandlers = (context) => {
             if (keepTag && normalizedTag !== "br") {
                 const text = (container.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
                 const hasMeaningfulChildren = !!container.querySelector("img,audio,video,table,hr,br,li,ul,ol")
-                if (!text && !hasMeaningfulChildren && normalizedTag !== "p" && normalizedTag !== "li") return null
-                if ((normalizedTag === "p" || normalizedTag === "li") && !text && !hasMeaningfulChildren) {
+                if (!text && !hasMeaningfulChildren && !["p", "li", "td", "th"].includes(normalizedTag)) return null
+                if (["p", "li"].includes(normalizedTag) && !text && !hasMeaningfulChildren) {
                     container.appendChild(document.createElement("br"))
                 }
             }
@@ -114,63 +112,47 @@ export const createClipboardHandlers = (context) => {
         return normalizeFragmentParagraphModel(output)
     }
 
-    const normalizeClipboardPlainText = (value) => {
-        const normalized = String(value || "").replace(/\r\n?/g, "\n")
-        const rows = normalized.split("\n")
-        const isVisualEmptyRow = (row) => row.replace(/[\s\u200b\u00a0]+/g, "") === ""
-        while (rows.length && isVisualEmptyRow(rows[0])) rows.shift()
-        while (rows.length && isVisualEmptyRow(rows[rows.length - 1])) rows.pop()
-        const compact = []
-        let previousWasEmpty = false
-        rows.forEach(row => {
-            const isEmpty = isVisualEmptyRow(row)
-            if (isEmpty && previousWasEmpty) return
-            compact.push(row)
-            previousWasEmpty = isEmpty
-        })
-        return compact.join("\n")
+    const normalizeClipboardPlainText = (value) => String(value || "")
+        .replace(/\r\n?/g, "\n")
+        .replace(/\u200b/g, "")
+        .replace(/^\n+/, "")
+        .replace(/\n+$/, "")
+
+    const paragraphToText = (paragraph) => {
+        if (!paragraph || paragraph.nodeType !== Node.ELEMENT_NODE) return ""
+        return String(paragraph.textContent || "")
+            .replace(/\u200b/g, "")
+            .trim()
     }
 
-    const fragmentToPlainText = (fragment) => {
-        if (!fragment) return ""
-        const lines = [""]
-        const pushNewLine = (force = false) => {
-            const currentLine = lines[lines.length - 1]
-            if (!force && currentLine === "") return
-            lines.push("")
-        }
-        const appendText = (value) => {
-            if (!value) return
-            lines[lines.length - 1] += value
-        }
-        const visit = (node) => {
-            if (!node) return
-            if (node.nodeType === Node.TEXT_NODE) {
-                appendText(node.textContent || "")
-                return
-            }
-            if (node.nodeType !== Node.ELEMENT_NODE) return
-            const tag = String(node.tagName || "").toLowerCase()
-            if (tag === "br") {
-                pushNewLine(true)
-                return
-            }
-            const isBlock = blockLikeTags.has(tag)
-            if (tag === "li") appendText("• ")
-            Array.from(node.childNodes || []).forEach(visit)
-            if (isBlock && lines[lines.length - 1] !== "") pushNewLine(true)
-        }
-        Array.from(fragment.childNodes || []).forEach(visit)
-        return normalizeClipboardPlainText(lines.join("\n"))
+    const serializeParagraphs = (container) => {
+        if (!container) return ""
+        const blocks = Array.from(container.querySelectorAll("p"))
+        if (!blocks.length) return normalizeClipboardPlainText(container.textContent || "")
+        const lines = blocks.map(paragraph => paragraphToText(paragraph))
+        while (lines.length && lines[0] === "") lines.shift()
+        while (lines.length && lines[lines.length - 1] === "") lines.pop()
+        return lines.join("\n")
     }
+
+    const fragmentToPlainText = (node) => {
+        if (!node) return ""
+        const container = document.createElement("div")
+        container.appendChild(node.cloneNode(true))
+        return normalizeClipboardPlainText(serializeParagraphs(container))
+    }
+
+    const hasRichContentWithoutText = (container) => !!container?.querySelector?.("img,audio,video,table,hr")
 
     const plainTextToFragment = (plainText) => {
         const fragment = document.createDocumentFragment()
         const normalizedText = String(plainText || "").replace(/\r\n?/g, "\n")
         const rows = normalizedText.split("\n")
-        rows.forEach((line, index) => {
-            if (index > 0) fragment.appendChild(document.createElement("br"))
-            fragment.appendChild(document.createTextNode(line))
+        rows.forEach(line => {
+            const paragraph = document.createElement("p")
+            if (line) paragraph.textContent = line
+            else paragraph.appendChild(document.createElement("br"))
+            fragment.appendChild(paragraph)
         })
         return fragment
     }
@@ -179,7 +161,7 @@ export const createClipboardHandlers = (context) => {
         if (!fragment) return false
         const text = (fragment.textContent || "").replace(/[\s\u200b\u00a0]+/g, "")
         if (text) return true
-        if (fragment.querySelector && fragment.querySelector("br,hr,p,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote")) return true
+        if (fragment.querySelector && fragment.querySelector("br,hr,p,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote,table")) return true
         return false
     }
 
@@ -222,7 +204,7 @@ export const createClipboardHandlers = (context) => {
             }
         }
 
-        if (plainText && insertFragmentAtSelection(plainTextToFragment(plainText))) {
+        if (insertFragmentAtSelection(plainTextToFragment(plainText))) {
             normalizeActivePage()
             queueSnapshot()
         }
@@ -236,8 +218,8 @@ export const createClipboardHandlers = (context) => {
         const fragment = range.cloneContents()
         const container = document.createElement("div")
         container.appendChild(fragment)
-        const plainText = normalizeClipboardPlainText(fragmentToPlainText(fragment))
-        if (!plainText.trim() && !container.querySelector("img,audio,video,table,hr")) return
+        const plainText = fragmentToPlainText(container)
+        if (!plainText.trim() && !hasRichContentWithoutText(container)) return
         event.preventDefault()
         event.clipboardData?.setData("text/plain", plainText)
         event.clipboardData?.setData("text/html", container.innerHTML)
@@ -245,21 +227,11 @@ export const createClipboardHandlers = (context) => {
     }
 
     const handleCut = (event) => {
-        const range = getActiveRangeInContent()
+        const range = restoreSelection() || getActiveRangeInContent()
         if (!range || range.collapsed) return
         handleCopy(event)
         if (!event.defaultPrevented) event.preventDefault()
-        const removedWithNative = (() => {
-            if (typeof document.execCommand !== "function") return false
-            try {
-                restoreSelection()
-                elements.content?.focus()
-                return document.execCommand("delete", false, null)
-            } catch {
-                return false
-            }
-        })()
-        if (!removedWithNative) range.deleteContents()
+        range.deleteContents()
         normalizeActivePage()
         storeSelection()
         queueSnapshot()
