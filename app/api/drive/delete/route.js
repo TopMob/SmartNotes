@@ -1,6 +1,5 @@
 import { createDriveClientWithRefreshToken } from "@/lib/drive/client"
 import { requireRequestAuth } from "@/lib/auth"
-import { getDriveCorsHeaders, jsonResponse } from "@/lib/drive/cors"
 import { mapDriveError } from "@/lib/drive/errors"
 import { getGoogleDriveIntegration } from "@/lib/drive/integrationStore"
 
@@ -20,39 +19,32 @@ async function handleDelete(request) {
     const uid = await requireRequestAuth(request)
     const integration = await getGoogleDriveIntegration(uid)
     if (!integration?.refreshToken) {
-      return jsonResponse(request, { success: false, error: "NOT_CONNECTED" }, 400, "POST, DELETE, OPTIONS")
+      return Response.json({ success: false, error: "NOT_CONNECTED" }, { status: 400 })
     }
 
     const payload = await readPayload(request)
     const fileId = String(payload.fileId || "").trim()
 
     if (!fileId) {
-      return jsonResponse(request, { success: false, error: "INVALID_PAYLOAD" }, 400, "POST, DELETE, OPTIONS")
+      return Response.json({ success: false, error: "INVALID_PAYLOAD" }, { status: 400 })
     }
 
     const { drive } = createDriveClientWithRefreshToken(integration.refreshToken)
     await drive.files.delete({ fileId })
 
-    return jsonResponse(request, { success: true }, 200, "POST, DELETE, OPTIONS")
+    return Response.json({ success: true }, { status: 200 })
   } catch (error) {
     const mappedError = mapDriveError(error)
     if (mappedError) {
-      return jsonResponse(request, { success: false, error: mappedError }, 401, "POST, DELETE, OPTIONS")
+      return Response.json({ success: false, error: mappedError }, { status: 401 })
     }
 
     if (String(error?.message || "") === "UNAUTHORIZED") {
-      return jsonResponse(request, { success: false, error: "UNAUTHORIZED" }, 401, "POST, DELETE, OPTIONS")
+      return Response.json({ success: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
 
-    return jsonResponse(request, { success: false, error: "INTERNAL_ERROR" }, 500, "POST, DELETE, OPTIONS")
+    return Response.json({ success: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
-}
-
-export async function OPTIONS(request) {
-  return new Response(null, {
-    status: 200,
-    headers: getDriveCorsHeaders(request, "POST, DELETE, OPTIONS")
-  })
 }
 
 export async function POST(request) {

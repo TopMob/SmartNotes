@@ -1,6 +1,5 @@
 import { google } from "googleapis"
 import { createOAuthClient } from "@/lib/drive/client"
-import { getDriveCorsHeaders } from "@/lib/drive/cors"
 import {
   getGoogleDriveIntegration,
   getGoogleDriveIntegrationPath,
@@ -36,14 +35,8 @@ function buildFrontendRedirectUrl(status, reason = "") {
   return url.toString()
 }
 
-function redirectResponse(request, status, reason = "") {
-  return new Response(null, {
-    status: 302,
-    headers: {
-      ...getDriveCorsHeaders(request, "GET, OPTIONS"),
-      Location: buildFrontendRedirectUrl(status, reason)
-    }
-  })
+function redirectResponse(status, reason = "") {
+  return Response.redirect(buildFrontendRedirectUrl(status, reason), 302)
 }
 
 async function readUserEmailSafe(oauth2Client) {
@@ -71,13 +64,6 @@ function logCallbackError(stage, error, extras = {}) {
   })
 }
 
-export async function OPTIONS(request) {
-  return new Response(null, {
-    status: 200,
-    headers: getDriveCorsHeaders(request, "GET, OPTIONS")
-  })
-}
-
 export async function GET(request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
@@ -88,7 +74,7 @@ export async function GET(request) {
       hasCode: Boolean(code),
       hasState: Boolean(state)
     })
-    return redirectResponse(request, "error", "missing_code_or_state")
+    return redirectResponse("error", "missing_code_or_state")
   }
 
   let uid = ""
@@ -103,11 +89,11 @@ export async function GET(request) {
         parsedUid: uid,
         consumedUid: consumedState?.uid || null
       })
-      return redirectResponse(request, "error", "invalid_state")
+      return redirectResponse("error", "invalid_state")
     }
   } catch (error) {
     logCallbackError("state_validation", error)
-    return redirectResponse(request, "error", "state_validation_failed")
+    return redirectResponse("error", "state_validation_failed")
   }
 
   try {
@@ -148,7 +134,7 @@ export async function GET(request) {
         integrationPath,
         hasExistingIntegration: Boolean(existingIntegration?.hasDoc)
       })
-      return redirectResponse(request, "error", "missing_refresh_token")
+      return redirectResponse("error", "missing_refresh_token")
     }
 
     const email = await readUserEmailSafe(oauth2Client)
@@ -162,9 +148,9 @@ export async function GET(request) {
       hasEmail: Boolean(email)
     })
 
-    return redirectResponse(request, "connected")
+    return redirectResponse("connected")
   } catch (error) {
     logCallbackError("token_exchange_or_save", error, { uid })
-    return redirectResponse(request, "error", "token_exchange_or_save_failed")
+    return redirectResponse("error", "token_exchange_or_save_failed")
   }
 }

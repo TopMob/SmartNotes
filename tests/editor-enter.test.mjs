@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { JSDOM } from "jsdom"
-import { createSelectionHandlers, createEnterHandlers } from "../js/editor/input-handlers.js"
+import { createSelectionHandlers, createEnterHandlers } from "../public/js/editor/input-handlers.js"
 
 const setupEditor = (html) => {
     const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`)

@@ -1,6 +1,5 @@
 import { createDriveClientWithRefreshToken } from "@/lib/drive/client"
 import { requireRequestAuth } from "@/lib/auth"
-import { getDriveCorsHeaders, jsonResponse } from "@/lib/drive/cors"
 import { mapDriveError } from "@/lib/drive/errors"
 import { getGoogleDriveIntegration } from "@/lib/drive/integrationStore"
 import { ensureDefaultAttachmentsFolder } from "@/lib/drive/folders"
@@ -21,13 +20,6 @@ async function readPayload(request) {
   }
 }
 
-export async function OPTIONS(request) {
-  return new Response(null, {
-    status: 200,
-    headers: getDriveCorsHeaders(request, "POST, OPTIONS")
-  })
-}
-
 export async function POST(request) {
   let uploadContext = {
     uid: "",
@@ -42,7 +34,7 @@ export async function POST(request) {
     const uid = await requireRequestAuth(request)
     const integration = await getGoogleDriveIntegration(uid)
     if (!integration?.refreshToken) {
-      return jsonResponse(request, { success: false, error: "NOT_CONNECTED" }, 400, "POST, OPTIONS")
+      return Response.json({ success: false, error: "NOT_CONNECTED" }, { status: 400 })
     }
 
     const payload = await readPayload(request)
@@ -51,12 +43,12 @@ export async function POST(request) {
     const folderId = typeof payload.folderId === "string" ? payload.folderId.trim() : ""
 
     if (!dataUrl) {
-      return jsonResponse(request, { success: false, error: "INVALID_PAYLOAD" }, 400, "POST, OPTIONS")
+      return Response.json({ success: false, error: "INVALID_PAYLOAD" }, { status: 400 })
     }
 
     const { mimeType, buffer } = parseDataUrl(dataUrl)
     if (buffer.byteLength > MAX_UPLOAD_BYTES) {
-      return jsonResponse(request, { success: false, error: "PAYLOAD_TOO_LARGE" }, 413, "POST, OPTIONS")
+      return Response.json({ success: false, error: "PAYLOAD_TOO_LARGE" }, { status: 413 })
     }
 
     const { drive } = createDriveClientWithRefreshToken(integration.refreshToken)
@@ -84,8 +76,7 @@ export async function POST(request) {
     })
     await ensurePublicReadPermission({ drive, fileId: uploaded.fileId })
 
-    return jsonResponse(
-      request,
+    return Response.json(
       {
         success: true,
         fileId: uploaded.fileId,
@@ -95,26 +86,25 @@ export async function POST(request) {
         mimeType,
         size: buffer.byteLength
       },
-      200,
-      "POST, OPTIONS"
+      { status: 200 }
     )
   } catch (error) {
     const mappedError = mapDriveError(error)
     if (String(error?.message || "") === "UNAUTHORIZED") {
-      return jsonResponse(request, { success: false, error: "UNAUTHORIZED" }, 401, "POST, OPTIONS")
+      return Response.json({ success: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
 
     logUploadError(error, uploadContext)
 
     const status = Number(error?.response?.status || 0)
     if (status >= 400 && status < 600) {
-      return jsonResponse(request, buildUploadErrorBody(error, mappedError), status, "POST, OPTIONS")
+      return Response.json(buildUploadErrorBody(error, mappedError), { status })
     }
 
     if (mappedError) {
-      return jsonResponse(request, buildUploadErrorBody(error, mappedError), 401, "POST, OPTIONS")
+      return Response.json(buildUploadErrorBody(error, mappedError), { status: 401 })
     }
 
-    return jsonResponse(request, buildUploadErrorBody(error, null), 500, "POST, OPTIONS")
+    return Response.json(buildUploadErrorBody(error, null), { status: 500 })
   }
 }
