@@ -1,14 +1,9 @@
-import { createEditorState, CONFIG } from "./core-state.js"
-import { createInputHandlers } from "./core-input.js"
+import { CONFIG, createEditorState, createCoreEngine } from "./core-engine.js"
+import { createInputEngine } from "./input-engine.js"
 import { normalizeParagraphModel } from "./input/paragraph-model.js"
-import { createMediaHandlers } from "./core-media.js"
-import { createLinkHandlers } from "./core-links.js"
-import { createMathHandlers } from "./core-math.js"
-import { createHistoryHandlers } from "./core-history.js"
-import { createAutosaveHandlers } from "./core-autosave.js"
+import { createFeatureEngine } from "./feature-engine.js"
 import { createEditorLayoutHandlers } from "./core-layout.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
-import { createEditorCommands } from "./editor-commands.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -111,7 +106,7 @@ export const EditorAPI = (() => {
 
     const layoutHandlers = createEditorLayoutHandlers({ elements, state })
 
-    const inputHandlers = createInputHandlers({
+    const inputHandlers = createInputEngine({
         elements,
         state,
         queueSnapshot: (...args) => queueSnapshot(...args),
@@ -122,51 +117,45 @@ export const EditorAPI = (() => {
         redo: (...args) => redo(...args)
     })
 
-    const handlePaste = (event) => inputHandlers.handlePaste(event)
-
-    const mediaHandlers = createMediaHandlers({
-        elements,
-        state,
-        getPages,
-        queueSnapshot: (...args) => queueSnapshot(...args),
-        insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
-        alignText: (side) => applyTextAlignment(side)
-    })
-
-    fileToDataUrl = mediaHandlers.fileToDataUrl
-    insertMedia = mediaHandlers.insertMedia
-
-    const mathHandlers = createMathHandlers({
-        elements,
-        state,
-        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        getBlockFromRange: inputHandlers.getBlockFromRange,
-        getCaretOffsetInBlock: inputHandlers.getCaretOffsetInBlock,
-        createRangeFromOffsets: inputHandlers.createRangeFromOffsets,
-        getPages,
-        queueSnapshot: (...args) => queueSnapshot(...args)
-    })
-
-    confirmEquationAtCaret = mathHandlers.confirmEquationAtCaret
-
-    const editorCommands = createEditorCommands({
-        getRoot: () => document.getElementById("note-content-editable"),
-        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        storeSelection: inputHandlers.storeSelection,
-        queueSnapshot: (...args) => queueSnapshot(...args),
-        fallback: {
-            enableFallback: StateStore.read().config?.editorExecCommandFallback !== false
-        }
-    })
-
-    applyTextAlignment = editorCommands.alignText
-
-    const linkHandlers = createLinkHandlers({
-        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        getEditorCommands: () => editorCommands,
+    const featureEngine = createFeatureEngine({
+        media: {
+            elements,
+            state,
+            getPages,
+            queueSnapshot: (...args) => queueSnapshot(...args),
+            insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
+            alignText: (side) => applyTextAlignment(side)
+        },
+        commands: {
+            getRoot: () => document.getElementById("note-content-editable"),
+            getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+            storeSelection: inputHandlers.storeSelection,
+            queueSnapshot: (...args) => queueSnapshot(...args),
+            fallback: {
+                enableFallback: StateStore.read().config?.editorExecCommandFallback !== false
+            }
+        },
+        math: {
+            elements,
+            state,
+            getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+            getBlockFromRange: inputHandlers.getBlockFromRange,
+            getCaretOffsetInBlock: inputHandlers.getCaretOffsetInBlock,
+            createRangeFromOffsets: inputHandlers.createRangeFromOffsets,
+            getPages,
+            queueSnapshot: (...args) => queueSnapshot(...args)
+        },
         openFromList: (...args) => openFromList(...args)
     })
 
+    const mediaHandlers = featureEngine.media
+    const editorCommands = featureEngine.commands
+    const linkHandlers = featureEngine.links
+
+    fileToDataUrl = mediaHandlers.fileToDataUrl
+    insertMedia = mediaHandlers.insertMedia
+    confirmEquationAtCaret = () => featureEngine.confirmEquationAtCaret()
+    applyTextAlignment = editorCommands.alignText
 
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
@@ -406,18 +395,7 @@ export const EditorAPI = (() => {
         }
     }
 
-    const autosaveHandlers = createAutosaveHandlers({
-        elements,
-        state,
-        getPages,
-        updateNotePageDrawings,
-        syncAutoTitle: inputHandlers.syncAutoTitle,
-        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
-        getSelectionBookmark: inputHandlers.getSelectionBookmark
-    })
-
-    captureSnapshot = autosaveHandlers.captureSnapshot
-    queueSnapshot = autosaveHandlers.queueSnapshot
+    let coreEngine
 
     const applySnapshot = (snap) => {
         if (!snap) return
@@ -446,10 +424,21 @@ export const EditorAPI = (() => {
     }
 
 
-    const historyHandlers = createHistoryHandlers({
+    coreEngine = createCoreEngine({
+        elements,
         state,
+        getPages,
+        updateNotePageDrawings,
+        syncAutoTitle: inputHandlers.syncAutoTitle,
+        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
+        getSelectionBookmark: inputHandlers.getSelectionBookmark,
         applySnapshot
     })
+
+    const autosaveHandlers = coreEngine.autosave
+    const historyHandlers = coreEngine.history
+    captureSnapshot = coreEngine.captureSnapshot
+    queueSnapshot = coreEngine.queueSnapshot
 
     const init = () => {
         refreshEditorDomElements()
@@ -518,20 +507,10 @@ export const EditorAPI = (() => {
         }
 
         if (boundElements.content) {
-            state.observer = new MutationObserver(scheduleSnapshotFrame)
-            state.observer.observe(boundElements.content, { childList: true, subtree: true, characterData: true, attributes: true })
+            state.observer = inputHandlers.createMutationObserver(scheduleSnapshotFrame)
+            state.observer.observe(boundElements.content, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "data-width", "data-height"] })
 
-            boundElements.content.addEventListener("paste", handlePaste, { signal })
-            boundElements.content.addEventListener("copy", inputHandlers.handleCopy, { signal })
-            boundElements.content.addEventListener("cut", inputHandlers.handleCut, { signal })
-            boundElements.content.addEventListener("beforeinput", inputHandlers.handleBeforeInput, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleEnterKeydown, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
-            boundElements.content.addEventListener("input", inputHandlers.handleInput, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleHistoryKeydown, { signal })
-            boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
-            boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
-            boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
+            inputHandlers.attachDelegatedHandlers(boundElements.content, signal)
 
             boundElements.content.addEventListener("click", (event) => {
                 const link = event.target.closest("a")
