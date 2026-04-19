@@ -1,6 +1,7 @@
 import { createMediaHandlers } from "./core-media.js"
 import { createLinkHandlers } from "./core-links.js"
 import { createEditorCommands } from "./editor-commands.js"
+import { ensureDrawingLoaded } from "./drawing-loader.js"
 
 export const createFeatureEngine = (context) => {
     const media = createMediaHandlers(context.media)
@@ -46,12 +47,34 @@ export const createFeatureEngine = (context) => {
         return false
     }
 
+    const drawing = {
+        ensureLoaded: async () => ensureDrawingLoaded(),
+        configure: async (config) => {
+            const instance = await ensureDrawingLoaded()
+            instance?.configure?.(config)
+            return instance
+        },
+        setupControls: async () => {
+            const instance = await ensureDrawingLoaded()
+            instance?.setupControls?.()
+            return instance
+        },
+        toggleMode: async () => {
+            const instance = await ensureDrawingLoaded()
+            instance?.toggleDrawingMode?.()
+            return instance
+        },
+        isReady: () => typeof window.EditorDrawing !== "undefined",
+        getInstance: () => window.EditorDrawing
+    }
+
     return {
         media,
         links,
         commands,
         commandDispatcher,
         confirmEquationAtCaret,
-        loadMath
+        loadMath,
+        drawing
     }
 }

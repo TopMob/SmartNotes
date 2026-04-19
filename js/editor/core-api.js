@@ -157,6 +157,28 @@ export const EditorAPI = (() => {
     confirmEquationAtCaret = () => featureEngine.confirmEquationAtCaret()
     applyTextAlignment = editorCommands.alignText
 
+    let drawingRuntimeConfigured = false
+    const getDrawing = () => featureEngine.drawing.getInstance()
+    const ensureDrawingRuntime = async () => {
+        const drawing = await featureEngine.drawing.ensureLoaded()
+        if (!drawing) return null
+        if (!drawingRuntimeConfigured) {
+            drawing.configure({
+                elements,
+                getPages,
+                getActivePage,
+                buildToolbar,
+                updateEditableState,
+                onDrawingChange: autosaveHandlers.persistDrawing
+            })
+            drawing.setupControls()
+            drawingRuntimeConfigured = true
+            state.drawingState = drawing.state
+            mediaHandlers.makeMediaDraggable()
+        }
+        return drawing
+    }
+
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
         const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
@@ -445,17 +467,6 @@ export const EditorAPI = (() => {
 
         loadToolSettings()
         buildToolbar()
-        if (typeof EditorDrawing !== "undefined") {
-            EditorDrawing.configure({
-                elements,
-                getPages,
-                getActivePage,
-                buildToolbar,
-                updateEditableState,
-                onDrawingChange: autosaveHandlers.persistDrawing
-            })
-            EditorDrawing.setupControls()
-        }
         bind()
     }
 
@@ -886,9 +897,10 @@ export const EditorAPI = (() => {
             imageUploadInputElement.value = ""
             imageUploadInputElement.click()
         }},
-        { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
+        { id: "sketch", i: "gesture", label: "tool_sketch", cmd: async () => {
             inputHandlers.storeSelection()
-            if (typeof EditorDrawing !== "undefined") EditorDrawing.toggleDrawingMode()
+            const drawing = await ensureDrawingRuntime()
+            drawing?.toggleDrawingMode?.()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => { inputHandlers.storeSelection(); mediaHandlers.toggleAlignMenu(btn) } },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => editorCommands.clearFormatting() }
@@ -906,9 +918,11 @@ export const EditorAPI = (() => {
 
     const storeActivePageDrawing = (options = {}) => {
         const currentNote = StateStore.read().currentNote
-        if (!currentNote || typeof EditorDrawing === "undefined") return
+        if (!currentNote) return
+        const drawingEngine = getDrawing()
+        if (!drawingEngine) return
         const drawings = normalizePageDrawings(currentNote, getPages().length)
-        const snapshot = EditorDrawing.getDrawingSnapshot?.() ?? ""
+        const snapshot = drawingEngine.getDrawingSnapshot?.() ?? ""
         if (drawings[state.pageIndex] === snapshot) return
         drawings[state.pageIndex] = snapshot
         const nextNote = updateNotePageDrawings(currentNote, drawings, options.updateTimestamp)
@@ -921,11 +935,13 @@ export const EditorAPI = (() => {
 
     const syncDrawingForActivePage = () => {
         const note = StateStore.read().currentNote
-        if (!note || typeof EditorDrawing === "undefined") return
+        if (!note) return
+        const drawingEngine = getDrawing()
+        if (!drawingEngine) return
         const page = getPages()[state.pageIndex] || null
-        EditorDrawing.setActivePage?.(page)
+        drawingEngine.setActivePage?.(page)
         const drawing = resolveActivePageDrawing(note)
-        EditorDrawing.setDrawingData(drawing, { recordHistory: true, replaceHistory: true })
+        drawingEngine.setDrawingData(drawing, { recordHistory: true, replaceHistory: true })
     }
 
     const open = (note = null) => {
@@ -1042,9 +1058,10 @@ export const EditorAPI = (() => {
         if (drawingControlsElement) {
             drawingControlsElement.classList.add("hidden")
         }
-        if (typeof EditorDrawing !== "undefined") {
-            EditorDrawing.setDrawingData("", { recordHistory: true, replaceHistory: true })
-            EditorDrawing.cleanup()
+        const drawingEngine = getDrawing()
+        if (drawingEngine) {
+            drawingEngine.setDrawingData("", { recordHistory: true, replaceHistory: true })
+            drawingEngine.cleanup()
         }
         if (state.observer) state.observer.disconnect()
         updateSearchQuery(document.getElementById("search-input")?.value || "")
@@ -1124,18 +1141,24 @@ export const EditorAPI = (() => {
     }
 
     function undo() {
-        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
-            EditorDrawing.undo?.()
-            return
+        if (state.drawingState?.active) {
+            const drawingEngine = getDrawing()
+            if (drawingEngine) {
+                drawingEngine.undo?.()
+                return
+            }
         }
         pushCurrentSnapshotToHistory()
         historyHandlers.undo()
     }
 
     function redo() {
-        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
-            EditorDrawing.redo?.()
-            return
+        if (state.drawingState?.active) {
+            const drawingEngine = getDrawing()
+            if (drawingEngine) {
+                drawingEngine.redo?.()
+                return
+            }
         }
         historyHandlers.redo()
     }
