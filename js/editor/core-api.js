@@ -1,14 +1,9 @@
-import { createEditorState, CONFIG } from "./core-state.js"
-import { createInputHandlers } from "./core-input.js"
+import { CONFIG, createEditorState, createCoreEngine } from "./core-engine.js"
+import { createInputEngine } from "./input-engine.js"
 import { normalizeParagraphModel } from "./input/paragraph-model.js"
-import { createMediaHandlers } from "./core-media.js"
-import { createLinkHandlers } from "./core-links.js"
-import { createMathHandlers } from "./core-math.js"
-import { createHistoryHandlers } from "./core-history.js"
-import { createAutosaveHandlers } from "./core-autosave.js"
+import { createFeatureEngine } from "./feature-engine.js"
 import { createEditorLayoutHandlers } from "./core-layout.js"
 import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-drawing.js"
-import { createEditorCommands } from "./editor-commands.js"
 
 export const EditorAPI = (() => {
     const state = createEditorState()
@@ -111,7 +106,7 @@ export const EditorAPI = (() => {
 
     const layoutHandlers = createEditorLayoutHandlers({ elements, state })
 
-    const inputHandlers = createInputHandlers({
+    const inputHandlers = createInputEngine({
         elements,
         state,
         queueSnapshot: (...args) => queueSnapshot(...args),
@@ -122,51 +117,69 @@ export const EditorAPI = (() => {
         redo: (...args) => redo(...args)
     })
 
-    const handlePaste = (event) => inputHandlers.handlePaste(event)
-
-    const mediaHandlers = createMediaHandlers({
-        elements,
-        state,
-        getPages,
-        queueSnapshot: (...args) => queueSnapshot(...args),
-        insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
-        alignText: (side) => applyTextAlignment(side)
-    })
-
-    fileToDataUrl = mediaHandlers.fileToDataUrl
-    insertMedia = mediaHandlers.insertMedia
-
-    const mathHandlers = createMathHandlers({
-        elements,
-        state,
-        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        getBlockFromRange: inputHandlers.getBlockFromRange,
-        getCaretOffsetInBlock: inputHandlers.getCaretOffsetInBlock,
-        createRangeFromOffsets: inputHandlers.createRangeFromOffsets,
-        getPages,
-        queueSnapshot: (...args) => queueSnapshot(...args)
-    })
-
-    confirmEquationAtCaret = mathHandlers.confirmEquationAtCaret
-
-    const editorCommands = createEditorCommands({
-        getRoot: () => document.getElementById("note-content-editable"),
-        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        storeSelection: inputHandlers.storeSelection,
-        queueSnapshot: (...args) => queueSnapshot(...args),
-        fallback: {
-            enableFallback: StateStore.read().config?.editorExecCommandFallback !== false
-        }
-    })
-
-    applyTextAlignment = editorCommands.alignText
-
-    const linkHandlers = createLinkHandlers({
-        getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
-        getEditorCommands: () => editorCommands,
+    const featureEngine = createFeatureEngine({
+        media: {
+            elements,
+            state,
+            getPages,
+            queueSnapshot: (...args) => queueSnapshot(...args),
+            insertHtmlAtSelection: inputHandlers.insertHtmlAtSelection,
+            alignText: (side) => applyTextAlignment(side)
+        },
+        commands: {
+            getRoot: () => document.getElementById("note-content-editable"),
+            getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+            storeSelection: inputHandlers.storeSelection,
+            queueSnapshot: (...args) => queueSnapshot(...args),
+            fallback: {
+                enableFallback: StateStore.read().config?.editorExecCommandFallback !== false
+            }
+        },
+        math: {
+            elements,
+            state,
+            getActiveRangeInContent: inputHandlers.getActiveRangeInContent,
+            getBlockFromRange: inputHandlers.getBlockFromRange,
+            getCaretOffsetInBlock: inputHandlers.getCaretOffsetInBlock,
+            createRangeFromOffsets: inputHandlers.createRangeFromOffsets,
+            getPages,
+            queueSnapshot: (...args) => queueSnapshot(...args)
+        },
         openFromList: (...args) => openFromList(...args)
     })
 
+    const mediaHandlers = featureEngine.media
+    const editorCommands = featureEngine.commands
+    const linkHandlers = featureEngine.links
+
+    fileToDataUrl = mediaHandlers.fileToDataUrl
+    insertMedia = mediaHandlers.insertMedia
+    confirmEquationAtCaret = () => featureEngine.confirmEquationAtCaret()
+    applyTextAlignment = editorCommands.alignText
+
+    let drawingRuntimeConfigured = false
+    const getDrawing = () => featureEngine.drawing.getInstance()
+    const ensureDrawingRuntime = async () => {
+        const drawing = await featureEngine.drawing.ensureLoaded()
+        if (!drawing) return null
+        if (!drawingRuntimeConfigured) {
+            drawing.configure({
+                elements,
+                getPages,
+                getActivePage,
+                buildToolbar,
+                updateEditableState,
+                onDrawingChange: autosaveHandlers.persistDrawing
+            })
+            drawing.setupControls()
+            drawingRuntimeConfigured = true
+            state.drawingState = drawing.state
+            mediaHandlers.makeMediaDraggable()
+        }
+        return drawing
+    }
+
+    const getRefs = () => window.InfraEngine?.getRefs?.() || window.DataPath
 
     const resolveExternalMediaMessage = (error, options = {}) => {
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
@@ -374,7 +387,7 @@ export const EditorAPI = (() => {
         const payload = window.NoteHelpers.buildNotePayload({ note, user, access })
 
         const ref = typeof CollaborationService === "undefined"
-            ? DataPath.getUserNotesCollection(user).doc(payload.id)
+            ? getRefs().getUserNotesCollection(user).doc(payload.id)
             : CollaborationService.getNoteReference(note, user)
 
         if (!ref) return
@@ -406,18 +419,7 @@ export const EditorAPI = (() => {
         }
     }
 
-    const autosaveHandlers = createAutosaveHandlers({
-        elements,
-        state,
-        getPages,
-        updateNotePageDrawings,
-        syncAutoTitle: inputHandlers.syncAutoTitle,
-        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
-        getSelectionBookmark: inputHandlers.getSelectionBookmark
-    })
-
-    captureSnapshot = autosaveHandlers.captureSnapshot
-    queueSnapshot = autosaveHandlers.queueSnapshot
+    let coreEngine
 
     const applySnapshot = (snap) => {
         if (!snap) return
@@ -446,27 +448,27 @@ export const EditorAPI = (() => {
     }
 
 
-    const historyHandlers = createHistoryHandlers({
+    coreEngine = createCoreEngine({
+        elements,
         state,
+        getPages,
+        updateNotePageDrawings,
+        syncAutoTitle: inputHandlers.syncAutoTitle,
+        updateSnapshotFrame: (fn) => { scheduleSnapshotFrame = fn },
+        getSelectionBookmark: inputHandlers.getSelectionBookmark,
         applySnapshot
     })
+
+    const autosaveHandlers = coreEngine.autosave
+    const historyHandlers = coreEngine.history
+    captureSnapshot = coreEngine.captureSnapshot
+    queueSnapshot = coreEngine.queueSnapshot
 
     const init = () => {
         refreshEditorDomElements()
 
         loadToolSettings()
         buildToolbar()
-        if (typeof EditorDrawing !== "undefined") {
-            EditorDrawing.configure({
-                elements,
-                getPages,
-                getActivePage,
-                buildToolbar,
-                updateEditableState,
-                onDrawingChange: autosaveHandlers.persistDrawing
-            })
-            EditorDrawing.setupControls()
-        }
         bind()
     }
 
@@ -518,20 +520,10 @@ export const EditorAPI = (() => {
         }
 
         if (boundElements.content) {
-            state.observer = new MutationObserver(scheduleSnapshotFrame)
-            state.observer.observe(boundElements.content, { childList: true, subtree: true, characterData: true, attributes: true })
+            state.observer = inputHandlers.createMutationObserver(scheduleSnapshotFrame)
+            state.observer.observe(boundElements.content, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "data-width", "data-height"] })
 
-            boundElements.content.addEventListener("paste", handlePaste, { signal })
-            boundElements.content.addEventListener("copy", inputHandlers.handleCopy, { signal })
-            boundElements.content.addEventListener("cut", inputHandlers.handleCut, { signal })
-            boundElements.content.addEventListener("beforeinput", inputHandlers.handleBeforeInput, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleEnterKeydown, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleEquationConfirmKeyDown, { signal })
-            boundElements.content.addEventListener("input", inputHandlers.handleInput, { signal })
-            boundElements.content.addEventListener("keydown", inputHandlers.handleHistoryKeydown, { signal })
-            boundElements.content.addEventListener("keyup", inputHandlers.storeSelection, { signal })
-            boundElements.content.addEventListener("mouseup", inputHandlers.storeSelection, { signal })
-            boundElements.content.addEventListener("touchend", inputHandlers.storeSelection, { signal })
+            inputHandlers.attachDelegatedHandlers(boundElements.content, signal)
 
             boundElements.content.addEventListener("click", (event) => {
                 const link = event.target.closest("a")
@@ -907,9 +899,10 @@ export const EditorAPI = (() => {
             imageUploadInputElement.value = ""
             imageUploadInputElement.click()
         }},
-        { id: "sketch", i: "gesture", label: "tool_sketch", cmd: () => {
+        { id: "sketch", i: "gesture", label: "tool_sketch", cmd: async () => {
             inputHandlers.storeSelection()
-            if (typeof EditorDrawing !== "undefined") EditorDrawing.toggleDrawingMode()
+            const drawing = await ensureDrawingRuntime()
+            drawing?.toggleDrawingMode?.()
         }},
         { id: "align", i: "format_align_center", label: "tool_align", cmd: (btn) => { inputHandlers.storeSelection(); mediaHandlers.toggleAlignMenu(btn) } },
         { id: "clear", i: "format_clear", label: "tool_clear", cmd: () => editorCommands.clearFormatting() }
@@ -927,9 +920,11 @@ export const EditorAPI = (() => {
 
     const storeActivePageDrawing = (options = {}) => {
         const currentNote = StateStore.read().currentNote
-        if (!currentNote || typeof EditorDrawing === "undefined") return
+        if (!currentNote) return
+        const drawingEngine = getDrawing()
+        if (!drawingEngine) return
         const drawings = normalizePageDrawings(currentNote, getPages().length)
-        const snapshot = EditorDrawing.getDrawingSnapshot?.() ?? ""
+        const snapshot = drawingEngine.getDrawingSnapshot?.() ?? ""
         if (drawings[state.pageIndex] === snapshot) return
         drawings[state.pageIndex] = snapshot
         const nextNote = updateNotePageDrawings(currentNote, drawings, options.updateTimestamp)
@@ -942,11 +937,13 @@ export const EditorAPI = (() => {
 
     const syncDrawingForActivePage = () => {
         const note = StateStore.read().currentNote
-        if (!note || typeof EditorDrawing === "undefined") return
+        if (!note) return
+        const drawingEngine = getDrawing()
+        if (!drawingEngine) return
         const page = getPages()[state.pageIndex] || null
-        EditorDrawing.setActivePage?.(page)
+        drawingEngine.setActivePage?.(page)
         const drawing = resolveActivePageDrawing(note)
-        EditorDrawing.setDrawingData(drawing, { recordHistory: true, replaceHistory: true })
+        drawingEngine.setDrawingData(drawing, { recordHistory: true, replaceHistory: true })
     }
 
     const open = (note = null) => {
@@ -1063,9 +1060,10 @@ export const EditorAPI = (() => {
         if (drawingControlsElement) {
             drawingControlsElement.classList.add("hidden")
         }
-        if (typeof EditorDrawing !== "undefined") {
-            EditorDrawing.setDrawingData("", { recordHistory: true, replaceHistory: true })
-            EditorDrawing.cleanup()
+        const drawingEngine = getDrawing()
+        if (drawingEngine) {
+            drawingEngine.setDrawingData("", { recordHistory: true, replaceHistory: true })
+            drawingEngine.cleanup()
         }
         if (state.observer) state.observer.disconnect()
         updateSearchQuery(document.getElementById("search-input")?.value || "")
@@ -1145,18 +1143,24 @@ export const EditorAPI = (() => {
     }
 
     function undo() {
-        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
-            EditorDrawing.undo?.()
-            return
+        if (state.drawingState?.active) {
+            const drawingEngine = getDrawing()
+            if (drawingEngine) {
+                drawingEngine.undo?.()
+                return
+            }
         }
         pushCurrentSnapshotToHistory()
         historyHandlers.undo()
     }
 
     function redo() {
-        if (state.drawingState?.active && typeof EditorDrawing !== "undefined") {
-            EditorDrawing.redo?.()
-            return
+        if (state.drawingState?.active) {
+            const drawingEngine = getDrawing()
+            if (drawingEngine) {
+                drawingEngine.redo?.()
+                return
+            }
         }
         historyHandlers.redo()
     }
@@ -1171,7 +1175,7 @@ export const EditorAPI = (() => {
         UI.confirm("delete", async () => {
             if (!db || !StateStore.read().user) return
             const ref = typeof CollaborationService === "undefined"
-                ? DataPath.getUserNotesCollection(StateStore.read().user).doc(note.id)
+                ? getRefs().getUserNotesCollection(StateStore.read().user).doc(note.id)
                 : CollaborationService.getNoteReference(note, StateStore.read().user)
             if (!ref) return
             await ref.delete()
@@ -1197,14 +1201,14 @@ export const EditorAPI = (() => {
         resetMediaTransform: mediaHandlers.resetMediaTransform,
         alignMediaOrText: mediaHandlers.alignMediaOrText,
         deleteSelectedMedia: mediaHandlers.deleteSelectedMedia,
-        confirmEquation: mathHandlers.confirmEquation,
+        confirmEquation: confirmEquationAtCaret,
         addPage,
         deleteActivePage,
         selectPage,
         nextPage,
         prevPage,
         applyLink: linkHandlers.applyLink,
-        handlePaste,
+        handlePaste: inputHandlers.handlePaste,
         saveSnapshot: autosaveHandlers.queueSnapshot
     }
 })()
