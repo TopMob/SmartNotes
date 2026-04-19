@@ -130,7 +130,7 @@
     --safe-bottom: env(safe-area-inset-bottom, 20px);
 
     --space-unit: 12px;
-    --editor-padding: 30px;
+    --editor-padding: 5px;
     --editor-line-height: 1.7;
     --editor-letter-spacing: 0px;
 

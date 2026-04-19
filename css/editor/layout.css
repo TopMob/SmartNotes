@@ -14,6 +14,8 @@
 }
 
 .editor-container {
+    --editor-padding: 12px !important;
+    --editor-bottom-offset: 10px !important;
     height: 100%;
     max-height: 100dvh;
     width: 100%;
@@ -63,7 +65,7 @@
 }
 
 .editor-scroll-area {
-    --editor-bottom-offset: 20px;
+    --editor-bottom-offset: 10px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -385,16 +387,21 @@
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(var(--blur-strength));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: 0;
-    padding: 8px var(--editor-padding) calc(6px + var(--safe-bottom));
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 8px 12px calc(8px + var(--safe-bottom)) !important; 
 }
 
 .tags-row {
-    margin-top: 4px;
-    display: grid;
-    gap: 6px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 8px;
     min-width: 0;
-    clear: both;
 }
 
 .tags-container {
@@ -449,13 +456,12 @@
 }
 
 .editor-bottom-actions {
-    margin-top: 2px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
-    clear: both;
-    flex-wrap: wrap;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-shrink: 0;
 }
 
 #note-title::placeholder {
