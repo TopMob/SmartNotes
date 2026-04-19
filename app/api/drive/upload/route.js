@@ -9,7 +9,7 @@ import { ensurePublicReadPermission, uploadFileToDrive } from "@/lib/drive/uploa
 
 export const runtime = "nodejs"
 
-const MAX_UPLOAD_BYTES = Number(process.env.DRIVE_MAX_UPLOAD_BYTES || 10 * 1024 * 1024)
+const MAX_UPLOAD_BYTES = 4000000
 const AUTHORIZATION_ERRORS = new Set(["RECONNECT_REQUIRED", "DRIVE_SCOPE_INSUFFICIENT"])
 
 async function readPayload(request) {
