@@ -8,12 +8,22 @@ const scriptSources = [
   "https://accounts.google.com"
 ]
 
+const imageSources = [
+  "'self'",
+  "data:",
+  "blob:",
+  "https://*.googleusercontent.com",
+  "http://googleusercontent.com",
+  "https://drive.google.com",
+  "https://ui-avatars.com"
+]
+
 const cspParts = [
   "default-src 'self'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "img-src 'self' data: blob:",
+  `img-src ${imageSources.join(" ")}`,
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "connect-src 'self' https: wss:",
@@ -29,16 +39,10 @@ function normalizeCsp(value: string) {
 
 function toBase64(bytes: Uint8Array) {
   let binary = ""
-
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte)
   })
-
   return btoa(binary)
-}
-
-function joinScriptSources(nonce: string) {
-  return [...scriptSources, `'nonce-${nonce}'`].join(" ")
 }
 
 export function createCspNonce() {
@@ -48,19 +52,13 @@ export function createCspNonce() {
 }
 
 export function buildCspHeader(nonce: string) {
-  const scriptDirective = `script-src ${joinScriptSources(nonce)}`
-  const scriptElemDirective = `script-src-elem ${joinScriptSources(nonce)}`
+  const scriptDirective = `script-src ${scriptSources.join(" ")}`
+  const scriptElemDirective = `script-src-elem ${scriptSources.join(" ")}`
 
   const withNonce = cspParts
     .map((part) => {
-      if (part === "script-src") {
-        return scriptDirective
-      }
-
-      if (part === "script-src-elem") {
-        return scriptElemDirective
-      }
-
+      if (part === "script-src") return scriptDirective
+      if (part === "script-src-elem") return scriptElemDirective
       return part
     })
     .join("; ")
