@@ -10,6 +10,7 @@ import { consumeOAuthState } from "@/lib/drive/oauthStateStore"
 import { parseOAuthState } from "@/lib/drive/state"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 const DEFAULT_FRONTEND_URL = "https://smartnotess.vercel.app/"
 
