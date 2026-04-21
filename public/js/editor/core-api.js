@@ -902,14 +902,23 @@ export const EditorAPI = (() => {
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => editorCommands.toggleNumberedList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => inputHandlers.insertHorizontalRule() },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
-    inputHandlers.storeSelection()
-    const safeRange = state.savedSelectionRange ? state.savedSelectionRange.cloneRange() : null
+    const sel = window.getSelection()
+    const backupRange = sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null
     
     UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {
-        if (safeRange) {
-            state.savedSelectionRange = safeRange
-        }
-        linkHandlers.applyLink(value)
+        setTimeout(() => {
+            const root = document.getElementById("note-content-editable")
+            if (root) root.focus()
+            
+            if (backupRange) {
+                const currentSel = window.getSelection()
+                currentSel.removeAllRanges()
+                currentSel.addRange(backupRange)
+                state.savedSelectionRange = backupRange
+            }
+            
+            linkHandlers.applyLink(value)
+        }, 50)
     })
 }},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
