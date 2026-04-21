@@ -902,11 +902,16 @@ export const EditorAPI = (() => {
         { id: "numbered", i: "format_list_numbered", label: "tool_numbered", cmd: () => editorCommands.toggleNumberedList() },
         { id: "hr", i: "horizontal_rule", label: "tool_hr", cmd: () => inputHandlers.insertHorizontalRule() },
         { id: "link", i: "link", label: "tool_link", cmd: () => {
-            inputHandlers.storeSelection()
-            UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {
-                linkHandlers.applyLink(value)
-            })
-        }},
+    inputHandlers.storeSelection()
+    const safeRange = state.savedSelectionRange ? state.savedSelectionRange.cloneRange() : null
+    
+    UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {
+        if (safeRange) {
+            state.savedSelectionRange = safeRange
+        }
+        linkHandlers.applyLink(value)
+    })
+}},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
             const imageUploadInputElement = document.getElementById("img-upload")
             if (!imageUploadInputElement) return
