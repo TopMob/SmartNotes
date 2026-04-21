@@ -821,6 +821,9 @@ const getCleanText = (html) => {
     wrapper.innerHTML = html || ""
     wrapper.querySelectorAll(".audio-block, .audio-wrapper").forEach(element => element.remove())
     wrapper.querySelectorAll("br").forEach(element => element.replaceWith("\n"))
+    wrapper.querySelectorAll("p, div, li, h1, h2, h3, h4, h5, h6, blockquote").forEach(element => {
+        element.appendChild(document.createTextNode("\n"))
+    })
     const text = wrapper.textContent || ""
     return text.replace(/\n{3,}/g, "\n\n").trim()
 }
