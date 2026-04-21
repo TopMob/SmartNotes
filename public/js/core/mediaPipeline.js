@@ -1,3 +1,305 @@
+import { ERROR_CODES, createExternalMediaError } from './errors.js'
+
+export const INLINE_MEDIA_PATTERN = /^data:(image|audio)\//i
+export const INLINE_MEDIA_URL_PATTERN = /data:(image|audio)\//i
+
+export const isInlineMediaSource = (value) => INLINE_MEDIA_PATTERN.test(String(value || '').trim())
+export const containsInlineMedia = (value) => INLINE_MEDIA_URL_PATTERN.test(String(value || ''))
+
+export const getInlineMediaSummary = (note) => {
+    const normalizedNote = note && typeof note === 'object' ? note : {}
+    const content = String(normalizedNote.content || '')
+    const pageDrawings = Array.isArray(normalizedNote.pageDrawings) ? normalizedNote.pageDrawings : []
+    const htmlMatches = content.match(/data:(image|audio)\//gi) || []
+    const drawingMatches = pageDrawings.filter(item => isInlineMediaSource(item))
+    return {
+        count: htmlMatches.length + drawingMatches.length,
+        hasInlineMedia: containsInlineMedia(content) || drawingMatches.length > 0
+    }
+}
+
+const stripInlineHtmlMedia = (html) => {
+    const wrapper = document.createElement('div')
+    wrapper.innerHTML = String(html || '')
+    Array.from(wrapper.querySelectorAll('img[src], audio[src], audio source[src]')).forEach(element => {
+        const source = String(element.getAttribute('src') || '').trim()
+        if (!isInlineMediaSource(source)) return
+        if (element.tagName.toLowerCase() === 'source') {
+            const parent = element.parentElement
+            element.remove()
+            if (parent && parent.tagName.toLowerCase() === 'audio' && !parent.querySelector('source[src], [src]')) parent.remove()
+            return
+        }
+        element.remove()
+    })
+    return wrapper.innerHTML
+}
+
+const stripInlinePageDrawings = (pageDrawings) => (Array.isArray(pageDrawings) ? pageDrawings : []).map(source => isInlineMediaSource(source) ? '' : source)
+
+export const createExternalMediaPipeline = ({ uploadDataUrl, sanitizeFileNamePart }) => {
+    const externalizeHtmlMedia = async (html, options = {}) => {
+        const wrapper = document.createElement('div')
+        wrapper.innerHTML = String(html || '')
+        const mediaElements = Array.from(wrapper.querySelectorAll('img[src], audio[src], audio source[src]'))
+        let changed = false
+        const failures = []
+        const mode = options.mode === 'best-effort' ? 'best-effort' : 'strict'
+
+        for (let index = 0; index < mediaElements.length; index += 1) {
+            const element = mediaElements[index]
+            const source = String(element.getAttribute('src') || '').trim()
+            if (!isInlineMediaSource(source)) continue
+            const fileNameBase = `${options.fileNameBase || 'attachment'}_${index + 1}`
+            try {
+                const publicUrl = await uploadDataUrl(source, { fileNameBase })
+                element.setAttribute('src', publicUrl)
+                if (element.tagName.toLowerCase() === 'audio' && element instanceof HTMLMediaElement) {
+                    element.src = publicUrl
+                }
+                changed = true
+            } catch (error) {
+                failures.push({ type: 'html', source, error, tagName: String(element.tagName || '').toLowerCase() })
+                if (mode !== 'best-effort') throw error
+                if (element.tagName.toLowerCase() === 'source') {
+                    const parent = element.parentElement
+                    element.remove()
+                    if (parent && parent.tagName.toLowerCase() === 'audio' && !parent.querySelector('source[src], [src]')) parent.remove()
+                } else {
+                    element.remove()
+                }
+                changed = true
+            }
+        }
+
+        let nextHtml = wrapper.innerHTML
+        if (containsInlineMedia(nextHtml)) {
+            if (mode === 'best-effort') {
+                nextHtml = stripInlineHtmlMedia(nextHtml)
+                changed = true
+            } else {
+                throw createExternalMediaError(ERROR_CODES.INLINE_MEDIA_BLOCKED)
+            }
+        }
+
+        return { html: nextHtml, changed, failures }
+    }
+
+    const externalizePageDrawings = async (pageDrawings, options = {}) => {
+        const drawings = Array.isArray(pageDrawings) ? pageDrawings.slice() : []
+        let changed = false
+        const failures = []
+        const mode = options.mode === 'best-effort' ? 'best-effort' : 'strict'
+        for (let index = 0; index < drawings.length; index += 1) {
+            const source = String(drawings[index] || '').trim()
+            if (!isInlineMediaSource(source)) continue
+            try {
+                drawings[index] = await uploadDataUrl(source, {
+                    fileNameBase: `${options.fileNameBase || 'drawing'}_${index + 1}`
+                })
+                changed = true
+            } catch (error) {
+                failures.push({ type: 'drawing', source, index, error })
+                if (mode !== 'best-effort') throw error
+                drawings[index] = ''
+                changed = true
+            }
+        }
+        const hasInlineMedia = drawings.some(item => isInlineMediaSource(item))
+        if (hasInlineMedia) {
+            if (mode === 'best-effort') return { pageDrawings: stripInlinePageDrawings(drawings), changed: true, failures }
+            throw createExternalMediaError(ERROR_CODES.INLINE_MEDIA_BLOCKED)
+        }
+        return { pageDrawings: drawings, changed, failures }
+    }
+
+    const externalizeNoteMedia = async (note, options = {}) => {
+        const normalizedNote = note && typeof note === 'object' ? { ...note } : {}
+        const htmlResult = await externalizeHtmlMedia(normalizedNote.content || '', {
+            fileNameBase: options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || 'note_media', 'note_media'),
+            mode: options.mode
+        })
+        const drawingsResult = await externalizePageDrawings(normalizedNote.pageDrawings || [], {
+            fileNameBase: `${options.fileNameBase || sanitizeFileNamePart(normalizedNote.title || normalizedNote.id || 'note_drawing', 'note_drawing')}_drawing`,
+            mode: options.mode
+        })
+        const nextNote = {
+            ...normalizedNote,
+            content: htmlResult.html,
+            pageDrawings: drawingsResult.pageDrawings
+        }
+        if (getInlineMediaSummary(nextNote).hasInlineMedia) {
+            if (options.mode === 'best-effort') {
+                return {
+                    note: {
+                        ...nextNote,
+                        content: stripInlineHtmlMedia(nextNote.content),
+                        pageDrawings: stripInlinePageDrawings(nextNote.pageDrawings)
+                    },
+                    changed: true,
+                    failures: [...htmlResult.failures, ...drawingsResult.failures]
+                }
+            }
+            throw createExternalMediaError(ERROR_CODES.INLINE_MEDIA_BLOCKED)
+        }
+        return {
+            note: nextNote,
+            changed: htmlResult.changed || drawingsResult.changed,
+            failures: [...htmlResult.failures, ...drawingsResult.failures]
+        }
+    }
+
+    return {
+        externalizeHtmlMedia,
+        externalizePageDrawings,
+        externalizeNoteMedia
+    }
+}
+
+import { containsInlineMedia, createExternalMediaPipeline, getInlineMediaSummary, isInlineMediaSource } from './mediaPipeline.js'
+import { normalizeExternalMediaErrorCode, resolveUserFacingError } from './errors.js'
+
+export const createExternalStorageService = ({ providers = [], defaultProviderId = '' } = {}) => {
+    const providerMap = new Map((Array.isArray(providers) ? providers : []).map(provider => [provider.providerId, provider]))
+    const fallbackProviderId = defaultProviderId || providerMap.keys().next().value || ''
+    const providerSelectionStorageKey = 'external-storage-provider'
+    const pipelineByProvider = new Map()
+
+    const getSelectedProviderId = () => {
+        const persistedProviderId = window.SafeStorage?.local?.get?.(providerSelectionStorageKey) || ''
+        return providerMap.has(persistedProviderId) ? persistedProviderId : fallbackProviderId
+    }
+
+    const getProvider = (providerId = getSelectedProviderId()) => providerMap.get(providerId) || providerMap.get(fallbackProviderId) || null
+
+    const getPipeline = (providerId = getSelectedProviderId()) => {
+        if (pipelineByProvider.has(providerId)) return pipelineByProvider.get(providerId)
+        const provider = getProvider(providerId)
+        const pipeline = createExternalMediaPipeline({
+            uploadDataUrl: (dataUrl, options = {}) => provider.uploadDataUrl(dataUrl, options),
+            sanitizeFileNamePart: (value, fallback) => provider.sanitizeFileNamePart(value, fallback)
+        })
+        pipelineByProvider.set(providerId, pipeline)
+        return pipeline
+    }
+
+    const service = {
+        providerId: getSelectedProviderId(),
+        getProvider,
+        setProvider(providerId) {
+            if (!providerMap.has(providerId)) return service.getStatus()
+            window.SafeStorage?.local?.set?.(providerSelectionStorageKey, providerId)
+            service.providerId = providerId
+            return service.getStatus()
+        },
+        connect(options = {}) {
+            return getProvider().connect(options)
+        },
+        unlink(options = {}) {
+            return getProvider().unlink(options)
+        },
+        handleSignedInUser(user, options = {}) {
+            return getProvider().handleSignedInUser(user, options)
+        },
+        handleSignedOutUser() {
+            providerMap.forEach(provider => provider.handleSignedOutUser?.())
+        },
+        uploadFile(file, options = {}) {
+            return getProvider().uploadFile(file, options)
+        },
+        uploadDataUrl(dataUrl, options = {}) {
+            return getProvider().uploadDataUrl(dataUrl, options)
+        },
+        externalizeHtmlMedia(html, options = {}) {
+            return getPipeline().externalizeHtmlMedia(html, options)
+        },
+        externalizePageDrawings(pageDrawings, options = {}) {
+            return getPipeline().externalizePageDrawings(pageDrawings, options)
+        },
+        externalizeNoteMedia(note, options = {}) {
+            return getPipeline().externalizeNoteMedia(note, options)
+        },
+        containsInlineMedia,
+        isInlineMediaSource,
+        getInlineMediaSummary,
+        normalizeExternalMediaErrorCode,
+        resolveUserFacingError,
+        getStatus() {
+            const provider = getProvider()
+            return {
+                activeProviderId: getSelectedProviderId(),
+                ...(provider?.getStatus?.() || { providerId: getSelectedProviderId() })
+            }
+        }
+    }
+
+    return service
+}
+
+export const ERROR_CODES = {
+    OFFLINE: "external-storage-offline",
+    UNLINKED: "external-storage-unlinked",
+    UNAVAILABLE: "external-storage-unavailable",
+    SAVE_FAILED: "external-attachment-save-failed",
+    INLINE_MEDIA_BLOCKED: "external-inline-media-blocked"
+}
+
+export const createExternalMediaError = (code, cause = null) => {
+    const error = new Error(code)
+    error.code = code
+    if (cause) error.cause = cause
+    return error
+}
+
+const inferAuthorizationErrorCode = (error) => {
+    const code = String(error?.code || "").toLowerCase()
+    const message = String(error?.message || "").toLowerCase()
+    if (
+        code.includes("popup")
+        || code.includes("cancel")
+        || code.includes("denied")
+        || code.includes("interaction")
+        || code.includes("login_required")
+        || code.includes("account")
+        || message.includes("popup")
+        || message.includes("cancel")
+        || message.includes("denied")
+        || message.includes("interaction")
+        || message.includes("login required")
+        || message.includes("account")
+        || message.includes("token")
+        || message.includes("consent")
+    ) {
+        return ERROR_CODES.UNLINKED
+    }
+    return ERROR_CODES.UNAVAILABLE
+}
+
+export const normalizeExternalMediaErrorCode = (error) => {
+    const rawCode = String(error?.code || error?.message || "")
+    if (!rawCode) return ERROR_CODES.UNAVAILABLE
+    if (Object.values(ERROR_CODES).includes(rawCode)) return rawCode
+    if (rawCode === "drive-offline") return ERROR_CODES.OFFLINE
+    if (rawCode === "drive-unavailable") return ERROR_CODES.UNLINKED
+    if (rawCode.startsWith("drive-upload-failed") || rawCode.startsWith("drive-permission-failed") || rawCode === "drive-invalid-file" || rawCode === "drive-invalid-data-url") {
+        return ERROR_CODES.SAVE_FAILED
+    }
+    return inferAuthorizationErrorCode(error)
+}
+
+export const resolveUserFacingError = (error, options = {}) => {
+    const code = normalizeExternalMediaErrorCode(error)
+    if (code === ERROR_CODES.UNLINKED) {
+        return options.attachmentOnly
+            ? { code, messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" }
+            : { code, messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" }
+    }
+    if (code === ERROR_CODES.OFFLINE || code === ERROR_CODES.UNAVAILABLE) {
+        return { code, messageKey: "external_storage_unavailable", fallbackMessage: "External disk is temporarily unavailable" }
+    }
+    return { code, messageKey: "external_attachment_save_failed", fallbackMessage: "Unable to save attachment to external disk" }
+}
+
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from '../../errors.js'
 import { resolveBackendBaseUrl, createApiEndpoint } from '../../../backendConfig.js'
 

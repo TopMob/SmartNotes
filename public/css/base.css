@@ -206,3 +206,183 @@ body.platform-android {
 .scrollable {
     scrollbar-gutter: stable;
 }
+
+@media (max-width: 768px) {
+    .top-bar {
+        padding: 0 15px;
+        height: 60px;
+    }
+
+    body.platform-ios .top-bar {
+        padding: var(--safe-top) 16px 0 16px;
+        height: calc(60px + var(--safe-top));
+    }
+
+    body.platform-android .top-bar {
+        padding: 0 14px;
+        height: 60px;
+    }
+
+    .search-container {
+        position: absolute;
+        top: 65px;
+        left: 15px;
+        right: 15px;
+        max-width: none;
+        z-index: 90;
+        box-shadow: var(--shadow-lg);
+        margin: 0;
+    }
+
+    body.platform-ios .search-container {
+        top: calc(65px + var(--safe-top));
+        left: 16px;
+        right: 16px;
+    }
+
+    .content-scrollable {
+        padding-top: 60px;
+    }
+
+    body.platform-ios .content-scrollable {
+        padding-top: calc(60px + var(--safe-top));
+        padding-bottom: calc(16px + var(--safe-bottom));
+    }
+
+    body.platform-android .content-scrollable {
+        padding-bottom: 16px;
+    }
+
+    #note-title {
+        font-size: 1.5rem;
+    }
+
+    .mobile-only-title {
+        display: none;
+    }
+
+    .modal-card {
+        width: 100%;
+        margin: 0;
+        max-height: 85vh;
+        border-radius: 24px 24px 0 0;
+        border-bottom: none;
+    }
+
+    .modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .btn-fab {
+        bottom: calc(20px + var(--safe-bottom));
+        right: 20px;
+    }
+
+    body.platform-ios .btn-fab {
+        bottom: calc(24px + var(--safe-bottom));
+    }
+
+    body.platform-android .btn-fab {
+        bottom: 20px;
+    }
+
+    .sidebar-glass {
+        width: 85%;
+        max-width: 320px;
+    }
+
+    body.platform-ios .sidebar-glass {
+        padding-top: var(--safe-top);
+        height: 100svh;
+    }
+
+    body.platform-android .sidebar-glass {
+        height: 100dvh;
+    }
+
+    .editor-container {
+        border: none;
+        --hit-size: 38px;
+    }
+
+    .editor-header-bar {
+        height: 54px;
+        padding: 0 12px;
+    }
+
+    .editor-tools {
+        gap: 6px;
+    }
+
+    .editor-scroll-area {
+        --editor-bottom-offset: calc(80px + var(--safe-bottom));
+        padding: 16px;
+        padding-bottom: var(--editor-bottom-offset);
+    }
+
+    .editor-toolbar {
+        gap: 6px;
+        padding: 6px;
+        margin-bottom: 12px;
+        position: static;
+        min-height: 50px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-behavior: smooth;
+        scrollbar-gutter: stable;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .note-content {
+        padding: 8px;
+        max-height: none;
+        min-height: clamp(190px, 34vh, 300px);
+    }
+
+    .editor-page-controls-header {
+        gap: 2px;
+    }
+
+    .page-indicator {
+        min-width: 38px;
+        font-size: 0.82rem;
+    }
+
+    .editor-page-item {
+        grid-template-columns: 44px minmax(0, 1fr) 34px;
+        gap: 6px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .sidebar-glass {
+        transform: translateX(0);
+        position: relative;
+        height: 100%;
+        box-shadow: none;
+        z-index: 1;
+    }
+}
+
+@media (prefers-contrast: more) {
+    .note-card,
+    .folder-card,
+    .modal-card {
+        border-color: rgba(255,255,255,0.4);
+    }
+}
+
+@media (hover: none) {
+    .note-card:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .card-actions {
+        opacity: 1;
+        transform: none;
+    }
+}
+

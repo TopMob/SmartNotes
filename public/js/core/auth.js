@@ -495,3 +495,400 @@ export function createAuthManager({ auth }) {
 
     return manager
 }
+
+let googleIdentityScriptPromise = null
+
+function createError(code, message) {
+    const error = new Error(message)
+    error.code = code
+    return error
+}
+
+function loadGoogleIdentityScript(timeoutMilliseconds = 9000) {
+    if (googleIdentityScriptPromise) return googleIdentityScriptPromise
+
+    googleIdentityScriptPromise = new Promise((resolve, reject) => {
+        if (typeof window !== "undefined" && window.google?.accounts?.id) {
+            resolve(true)
+            return
+        }
+
+        const scriptSource = "https://accounts.google.com/gsi/client"
+        const existingScriptElement = document.querySelector(`script[src="${scriptSource}"]`)
+        if (existingScriptElement) {
+            const waitStartedAt = Date.now()
+            const poll = () => {
+                if (typeof window !== "undefined" && window.google?.accounts?.id) {
+                    resolve(true)
+                    return
+                }
+                if (Date.now() - waitStartedAt >= timeoutMilliseconds) {
+                    reject(createError("auth/google-identity-script-timeout", "Google identity script timeout"))
+                    return
+                }
+                setTimeout(poll, 40)
+            }
+            poll()
+            return
+        }
+
+        const scriptElement = document.createElement("script")
+        scriptElement.src = scriptSource
+        scriptElement.async = true
+        scriptElement.defer = true
+
+        const timeoutId = setTimeout(() => {
+            scriptElement.remove()
+            reject(createError("auth/google-identity-script-timeout", "Google identity script timeout"))
+        }, timeoutMilliseconds)
+
+        scriptElement.addEventListener("load", () => {
+            clearTimeout(timeoutId)
+            if (typeof window !== "undefined" && window.google?.accounts?.id) {
+                resolve(true)
+                return
+            }
+            reject(createError("auth/google-identity-unavailable", "Google identity API unavailable"))
+        }, { once: true })
+
+        scriptElement.addEventListener("error", () => {
+            clearTimeout(timeoutId)
+            scriptElement.remove()
+            reject(createError("auth/google-identity-script-failed", "Google identity script failed"))
+        }, { once: true })
+
+        document.head.appendChild(scriptElement)
+    })
+
+    return googleIdentityScriptPromise
+}
+
+export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds = 12000 }) {
+    if (!clientId) {
+        throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
+    }
+
+    await loadGoogleIdentityScript()
+
+    if (typeof window === "undefined" || !window.google?.accounts?.id) {
+        throw createError("auth/google-identity-unavailable", "Google identity API unavailable")
+    }
+
+    return new Promise((resolve, reject) => {
+        let settled = false
+
+        const finishWithResolve = token => {
+            if (settled) return
+            settled = true
+            clearTimeout(timeoutId)
+            resolve(token)
+        }
+
+        const finishWithReject = error => {
+            if (settled) return
+            settled = true
+            clearTimeout(timeoutId)
+            reject(error)
+        }
+
+        const timeoutId = setTimeout(() => {
+            finishWithReject(createError("auth/google-identity-timeout", "Google identity timeout"))
+        }, timeoutMilliseconds)
+
+        window.google.accounts.id.initialize({
+            client_id: clientId,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            context: "signin",
+            itp_support: true,
+            callback: response => {
+                const token = String(response?.credential || "")
+                if (!token) {
+                    finishWithReject(createError("auth/google-identity-empty-token", "Google identity token is empty"))
+                    return
+                }
+                finishWithResolve(token)
+            }
+        })
+
+        window.google.accounts.id.prompt(notification => {
+            if (settled) return
+            if (notification?.isNotDisplayed?.()) {
+                finishWithReject(createError("auth/google-identity-not-displayed", "Google identity prompt not displayed"))
+                return
+            }
+            if (notification?.isSkippedMoment?.()) {
+                finishWithReject(createError("auth/google-identity-skipped", "Google identity prompt skipped"))
+            }
+        })
+    })
+}
+
+import { createExternalStorageService } from './externalStorage/service.js'
+import { createGoogleDriveProvider } from './externalStorage/providers/googleDrive/provider.js'
+import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from './externalStorage/errors.js'
+import { containsInlineMedia, getInlineMediaSummary, isInlineMediaSource } from './mediaPipeline.js'
+
+const googleDriveProvider = createGoogleDriveProvider()
+const externalStorageService = createExternalStorageService({
+    providers: [googleDriveProvider],
+    defaultProviderId: googleDriveProvider.providerId
+})
+
+export const GoogleDriveMediaService = {
+    ...externalStorageService,
+    providerId: googleDriveProvider.providerId,
+    normalizeDrivePublicUrl: googleDriveProvider.normalizePublicUrl,
+    containsInlineMedia,
+    isInlineMediaSource,
+    getInlineMediaSummary,
+    normalizeExternalMediaErrorCode,
+    resolveUserFacingError,
+    ERROR_CODES,
+    createExternalMediaError
+}
+
+export const firebaseConfig = {
+    apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
+    authDomain: "smartnotes-f5733.firebaseapp.com",
+    projectId: "smartnotes-f5733",
+    storageBucket: "smartnotes-f5733.firebasestorage.app",
+    messagingSenderId: "523799066979",
+    appId: "1:523799066979:web:abc13814f34864230cbb56",
+    clientId: "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com"
+}
+
+let firebaseSingleton = null
+
+function getUserAgentDataBrands() {
+    const userAgentData = navigator.userAgentData
+    if (!userAgentData || !Array.isArray(userAgentData.brands)) return ""
+    return userAgentData.brands.map(brandEntry => String(brandEntry.brand || "")).join(" ").toLowerCase()
+}
+
+function detectBraveBrowser() {
+    if (typeof navigator === "undefined") return false
+    if (typeof navigator.brave !== "undefined") return true
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    if (userAgent.includes("brave")) return true
+    const brands = getUserAgentDataBrands()
+    return brands.includes("brave")
+}
+
+
+function detectSafariBrowser() {
+    if (typeof navigator === "undefined") return false
+    const userAgent = String(navigator.userAgent || "")
+    const hasSafari = /Safari/i.test(userAgent)
+    const hasExcludedBrowser = /Chrome|Chromium|CriOS|FxiOS|Edg|EdgiOS|OPR|Opera|SamsungBrowser/i.test(userAgent)
+    return hasSafari && !hasExcludedBrowser
+}
+
+function resolveFirestoreSettings() {
+    const baseSettings = {
+        ignoreUndefinedProperties: true,
+        useFetchStreams: false
+    }
+
+    if (detectBraveBrowser() || detectSafariBrowser()) {
+        return {
+            ...baseSettings,
+            experimentalForceLongPolling: true
+        }
+    }
+
+    return {
+        ...baseSettings,
+        experimentalAutoDetectLongPolling: true
+    }
+}
+
+export function initFirebase() {
+    if (firebaseSingleton) return firebaseSingleton
+
+    if (typeof firebase === "undefined") {
+        return { app: null, auth: null, db: null }
+    }
+
+    const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig)
+    const auth = firebase.auth(app)
+    const db = firebase.firestore(app)
+
+    db.settings({ ...resolveFirestoreSettings(), merge: true })
+    try {
+        db.enablePersistence().catch(() => null)
+    } catch {}
+
+
+    firebaseSingleton = { app, auth, db }
+    console.info("[Firebase] db initialized", !!db)
+    return firebaseSingleton
+}
+function detectMobilePlatform() {
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    const platform = String(navigator.platform || "").toLowerCase()
+    const touchPoints = Number(navigator.maxTouchPoints || 0)
+
+    const isIphoneFamily = /iphone|ipad|ipod/.test(userAgent)
+    const isIpadDesktopMode = platform === "macintel" && touchPoints > 1
+    if (isIphoneFamily || isIpadDesktopMode) return "ios"
+    if (/android/.test(userAgent)) return "android"
+    return "other"
+}
+
+function applyMobilePlatformAttributes() {
+    const platformType = detectMobilePlatform()
+    const rootElement = document.documentElement
+    const bodyElement = document.body
+    if (!rootElement || !bodyElement) return
+
+    const classNames = ["platform-ios", "platform-android", "platform-other"]
+    rootElement.classList.remove(...classNames)
+    bodyElement.classList.remove(...classNames)
+
+    const className = platformType === "ios"
+        ? "platform-ios"
+        : platformType === "android"
+            ? "platform-android"
+            : "platform-other"
+
+    rootElement.classList.add(className)
+    bodyElement.classList.add(className)
+    rootElement.dataset.mobilePlatform = platformType
+    bodyElement.dataset.mobilePlatform = platformType
+}
+
+export function bootstrapCore({ ThemeManager, Auth }) {
+    const boot = () => {
+        applyMobilePlatformAttributes()
+        if (ThemeManager && typeof ThemeManager.init === "function") {
+            ThemeManager.init()
+        }
+
+        const loginButton = document.querySelector("[data-action='login']")
+        if (loginButton && !loginButton.dataset.authBound) {
+            loginButton.dataset.authBound = "1"
+            loginButton.addEventListener("click", () => {
+                Auth.login()
+            })
+        }
+
+
+        document.addEventListener("dblclick", (event) => {
+            event.preventDefault()
+        }, { passive: false })
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", boot, { once: true })
+        return
+    }
+    boot()
+}
+
+const DEFAULT_BACKEND_BASE_URL = ""
+
+const normalizeBaseUrl = value => {
+    const normalized = String(value || "").trim()
+    if (!normalized) return DEFAULT_BACKEND_BASE_URL
+    return normalized.replace(/\/+$/g, "")
+}
+
+const resolveBackendBaseUrl = (overrides = {}) => {
+    if (typeof window !== "undefined" && window.location?.hostname === "smartnotess.vercel.app") {
+        return ""
+    }
+    const explicit = overrides.backendBaseUrl
+    if (explicit) return normalizeBaseUrl(explicit)
+    return DEFAULT_BACKEND_BASE_URL
+}
+
+const createApiEndpoint = (path, overrides = {}) => {
+    const baseUrl = resolveBackendBaseUrl(overrides)
+    const normalizedPath = String(path || "").replace(/^\/+/, "")
+    return baseUrl ? `${baseUrl}/api/${normalizedPath}` : `/api/${normalizedPath}`
+}
+
+const backendConfigApi = {
+    DEFAULT_BACKEND_BASE_URL,
+    normalizeBaseUrl,
+    resolveBackendBaseUrl,
+    createApiEndpoint
+}
+
+if (typeof window !== "undefined") {
+    window.SmartNotesBackendConfig = backendConfigApi
+}
+
+export { DEFAULT_BACKEND_BASE_URL, normalizeBaseUrl, resolveBackendBaseUrl, createApiEndpoint }
+import { detectBrowserProfile } from "./authBrowserProfiles.js"
+
+export function planAuthMethods() {
+    const browserProfile = detectBrowserProfile()
+    return {
+        profile: browserProfile,
+        methods: ["popup"]
+    }
+}
+
+function readUserAgent() {
+    if (typeof navigator === "undefined") return ""
+    return String(navigator.userAgent || "")
+}
+
+function readUserAgentDataBrands() {
+    if (typeof navigator === "undefined") return ""
+    const brands = navigator.userAgentData?.brands
+    if (!Array.isArray(brands)) return ""
+    return brands.map(brand => String(brand.brand || "")).join(" ")
+}
+
+function createMatchSource() {
+    const userAgent = readUserAgent()
+    const brands = readUserAgentDataBrands()
+    return `${userAgent} ${brands}`.toLowerCase()
+}
+
+function matches(source, expression) {
+    return expression.test(source)
+}
+
+export function detectBrowserProfile() {
+    const source = createMatchSource()
+    const isAndroid = matches(source, /android/)
+    const isIphone = matches(source, /iphone/)
+    const isIpad = matches(source, /ipad/)
+    const isIpod = matches(source, /ipod/)
+    const isIos = isIphone || isIpad || isIpod
+    const isMobile = isAndroid || isIos || matches(source, /mobile/)
+    const isFirefox = matches(source, /firefox|fxios/)
+    const isEdge = matches(source, /edg|edgios/)
+    const isOpera = matches(source, /opr|opera/)
+    const isOperaGx = matches(source, /opera gx|operagx/)
+    const isYandex = matches(source, /yabrowser|yowser/)
+    const isSamsung = matches(source, /samsungbrowser/)
+    const isDuckDuckGo = matches(source, /duckduckgo/)
+    const isSoul = matches(source, /soul/)
+    const isChromeFamily = matches(source, /chrome|chromium|crios/)
+    const isBrave = typeof navigator !== "undefined" && !!navigator.brave
+    const isSafari = matches(source, /safari/) && !isChromeFamily && !isFirefox && !isEdge && !isOpera && !isYandex && !isSamsung
+    const engine = isFirefox ? "gecko" : (isSafari ? "webkit" : "chromium")
+
+    return {
+        engine,
+        isMobile,
+        isIos,
+        isFirefox,
+        isSafari,
+        isBrave,
+        isEdge,
+        isOpera,
+        isOperaGx,
+        isYandex,
+        isSamsung,
+        isDuckDuckGo,
+        isSoul,
+        isChromeFamily
+    }
+}
+
