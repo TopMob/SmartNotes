@@ -906,19 +906,32 @@ export const EditorAPI = (() => {
     const backupRange = sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null
     
     UI.showPrompt(UI.getText("link_title", "Add link"), UI.getText("link_placeholder", "Paste URL"), (value) => {
-        setTimeout(() => {
-            const root = document.getElementById("note-content-editable")
-            if (root) root.focus()
-            
+        let url = String(value || "").trim()
+        if (!url) return
+        
+        if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url) && /^[\w.-]+\.[a-z]{2,}/i.test(url)) {
+            url = `https://${url}`
+        }
+        
+        const root = document.getElementById("note-content-editable")
+        if (root) {
+            root.focus()
             if (backupRange) {
                 const currentSel = window.getSelection()
                 currentSel.removeAllRanges()
                 currentSel.addRange(backupRange)
-                state.savedSelectionRange = backupRange
             }
-            
-            linkHandlers.applyLink(value)
-        }, 50)
+        }
+        
+        const currentSelCheck = window.getSelection()
+        if (!currentSelCheck || currentSelCheck.isCollapsed) {
+            UI.showToast(UI.getText("link_selection_required", "Select text to link"))
+            return
+        }
+        
+        if (editorCommands && editorCommands.insertLink) {
+            editorCommands.insertLink(url)
+        }
     })
 }},
         { id: "image", i: "image", label: "tool_image", cmd: () => {
