@@ -9,13 +9,12 @@ import {
   RETRY_COUNT
 } from "./config.js"
 import {
-  isNoteReadyForAnalysis,
   isValidAnalyzedItem,
   resolveFolderId,
   shouldAnalyzeNote,
   toAiFolderId
 } from "./notes.js"
-import { buildAnalysisUserContext, buildFolderCandidates, buildNoteInput, selectFolderCandidatesForNote } from "./contract.js"
+import { buildAnalysisUserContext, buildFolderCandidates, buildNoteInput, isNoteReadyForAnalysis, selectFolderCandidatesForNote } from "./contract.js"
 import { ANALYSIS_CONTRACT_VERSION, ANALYSIS_MODEL_FAMILY, RESURFACING_CLASSES } from "../providers/schema.js"
 
 async function analyzeSingleNote({ database, uid, userContext, allFolders, folderSet, note }) {
