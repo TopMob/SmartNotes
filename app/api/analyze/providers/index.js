@@ -110,7 +110,10 @@ async function callYandex(prompt) {
     }
   )
 
-  return safeParseJsonArray(data?.result?.alternatives?.[0]?.message?.text || "")
+  return {
+    parsed: safeParseJsonArray(data?.result?.alternatives?.[0]?.message?.text || ""),
+    model: "yandexgpt/latest"
+  }
 }
 
 async function callOpenAiCompatible(prompt, { apiKeyEnvName, modelEnvName, defaultModel, baseUrl, extraPayload = {} }) {
@@ -146,7 +149,10 @@ async function callOpenAiCompatible(prompt, { apiKeyEnvName, modelEnvName, defau
     })
   }
 
-  return parsed
+  return {
+    parsed,
+    model
+  }
 }
 
 async function callGemini(prompt) {
@@ -197,11 +203,17 @@ async function callGemini(prompt) {
   for (const textBlock of textBlocks) {
     const parsedResult = safeParseJsonArray(textBlock)
     if (Array.isArray(parsedResult)) {
-      return parsedResult
+      return {
+        parsed: parsedResult,
+        model
+      }
     }
   }
 
-  return null
+  return {
+    parsed: null,
+    model
+  }
 }
 
 async function callClaude(prompt) {
@@ -227,7 +239,10 @@ async function callClaude(prompt) {
   )
 
   const firstBlock = Array.isArray(data?.content) ? data.content[0] : null
-  return safeParseJsonArray(firstBlock?.text || "")
+  return {
+    parsed: safeParseJsonArray(firstBlock?.text || ""),
+    model
+  }
 }
 
 async function callOllama(prompt) {
@@ -247,7 +262,10 @@ async function callOllama(prompt) {
     }
   )
 
-  return safeParseJsonArray(data?.content || "")
+  return {
+    parsed: safeParseJsonArray(data?.content || ""),
+    model
+  }
 }
 
 const providerExecutors = {
@@ -290,5 +308,14 @@ export async function analyzeWithProvider({ providerName, userContext, folders, 
     folders,
     notes
   })
-  return executeProvider(prompt)
+  const result = await executeProvider(prompt)
+
+  if (Array.isArray(result)) {
+    return {
+      parsed: result,
+      model: providerName
+    }
+  }
+
+  return result
 }

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildNoteInput, isNoteReadyForAnalysis, buildAnalysisUserContext } from '../app/api/analyze/core/contract.js'
+import { buildNoteInput, isNoteReadyForAnalysis, buildAnalysisUserContext, selectFolderCandidatesForNote } from '../app/api/analyze/core/contract.js'
 import { buildAnalysisPrompt } from '../app/api/analyze/providers/prompt.js'
 import { createAnalysisTaskInput } from '../app/api/analyze/providers/schema.js'
 
@@ -74,4 +74,24 @@ test('buildAnalysisPrompt uses structured English prompt contract', () => {
     assert.match(prompt, /resurfacingClass/)
     assert.match(prompt, /Folder candidates:/)
     assert.match(prompt, /Notes:/)
+})
+
+test('selectFolderCandidatesForNote prioritizes matching folders over generic ones', () => {
+    const folders = [
+        { id: 'misc', name: 'Разное', description: '', isGeneric: true },
+        { id: 'work', name: 'Работа', description: 'Проекты, релизы, задачи', isGeneric: false },
+        { id: 'travel', name: 'Путешествия', description: 'Маршруты и билеты', isGeneric: false }
+    ]
+
+    const candidates = selectFolderCandidatesForNote(folders, {
+        title: 'План релиза',
+        cleanText: 'Нужно собрать задачи по проекту и подготовить релиз',
+        currentFolderId: null,
+        currentUserTags: ['проект'],
+        currentHiddenTags: [],
+        analyzed: false
+    }, 2)
+
+    assert.equal(candidates.length, 2)
+    assert.equal(candidates[0].id, 'work')
 })

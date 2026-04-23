@@ -15,22 +15,29 @@ import {
   shouldAnalyzeNote,
   toAiFolderId
 } from "./notes.js"
-import { buildAnalysisUserContext, buildFolderCandidates, buildNoteInput } from "./contract.js"
-import { RESURFACING_CLASSES } from "../providers/schema.js"
+import { buildAnalysisUserContext, buildFolderCandidates, buildNoteInput, selectFolderCandidatesForNote } from "./contract.js"
+import { ANALYSIS_CONTRACT_VERSION, ANALYSIS_MODEL_FAMILY, RESURFACING_CLASSES } from "../providers/schema.js"
 
-async function analyzeChunk({ database, uid, userContext, folders, folderSet, notesChunk }) {
+async function analyzeSingleNote({ database, uid, userContext, allFolders, folderSet, note }) {
   let modelResult = null
   let attempt = 0
   let lastError = null
+  let resolvedModelName = ""
+  const candidateFolders = selectFolderCandidatesForNote(allFolders, note)
 
   while (!Array.isArray(modelResult) && attempt <= RETRY_COUNT) {
     try {
-      modelResult = await analyzeWithProvider({
+      const providerResult = await analyzeWithProvider({
         providerName: ANALYZE_PROVIDER,
         userContext,
-        folders,
-        notes: notesChunk
+        folders: candidateFolders,
+        notes: [{
+          ...note,
+          folderCandidates: candidateFolders
+        }]
       })
+      modelResult = providerResult?.parsed || null
+      resolvedModelName = String(providerResult?.model || "")
       lastError = null
     } catch (error) {
       lastError = error
@@ -39,7 +46,8 @@ async function analyzeChunk({ database, uid, userContext, folders, folderSet, no
         provider: ANALYZE_PROVIDER,
         uid,
         attempt: attempt + 1,
-        notes: notesChunk.length,
+        notes: 1,
+        noteId: note.id,
         error: String(error?.message || error)
       })
     }
@@ -51,13 +59,13 @@ async function analyzeChunk({ database, uid, userContext, folders, folderSet, no
       provider: ANALYZE_PROVIDER,
       uid,
       attempts: attempt,
-      notes: notesChunk.length,
+      notes: 1,
+      noteId: note.id,
       lastError: lastError ? String(lastError?.message || lastError) : null
     })
     return 0
   }
 
-  const notesById = new Map(notesChunk.map(note => [note.id, note]))
   const writeBatch = database.batch()
   let updatedCount = 0
 
@@ -73,17 +81,16 @@ async function analyzeChunk({ database, uid, userContext, folders, folderSet, no
       continue
     }
 
-    const sourceNote = notesById.get(analyzedItem.id)
-    if (!sourceNote) {
+    if (analyzedItem.id !== note.id) {
       continue
     }
 
     const noteReference = database.collection("users").doc(uid).collection("notes").doc(analyzedItem.id)
 
-    const mergedUserTags = mergeAndNormalizeTags(sourceNote.currentUserTags, analyzedItem.userTags, 5)
-    const mergedHiddenTags = mergeAndNormalizeTags(sourceNote.currentHiddenTags, analyzedItem.hiddenTags, 15)
+    const mergedUserTags = mergeAndNormalizeTags(note.currentUserTags, analyzedItem.userTags, 5)
+    const mergedHiddenTags = mergeAndNormalizeTags(note.currentHiddenTags, analyzedItem.hiddenTags, 15)
     const normalizedRelevance = clampRelevance(analyzedItem.relevance)
-    const resolvedFolderId = resolveFolderId(sourceNote, analyzedItem, folderSet)
+    const resolvedFolderId = resolveFolderId(note, analyzedItem, folderSet)
     const resurfacingClass = RESURFACING_CLASSES.includes(analyzedItem.resurfacingClass)
       ? analyzedItem.resurfacingClass
       : "reference"
@@ -95,6 +102,9 @@ async function analyzeChunk({ database, uid, userContext, folders, folderSet, no
       folderId: resolvedFolderId,
       analyzed: true,
       analyzedBy: ANALYZE_PROVIDER,
+      aiContractVersion: ANALYSIS_CONTRACT_VERSION,
+      aiModelFamily: ANALYSIS_MODEL_FAMILY,
+      aiModelVersion: resolvedModelName || ANALYZE_PROVIDER,
       promptVersion: PROMPT_VERSION,
       aiTags: normalizeTagArray(mergedUserTags, 5),
       aiRelevance: normalizedRelevance,
@@ -113,7 +123,8 @@ async function analyzeChunk({ database, uid, userContext, folders, folderSet, no
     console.error("Analyze chunk produced no writable updates", {
       provider: ANALYZE_PROVIDER,
       uid,
-      notes: notesChunk.length,
+      notes: 1,
+      noteId: note.id,
       resultCount: modelResult.length
     })
   }
@@ -130,9 +141,9 @@ export async function processUserNotes({ database, uid, reindexAll }) {
   ])
 
   const userContext = buildAnalysisUserContext({ userDocument })
-  const folders = buildFolderCandidates(foldersSnapshot)
+  const allFolders = buildFolderCandidates(foldersSnapshot)
 
-  const folderSet = new Set(folders.map(folder => folder.id))
+  const folderSet = new Set(allFolders.map(folder => folder.id))
   const notes = notesSnapshot.docs
     .map(document => buildNoteInput(document, NOTE_TEXT_LIMIT))
     .filter(note => shouldAnalyzeNote(note, reindexAll))
@@ -145,7 +156,9 @@ export async function processUserNotes({ database, uid, reindexAll }) {
   let totalUpdated = 0
   for (let startIndex = 0; startIndex < notes.length; startIndex += CHUNK_SIZE) {
     const notesChunk = notes.slice(startIndex, startIndex + CHUNK_SIZE)
-    totalUpdated += await analyzeChunk({ database, uid, userContext, folders, folderSet, notesChunk })
+    for (const note of notesChunk) {
+      totalUpdated += await analyzeSingleNote({ database, uid, userContext, allFolders, folderSet, note })
+    }
   }
 
   return totalUpdated

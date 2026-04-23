@@ -1,9 +1,58 @@
 import { stripHtml } from "../providers/utils.js"
+import { MAX_FOLDER_CANDIDATES } from "../providers/schema.js"
 
 const GENERIC_FOLDER_NAMES = new Set(["ideas", "misc", "other", "прочее", "разное", "заметки"])
 
 function trimText(value, maxLength) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength)
+}
+
+function tokenize(value) {
+  return trimText(value, 10000)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(token => token.length >= 3)
+}
+
+function createTokenSet(values) {
+  const tokenSet = new Set()
+  for (const value of values) {
+    for (const token of tokenize(value)) {
+      tokenSet.add(token)
+    }
+  }
+  return tokenSet
+}
+
+function scoreFolderCandidate(folder, note) {
+  const noteTokens = createTokenSet([
+    note.title,
+    note.cleanText,
+    ...(note.currentUserTags || []),
+    ...(note.currentHiddenTags || [])
+  ])
+  const folderTokens = createTokenSet([folder.name, folder.description])
+
+  let score = 0
+  for (const token of folderTokens) {
+    if (noteTokens.has(token)) {
+      score += folder.description ? 3 : 2
+    }
+  }
+
+  if (note.currentFolderId && folder.id === note.currentFolderId) {
+    score += note.analyzed ? 6 : 2
+  }
+
+  if (folder.isGeneric) {
+    score -= 1
+  }
+
+  if (folder.description) {
+    score += 1
+  }
+
+  return score
 }
 
 function normalizeFolderCandidate(document) {
@@ -51,6 +100,46 @@ export function buildAnalysisUserContext({ userDocument }) {
 
 export function buildFolderCandidates(foldersSnapshot) {
   return foldersSnapshot.docs.map(normalizeFolderCandidate)
+}
+
+export function selectFolderCandidatesForNote(folders, note, maxItems = MAX_FOLDER_CANDIDATES) {
+  const rankedFolders = [...(Array.isArray(folders) ? folders : [])]
+    .map(folder => ({
+      ...folder,
+      lexicalScore: scoreFolderCandidate(folder, note)
+    }))
+    .sort((first, second) => {
+      if (second.lexicalScore !== first.lexicalScore) {
+        return second.lexicalScore - first.lexicalScore
+      }
+
+      if (first.isGeneric !== second.isGeneric) {
+        return first.isGeneric ? 1 : -1
+      }
+
+      return first.name.localeCompare(second.name)
+    })
+
+  const selectedFolders = rankedFolders.slice(0, Math.max(1, maxItems)).map(folder => ({
+    id: folder.id,
+    name: folder.name,
+    description: folder.description,
+    isGeneric: folder.isGeneric
+  }))
+
+  if (note.currentFolderId && !selectedFolders.some(folder => folder.id === note.currentFolderId)) {
+    const currentFolder = rankedFolders.find(folder => folder.id === note.currentFolderId)
+    if (currentFolder) {
+      selectedFolders.unshift({
+        id: currentFolder.id,
+        name: currentFolder.name,
+        description: currentFolder.description,
+        isGeneric: currentFolder.isGeneric
+      })
+    }
+  }
+
+  return selectedFolders.slice(0, Math.max(1, maxItems))
 }
 
 export function buildNoteInput(document, noteTextLimit) {
