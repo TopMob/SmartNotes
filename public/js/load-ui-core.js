@@ -66,6 +66,25 @@ const UI = {
         return dict[key] || fallback || key
     },
 
+    isFeatureEnabled(featureKey = "") {
+        const normalizedFeatureKey = String(featureKey || "").trim()
+        if (!normalizedFeatureKey) return false
+        return window.AppFeatures?.[normalizedFeatureKey] === true
+    },
+
+    showFeatureDisabledToast(featureKey = "") {
+        const normalizedFeatureKey = String(featureKey || "").trim()
+        const fallbackByFeature = {
+            sharedAccess: "Совместный доступ временно отключен",
+            workspaces: "Совместные папки временно отключены",
+            googleDrive: "Google Drive временно отключён",
+            feedback: "Обратная связь временно отключена",
+            poll: "Опрос временно отключён"
+        }
+        const fallbackMessage = fallbackByFeature[normalizedFeatureKey] || "Функция временно отключена"
+        this.showToast(this.getText(`feature_${normalizedFeatureKey}_disabled`, fallbackMessage))
+    },
+
     resolveNoteById(noteId) {
         const targetId = String(noteId || "")
         if (!targetId) return null
