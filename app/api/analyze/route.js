@@ -41,28 +41,43 @@ export async function POST(request) {
 
   const requestUrl = new URL(request.url)
   const requestPayload = await readJsonObject(request)
+  const targetUid = String(requestPayload.uid ?? requestPayload.userId ?? requestUrl.searchParams.get("uid") ?? "").trim()
   const reindexAll = toBoolean(
     requestPayload.reindexAll ?? requestPayload.forceReindex ?? requestUrl.searchParams.get("reindexAll")
   )
 
   try {
     const database = getFirestoreDatabase()
-    const usersSnapshot = await database.collection("users").get()
     let processedCount = 0
+    let processedUsers = 0
 
-    for (const userDocument of usersSnapshot.docs) {
-      processedCount += await processUserNotes({
+    if (targetUid) {
+      processedCount = await processUserNotes({
         database,
-        uid: userDocument.id,
+        uid: targetUid,
         reindexAll
       })
+      processedUsers = 1
+    } else {
+      const usersSnapshot = await database.collection("users").get()
+
+      for (const userDocument of usersSnapshot.docs) {
+        processedCount += await processUserNotes({
+          database,
+          uid: userDocument.id,
+          reindexAll
+        })
+        processedUsers += 1
+      }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
         processed: processedCount,
+        processedUsers,
         provider: ANALYZE_PROVIDER,
+        uid: targetUid || null,
         reindexAll,
         promptVersion: PROMPT_VERSION
       }),

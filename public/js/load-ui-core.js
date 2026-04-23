@@ -793,14 +793,11 @@ Object.assign(UI, {
             case "trigger-admin-analysis-pending":
                 this.triggerAnalysisRequest("pending", "trigger-admin-analysis-pending")
                 break
-            case "trigger-admin-analysis-reindex-query":
-                this.triggerAnalysisRequest("reindex_query", "trigger-admin-analysis-reindex-query")
+            case "trigger-admin-analysis-all":
+                this.triggerAnalysisRequest("reindex_body", "trigger-admin-analysis-all")
                 break
-            case "trigger-admin-analysis-reindex-body":
-                this.triggerAnalysisRequest("reindex_body", "trigger-admin-analysis-reindex-body")
-                break
-            case "trigger-admin-analysis-reindex-force":
-                this.triggerAnalysisRequest("reindex_force", "trigger-admin-analysis-reindex-force")
+            case "trigger-admin-analysis-user":
+                this.triggerAnalysisRequest("reindex_body", "trigger-admin-analysis-user")
                 break
             case "settings-back":
                 this.backSettingsPage()
@@ -2327,31 +2324,84 @@ Object.assign(UI, {
         const description = document.createElement("p")
         window.DomSecurity.setText(description, this.getText("analysis_admin_description", "Запуск серверного анализа заметок"))
 
+        const helper = document.createElement("p")
+        helper.style.marginTop = "6px"
+        helper.style.opacity = "0.78"
+        helper.style.fontSize = "14px"
+        helper.style.lineHeight = "1.5"
+        window.DomSecurity.setText(helper, this.getText("analysis_admin_helper", "Запуск выполняется на сервере. Для старта потребуется admin secret."))
+
         const actions = [
-            { key: "pending", className: "btn-primary", action: "trigger-admin-analysis-pending", labelKey: "analysis_pending_reindex_button", fallback: "Проиндексировать непроиндексированные" },
-            { key: "reindex_query", className: "btn-secondary", action: "trigger-admin-analysis-reindex-query", labelKey: "analysis_reindex_query_button", fallback: "Полная переиндексация через query-параметр" },
-            { key: "reindex_body", className: "btn-secondary", action: "trigger-admin-analysis-reindex-body", labelKey: "analysis_reindex_body_button", fallback: "Полная переиндексация через body reindexAll" },
-            { key: "reindex_force", className: "btn-secondary", action: "trigger-admin-analysis-reindex-force", labelKey: "analysis_force_reindex_button", fallback: "Полная переиндексация через body forceReindex" }
+            {
+                key: "pending",
+                className: "btn-primary",
+                action: "trigger-admin-analysis-pending",
+                labelKey: "analysis_pending_reindex_button",
+                fallback: "Проиндексировать непроиндексированные",
+                descriptionKey: "analysis_pending_reindex_description",
+                descriptionFallback: "Запускает анализ только для заметок, которые еще не отмечены как обработанные."
+            },
+            {
+                key: "all",
+                className: "btn-secondary",
+                action: "trigger-admin-analysis-all",
+                labelKey: "analysis_full_reindex_button",
+                fallback: "Проиндексировать ВСЕ заметки",
+                descriptionKey: "analysis_full_reindex_description",
+                descriptionFallback: "Повторно прогоняет анализ по всем заметкам, включая уже проиндексированные."
+            }
         ]
 
         const buttonsContainer = document.createElement("div")
         buttonsContainer.style.display = "grid"
         buttonsContainer.style.gridTemplateColumns = "1fr"
-        buttonsContainer.style.gap = "10px"
-        buttonsContainer.style.marginTop = "10px"
+        buttonsContainer.style.gap = "12px"
+        buttonsContainer.style.marginTop = "14px"
 
         actions.forEach(actionConfig => {
+            const actionPanel = document.createElement("div")
+            actionPanel.className = "note-card"
+            actionPanel.style.padding = "14px"
+            actionPanel.style.display = "grid"
+            actionPanel.style.gap = "10px"
+
+            const actionHeading = document.createElement("div")
+            actionHeading.style.fontWeight = "700"
+            actionHeading.style.fontSize = "15px"
+            window.DomSecurity.setText(actionHeading, this.getText(actionConfig.labelKey, actionConfig.fallback))
+
+            const actionDescription = document.createElement("p")
+            actionDescription.style.margin = "0"
+            actionDescription.style.opacity = "0.82"
+            actionDescription.style.fontSize = "14px"
+            actionDescription.style.lineHeight = "1.5"
+            window.DomSecurity.setText(actionDescription, this.getText(actionConfig.descriptionKey, actionConfig.descriptionFallback))
+
             const actionButton = document.createElement("button")
             actionButton.type = "button"
             actionButton.className = actionConfig.className
             actionButton.dataset.action = actionConfig.action
             actionButton.dataset.analysisVariant = actionConfig.key
             window.DomSecurity.setText(actionButton, this.getText(actionConfig.labelKey, actionConfig.fallback))
-            buttonsContainer.append(actionButton)
+            actionPanel.append(actionHeading, actionDescription, actionButton)
+            buttonsContainer.append(actionPanel)
         })
 
-        actionCard.append(title, description, buttonsContainer)
+        actionCard.append(title, description, helper, buttonsContainer)
         root.replaceChildren(actionCard)
+    },
+
+    formatAnalysisResultMessage(responseData = {}) {
+        const provider = String(responseData?.provider || "")
+        const processed = Number(responseData?.processed)
+        const processedLabel = Number.isFinite(processed)
+            ? this.getText("analysis_result_processed", "Обработано заметок") + `: ${processed}`
+            : ""
+        const providerLabel = provider
+            ? this.getText("analysis_result_provider", "Провайдер") + `: ${provider}`
+            : ""
+
+        return [processedLabel, providerLabel].filter(Boolean).join(". ")
     },
 
     async markNoteForReanalysis(noteId = "") {
@@ -2393,8 +2443,10 @@ Object.assign(UI, {
             window.DomSecurity.setText(triggerButton, this.getText("loading", "Loading..."))
         }
         try {
-            await this.requestAnalysis({ secretToken, requestVariant: analysisVariant })
-            this.showToast(this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера"))
+            const responseData = await this.requestAnalysis({ secretToken, requestVariant: analysisVariant })
+            const summary = this.formatAnalysisResultMessage(responseData)
+            const successMessage = this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера")
+            this.showToast(summary ? `${successMessage} ${summary}` : successMessage)
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         } finally {

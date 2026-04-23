@@ -496,6 +496,7 @@ const StateStore = (() => {
         originalUserSettings: null,
         draftUserSettings: null,
         saveStatus: { status: "idle", message: "", updatedAt: 0 },
+        adminAnalysisStatus: { status: "idle", message: "", updatedAt: 0, processed: null, provider: "", uid: "", processedUsers: null },
         pagination: {
             displayLimit: 20,
             renderStep: 20,
@@ -556,6 +557,7 @@ const StateStore = (() => {
         originalUserSettings: null,
         draftUserSettings: null,
         saveStatus: { ...initialState.saveStatus },
+        adminAnalysisStatus: { ...initialState.adminAnalysisStatus },
         pagination: { ...initialState.pagination, renderStep: previousState.pagination.renderStep, pageSize: previousState.pagination.pageSize },
         config: { ...previousState.config }
     }))
