@@ -53,7 +53,7 @@ async function callYandex(prompt) {
   return safeParseJsonArray(data?.result?.alternatives?.[0]?.message?.text || "")
 }
 
-async function callOpenAiCompatible(prompt, { apiKeyEnvName, modelEnvName, defaultModel, baseUrl }) {
+async function callOpenAiCompatible(prompt, { apiKeyEnvName, modelEnvName, defaultModel, baseUrl, extraPayload = {} }) {
   const apiKey = requireEnvValue(apiKeyEnvName)
   const model = process.env[modelEnvName] || defaultModel
 
@@ -63,6 +63,7 @@ async function callOpenAiCompatible(prompt, { apiKeyEnvName, modelEnvName, defau
       model,
       temperature: TEMPERATURE,
       max_tokens: MAX_TOKENS,
+      ...extraPayload,
       messages: [
         { role: "system", content: "You are a strict semantic classifier." },
         { role: "user", content: prompt }
@@ -191,6 +192,15 @@ const providerExecutors = {
     modelEnvName: "DEEPSEEK_MODEL",
     defaultModel: "deepseek-chat",
     baseUrl: "https://api.deepseek.com"
+  }),
+  codexsale: prompt => callOpenAiCompatible(prompt, {
+    apiKeyEnvName: "CODEXSALE_API_KEY",
+    modelEnvName: "CODEXSALE_MODEL",
+    defaultModel: "gpt-5.4",
+    baseUrl: "https://codex.sale/v1",
+    extraPayload: {
+      reasoningEffort: process.env.CODEXSALE_REASONING_EFFORT || "medium"
+    }
   }),
   gemini: callGemini,
   claude: callClaude,

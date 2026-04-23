@@ -5,6 +5,7 @@
 - `yandex`
 - `chatgpt`
 - `deepseek`
+- `codexsale`
 - `gemini`
 - `claude`
 - `ollama`
@@ -20,6 +21,7 @@
 - Yandex: `YC_API_KEY`, `YC_FOLDER_ID`
 - ChatGPT: `OPENAI_API_KEY`, optional `OPENAI_MODEL`
 - DeepSeek: `DEEPSEEK_API_KEY`, optional `DEEPSEEK_MODEL`
+- CodexSale: `CODEXSALE_API_KEY`, optional `CODEXSALE_MODEL`, optional `CODEXSALE_REASONING_EFFORT`
 - Gemini: `GEMINI_API_KEY`, optional `GEMINI_MODEL`
 - Claude: `ANTHROPIC_API_KEY`, optional `CLAUDE_MODEL`
 - Ollama bridge: `OLLAMA_SERVER_URL`, optional `OLLAMA_MODEL`
