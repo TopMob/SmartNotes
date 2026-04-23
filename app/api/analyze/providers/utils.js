@@ -80,8 +80,25 @@ export function normalizeAnalyzedItem(value) {
     folderId: typeof item.folderId === "string" ? item.folderId : null,
     userTags,
     hiddenTags,
-    relevance: item.relevance
+    relevance: item.relevance,
+    resurfacingClass: typeof item.resurfacingClass === "string" ? item.resurfacingClass : ""
   }
+}
+
+export function normalizeTagArray(tags, maxItems) {
+  const seen = new Set()
+  const normalizedTags = []
+
+  for (const tag of Array.isArray(tags) ? tags : []) {
+    const text = String(tag || "").trim().replace(/\s+/g, " ")
+    const key = text.toLowerCase()
+    if (!text || seen.has(key)) continue
+    seen.add(key)
+    normalizedTags.push(text.slice(0, 40))
+    if (normalizedTags.length >= maxItems) break
+  }
+
+  return normalizedTags
 }
 
 export function mergeAndNormalizeTags(existingTags, generatedTags, maxItems) {

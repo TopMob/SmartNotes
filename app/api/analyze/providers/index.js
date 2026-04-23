@@ -1,5 +1,6 @@
-import { buildAnalysisPrompt } from "./prompt"
-import { safeParseJsonArray } from "./utils"
+import { buildAnalysisPrompt } from "./prompt.js"
+import { safeParseJsonArray } from "./utils.js"
+import { createAnalysisTaskInput } from "./schema.js"
 
 const TEMPERATURE = Number(process.env.ANALYZE_TEMPERATURE ?? 0.1)
 const MAX_TOKENS = Number(process.env.ANALYZE_MAX_TOKENS ?? 2500)
@@ -277,12 +278,17 @@ const providerExecutors = {
   ollama: callOllama
 }
 
-export async function analyzeWithProvider({ providerName, folders, notes }) {
+export async function analyzeWithProvider({ providerName, userContext, folders, notes }) {
   const executeProvider = providerExecutors[providerName]
   if (!executeProvider) {
     throw new Error(`Unsupported provider: ${providerName}`)
   }
 
-  const prompt = buildAnalysisPrompt({ folders, notes })
+  const prompt = buildAnalysisPrompt({
+    task: createAnalysisTaskInput(),
+    userContext,
+    folders,
+    notes
+  })
   return executeProvider(prompt)
 }

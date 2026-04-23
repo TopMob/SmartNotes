@@ -1,7 +1,7 @@
 export const API_SECRET = process.env.API_SECRET
 export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://smartnotess.vercel.app"
 export const ANALYZE_PROVIDER = process.env.ANALYZE_PROVIDER || "codexsale"
-export const PROMPT_VERSION = "v3.1-balanced"
+export const PROMPT_VERSION = "v4.0-structured-en"
 
 function toPositiveInteger(value, fallbackValue) {
   const parsedValue = Number(value)

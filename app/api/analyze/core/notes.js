@@ -1,36 +1,3 @@
-import { stripHtml } from "../providers/utils"
-
-export function createNoteForPrompt(document, noteTextLimit) {
-  const noteData = document.data()
-  const isAnalyzed = noteData.analyzed === true || noteData.aiProcessed === true
-  const activeFolderId =
-    typeof noteData.folderId === "string" && noteData.folderId
-      ? noteData.folderId
-      : typeof noteData.aiFolder === "string" && noteData.aiFolder
-        ? noteData.aiFolder
-        : null
-  const currentUserTags =
-    Array.isArray(noteData.tags) && noteData.tags.length
-      ? noteData.tags
-      : Array.isArray(noteData.aiTags)
-        ? noteData.aiTags
-        : []
-
-  return {
-    id: document.id,
-    title: noteData.title || "",
-    text: stripHtml(noteData.content || "").slice(0, noteTextLimit),
-    analyzed: isAnalyzed,
-    currentFolderId: activeFolderId,
-    currentUserTags,
-    currentHiddenTags: Array.isArray(noteData.hiddenTags) ? noteData.hiddenTags : []
-  }
-}
-
-export function isNoteReadyForAnalysis(note) {
-  return Boolean(note.title || note.text)
-}
-
 export function shouldAnalyzeNote(note, reindexAll) {
   if (reindexAll) {
     return true
@@ -65,6 +32,10 @@ export function isValidAnalyzedItem(analyzedItem) {
   }
 
   if (!Array.isArray(analyzedItem.hiddenTags)) {
+    return false
+  }
+
+  if (typeof analyzedItem.resurfacingClass !== "string") {
     return false
   }
 
