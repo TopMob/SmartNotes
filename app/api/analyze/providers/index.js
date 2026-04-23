@@ -26,6 +26,65 @@ async function postJson(url, payload, headers) {
   return response.json()
 }
 
+function extractAssistantText(messageContent) {
+  if (typeof messageContent === "string") {
+    return messageContent
+  }
+
+  if (Array.isArray(messageContent)) {
+    return messageContent
+      .map(block => {
+        if (typeof block === "string") {
+          return block
+        }
+
+        if (typeof block?.text === "string") {
+          return block.text
+        }
+
+        if (typeof block?.content === "string") {
+          return block.content
+        }
+
+        return ""
+      })
+      .filter(Boolean)
+      .join("\n")
+  }
+
+  if (typeof messageContent?.text === "string") {
+    return messageContent.text
+  }
+
+  return ""
+}
+
+function extractOpenAiCompatibleText(data) {
+  const choice = data?.choices?.[0]
+  const messageText = extractAssistantText(choice?.message?.content)
+  if (messageText) {
+    return messageText
+  }
+
+  if (typeof choice?.text === "string") {
+    return choice.text
+  }
+
+  if (typeof data?.output_text === "string") {
+    return data.output_text
+  }
+
+  if (Array.isArray(data?.output)) {
+    return data.output
+      .flatMap(item => item?.content || [])
+      .map(block => block?.text || "")
+      .filter(Boolean)
+      .join("\n")
+  }
+
+  return ""
+}
+
 async function callYandex(prompt) {
   const apiKey = requireEnvValue("YC_API_KEY")
   const folderId = requireEnvValue("YC_FOLDER_ID")
@@ -75,7 +134,18 @@ async function callOpenAiCompatible(prompt, { apiKeyEnvName, modelEnvName, defau
     }
   )
 
-  return safeParseJsonArray(data?.choices?.[0]?.message?.content || "")
+  const rawText = extractOpenAiCompatibleText(data)
+  const parsed = safeParseJsonArray(rawText)
+
+  if (!Array.isArray(parsed)) {
+    console.error("Analyze provider returned non-array content", {
+      providerBaseUrl: baseUrl,
+      model,
+      preview: rawText.slice(0, 500)
+    })
+  }
+
+  return parsed
 }
 
 async function callGemini(prompt) {

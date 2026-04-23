@@ -1,6 +1,6 @@
 export const API_SECRET = process.env.API_SECRET
 export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "https://smartnotess.vercel.app"
-export const ANALYZE_PROVIDER = process.env.ANALYZE_PROVIDER || "gemini"
+export const ANALYZE_PROVIDER = process.env.ANALYZE_PROVIDER || "codexsale"
 export const PROMPT_VERSION = "v3.1-balanced"
 
 function toPositiveInteger(value, fallbackValue) {

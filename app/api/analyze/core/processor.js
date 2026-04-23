@@ -1,6 +1,6 @@
 import admin from "firebase-admin"
 import { analyzeWithProvider } from "../providers"
-import { clampRelevance, mergeAndNormalizeTags } from "../providers/utils"
+import { clampRelevance, mergeAndNormalizeTags, normalizeAnalyzedItem } from "../providers/utils"
 import {
   ANALYZE_PROVIDER,
   CHUNK_SIZE,
@@ -59,8 +59,15 @@ async function analyzeChunk({ database, uid, folders, folderSet, notesChunk }) {
   const writeBatch = database.batch()
   let updatedCount = 0
 
-  for (const analyzedItem of modelResult) {
+  for (const rawAnalyzedItem of modelResult) {
+    const analyzedItem = normalizeAnalyzedItem(rawAnalyzedItem)
+
     if (!isValidAnalyzedItem(analyzedItem)) {
+      console.error("Analyze item has invalid shape", {
+        provider: ANALYZE_PROVIDER,
+        uid,
+        item: rawAnalyzedItem
+      })
       continue
     }
 
@@ -96,6 +103,13 @@ async function analyzeChunk({ database, uid, folders, folderSet, notesChunk }) {
 
   if (updatedCount > 0) {
     await writeBatch.commit()
+  } else {
+    console.error("Analyze chunk produced no writable updates", {
+      provider: ANALYZE_PROVIDER,
+      uid,
+      notes: notesChunk.length,
+      resultCount: modelResult.length
+    })
   }
 
   return updatedCount

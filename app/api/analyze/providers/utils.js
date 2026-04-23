@@ -58,6 +58,32 @@ export function safeParseJsonArray(rawText) {
   }
 }
 
+export function normalizeAnalyzedItem(value) {
+  if (!value || typeof value !== "object") {
+    return null
+  }
+
+  const item = value
+  const userTags = Array.isArray(item.userTags)
+    ? item.userTags
+    : Array.isArray(item.tags)
+      ? item.tags
+      : []
+  const hiddenTags = Array.isArray(item.hiddenTags)
+    ? item.hiddenTags
+    : Array.isArray(item.keywords)
+      ? item.keywords
+      : []
+
+  return {
+    id: typeof item.id === "string" ? item.id : "",
+    folderId: typeof item.folderId === "string" ? item.folderId : null,
+    userTags,
+    hiddenTags,
+    relevance: item.relevance
+  }
+}
+
 export function mergeAndNormalizeTags(existingTags, generatedTags, maxItems) {
   const mergedValues = [...(existingTags || []), ...(generatedTags || [])]
   const uniqueByCanonical = new Map()
