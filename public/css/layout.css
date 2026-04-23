@@ -511,6 +511,13 @@ body.platform-android .top-bar {
     overflow: hidden;
 }
 
+#admin-analysis-status-text {
+    max-height: none;
+    overflow: visible;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .note-meta {
     display: flex;
     align-items: center;

@@ -2320,8 +2320,12 @@ Object.assign(UI, {
         if (!root) return
         this.els.empty.classList.add("hidden")
         this.els.grid.classList.remove("folder-grid")
-        const actionCard = document.createElement("div")
-        actionCard.className = "note-card"
+        root.style.display = "grid"
+        root.style.gridTemplateColumns = "1fr"
+        root.style.gap = "14px"
+
+        const headerCard = document.createElement("div")
+        headerCard.className = "note-card"
 
         const title = document.createElement("h3")
         window.DomSecurity.setText(title, this.getText("ai_functions", "ИИ функции"))
@@ -2335,6 +2339,7 @@ Object.assign(UI, {
         helper.style.fontSize = "14px"
         helper.style.lineHeight = "1.5"
         window.DomSecurity.setText(helper, this.getText("analysis_admin_helper", "Запуск выполняется на сервере. Для старта потребуется admin secret."))
+        headerCard.append(title, description, helper)
 
         const actions = [
             {
@@ -2359,9 +2364,8 @@ Object.assign(UI, {
 
         const buttonsContainer = document.createElement("div")
         buttonsContainer.style.display = "grid"
-        buttonsContainer.style.gridTemplateColumns = "repeat(auto-fit, minmax(240px, 1fr))"
+        buttonsContainer.style.gridTemplateColumns = "repeat(auto-fit, minmax(260px, 1fr))"
         buttonsContainer.style.gap = "12px"
-        buttonsContainer.style.marginTop = "14px"
 
         actions.forEach(actionConfig => {
             const actionPanel = document.createElement("div")
@@ -2444,12 +2448,13 @@ Object.assign(UI, {
         statusText.style.opacity = "0.86"
         statusText.style.fontSize = "14px"
         statusText.style.lineHeight = "1.55"
+        statusText.style.maxHeight = "none"
+        statusText.style.overflow = "visible"
         window.DomSecurity.setText(statusText, this.getAdminAnalysisStatusText())
 
         statusCard.append(statusTitle, statusText)
 
-        actionCard.append(title, description, helper, buttonsContainer, statusCard)
-        root.replaceChildren(actionCard)
+        root.replaceChildren(headerCard, buttonsContainer, statusCard)
     },
 
     getAdminAnalysisStatusText() {
