@@ -1,0 +1,132 @@
+import { initSupabase } from "./supabase.js"
+
+const sessionEndpoint = "/api/supabase/session"
+
+function normalizeUser(user, session) {
+    if (!user) return null
+    return {
+        uid: String(user.id || ""),
+        id: String(user.id || ""),
+        email: String(user.email || ""),
+        displayName: String(user.display_name || user.user_metadata?.display_name || ""),
+        photoURL: String(user.avatar_url || user.user_metadata?.avatar_url || ""),
+        providerData: [],
+        accessToken: String(session?.access_token || "")
+    }
+}
+
+async function syncProfile(session) {
+    const accessToken = String(session?.access_token || "")
+    if (!accessToken) return null
+
+    const response = await fetch(sessionEndpoint, {
+        method: "GET",
+        headers: {
+            Authorization: `Bearer ${accessToken}`
+        }
+    })
+
+    if (!response.ok) {
+        throw new Error(`supabase-session-http-${response.status}`)
+    }
+
+    const payload = await response.json()
+    return normalizeUser(payload?.user || null, session)
+}
+
+function createPersistenceEnum() {
+    return {
+        LOCAL: "local"
+    }
+}
+
+export async function createSupabaseAuth() {
+    const client = await initSupabase()
+    if (!client) return null
+
+    let currentUser = null
+    const authStateSubscribers = new Set()
+
+    const emitAuthState = async (session) => {
+        try {
+            currentUser = session?.user ? await syncProfile(session) : null
+        } catch (error) {
+            console.error("[SupabaseAuth] session sync failed", error)
+            currentUser = null
+        }
+
+        authStateSubscribers.forEach(callback => {
+            Promise.resolve(callback(currentUser)).catch(error => {
+                console.error("[SupabaseAuth] auth state callback failed", error)
+            })
+        })
+    }
+
+    const initialSessionResult = await client.auth.getSession()
+    const initialSession = initialSessionResult?.data?.session || null
+    await emitAuthState(initialSession)
+
+    client.auth.onAuthStateChange((_event, session) => {
+        emitAuthState(session)
+    })
+
+    return {
+        app: { options: { clientId: "" } },
+        currentUser,
+        Auth: {
+            Persistence: createPersistenceEnum()
+        },
+        async setPersistence() {
+            return true
+        },
+        async signInWithEmailAndPassword(email, password) {
+            const { error } = await client.auth.signInWithPassword({ email, password })
+            if (error) throw error
+            const sessionResult = await client.auth.getSession()
+            this.currentUser = await syncProfile(sessionResult?.data?.session || null)
+            currentUser = this.currentUser
+            return { user: this.currentUser }
+        },
+        async createUserWithEmailAndPassword(email, password) {
+            const { error } = await client.auth.signUp({ email, password })
+            if (error) throw error
+            const sessionResult = await client.auth.getSession()
+            this.currentUser = await syncProfile(sessionResult?.data?.session || null)
+            currentUser = this.currentUser
+            return { user: this.currentUser }
+        },
+        async sendPasswordResetEmail(email) {
+            const { error } = await client.auth.resetPasswordForEmail(email)
+            if (error) throw error
+            return true
+        },
+        async fetchSignInMethodsForEmail() {
+            return ["password"]
+        },
+        async signOut() {
+            const { error } = await client.auth.signOut()
+            if (error) throw error
+            this.currentUser = null
+            currentUser = null
+        },
+        async getRedirectResult() {
+            return null
+        },
+        async signInWithPopup() {
+            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
+        },
+        async signInWithRedirect() {
+            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
+        },
+        onAuthStateChanged(next, error) {
+            const callback = typeof next === "function" ? next : () => {}
+            authStateSubscribers.add(callback)
+            Promise.resolve(callback(currentUser)).catch(err => {
+                if (typeof error === "function") error(err)
+            })
+            return () => {
+                authStateSubscribers.delete(callback)
+            }
+        }
+    }
+}
