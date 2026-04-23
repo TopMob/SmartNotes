@@ -64,6 +64,24 @@ type NoteRow = {
   user_id: string
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(item => String(item || "")).filter(Boolean)
+    : []
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  return normalized || null
+}
+
+function normalizeOptionalObject(value: unknown): JsonObject | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject
+    : null
+}
+
 function normalizeFolderName(name: unknown) {
   return String(name || "").trim()
 }
@@ -168,20 +186,20 @@ function mapNoteRow(note: NoteRow) {
     isFavorite: Boolean(metadata.isFavorite),
     isPinned: Boolean(metadata.isPinned),
     reminderAt: note.reminder_at || null,
-    trashedAt: note.is_deleted ? (metadata.trashedAt || note.updated_at || note.created_at || null) : null,
+    trashedAt: note.is_deleted ? (normalizeOptionalString(metadata.trashedAt) || note.updated_at || note.created_at || null) : null,
     contentType: "text",
     aiFolder: note.ai_folder_id || "",
-    aiTags: Array.isArray(metadata.aiTags) ? metadata.aiTags : [],
+    aiTags: normalizeStringArray(metadata.aiTags),
     relevance: Number.isFinite(Number(note.ai_relevance)) ? Number(note.ai_relevance) : 0,
     aiRelevance: Number.isFinite(Number(note.ai_relevance)) ? Number(note.ai_relevance) : 0,
     aiProcessed: note.ai_processed === true,
     aiVersion: 1,
     aiLastAnalyzed: note.ai_last_analyzed || null,
-    pageTitles: Array.isArray(metadata.pageTitles) ? metadata.pageTitles : [],
-    pageDrawings: Array.isArray(metadata.pageDrawings) ? metadata.pageDrawings : [],
+    pageTitles: normalizeStringArray(metadata.pageTitles),
+    pageDrawings: normalizeStringArray(metadata.pageDrawings),
     pageDrawingsRevision: typeof metadata.pageDrawingsRevision === "string" ? metadata.pageDrawingsRevision : "",
-    lock: metadata.lock && typeof metadata.lock === "object" ? metadata.lock : null,
-    workspaceId: metadata.workspaceId || null,
+    lock: normalizeOptionalObject(metadata.lock),
+    workspaceId: normalizeOptionalString(metadata.workspaceId),
     createdAt: note.created_at || null,
     updatedAt: note.updated_at || null,
     ownerUid: note.user_id,
