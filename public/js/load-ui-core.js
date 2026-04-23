@@ -2262,7 +2262,7 @@ Object.assign(UI, {
         return "/api/analyze"
     },
 
-    async requestAnalysis({ secretToken = "", requestVariant = "pending" } = {}) {
+    async requestAnalysis({ secretToken = "", requestVariant = "pending", targetUid = "" } = {}) {
         const requestHeaders = {
             "Content-Type": "application/json"
         }
@@ -2272,6 +2272,7 @@ Object.assign(UI, {
 
         let endpoint = this.getAnalysisApiEndpoint()
         let requestBody = {}
+        const normalizedTargetUid = String(targetUid || "").trim()
 
         if (requestVariant === "reindex_query") {
             endpoint = `${endpoint}?reindexAll=true`
@@ -2280,6 +2281,10 @@ Object.assign(UI, {
             requestBody = { reindexAll: true }
         } else if (requestVariant === "reindex_force") {
             requestBody = { forceReindex: true }
+        }
+
+        if (normalizedTargetUid) {
+            requestBody = { ...(requestBody || {}), uid: normalizedTargetUid, reindexAll: true }
         }
 
         const response = await fetch(endpoint, {
@@ -2319,7 +2324,7 @@ Object.assign(UI, {
         actionCard.className = "note-card"
 
         const title = document.createElement("h3")
-        window.DomSecurity.setText(title, this.getText("admin_tools", "Админ-меню"))
+        window.DomSecurity.setText(title, this.getText("ai_functions", "ИИ функции"))
 
         const description = document.createElement("p")
         window.DomSecurity.setText(description, this.getText("analysis_admin_description", "Запуск серверного анализа заметок"))
@@ -2354,7 +2359,7 @@ Object.assign(UI, {
 
         const buttonsContainer = document.createElement("div")
         buttonsContainer.style.display = "grid"
-        buttonsContainer.style.gridTemplateColumns = "1fr"
+        buttonsContainer.style.gridTemplateColumns = "repeat(auto-fit, minmax(240px, 1fr))"
         buttonsContainer.style.gap = "12px"
         buttonsContainer.style.marginTop = "14px"
 
@@ -2387,21 +2392,118 @@ Object.assign(UI, {
             buttonsContainer.append(actionPanel)
         })
 
-        actionCard.append(title, description, helper, buttonsContainer)
+        const userActionPanel = document.createElement("div")
+        userActionPanel.className = "note-card"
+        userActionPanel.style.padding = "14px"
+        userActionPanel.style.display = "grid"
+        userActionPanel.style.gap = "10px"
+
+        const userActionHeading = document.createElement("div")
+        userActionHeading.style.fontWeight = "700"
+        userActionHeading.style.fontSize = "15px"
+        window.DomSecurity.setText(userActionHeading, this.getText("analysis_user_reindex_button", "Проиндексировать заметки пользователя"))
+
+        const userActionDescription = document.createElement("p")
+        userActionDescription.style.margin = "0"
+        userActionDescription.style.opacity = "0.82"
+        userActionDescription.style.fontSize = "14px"
+        userActionDescription.style.lineHeight = "1.5"
+        window.DomSecurity.setText(userActionDescription, this.getText("analysis_user_reindex_description", "Повторно запускает анализ для всех заметок конкретного пользователя по его UID."))
+
+        const userActionField = document.createElement("input")
+        userActionField.type = "text"
+        userActionField.id = "admin-analysis-target-uid"
+        userActionField.className = "input-area"
+        userActionField.placeholder = this.getText("analysis_user_uid_placeholder", "Введите UID пользователя")
+        userActionField.autocomplete = "off"
+        userActionField.spellcheck = false
+
+        const userActionButton = document.createElement("button")
+        userActionButton.type = "button"
+        userActionButton.className = "btn-secondary"
+        userActionButton.dataset.action = "trigger-admin-analysis-user"
+        window.DomSecurity.setText(userActionButton, this.getText("analysis_user_reindex_button", "Проиндексировать заметки пользователя"))
+
+        userActionPanel.append(userActionHeading, userActionDescription, userActionField, userActionButton)
+        buttonsContainer.append(userActionPanel)
+
+        const statusCard = document.createElement("div")
+        statusCard.className = "note-card"
+        statusCard.style.marginTop = "14px"
+        statusCard.style.padding = "14px"
+        statusCard.style.display = "grid"
+        statusCard.style.gap = "8px"
+
+        const statusTitle = document.createElement("div")
+        statusTitle.style.fontWeight = "700"
+        window.DomSecurity.setText(statusTitle, this.getText("analysis_status_title", "Последний запуск"))
+
+        const statusText = document.createElement("p")
+        statusText.id = "admin-analysis-status-text"
+        statusText.style.margin = "0"
+        statusText.style.opacity = "0.86"
+        statusText.style.fontSize = "14px"
+        statusText.style.lineHeight = "1.55"
+        window.DomSecurity.setText(statusText, this.getAdminAnalysisStatusText())
+
+        statusCard.append(statusTitle, statusText)
+
+        actionCard.append(title, description, helper, buttonsContainer, statusCard)
         root.replaceChildren(actionCard)
+    },
+
+    getAdminAnalysisStatusText() {
+        const status = StateStore.read().adminAnalysisStatus || {}
+        if (!status.updatedAt) {
+            return this.getText("analysis_status_empty", "Запусков пока не было.")
+        }
+
+        if (status.status === "running") {
+            return status.message || this.getText("analysis_status_running", "Запуск выполняется...")
+        }
+
+        const parts = []
+        if (status.message) parts.push(status.message)
+        if (Number.isFinite(Number(status.processed))) parts.push(`${this.getText("analysis_result_processed", "Обработано заметок")}: ${Number(status.processed)}`)
+        if (Number.isFinite(Number(status.processedUsers))) parts.push(`${this.getText("analysis_result_users", "Пользователей")}: ${Number(status.processedUsers)}`)
+        if (status.provider) parts.push(`${this.getText("analysis_result_provider", "Провайдер")}: ${status.provider}`)
+        if (status.uid) parts.push(`${this.getText("analysis_result_uid", "UID")}: ${status.uid}`)
+        return parts.filter(Boolean).join(". ") || this.getText("analysis_status_empty", "Запусков пока не было.")
+    },
+
+    updateAdminAnalysisStatus(statusPatch = {}) {
+        const currentStatus = StateStore.read().adminAnalysisStatus || {}
+        const nextStatus = {
+            ...currentStatus,
+            ...statusPatch,
+            updatedAt: Date.now()
+        }
+        StateStore.update("adminAnalysisStatus", nextStatus)
+        const statusText = document.getElementById("admin-analysis-status-text")
+        if (statusText) {
+            window.DomSecurity.setText(statusText, this.getAdminAnalysisStatusText())
+        }
     },
 
     formatAnalysisResultMessage(responseData = {}) {
         const provider = String(responseData?.provider || "")
         const processed = Number(responseData?.processed)
+        const processedUsers = Number(responseData?.processedUsers)
+        const uid = String(responseData?.uid || "")
         const processedLabel = Number.isFinite(processed)
             ? this.getText("analysis_result_processed", "Обработано заметок") + `: ${processed}`
+            : ""
+        const usersLabel = Number.isFinite(processedUsers)
+            ? this.getText("analysis_result_users", "Пользователей") + `: ${processedUsers}`
             : ""
         const providerLabel = provider
             ? this.getText("analysis_result_provider", "Провайдер") + `: ${provider}`
             : ""
+        const uidLabel = uid
+            ? this.getText("analysis_result_uid", "UID") + `: ${uid}`
+            : ""
 
-        return [processedLabel, providerLabel].filter(Boolean).join(". ")
+        return [processedLabel, usersLabel, providerLabel, uidLabel].filter(Boolean).join(". ")
     },
 
     async markNoteForReanalysis(noteId = "") {
@@ -2436,18 +2538,48 @@ Object.assign(UI, {
         if (!secretToken) return
         const normalizedActionName = String(actionName || "")
         const triggerButton = normalizedActionName ? document.querySelector(`[data-action="${normalizedActionName}"]`) : null
+        const targetUidInput = document.getElementById("admin-analysis-target-uid")
+        const targetUid = normalizedActionName === "trigger-admin-analysis-user" ? String(targetUidInput?.value || "").trim() : ""
+        if (normalizedActionName === "trigger-admin-analysis-user" && !targetUid) {
+            this.showToast(this.getText("analysis_user_uid_required", "Введите UID пользователя"))
+            return
+        }
         const initialLabel = triggerButton ? triggerButton.textContent : ""
         if (triggerButton) {
             triggerButton.disabled = true
             triggerButton.setAttribute("aria-busy", "true")
             window.DomSecurity.setText(triggerButton, this.getText("loading", "Loading..."))
         }
+        this.updateAdminAnalysisStatus({
+            status: "running",
+            message: this.getText("analysis_status_running", "Запуск выполняется..."),
+            processed: null,
+            provider: "",
+            uid: targetUid,
+            processedUsers: null
+        })
         try {
-            const responseData = await this.requestAnalysis({ secretToken, requestVariant: analysisVariant })
+            const responseData = await this.requestAnalysis({ secretToken, requestVariant: analysisVariant, targetUid })
             const summary = this.formatAnalysisResultMessage(responseData)
             const successMessage = this.getText("analysis_request_sent", "Запрос отправлен. Анализ выполнится на стороне сервера")
+            this.updateAdminAnalysisStatus({
+                status: "success",
+                message: successMessage,
+                processed: responseData?.processed,
+                provider: responseData?.provider || "",
+                uid: responseData?.uid || targetUid,
+                processedUsers: responseData?.processedUsers
+            })
             this.showToast(summary ? `${successMessage} ${summary}` : successMessage)
         } catch {
+            this.updateAdminAnalysisStatus({
+                status: "error",
+                message: this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"),
+                processed: null,
+                provider: "",
+                uid: targetUid,
+                processedUsers: null
+            })
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         } finally {
             if (triggerButton) {
