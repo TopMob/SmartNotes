@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      ".next/**",
+      ".vercel/**",
+      "dist/**",
+      "build/**",
+      "out/**",
+      ".cache/**",
+      "coverage/**",
+      ".nyc_output/**",
+      ".yarn/**",
+      ".pnp",
+      ".pnp.*",
+      ".firebase/**",
+      ".vscode/**",
+      ".idea/**",
+      ".DS_Store",
+      "Thumbs.db",
+      "*.log",
+      "npm-debug.log*",
+      "yarn-debug.log*",
+      "yarn-error.log*",
+      ".pnpm-debug.log*",
+      ".eslintcache",
+      "*.swp",
+      "*.tsbuildinfo",
+      "next-env.d.ts",
+      ".env*",
+      "*.pem"
+    ]
+  }
+}
