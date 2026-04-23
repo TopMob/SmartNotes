@@ -1,4 +1,5 @@
 const NotesRepository = (() => {
+    const isSharedAccessEnabled = () => window.AppFeatures?.sharedAccess === true
     function getCollection(user) {
         return DataPath.getUserNotesCollection(user)
     }
@@ -16,11 +17,16 @@ const NotesRepository = (() => {
         return { documents: snapshot.docs, lastDocument: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : options.startAfterDocument }
     }
     function subscribeSharedEntries(user, next, error) {
+        if (!isSharedAccessEnabled()) {
+            if (typeof next === "function") next({ forEach() {} })
+            return () => {}
+        }
         const collection = DataPath.getUserSharedCollection(user, "sharedNotes")
         if (!collection) return () => {}
         return collection.onSnapshot(next, error)
     }
     function subscribeSharedNote(ownerUid, noteId, next, error) {
+        if (!isSharedAccessEnabled() || !db) return () => {}
         return db.collection("users").doc(ownerUid).collection("notes").doc(noteId).onSnapshot(next, error)
     }
     return { subscribeOwnedNotes, loadMoreOwnedNotes, subscribeSharedEntries, subscribeSharedNote }
@@ -64,9 +70,10 @@ const SettingsRepository = (() => {
 })()
 
 const WorkspacesRepository = (() => {
+    const isWorkspacesEnabled = () => window.AppFeatures?.workspaces === true
     function getWorkspaceReference(workspaceId) {
         const normalizedWorkspaceId = String(workspaceId || "")
-        if (!db || !normalizedWorkspaceId) return null
+        if (!isWorkspacesEnabled() || !db || !normalizedWorkspaceId) return null
         return db.collection("workspaces").doc(normalizedWorkspaceId)
     }
 
@@ -76,6 +83,10 @@ const WorkspacesRepository = (() => {
     }
 
     function subscribeUserWorkspaces(user, next, error) {
+        if (!isWorkspacesEnabled()) {
+            if (typeof next === "function") next({ forEach() {} })
+            return () => {}
+        }
         const collection = DataPath.getUserSharedCollection(user, "sharedWorkspaces")
         if (!collection) return () => {}
         return collection.onSnapshot(next, error)
@@ -652,6 +663,7 @@ const SharedNotesService = (() => {
 })()
 
 const WorkspaceAccessService = (() => {
+    const isWorkspacesEnabled = () => window.AppFeatures?.workspaces === true
     const shareCollection = "workspaceShares"
     const pendingTokenKey = "pending-workspace-share-token"
 
@@ -710,6 +722,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function createWorkspace(name, description = "") {
+        if (!isWorkspacesEnabled()) return null
         const user = StateStore.read().user
         if (!db || !user?.uid) return null
         const normalizedName = String(name || "").trim()
@@ -740,6 +753,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function addMemberByUid(workspaceId, targetUid, role = "editor") {
+        if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
         if (!db || !user?.uid) return false
         const normalizedWorkspaceId = String(workspaceId || "").trim()
@@ -770,6 +784,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function createInviteLink(workspaceId, role = "editor") {
+        if (!isWorkspacesEnabled()) return ""
         const user = StateStore.read().user
         if (!db || !user?.uid) return ""
         const normalizedWorkspaceId = String(workspaceId || "").trim()
@@ -792,6 +807,7 @@ const WorkspaceAccessService = (() => {
     }
 
     function captureWorkspaceShareToken() {
+        if (!isWorkspacesEnabled()) return ""
         const token = getWorkspaceShareTokenFromUrl()
         if (!token) return ""
         SafeStorage.session.set(pendingTokenKey, token)
@@ -802,6 +818,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function acceptWorkspaceShareToken(value, user) {
+        if (!isWorkspacesEnabled()) return null
         if (!db || !user?.uid) return null
         const normalizedToken = normalizeShareToken(value)
         if (!normalizedToken) return null
@@ -834,6 +851,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function acceptPendingWorkspaceShare(user) {
+        if (!isWorkspacesEnabled()) return null
         const token = SafeStorage.session.get(pendingTokenKey)
         if (!token) return null
         SafeStorage.session.remove(pendingTokenKey)
@@ -841,6 +859,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function acceptWorkspaceShareFromUrl(user) {
+        if (!isWorkspacesEnabled()) return null
         const token = getWorkspaceShareTokenFromUrl()
         if (!token) return null
         captureWorkspaceShareToken()
@@ -856,6 +875,7 @@ const WorkspaceAccessService = (() => {
 
 
     async function updateWorkspace(workspaceId, updates = {}) {
+        if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         if (!db || !user?.uid || !normalizedWorkspaceId) return false
@@ -882,6 +902,7 @@ const WorkspaceAccessService = (() => {
     }
 
     function getWorkspaceMembers(workspaceId) {
+        if (!isWorkspacesEnabled()) return []
         const workspace = getWorkspaceById(workspaceId)
         if (!workspace) return []
         const members = workspace.members && typeof workspace.members === "object" ? workspace.members : {}
@@ -895,6 +916,7 @@ const WorkspaceAccessService = (() => {
 
 
     async function updateMemberRole(workspaceId, memberUid, role) {
+        if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedMemberUid = String(memberUid || "").trim()
@@ -919,6 +941,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function removeMember(workspaceId, memberUid) {
+        if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedMemberUid = String(memberUid || "").trim()
@@ -938,6 +961,7 @@ const WorkspaceAccessService = (() => {
     }
 
     async function updateMemberDisplayName(workspaceId, memberUid, displayName) {
+        if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedMemberUid = String(memberUid || "").trim()
@@ -1151,8 +1175,8 @@ const SessionService = (() => {
         state.foldersUnsubscribe = null
         SettingsSyncService.clear()
         OwnedNotesService.clear()
-        SharedNotesService.clear()
-        WorkspacesService.clear()
+        if (window.AppFeatures?.sharedAccess === true) SharedNotesService.clear()
+        if (window.AppFeatures?.workspaces === true) WorkspacesService.clear()
         RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
@@ -1170,7 +1194,7 @@ const SessionService = (() => {
             try {
                 StateActions.setUser(user)
                 await DataPath.ensureUserDocument(user)
-                if (typeof WorkspaceAccessService !== "undefined") {
+                if (window.AppFeatures?.workspaces === true && typeof WorkspaceAccessService !== "undefined") {
                     WorkspaceAccessService.captureWorkspaceShareToken()
                 }
                 await SettingsSyncService.initialize(user)
@@ -1184,9 +1208,9 @@ const SessionService = (() => {
                     const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
                     StateStore.update("folders", folders)
                 }, error => EventBus.publish("foldersSyncError", error))
-                SharedNotesService.subscribe(user)
-                WorkspacesService.subscribe(user)
-                if (typeof WorkspaceAccessService !== "undefined") {
+                if (window.AppFeatures?.sharedAccess === true) SharedNotesService.subscribe(user)
+                if (window.AppFeatures?.workspaces === true) WorkspacesService.subscribe(user)
+                if (window.AppFeatures?.workspaces === true && typeof WorkspaceAccessService !== "undefined") {
                     await WorkspaceAccessService.acceptWorkspaceShareFromUrl(user)
                     await WorkspaceAccessService.acceptPendingWorkspaceShare(user)
                 }

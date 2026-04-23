@@ -3,6 +3,10 @@ import { requireRequestAuth } from "@/lib/auth"
 
 export const runtime = "nodejs"
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || "")
+}
+
 export async function GET(request: Request) {
   try {
     const firebaseUid = await requireRequestAuth(request)
@@ -13,7 +17,7 @@ export async function GET(request: Request) {
       ...status
     })
   } catch (error) {
-    if (String(error?.message || "") === "UNAUTHORIZED") {
+    if (getErrorMessage(error) === "UNAUTHORIZED") {
       return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
 
@@ -21,7 +25,7 @@ export async function GET(request: Request) {
       {
         ok: false,
         error: "IDENTITY_STATUS_FAILED",
-        details: String(error?.message || error)
+        details: getErrorMessage(error)
       },
       { status: 500 }
     )

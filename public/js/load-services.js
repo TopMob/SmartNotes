@@ -809,13 +809,12 @@ const CollaborationService = {
         if (!db || !user || !note) return null
         const access = this.getAccess(note)
         const workspaceId = access?.workspaceId || note.workspaceId
-        if (workspaceId) {
+        if (workspaceId && window.AppFeatures?.workspaces === true && typeof db.collection === "function") {
             const noteId = access?.noteId || String(note.id || "").replace(`workspace_${workspaceId}_`, "")
             return db.collection("workspaces").doc(workspaceId).collection("notes").doc(noteId)
         }
-        const ownerUid = access?.ownerUid || user.uid
         const noteId = access?.noteId || note.id
-        return db.collection("users").doc(ownerUid).collection("notes").doc(noteId)
+        return DataPath.getUserNotesCollection(user).doc(noteId)
     },
     async copyToClipboard(text) {
         const value = String(text || "")

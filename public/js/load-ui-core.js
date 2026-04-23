@@ -619,6 +619,10 @@ Object.assign(UI, {
                 break
             }
             case "switch-view":
+              if (el.dataset.view === "shared_access" && (!this.isFeatureEnabled("sharedAccess") || !this.isFeatureEnabled("workspaces"))) {
+                this.showFeatureDisabledToast("sharedAccess")
+                break
+              }
               switchView(el.dataset.view)
               if (!window.matchMedia("(min-width: 1024px)").matches) {
                 this.toggleSidebar(false)
@@ -651,6 +655,10 @@ Object.assign(UI, {
                 break
             }
             case "join-shared-workspace-link": {
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 this.showPrompt(this.getText("join_shared_workspace", "Присоединиться по ссылке"), this.getText("join_shared_workspace_placeholder", "Вставьте ссылку или токен"), async value => {
                     const user = StateStore.read().user
                     if (!user?.uid) return
@@ -660,27 +668,51 @@ Object.assign(UI, {
                 break
             }
             case "toggle-active-workspace-menu":
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 this.toggleActiveWorkspaceMenu()
                 break
             case "view-workspace-members":
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 this.openWorkspaceMembersModal()
                 this.toggleActiveWorkspaceMenu(false)
                 break
             case "rename-workspace":
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 this.renameActiveWorkspace()
                 this.toggleActiveWorkspaceMenu(false)
                 break
             case "edit-workspace-description":
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 this.editActiveWorkspaceDescription()
                 this.toggleActiveWorkspaceMenu(false)
                 break
             case "open-shared-workspace":
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 switchView("shared_workspace", null, el.dataset.workspaceId)
                 if (!window.matchMedia("(min-width: 1024px)").matches) {
                     this.toggleSidebar(false)
                 }
                 break
             case "copy-shared-workspace-link": {
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
                 const link = await WorkspaceAccessService?.createInviteLink?.(workspaceId, "editor")
                 if (!link) {
@@ -692,6 +724,10 @@ Object.assign(UI, {
                 break
             }
             case "add-shared-workspace-user": {
+                if (!this.isFeatureEnabled("workspaces")) {
+                    this.showFeatureDisabledToast("workspaces")
+                    break
+                }
                 const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
                 this.showPrompt(this.getText("shared_user_uid_prompt", "UID пользователя"), this.getText("shared_user_uid_placeholder", "Введите UID"), async value => {
                     const targetUid = String(value || "").trim()
@@ -765,6 +801,10 @@ Object.assign(UI, {
             }
             case "settings-backup-all-notes": {
                 if (el.disabled) break
+                if (!this.isFeatureEnabled("googleDrive")) {
+                    this.showFeatureDisabledToast("googleDrive")
+                    break
+                }
                 el.disabled = true
                 const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
                 try {
@@ -778,6 +818,10 @@ Object.assign(UI, {
             }
             case "settings-backup-folder": {
                 if (el.disabled) break
+                if (!this.isFeatureEnabled("googleDrive")) {
+                    this.showFeatureDisabledToast("googleDrive")
+                    break
+                }
                 this.backupFolderBySelection()
                 break
             }
@@ -894,6 +938,10 @@ Object.assign(UI, {
                 break
             }
             case "open-feedback-modal":
+                if ((el.dataset.modal === "rate-modal" && !this.isFeatureEnabled("feedback")) || (el.dataset.modal === "poll-modal" && !this.isFeatureEnabled("poll"))) {
+                    this.showFeatureDisabledToast(el.dataset.modal === "poll-modal" ? "poll" : "feedback")
+                    break
+                }
                 this.closeModal("feedback-menu-modal")
                 this.openModal(el.dataset.modal)
                 break
@@ -980,6 +1028,10 @@ Object.assign(UI, {
                 this.toggleFilterMenu()
                 break
             case "submit-feedback":
+                if (!this.isFeatureEnabled("feedback")) {
+                    this.showFeatureDisabledToast("feedback")
+                    break
+                }
                 this.submitFeedback()
                 break
             case "media-reset":
@@ -1723,6 +1775,10 @@ Object.assign(UI, {
     },
 
     async backupAllNotesToDrive() {
+        if (!this.isFeatureEnabled("googleDrive")) {
+            this.showFeatureDisabledToast("googleDrive")
+            return null
+        }
         try {
             return await this.backupNotesBundleToDrive(this.getExportableNotes(), {
                 scope: "all",
@@ -1757,6 +1813,10 @@ Object.assign(UI, {
     },
 
     async backupActiveFolderToDrive(folderId = null) {
+        if (!this.isFeatureEnabled("googleDrive")) {
+            this.showFeatureDisabledToast("googleDrive")
+            return null
+        }
         const { activeFolderId, folders } = StateStore.read()
         const targetFolderId = folderId || activeFolderId
         if (!targetFolderId) return null
@@ -1806,7 +1866,11 @@ Object.assign(UI, {
     },
 
     canShowPrimaryAction(view = StateStore.read().view) {
-        return new Set(["notes", "folder", "folders", "shared_access", "shared_workspace"]).has(String(view || "notes"))
+        const normalizedView = String(view || "notes")
+        if ((normalizedView === "shared_access" || normalizedView === "shared_workspace") && (!this.isFeatureEnabled("sharedAccess") || !this.isFeatureEnabled("workspaces"))) {
+            return false
+        }
+        return new Set(["notes", "folder", "folders", "shared_access", "shared_workspace"]).has(normalizedView)
     },
 
     primaryAction() {
@@ -1817,10 +1881,18 @@ Object.assign(UI, {
             return
         }
         if (currentView === "shared_access") {
+            if (!this.isFeatureEnabled("workspaces")) {
+                this.showFeatureDisabledToast("workspaces")
+                return
+            }
             this.createSharedWorkspace()
             return
         }
         if (currentView === "shared_workspace") {
+            if (!this.isFeatureEnabled("workspaces")) {
+                this.showFeatureDisabledToast("workspaces")
+                return
+            }
             const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
             if (!workspace || !WorkspaceAccessService?.canEditWorkspace?.(workspace)) {
                 this.showToast(this.getText("share_manage_denied", "Permission denied"))
@@ -1832,6 +1904,10 @@ Object.assign(UI, {
 
 
     createSharedWorkspace() {
+        if (!this.isFeatureEnabled("workspaces")) {
+            this.showFeatureDisabledToast("workspaces")
+            return
+        }
         this.showPrompt(this.getText("shared_workspace_create", "Новая совместная папка"), this.getText("shared_workspace_placeholder", "Название папки"), async (name, description) => {
             const normalizedName = String(name || "").trim()
             const normalizedDescription = String(description || "").trim()
@@ -2315,6 +2391,13 @@ Object.assign(UI, {
         }
     },
 
+    resetContentGridLayout(root = this.els.grid) {
+        if (!root) return
+        root.style.display = ""
+        root.style.gridTemplateColumns = ""
+        root.style.gap = ""
+    },
+
     renderAdminToolsView() {
         const root = this.els.grid
         if (!root) return
@@ -2600,7 +2683,7 @@ Object.assign(UI, {
         const wrapper = this.els.activeWorkspaceMenuWrapper
         if (!wrapper) return
         const state = StateStore.read()
-        const isVisible = state.view === "shared_workspace" && !!state.activeSharedWorkspaceId
+        const isVisible = this.isFeatureEnabled("workspaces") && state.view === "shared_workspace" && !!state.activeSharedWorkspaceId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {
             this.toggleActiveWorkspaceMenu(false)
@@ -2656,6 +2739,7 @@ Object.assign(UI, {
         el.setAttribute("aria-hidden", "false")
         this.toggleSidebar(false)
         if (id === "poll-modal") {
+            if (!this.isFeatureEnabled("poll")) return false
             this.startSurvey()
         }
         if (id === "lock-center-modal") {
@@ -3366,6 +3450,11 @@ Object.assign(UI, {
         if (driveConnectButton && !driveConnectButton.dataset.bound) {
             driveConnectButton.dataset.bound = "1"
             driveConnectButton.addEventListener("click", async () => {
+                if (!this.isFeatureEnabled("googleDrive")) {
+                    this.showFeatureDisabledToast("googleDrive")
+                    this.syncSettingsUI()
+                    return
+                }
                 const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
                 const driveStatus = mediaService?.getStatus?.() || null
                 const isDriveLinked = !!driveStatus?.linked || !!driveStatus?.connected
@@ -3875,7 +3964,7 @@ Object.assign(UI, {
         const driveStatusElement = document.getElementById("settings-drive-status")
         const driveConnectButton = document.getElementById("settings-drive-connect")
         const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const driveStatus = mediaService?.getStatus?.() || null
+        const driveStatus = this.isFeatureEnabled("googleDrive") ? (mediaService?.getStatus?.() || null) : { configured: false, pending: false, linked: false, connected: false, errorCode: "feature-disabled" }
         if (driveStatusElement) {
             if (!driveStatus?.configured) {
                 driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")

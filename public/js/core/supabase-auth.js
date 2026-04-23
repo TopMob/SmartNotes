@@ -46,6 +46,68 @@ export async function createSupabaseAuth() {
 
     let currentUser = null
     const authStateSubscribers = new Set()
+    const authApi = {
+        app: { options: { clientId: "" } },
+        Auth: {
+            Persistence: createPersistenceEnum()
+        },
+        get currentUser() {
+            return currentUser
+        },
+        async setPersistence() {
+            return true
+        },
+        async signInWithEmailAndPassword(email, password) {
+            const { error } = await client.auth.signInWithPassword({ email, password })
+            if (error) throw error
+            const sessionResult = await client.auth.getSession()
+            currentUser = await syncProfile(sessionResult?.data?.session || null)
+            return { user: currentUser }
+        },
+        async createUserWithEmailAndPassword(email, password) {
+            const result = await client.auth.signUp({ email, password })
+            if (result.error) throw result.error
+
+            const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
+            currentUser = session ? await syncProfile(session) : null
+            return {
+                user: currentUser,
+                pendingConfirmation: !session && !!result?.data?.user
+            }
+        },
+        async sendPasswordResetEmail(email) {
+            const { error } = await client.auth.resetPasswordForEmail(email)
+            if (error) throw error
+            return true
+        },
+        async fetchSignInMethodsForEmail() {
+            return ["password"]
+        },
+        async signOut() {
+            const { error } = await client.auth.signOut()
+            if (error) throw error
+            currentUser = null
+        },
+        async getRedirectResult() {
+            return null
+        },
+        async signInWithPopup() {
+            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
+        },
+        async signInWithRedirect() {
+            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
+        },
+        onAuthStateChanged(next, error) {
+            const callback = typeof next === "function" ? next : () => {}
+            authStateSubscribers.add(callback)
+            Promise.resolve(callback(currentUser)).catch(err => {
+                if (typeof error === "function") error(err)
+            })
+            return () => {
+                authStateSubscribers.delete(callback)
+            }
+        }
+    }
 
     const emitAuthState = async (session) => {
         try {
@@ -70,63 +132,5 @@ export async function createSupabaseAuth() {
         emitAuthState(session)
     })
 
-    return {
-        app: { options: { clientId: "" } },
-        currentUser,
-        Auth: {
-            Persistence: createPersistenceEnum()
-        },
-        async setPersistence() {
-            return true
-        },
-        async signInWithEmailAndPassword(email, password) {
-            const { error } = await client.auth.signInWithPassword({ email, password })
-            if (error) throw error
-            const sessionResult = await client.auth.getSession()
-            this.currentUser = await syncProfile(sessionResult?.data?.session || null)
-            currentUser = this.currentUser
-            return { user: this.currentUser }
-        },
-        async createUserWithEmailAndPassword(email, password) {
-            const { error } = await client.auth.signUp({ email, password })
-            if (error) throw error
-            const sessionResult = await client.auth.getSession()
-            this.currentUser = await syncProfile(sessionResult?.data?.session || null)
-            currentUser = this.currentUser
-            return { user: this.currentUser }
-        },
-        async sendPasswordResetEmail(email) {
-            const { error } = await client.auth.resetPasswordForEmail(email)
-            if (error) throw error
-            return true
-        },
-        async fetchSignInMethodsForEmail() {
-            return ["password"]
-        },
-        async signOut() {
-            const { error } = await client.auth.signOut()
-            if (error) throw error
-            this.currentUser = null
-            currentUser = null
-        },
-        async getRedirectResult() {
-            return null
-        },
-        async signInWithPopup() {
-            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
-        },
-        async signInWithRedirect() {
-            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
-        },
-        onAuthStateChanged(next, error) {
-            const callback = typeof next === "function" ? next : () => {}
-            authStateSubscribers.add(callback)
-            Promise.resolve(callback(currentUser)).catch(err => {
-                if (typeof error === "function") error(err)
-            })
-            return () => {
-                authStateSubscribers.delete(callback)
-            }
-        }
-    }
+    return authApi
 }

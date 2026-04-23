@@ -405,6 +405,7 @@ Object.assign(UI, {
         const { folders } = StateStore.read()
         const hiddenFolders = folders.filter(folder => !!folder.isHidden && !folder.trashedAt)
         this.els.empty.classList.toggle("hidden", hiddenFolders.length > 0)
+        this.resetContentGridLayout()
         this.els.grid.classList.add("folder-grid")
 
         const fragment = document.createDocumentFragment()
@@ -544,6 +545,7 @@ Object.assign(UI, {
         const { folders, notes } = StateStore.read()
         const visibleFolders = folders.filter(folder => !folder.trashedAt && !folder.isHidden)
         this.els.empty.classList.toggle("hidden", visibleFolders.length > 0)
+        this.resetContentGridLayout()
         this.els.grid.classList.add("folder-grid")
 
         const fragment = document.createDocumentFragment()
@@ -607,8 +609,16 @@ Object.assign(UI, {
     },
 
     renderSharedAccessView() {
+        if (!this.isFeatureEnabled("sharedAccess") || !this.isFeatureEnabled("workspaces")) {
+            this.updateEmptyState("groups_off", this.getText("shared_workspace_disabled", "Shared notes are temporarily unavailable"))
+            this.resetContentGridLayout()
+            this.els.empty.classList.remove("hidden")
+            this.els.grid.replaceChildren()
+            return
+        }
         this.updateEmptyState("groups", this.getText("shared_access_empty", "У вас пока нет совместных папок"))
         const workspaces = Array.isArray(StateStore.read().sharedWorkspaces) ? StateStore.read().sharedWorkspaces : []
+        this.resetContentGridLayout()
         this.els.grid.classList.add("folder-grid")
         this.els.empty.classList.add("hidden")
         const fragment = document.createDocumentFragment()
@@ -623,6 +633,10 @@ Object.assign(UI, {
 
 Object.assign(UI, {
     async submitFeedback() {
+        if (!this.isFeatureEnabled("feedback")) {
+            this.showFeatureDisabledToast("feedback")
+            return
+        }
         if (!db || !StateStore.read().user) {
             this.showToast(this.getText("feedback_failed", "Unable to send feedback"))
             return
@@ -769,6 +783,10 @@ Object.assign(UI, {
     },
 
     async submitSurvey() {
+        if (!this.isFeatureEnabled("poll")) {
+            this.showFeatureDisabledToast("poll")
+            return
+        }
         if (!db || !StateStore.read().user) {
             this.showToast(this.getText("poll_failed", "Unable to send poll"))
             return

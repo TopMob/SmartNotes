@@ -7,6 +7,7 @@ import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
 import { validateFolderName, validateFolderDescription, canAddFolder, canAddCustomTheme, canAssignToFolder, FOLDER_DESCRIPTION_SOFT_LIMIT, FOLDER_DESCRIPTION_HARD_LIMIT } from "./core/validators.js"
 import { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload } from "./core/noteHelpers.js"
 import { GoogleDriveMediaService } from "./core/googleDriveMedia.js"
+import { initSupabase } from "./core/supabase.js"
 
 const core = window.__smartnotesCore || (() => {
     const context = { auth: null, db: null, Auth: null }
@@ -43,134 +44,26 @@ window.Validators = {
     FOLDER_DESCRIPTION_HARD_LIMIT
 }
 window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
-window.GoogleDriveMediaService = GoogleDriveMediaService
-window.ExternalMediaService = GoogleDriveMediaService
-
-const firebaseRuntimeSources = [
-    {
-        name: "gstatic",
-        urls: [
-            "https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js",
-            "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js",
-            "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"
-        ]
-    },
-    {
-        name: "jsdelivr",
-        urls: [
-            "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-app-compat.js",
-            "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-auth-compat.js",
-            "https://cdn.jsdelivr.net/npm/firebase@9.6.1/firebase-firestore-compat.js"
-        ]
-    },
-    {
-        name: "unpkg",
-        urls: [
-            "https://unpkg.com/firebase@9.6.1/firebase-app-compat.js",
-            "https://unpkg.com/firebase@9.6.1/firebase-auth-compat.js",
-            "https://unpkg.com/firebase@9.6.1/firebase-firestore-compat.js"
-        ]
-    },
-    {
-        name: "cdnjs",
-        urls: [
-            "https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-app-compat.min.js",
-            "https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-auth-compat.min.js",
-            "https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-firestore-compat.min.js"
-        ]
+window.AppFeatures = Object.assign({
+    sharedAccess: false,
+    workspaces: false,
+    googleDrive: false,
+    feedback: false,
+    poll: false
+}, window.AppFeatures || {})
+window.GoogleDriveMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
+window.ExternalMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
+window.firebase = {
+    firestore: {
+        FieldValue: {
+            serverTimestamp() {
+                return new Date().toISOString()
+            },
+            delete() {
+                return null
+            }
+        }
     }
-]
-
-const firebaseRuntimeWarnedSources = new Set()
-
-function waitForFirebaseAvailability(timeoutMilliseconds) {
-    return new Promise(resolve => {
-        if (typeof firebase !== "undefined") {
-            resolve(true)
-            return
-        }
-        const startedAt = Date.now()
-        const poll = () => {
-            if (typeof firebase !== "undefined") {
-                resolve(true)
-                return
-            }
-            if (Date.now() - startedAt >= timeoutMilliseconds) {
-                resolve(false)
-                return
-            }
-            setTimeout(poll, 50)
-        }
-        poll()
-    })
-}
-
-function loadExternalScript(url, timeoutMilliseconds) {
-    return new Promise((resolve, reject) => {
-        const existingScriptElement = document.querySelector(`script[src="${url}"]`)
-        if (existingScriptElement) {
-            if (typeof firebase !== "undefined") {
-                resolve()
-                return
-            }
-            setTimeout(() => {
-                if (typeof firebase !== "undefined") {
-                    resolve()
-                    return
-                }
-                reject(new Error(`Script present but runtime unavailable: ${url}`))
-            }, 1200)
-            return
-        }
-
-        const scriptElement = document.createElement("script")
-        scriptElement.src = url
-        scriptElement.async = true
-
-        const timeoutId = setTimeout(() => {
-            scriptElement.remove()
-            reject(new Error(`Script load timeout: ${url}`))
-        }, timeoutMilliseconds)
-
-        scriptElement.addEventListener("load", () => {
-            clearTimeout(timeoutId)
-            resolve()
-        }, { once: true })
-
-        scriptElement.addEventListener("error", () => {
-            clearTimeout(timeoutId)
-            scriptElement.remove()
-            reject(new Error(`Script load failed: ${url}`))
-        }, { once: true })
-
-        document.head.appendChild(scriptElement)
-    })
-}
-
-async function ensureFirebaseRuntime() {
-    if (typeof firebase !== "undefined") return true
-
-    const initialWaitSucceeded = await waitForFirebaseAvailability(350)
-    if (initialWaitSucceeded) return true
-
-    for (const sourceSet of firebaseRuntimeSources) {
-        try {
-            for (const sourceUrl of sourceSet.urls) {
-                await loadExternalScript(sourceUrl, 7000)
-            }
-        } catch (error) {
-            if (!firebaseRuntimeWarnedSources.has(sourceSet.name)) {
-                firebaseRuntimeWarnedSources.add(sourceSet.name)
-                console.warn(`[Core] Firebase CDN failed: ${sourceSet.name}`, error)
-            }
-            continue
-        }
-
-        const sourceWaitSucceeded = await waitForFirebaseAvailability(3500)
-        if (sourceWaitSucceeded) return true
-    }
-
-    return false
 }
 
 
@@ -211,22 +104,29 @@ function showRuntimeErrorMessage(messageText) {
 const hideSplashScreen = initializeSplashScreen()
 
 async function startCore() {
-    const firebaseRuntimeReady = await ensureFirebaseRuntime()
-    if (!firebaseRuntimeReady) {
+    const configResponse = await fetch("/api/supabase/config")
+    if (!configResponse.ok) {
         hideSplashScreen()
-        showRuntimeErrorMessage("Не удалось загрузить Firebase")
-        throw new Error("Firebase runtime unavailable")
+        showRuntimeErrorMessage("Не удалось загрузить Supabase config")
+        throw new Error("Supabase config unavailable")
     }
 
+    const configPayload = await configResponse.json()
+    window.SmartNotesSupabaseConfig = {
+        url: String(configPayload?.url || ""),
+        publishableKey: String(configPayload?.publishableKey || "")
+    }
+    await initSupabase()
+
     if (!core.auth || !core.db) {
-        const infraState = InfraEngine.init()
+        const infraState = await InfraEngine.init()
         core.auth = infraState.auth
         core.db = infraState.db
         window.auth = core.auth
         window.db = core.db
     }
 
-    const authManager = InfraEngine.createAuth()
+    const authManager = await InfraEngine.createAuth()
     core.Auth = authManager
     window.Auth = core.Auth
     resolveAuthReady(authManager)

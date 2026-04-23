@@ -5,6 +5,8 @@ import { createAuthManager } from "./auth.js"
 
 const createApiEndpoint = path => window.SmartNotesBackendConfig?.createApiEndpoint?.(path) || `/api/${String(path || "").replace(/^\/+/, "")}`
 
+const createServerTimestamp = () => new Date().toISOString()
+
 const buildAuthorizedHeaders = user => {
     const accessToken = String(user?.accessToken || "")
     return {
@@ -17,19 +19,84 @@ const buildAuthorizedHeaders = user => {
 const createDocumentSnapshot = (record) => ({
     id: String(record?.id || ""),
     exists: !!record,
-    data: () => ({ ...(record || {}) })
+    data: () => ({ ...(record || {}) }),
+    ref: null
 })
 
-const createCollectionApi = ({ user, endpoint }) => ({
+const applyFilters = (rows, filters = []) => {
+    return (Array.isArray(rows) ? rows : []).filter(row => {
+        return filters.every(filter => {
+            if (!filter || filter.operator !== "==") return true
+            return row?.[filter.field] === filter.value
+        })
+    })
+}
+
+const sortByUpdatedDesc = rows => [...rows].sort((first, second) => {
+    const firstTime = Date.parse(String(first?.updatedAt || first?.createdAt || "")) || 0
+    const secondTime = Date.parse(String(second?.updatedAt || second?.createdAt || "")) || 0
+    return secondTime - firstTime
+})
+
+const createBatchApi = () => {
+    const operations = []
+    return {
+        set(reference, data) {
+            operations.push(() => reference.set(data))
+        },
+        update(reference, data) {
+            operations.push(() => reference.update(data))
+        },
+        delete(reference) {
+            operations.push(() => reference.delete())
+        },
+        async commit() {
+            for (const operation of operations) {
+                await operation()
+            }
+        }
+    }
+}
+
+const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument = null, limitValue = null }) => ({
     async get() {
-        const response = await fetch(createApiEndpoint(endpoint), {
+        const query = new URLSearchParams()
+        if (Number.isFinite(Number(limitValue)) && Number(limitValue) > 0) {
+            query.set("limit", String(limitValue))
+        }
+        if (startAfterDocument?.id) {
+            query.set("startAfterId", String(startAfterDocument.id))
+        }
+
+        const requestUrl = `${createApiEndpoint(endpoint)}${query.toString() ? `?${query.toString()}` : ""}`
+        const response = await fetch(requestUrl, {
             method: "GET",
             headers: buildAuthorizedHeaders(user)
         })
         if (!response.ok) throw new Error(`supabase-collection-http-${response.status}`)
         const payload = await response.json()
-        const rows = Array.isArray(payload?.notes) ? payload.notes : Array.isArray(payload?.folders) ? payload.folders : []
-        return { docs: rows.map(createDocumentSnapshot) }
+        const rawRows = Array.isArray(payload?.notes) ? payload.notes : Array.isArray(payload?.folders) ? payload.folders : []
+        const filteredRows = applyFilters(rawRows, filters)
+        const sortedRows = endpoint === "supabase/notes" ? sortByUpdatedDesc(filteredRows) : filteredRows
+        const limitedRows = Number.isFinite(Number(limitValue)) && Number(limitValue) > 0
+            ? sortedRows.slice(0, Number(limitValue))
+            : sortedRows
+        const docs = limitedRows.map(record => {
+            const snapshot = createDocumentSnapshot(record)
+            snapshot.ref = createCollectionApi({ user, endpoint, filters }).doc(snapshot.id)
+            return snapshot
+        })
+        return { docs, forEach(callback) { docs.forEach(callback) } }
+    },
+    async add(data) {
+        const response = await fetch(createApiEndpoint(endpoint), {
+            method: "POST",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify(data || {})
+        })
+        if (!response.ok) throw new Error(`supabase-collection-add-http-${response.status}`)
+        const payload = await response.json()
+        return payload?.note || payload?.folder || payload || null
     },
     doc(id = "") {
         const documentId = String(id || "")
@@ -44,10 +111,24 @@ const createCollectionApi = ({ user, endpoint }) => ({
                 return response.json()
             },
             async update(data) {
-                return this.set(data)
+                const response = await fetch(createApiEndpoint(endpoint), {
+                    method: "PUT",
+                    headers: buildAuthorizedHeaders(user),
+                    body: JSON.stringify({ ...(data || {}), id: documentId })
+                })
+                if (!response.ok) throw new Error(`supabase-doc-update-http-${response.status}`)
+                return response.json()
+            },
+            async delete() {
+                const response = await fetch(`${createApiEndpoint(endpoint)}?id=${encodeURIComponent(documentId)}`, {
+                    method: "DELETE",
+                    headers: buildAuthorizedHeaders(user)
+                })
+                if (!response.ok) throw new Error(`supabase-doc-delete-http-${response.status}`)
+                return response.json()
             },
             async get() {
-                const collectionResult = await createCollectionApi({ user, endpoint }).get()
+                const collectionResult = await createCollectionApi({ user, endpoint, filters }).get()
                 const matched = collectionResult.docs.find(entry => entry.id === documentId)
                 return matched || { id: documentId, exists: false, data: () => ({}) }
             },
@@ -70,10 +151,19 @@ const createCollectionApi = ({ user, endpoint }) => ({
         }
     },
     limit() {
-        return this
+        return createCollectionApi({ user, endpoint, filters, startAfterDocument, limitValue: arguments[0] })
     },
     startAfter() {
-        return this
+        return createCollectionApi({ user, endpoint, filters, startAfterDocument: arguments[0], limitValue })
+    },
+    where(field, operator, value) {
+        return createCollectionApi({
+            user,
+            endpoint,
+            filters: [...filters, { field, operator, value }],
+            startAfterDocument,
+            limitValue
+        })
     },
     onSnapshot(next, error) {
         let cancelled = false
@@ -134,7 +224,7 @@ const createRefsApi = () => ({
 const infraState = {
     app: { name: "supabase" },
     auth: null,
-    db: { kind: "supabase-http" },
+    db: { kind: "supabase-http", batch: createBatchApi },
     authManager: null,
     refsApi: null
 }

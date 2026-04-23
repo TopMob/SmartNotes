@@ -3,6 +3,8 @@ import { createGoogleDriveProvider } from './externalStorage/providers/googleDri
 import { ERROR_CODES, createExternalMediaError, normalizeExternalMediaErrorCode, resolveUserFacingError } from './externalStorage/errors.js'
 import { containsInlineMedia, getInlineMediaSummary, isInlineMediaSource } from './externalStorage/mediaPipeline.js'
 
+const isGoogleDriveFeatureEnabled = () => window.AppFeatures?.googleDrive === true
+
 const googleDriveProvider = createGoogleDriveProvider()
 const externalStorageService = createExternalStorageService({
     providers: [googleDriveProvider],
@@ -19,6 +21,28 @@ export const GoogleDriveMediaService = {
     normalizeExternalMediaErrorCode,
     resolveUserFacingError,
     ERROR_CODES,
-    createExternalMediaError
+    createExternalMediaError,
+    getStatus() {
+        if (!isGoogleDriveFeatureEnabled()) {
+            return { configured: false, linked: false, connected: false, pending: false, errorCode: "feature-disabled" }
+        }
+        return externalStorageService.getStatus()
+    },
+    async connect() {
+        if (!isGoogleDriveFeatureEnabled()) throw createExternalMediaError("feature-disabled")
+        return externalStorageService.connect()
+    },
+    async unlink() {
+        if (!isGoogleDriveFeatureEnabled()) return false
+        return externalStorageService.unlink()
+    },
+    async externalizeNoteMedia(...args) {
+        if (!isGoogleDriveFeatureEnabled()) throw createExternalMediaError("feature-disabled")
+        return externalStorageService.externalizeNoteMedia(...args)
+    },
+    async backupBundle(...args) {
+        if (!isGoogleDriveFeatureEnabled()) throw createExternalMediaError("feature-disabled")
+        return externalStorageService.backupBundle(...args)
+    }
 }
 

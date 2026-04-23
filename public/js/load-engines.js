@@ -166,6 +166,14 @@ function updateSearchQuery(query) {
 function switchView(view, folderId = null, sharedWorkspaceId = null) {
     const currentState = StateStore.read()
     const nextView = String(view || "notes")
+    const sharedFeaturesEnabled = window.AppFeatures?.sharedAccess === true && window.AppFeatures?.workspaces === true
+    if ((nextView === "shared_access" || nextView === "shared_workspace") && !sharedFeaturesEnabled) {
+        const fallbackView = currentState.view === "shared_access" || currentState.view === "shared_workspace" ? "notes" : currentState.view
+        if (currentState.view !== fallbackView) {
+            StateStore.set(previousState => ({ ...previousState, view: fallbackView, activeFolderId: previousState.view === "folder" ? previousState.activeFolderId : null, activeSharedWorkspaceId: null }))
+        }
+        return
+    }
     const nextFolderId = nextView === "folder" ? folderId : null
     const nextWorkspaceId = nextView === "shared_workspace" ? sharedWorkspaceId : null
     if (currentState.view === nextView && currentState.activeFolderId === nextFolderId && currentState.activeSharedWorkspaceId === nextWorkspaceId) return
@@ -725,6 +733,7 @@ const NotesListEngine = (() => {
         }
 
         runtime.empty.classList.add("hidden")
+        UI.resetContentGridLayout?.(runtime.grid)
         runtime.grid.classList.remove("folder-grid")
         clearGrid()
         cleanupCache()

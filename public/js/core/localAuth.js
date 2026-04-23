@@ -120,38 +120,10 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         }
     }
 
-    const fetchMethods = async email => {
-        if (!auth || !email) return []
-        try {
-            const methods = await auth.fetchSignInMethodsForEmail(email)
-            return Array.isArray(methods) ? methods : []
-        } catch (error) {
-            handleAuthError(error)
-            return null
-        }
-    }
-
-    const isGoogleOnlyAccount = methods => methods.includes("google.com") && !methods.includes("password")
-
     const signInWithEmail = async () => {
         if (!auth) return
         const credentials = readSignInCredentials()
         if (!validateSignInCredentials(credentials)) return
-
-        const methods = await fetchMethods(credentials.email)
-        if (methods === null) return
-        if (!methods.length) {
-            setFeedback(getText("auth_email_not_found", "Аккаунт с таким email не найден"))
-            return
-        }
-        if (methods.length && !methods.includes("password")) {
-            if (isGoogleOnlyAccount(methods)) {
-                setFeedback(getText("auth_email_google_only", "Этот email зарегистрирован через Google. Войдите через Google."))
-                return
-            }
-            setFeedback(getText("auth_email_provider_conflict", "Для этого email используется другой способ входа"))
-            return
-        }
 
         setFeedback("")
         await runWithBusyState(async () => {
@@ -166,23 +138,12 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         const credentials = readSignUpCredentials()
         if (!validateSignUpCredentials(credentials)) return
 
-        const methods = await fetchMethods(credentials.email)
-        if (methods === null) return
-        if (isGoogleOnlyAccount(methods)) {
-            setFeedback(getText("auth_email_google_only", "Этот email зарегистрирован через Google. Войдите через Google."))
-            return
-        }
-        if (methods.includes("password")) {
-            setFeedback(getText("auth_email_exists", "Пользователь с таким email уже существует. Выполните вход."))
-            setMode("signin")
-            const signInEmailElement = getElement(elementIds.signInEmail)
-            if (signInEmailElement) signInEmailElement.value = credentials.email
-            return
-        }
-
         setFeedback("")
         await runWithBusyState(async () => {
-            await auth.createUserWithEmailAndPassword(credentials.email, credentials.password)
+            const result = await auth.createUserWithEmailAndPassword(credentials.email, credentials.password)
+            if (result?.pendingConfirmation) {
+                setFeedback(getText("auth_email_not_confirmed_signup", "Проверьте почту и подтвердите регистрацию"), "success")
+            }
         }).catch(error => {
             handleAuthError(error)
         })
@@ -197,17 +158,6 @@ export function createLocalAuthManager({ auth, setLoginBusy, handleAuthError, ge
         }
         if (!isEmailFormatValid(email)) {
             setFeedback(getText("auth_invalid_email_format", "Введите корректный email"))
-            return
-        }
-
-        const methods = await fetchMethods(email)
-        if (methods === null) return
-        if (!methods.includes("password")) {
-            if (isGoogleOnlyAccount(methods)) {
-                setFeedback(getText("auth_email_google_only", "Этот email зарегистрирован через Google. Войдите через Google."))
-                return
-            }
-            setFeedback(getText("auth_email_not_found", "Аккаунт с таким email не найден"))
             return
         }
 

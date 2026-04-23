@@ -1,58 +1,38 @@
-import { getSupabaseAdminClient } from "@/lib/supabase"
 import { ensureSupabaseProfile, getSupabaseProfile } from "@/lib/supabase/notes"
+import { handleRouteError, ok, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
 
-async function getUserFromAccessToken(accessToken: string) {
-  const supabase = getSupabaseAdminClient()
-  const { data, error } = await supabase.auth.getUser(accessToken)
-  if (error) throw error
-  return data.user
-}
-
 export async function GET(request: Request) {
   try {
-    const authorization = request.headers.get("authorization") || ""
-    const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : ""
-    if (!token) {
-      return Response.json({ user: null }, { status: 200 })
-    }
-
-    const user = await getUserFromAccessToken(token)
-    if (!user?.id) {
-      return Response.json({ user: null }, { status: 200 })
-    }
+    const user = await requireSupabaseUser(request)
 
     const profile = await ensureSupabaseProfile({
       userId: user.id,
-      email: user.email || "",
-      displayName: String(user.user_metadata?.display_name || ""),
-      avatarUrl: String(user.user_metadata?.avatar_url || "")
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl
     })
 
-    return Response.json({ user: profile })
+    return ok({ user: profile })
   } catch (error) {
-    return Response.json({ error: "SESSION_FAILED", details: String(error?.message || error) }, { status: 500 })
+    return handleRouteError(error, "SESSION_FAILED")
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json()
-    const userId = String(payload?.userId || "").trim()
-    if (!userId) {
-      return Response.json({ error: "USER_ID_REQUIRED" }, { status: 400 })
-    }
+    const user = await requireSupabaseUser(request)
 
     const profile = await ensureSupabaseProfile({
-      userId,
-      email: String(payload?.email || ""),
-      displayName: String(payload?.displayName || ""),
-      avatarUrl: String(payload?.avatarUrl || "")
+      userId: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl
     })
 
-    return Response.json({ user: profile })
+    return ok({ user: profile })
   } catch (error) {
-    return Response.json({ error: "PROFILE_SYNC_FAILED", details: String(error?.message || error) }, { status: 500 })
+    return handleRouteError(error, "PROFILE_SYNC_FAILED")
   }
 }

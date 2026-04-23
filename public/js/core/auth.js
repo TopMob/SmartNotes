@@ -1,6 +1,4 @@
-import { planAuthMethods } from "./authFlowPlanner.js"
 import { createLocalAuthManager } from "./localAuth.js"
-import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
 
 export function createAuthManager({ auth }) {
     const state = {
@@ -9,7 +7,6 @@ export function createAuthManager({ auth }) {
         authReady: false,
         currentUser: null,
         authActionElements: [],
-        googleSignInPendingTimeoutId: null,
         localAuthManager: null,
         persistenceReady: false,
         authStateResolved: false,
@@ -23,24 +20,6 @@ export function createAuthManager({ auth }) {
         _toast(text) {
             if (typeof UI !== "undefined" && UI.showToast) UI.showToast(text)
             else console.error(text)
-        },
-        _provider() {
-            const provider = new firebase.auth.GoogleAuthProvider()
-            provider.setCustomParameters({ prompt: "select_account" })
-            return provider
-        },
-        _getGoogleClientId() {
-            const configuredClientId = auth?.app?.options?.clientId
-            return String(configuredClientId || "").trim()
-        },
-        async _signInWithGoogleIdentity() {
-            const googleClientId = this._getGoogleClientId()
-            if (!googleClientId) {
-                throw { code: "auth/google-identity-client-id-missing", message: "Google client id is missing" }
-            }
-            const token = await requestGoogleIdentityToken({ clientId: googleClientId })
-            const credential = firebase.auth.GoogleAuthProvider.credential(token)
-            await auth.signInWithCredential(credential)
         },
         _collectAuthActionElements() {
             const selector = [
@@ -60,18 +39,6 @@ export function createAuthManager({ auth }) {
             feedbackElement.classList.remove("is-error", "is-success", "is-info")
             if (type) feedbackElement.classList.add(`is-${type}`)
         },
-        _clearGoogleSignInPendingTimeout() {
-            if (!state.googleSignInPendingTimeoutId) return
-            clearTimeout(state.googleSignInPendingTimeoutId)
-            state.googleSignInPendingTimeoutId = null
-        },
-        _showGoogleSignInPendingFeedback() {
-            this._clearGoogleSignInPendingTimeout()
-            this._setAuthFeedback(this._t("auth_google_starting", "Открываем окно входа Google..."), "info")
-            state.googleSignInPendingTimeoutId = setTimeout(() => {
-                this._setAuthFeedback(this._t("auth_google_waiting", "Если окно не появилось, проверьте блокировку всплывающих окон"), "info")
-            }, 2200)
-        },
         _setLoginBusy(flag) {
             state.loginInFlight = !!flag
             this._collectAuthActionElements()
@@ -81,7 +48,6 @@ export function createAuthManager({ auth }) {
                 actionElement.classList.toggle("is-loading", !!flag)
             }
             if (!flag) {
-                this._clearGoogleSignInPendingTimeout()
                 this._setAuthFeedback("")
             }
         },
@@ -108,22 +74,26 @@ export function createAuthManager({ auth }) {
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
                 "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
-                "auth/google-identity-script-timeout": this._t("auth_network_failed", "No internet connection"),
-                "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
-                "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
-                "auth/google-identity-not-displayed": this._t("auth_popup_blocked", "Popup was blocked by the browser")
+                "invalid_credentials": this._t("login_failed", "Sign-in failed")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
-            const text = map[code] || (serviceUnavailable
+            const invalidCredentials = message.includes("invalid login credentials") || message.includes("invalid credentials")
+            const emailExists = message.includes("already registered") || message.includes("already been registered")
+            const emailNotConfirmed = message.includes("email not confirmed")
+            const text = (emailNotConfirmed
+                ? this._t("auth_email_not_confirmed", "Подтвердите email перед входом")
+                : emailExists
+                    ? this._t("auth_email_exists", "An account with this email already exists. Please sign in")
+                    : invalidCredentials
+                        ? this._t("login_failed", "Sign-in failed")
+                        : map[code]) || (serviceUnavailable
                 ? this._t("auth_service_unavailable", "Service temporarily unavailable")
                 : `${this._t("login_failed", "Sign-in failed")}: ${code}`)
             this._toast(text)
             console.error("[Auth] login error", code, err)
         },
         _getPersistenceEnum() {
-            if (typeof firebase === "undefined") return null
-            if (!firebase.auth || !firebase.auth.Auth || !firebase.auth.Auth.Persistence) return null
-            return firebase.auth.Auth.Persistence
+            return auth?.Auth?.Persistence || null
         },
         async _ensureLocalPersistence() {
             if (state.persistenceReady) return true
@@ -143,42 +113,9 @@ export function createAuthManager({ auth }) {
         async _preparePersistenceForRedirectResult() {
             return this._ensureLocalPersistence()
         },
-        async _signInWithMethod(method) {
-            if (method === "redirect") {
-                await auth.signInWithRedirect(this._provider())
-                return
-            }
-            await auth.signInWithPopup(this._provider())
-        },
-        _isRedirectDomainAllowed() {
-            const currentHost = String(window?.location?.hostname || "").toLowerCase()
-            const authDomainHost = String(auth?.app?.options?.authDomain || "").toLowerCase()
-            if (!currentHost || !authDomainHost) return false
-            if (currentHost === authDomainHost) return true
-            if (currentHost.endsWith(".firebaseapp.com") || currentHost.endsWith(".web.app")) return true
-            return false
-        },
-        _canRecoverWithRedirect(error) {
-            if (!this._isRedirectDomainAllowed()) return false
-            const errorCode = String(error?.code || "")
-            return errorCode === "auth/internal-error"
-                || errorCode === "auth/network-request-failed"
-                || errorCode === "auth/popup-blocked"
-        },
-        async _attemptRedirectRecovery(error) {
-            if (!this._canRecoverWithRedirect(error)) return false
-            const selectedPersistence = await this._preparePersistenceForMethod("redirect")
-            if (!selectedPersistence) return false
-            try {
-                await this._signInWithMethod("redirect")
-                return true
-            } catch (redirectError) {
-                throw redirectError
-            }
-        },
         async login() {
-            if (!auth || typeof firebase === "undefined") {
-                console.error("[Auth] Firebase auth is unavailable: SDK not initialized")
+            if (!auth) {
+                console.error("[Auth] auth is unavailable: SDK not initialized")
                 this._toast(this._t("auth_unavailable", "Authentication unavailable"))
                 return
             }
@@ -190,77 +127,9 @@ export function createAuthManager({ auth }) {
                 return
             }
 
-            this._setLoginBusy(true)
-            this._showGoogleSignInPendingFeedback()
             state.driveInteractiveAllowed = true
-
             await this._ensureLocalPersistence()
-            try {
-                await this._signInWithGoogleIdentity()
-                this._setLoginBusy(false)
-                return
-            } catch (googleIdentityError) {
-                const googleIdentityErrorCode = String(googleIdentityError?.code || "")
-                const googleIdentityRecoverableCodes = new Set([
-                    "auth/google-identity-script-timeout",
-                    "auth/google-identity-script-failed",
-                    "auth/google-identity-timeout",
-                    "auth/google-identity-not-displayed",
-                    "auth/google-identity-skipped",
-                    "auth/google-identity-unavailable",
-                    "auth/google-identity-empty-token"
-                ])
-                if (!googleIdentityRecoverableCodes.has(googleIdentityErrorCode)) {
-                    this._setLoginBusy(false)
-                    state.driveInteractiveAllowed = false
-                    this.handleAuthError(googleIdentityError)
-                    return
-                }
-            }
-            const { methods } = planAuthMethods()
-            let lastError = null
-
-            for (const method of methods) {
-                const selectedPersistence = await this._preparePersistenceForMethod(method)
-                if (!selectedPersistence) continue
-
-                try {
-                    await this._signInWithMethod(method)
-                    this._setLoginBusy(false)
-                    return
-                } catch (error) {
-                    const errorCode = String(error?.code || "")
-                    lastError = error
-                    if (errorCode === "auth/popup-closed-by-user") {
-                        this._setLoginBusy(false)
-                        state.driveInteractiveAllowed = false
-                        this.handleAuthError(error)
-                        return
-                    }
-                }
-            }
-
-            if (lastError) {
-                try {
-                    const redirectRecoveryStarted = await this._attemptRedirectRecovery(lastError)
-                    if (redirectRecoveryStarted) {
-                        this._setLoginBusy(false)
-                        return
-                    }
-                } catch (redirectRecoveryError) {
-                    this._setLoginBusy(false)
-                    state.driveInteractiveAllowed = false
-                    this.handleAuthError(redirectRecoveryError)
-                    return
-                }
-                this._setLoginBusy(false)
-                state.driveInteractiveAllowed = false
-                this.handleAuthError(lastError)
-                return
-            }
-
-            this._setLoginBusy(false)
-            state.driveInteractiveAllowed = false
+            await this.loginWithEmail()
         },
         _ensureLocalAuthManager() {
             if (state.localAuthManager) return state.localAuthManager
@@ -289,7 +158,7 @@ export function createAuthManager({ auth }) {
         },
         async switchAccount() {
             await this.logout()
-            await this.login()
+            await this.loginWithEmail()
         },
 
         async updateDisplayName(nextName = "") {
