@@ -35,6 +35,26 @@ self.addEventListener("fetch", event => {
   if (requestUrl.origin !== self.location.origin) return
   if (requestUrl.pathname.startsWith("/api/")) return
 
+   const acceptHeader = request.headers.get("accept") || ""
+   const isNavigationRequest = request.mode === "navigate"
+     || request.destination === "document"
+     || acceptHeader.includes("text/html")
+
+   if (isNavigationRequest) {
+     event.respondWith(
+       fetch(request)
+         .then(networkResponse => {
+           if (networkResponse && networkResponse.status === 200) {
+             const responseCopy = networkResponse.clone()
+             caches.open(CACHE_NAME).then(cache => cache.put(request, responseCopy)).catch(() => null)
+           }
+           return networkResponse
+         })
+         .catch(() => caches.match(request).then(cachedResponse => cachedResponse || caches.match("/")))
+     )
+     return
+   }
+
   event.respondWith(
     caches.match(request).then(cachedResponse => {
       if (cachedResponse) return cachedResponse

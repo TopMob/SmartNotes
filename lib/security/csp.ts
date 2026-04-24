@@ -1,7 +1,6 @@
 const scriptSources = [
   "'self'",
   "'unsafe-inline'",
-  "https://esm.sh",
   "https://www.gstatic.com",
   "https://cdn.jsdelivr.net",
   "https://unpkg.com",

@@ -3,6 +3,7 @@ let officialClientLoadPromise = null
 
 const AUTH_CALLBACK_PATH = "/auth/callback"
 const OFFICIAL_STORAGE_KEY = "sb-smartnotes-auth-token"
+const SUPABASE_BROWSER_SCRIPT_SRC = "/vendor/supabase.js"
 
 function getRuntimeConfig() {
     const url = String(window.SmartNotesSupabaseConfig?.url || "").trim().replace(/\/+$/g, "")
@@ -44,13 +45,41 @@ function migrateLegacySession() {
 
 async function loadOfficialSupabaseCreateClient() {
     if (!officialClientLoadPromise) {
-        officialClientLoadPromise = import("https://esm.sh/@supabase/supabase-js@2.49.8")
-            .then((module) => {
-                if (typeof module?.createClient !== "function") {
-                    throw new Error("supabase-create-client-missing")
+        officialClientLoadPromise = new Promise((resolve, reject) => {
+            const resolveFactory = () => {
+                const createClient = window.supabase?.createClient
+                if (typeof createClient !== "function") {
+                    reject(new Error("supabase-create-client-missing"))
+                    return false
                 }
-                return module.createClient
-            })
+                resolve(createClient)
+                return true
+            }
+
+            if (resolveFactory()) return
+
+            const existingScript = document.querySelector(`script[src="${SUPABASE_BROWSER_SCRIPT_SRC}"]`)
+            if (existingScript) {
+                existingScript.addEventListener("load", () => {
+                    resolveFactory()
+                }, { once: true })
+                existingScript.addEventListener("error", () => {
+                    reject(new Error("supabase-browser-script-failed"))
+                }, { once: true })
+                return
+            }
+
+            const scriptElement = document.createElement("script")
+            scriptElement.src = SUPABASE_BROWSER_SCRIPT_SRC
+            scriptElement.async = true
+            scriptElement.addEventListener("load", () => {
+                resolveFactory()
+            }, { once: true })
+            scriptElement.addEventListener("error", () => {
+                reject(new Error("supabase-browser-script-failed"))
+            }, { once: true })
+            document.head.appendChild(scriptElement)
+        })
     }
     return officialClientLoadPromise
 }

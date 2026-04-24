@@ -65,7 +65,7 @@ export default function AuthCallbackPage() {
       } catch {}
 
       if (!window.localStorage.getItem(SUPABASE_BROWSER_STORAGE_KEY)) {
-        throw new Error("oauth-session-storage-missing")
+        console.warn("[AuthCallback] Supabase storage key missing after redirect processing")
       }
 
       await syncProfile(session.access_token)
