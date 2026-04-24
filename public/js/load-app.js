@@ -368,9 +368,6 @@ window.Calculator = Calculator;
                     UI.getText("reminder_note", "Reminder")
                 )
             }))
-            unsubscribeUiEvents.push(EventBus.subscribe("permissionRevoked", () => {
-                UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
-            }))
             unsubscribeUiEvents.push(EventBus.subscribe("settingsSaved", () => {
                 UI.showToast(UI.getText("settings_saved", "Настройки сохранены"))
             }))

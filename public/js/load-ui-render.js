@@ -305,7 +305,7 @@ Object.assign(UI, {
             const buttonFolderId = buttonElement.dataset.folderId
             let isActive = false
             if (buttonView) {
-                isActive = stateSnapshot.view === buttonView || (buttonView === "shared_access" && stateSnapshot.view === "shared_workspace")
+                isActive = stateSnapshot.view === buttonView
             } else if (buttonFolderId) {
                 isActive = stateSnapshot.view === "folder" && stateSnapshot.activeFolderId === buttonFolderId
             }

@@ -1,5 +1,4 @@
 const NotesRepository = (() => {
-    const isSharedAccessEnabled = () => window.AppFeatures?.sharedAccess === true
     function getCollection(user) {
         return DataPath.getUserNotesCollection(user)
     }
@@ -16,20 +15,7 @@ const NotesRepository = (() => {
         const snapshot = await collection.startAfter(options.startAfterDocument).limit(options?.pageSize || 500).get()
         return { documents: snapshot.docs, lastDocument: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : options.startAfterDocument }
     }
-    function subscribeSharedEntries(user, next, error) {
-        if (!isSharedAccessEnabled()) {
-            if (typeof next === "function") next({ forEach() {} })
-            return () => {}
-        }
-        const collection = DataPath.getUserSharedCollection(user, "sharedNotes")
-        if (!collection) return () => {}
-        return collection.onSnapshot(next, error)
-    }
-    function subscribeSharedNote(ownerUid, noteId, next, error) {
-        if (!isSharedAccessEnabled() || !db) return () => {}
-        return db.collection("users").doc(ownerUid).collection("notes").doc(noteId).onSnapshot(next, error)
-    }
-    return { subscribeOwnedNotes, loadMoreOwnedNotes, subscribeSharedEntries, subscribeSharedNote }
+    return { subscribeOwnedNotes, loadMoreOwnedNotes }
 })()
 
 const FoldersRepository = (() => {
@@ -269,10 +255,10 @@ const WorkspacesRepository = (() => {
     }
 
     function subscribeWorkspaceNotes(workspaceId, next, error) {
-        if (!db) return () => {}
-        const normalizedWorkspaceId = String(workspaceId || "")
-        if (!normalizedWorkspaceId) return () => {}
-        return db.collection("workspaces").doc(normalizedWorkspaceId).collection("notes").onSnapshot(next, error)
+        if (typeof next === "function") {
+            next({ docs: [], forEach(callback) { (Array.isArray([]) ? [] : []).forEach(callback) } })
+        }
+        return () => {}
     }
 
     return {
@@ -463,8 +449,8 @@ const NotesSortingStrategy = (() => {
 })()
 
 const NotesAggregationService = (() => {
-    function aggregate(ownedNotes, sharedNotes, workspaceNotes, activeUid) {
-        const mergedNotes = NotesStorage.applyStoredFavorites([...(ownedNotes || []), ...(sharedNotes || []), ...(workspaceNotes || [])])
+    function aggregate(ownedNotes, workspaceNotes, activeUid) {
+        const mergedNotes = NotesStorage.applyStoredFavorites([...(ownedNotes || []), ...(workspaceNotes || [])])
         if (activeUid) NotesStorage.writeCachedNotes(activeUid, mergedNotes)
         NotesStorage.syncFavoritesStorage(mergedNotes)
         return mergedNotes
@@ -750,107 +736,6 @@ const OwnedNotesService = (() => {
         return state.notes.slice()
     }
     return { subscribe, clear, loadMore, getNotes }
-})()
-
-const SharedNotesService = (() => {
-    const state = { user: null, unsubscribeEntries: null, sharedEntries: new Map(), sharedNotes: new Map(), sharedNoteUnsubscribers: new Map() }
-    function shouldIgnoreSharedError(error) {
-        const code = String(error?.code || "")
-        return code === "permission-denied" || code === "failed-precondition"
-    }
-    function removeSharedEntry(sharedId) {
-        const unsubscribeNote = state.sharedNoteUnsubscribers.get(sharedId)
-        if (unsubscribeNote) unsubscribeNote()
-        state.sharedNoteUnsubscribers.delete(sharedId)
-        state.sharedEntries.delete(sharedId)
-        state.sharedNotes.delete(sharedId)
-    }
-    function publishSharedNotes() {
-        const sharedNotes = [...state.sharedNotes.values()]
-        console.info("[Session] subscribe shared notes snapshot size=", sharedNotes.length)
-        EventBus.publish("sharedNotesUpdated", sharedNotes)
-    }
-    function updateEntries(nextEntries) {
-        const removedIds = []
-        state.sharedEntries.forEach((entry, sharedId) => {
-            if (!nextEntries.has(sharedId)) removedIds.push(sharedId)
-        })
-        removedIds.forEach(removeSharedEntry)
-        nextEntries.forEach((entry, sharedId) => {
-            if (!entry.permission) {
-                removeSharedEntry(sharedId)
-                return
-            }
-            if (state.sharedEntries.has(sharedId)) return
-            state.sharedEntries.set(sharedId, entry)
-            const unsubscribeNote = NotesRepository.subscribeSharedNote(entry.ownerUid, entry.noteId, noteSnapshot => {
-                if (!noteSnapshot.exists) {
-                    removeSharedEntry(sharedId)
-                    publishSharedNotes()
-                    return
-                }
-                const normalizedNote = NoteIO.normalizeNote({ id: entry.noteId, ...noteSnapshot.data() })
-                const currentUserUid = state.user?.uid || ""
-                const roles = normalizedNote.access?.roles && typeof normalizedNote.access.roles === "object" ? normalizedNote.access.roles : {}
-                if (currentUserUid && !roles[currentUserUid]) {
-                    removeSharedEntry(sharedId)
-                    EventBus.publish("permissionRevoked", { sharedId, ownerUid: entry.ownerUid, noteId: entry.noteId })
-                    publishSharedNotes()
-                    return
-                }
-                state.sharedNotes.set(sharedId, {
-                    ...normalizedNote,
-                    id: CollaborationService.sharedNoteId(entry.ownerUid, entry.noteId),
-                    access: { ownerUid: entry.ownerUid, ownerCollection: "users", noteId: entry.noteId, shareId: sharedId, roles: { ...roles, ...(currentUserUid ? { [currentUserUid]: entry.permission } : {}) } }
-                })
-                publishSharedNotes()
-            }, error => {
-                if (shouldIgnoreSharedError(error)) {
-                    removeSharedEntry(sharedId)
-                    publishSharedNotes()
-                    return
-                }
-                EventBus.publish("sharedSyncError", error)
-            })
-            state.sharedNoteUnsubscribers.set(sharedId, unsubscribeNote)
-        })
-        publishSharedNotes()
-    }
-    function subscribe(user) {
-        if (window.AppFeatures?.sharedAccess !== true) {
-            state.user = user
-            publishSharedNotes()
-            return
-        }
-        state.user = user
-        if (state.unsubscribeEntries) state.unsubscribeEntries()
-        state.unsubscribeEntries = NotesRepository.subscribeSharedEntries(user, snapshot => {
-            const entries = new Map()
-            snapshot.forEach(documentEntry => {
-                const entry = documentEntry.data() || {}
-                entries.set(documentEntry.id, { id: documentEntry.id, noteId: entry.noteId, ownerUid: entry.ownerUid, permission: entry.permission || "viewer" })
-            })
-            updateEntries(entries)
-        }, error => {
-            if (shouldIgnoreSharedError(error)) {
-                state.sharedEntries.clear()
-                state.sharedNotes.clear()
-                publishSharedNotes()
-                return
-            }
-            EventBus.publish("sharedSyncError", error)
-        })
-    }
-    function clear() {
-        if (state.unsubscribeEntries) state.unsubscribeEntries()
-        state.unsubscribeEntries = null
-        state.sharedNoteUnsubscribers.forEach(unsubscribe => unsubscribe())
-        state.sharedNoteUnsubscribers.clear()
-        state.sharedEntries.clear()
-        state.sharedNotes.clear()
-        state.user = null
-    }
-    return { subscribe, clear }
 })()
 
 const WorkspaceAccessService = (() => {
@@ -1303,7 +1188,7 @@ const WorkspacesService = (() => {
 })()
 
 const SessionService = (() => {
-    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], sharedNotes: [], workspaceNotes: [] }
+    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], workspaceNotes: [] }
     function sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
             const firstCreatedAt = firstFolder?.createdAt?.toDate ? firstFolder.createdAt.toDate().getTime() : Date.parse(firstFolder?.createdAt || "") || 0
@@ -1313,16 +1198,12 @@ const SessionService = (() => {
         })
     }
     function publishNotes() {
-        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.sharedNotes, state.workspaceNotes, state.activeUid)
+        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.workspaceNotes, state.activeUid)
         StateStore.update("notes", aggregatedNotes)
     }
     function bindAggregation() {
         EventBus.subscribe("ownedNotesUpdated", ownedNotes => {
             state.ownedNotes = Array.isArray(ownedNotes) ? ownedNotes : []
-            publishNotes()
-        })
-        EventBus.subscribe("sharedNotesUpdated", sharedNotes => {
-            state.sharedNotes = Array.isArray(sharedNotes) ? sharedNotes : []
             publishNotes()
         })
         EventBus.subscribe("workspaceNotesUpdated", workspaceNotes => {
@@ -1336,12 +1217,10 @@ const SessionService = (() => {
         state.foldersUnsubscribe = null
         SettingsSyncService.clear()
         OwnedNotesService.clear()
-        if (window.AppFeatures?.sharedAccess === true) SharedNotesService.clear()
         if (window.AppFeatures?.workspaces === true) WorkspacesService.clear()
         RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
-        state.sharedNotes = []
         state.workspaceNotes = []
         StateStore.resetSession()
     }
@@ -1369,7 +1248,6 @@ const SessionService = (() => {
                     const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
                     StateStore.update("folders", folders)
                 }, error => EventBus.publish("foldersSyncError", error))
-                if (window.AppFeatures?.sharedAccess === true) SharedNotesService.subscribe(user)
                 if (window.AppFeatures?.workspaces === true) WorkspacesService.subscribe(user)
                 if (window.AppFeatures?.workspaces === true && typeof WorkspaceAccessService !== "undefined") {
                     await WorkspaceAccessService.acceptWorkspaceShareFromUrl(user)
@@ -1501,7 +1379,6 @@ const NotesQueryService = (() => {
             filteredNotes = filteredNotes.filter(note => !isHiddenLocked(note))
         }
 
-        if (view === "shared_access") return []
         if (view === "notes") {
             filteredNotes = filteredNotes.filter(note => {
                 if (note?.workspaceId) return false
@@ -1517,7 +1394,7 @@ const NotesQueryService = (() => {
         else if (view === "archive") filteredNotes = filteredNotes.filter(note => note.isArchived)
         else if (view === "folder") filteredNotes = filteredNotes.filter(note => note.folderId === activeFolderId)
         else if (view === "shared_workspace") filteredNotes = filteredNotes.filter(note => note.workspaceId && note.workspaceId === stateSnapshot.activeSharedWorkspaceId)
-        else if (view !== "locked" && view !== "reminders" && view !== "trash" && view !== "shared_access") filteredNotes = filteredNotes.filter(note => !note.isArchived)
+        else if (view !== "locked" && view !== "reminders" && view !== "trash") filteredNotes = filteredNotes.filter(note => !note.isArchived)
 
         if (view !== "folder" && view !== "shared_workspace") {
             filteredNotes = filteredNotes.filter(note => !note.folderId || !hiddenFolderIdentifiers.has(note.folderId))
@@ -1527,7 +1404,7 @@ const NotesQueryService = (() => {
         const selectedFolders = Array.isArray(configuredFilter.folders) ? configuredFilter.folders : []
         const selectedTags = Array.isArray(configuredFilter.tags) ? configuredFilter.tags : []
         const updatedWindowDays = Number(configuredFilter.updatedWindowDays || 0)
-        const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash" && view !== "shared_workspace" && view !== "shared_access"
+        const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash" && view !== "shared_workspace"
 
         if (canUseFolderFilters && selectedFolders.length) {
             filteredNotes = filteredNotes.filter(note => {
@@ -1638,10 +1515,6 @@ const NotesUIAdapter = (() => {
         }
         if (viewModel.view === "hidden_folders") {
             UI.renderHiddenFolders()
-            return
-        }
-        if (viewModel.view === "shared_access") {
-            UI.renderSharedAccessView()
             return
         }
         if (viewModel.view === "admin_tools") {

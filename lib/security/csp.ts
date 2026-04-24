@@ -30,7 +30,7 @@ const cspParts = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline' https://accounts.google.com https://www.gstatic.com",
   "connect-src 'self' https: wss:",
-  "frame-src 'self' https://accounts.google.com https://smart-notes-f5733.firebaseapp.com",
+  "frame-src 'self' https://accounts.google.com",
   "script-src",
   "script-src-elem",
   "script-src-attr 'none'",

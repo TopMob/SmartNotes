@@ -662,9 +662,6 @@ const LockService = {
 }
 
 const CollaborationService = {
-    shareCollection: "noteShares",
-    sharedNotesCollection: "sharedNotes",
-    pendingTokenKey: "pending-share-token",
     getWorkspaceNoteId(note, access = null) {
         const resolvedAccess = access || this.getAccess(note)
         const workspaceId = String(resolvedAccess?.workspaceId || note?.workspaceId || "").trim()
@@ -674,34 +671,6 @@ const CollaborationService = {
         if (!workspaceId || !rawNoteId) return rawNoteId
         const workspacePrefix = `workspace_${workspaceId}_`
         return rawNoteId.startsWith(workspacePrefix) ? rawNoteId.slice(workspacePrefix.length) : rawNoteId
-    },
-    getNoteReferencePath(note, access = null) {
-        const resolvedAccess = access || this.getAccess(note)
-        const pathCandidates = [
-            resolvedAccess?.noteRef,
-            resolvedAccess?.notePath,
-            resolvedAccess?.referencePath,
-            note?.noteRef,
-            note?.notePath,
-            note?.referencePath
-        ]
-        for (const candidate of pathCandidates) {
-            const normalizedCandidate = String(candidate || "").trim()
-            if (normalizedCandidate) return normalizedCandidate
-        }
-        return ""
-    },
-    getShareOwnerCollection(note, access = null) {
-        const resolvedAccess = access || this.getAccess(note)
-        const collectionCandidates = [
-            resolvedAccess?.ownerCollection,
-            note?.ownerCollection
-        ]
-        for (const candidate of collectionCandidates) {
-            const normalizedCandidate = String(candidate || "").trim()
-            if (normalizedCandidate) return normalizedCandidate
-        }
-        return "users"
     },
     getAccess(note) {
         const access = note && typeof note === "object" ? note.access : null
@@ -763,102 +732,15 @@ const CollaborationService = {
         const userUid = StateStore.read().user?.uid
         return !!(access && access.ownerUid && access.ownerUid !== userUid)
     },
-    sharedNoteId(ownerUid, noteId) {
-        return `shared_${ownerUid}_${noteId}`
-    },
     normalizePermission(value) {
         return value === "editor" || value === "edit" ? "editor" : "viewer"
     },
-    async generateToken() {
-        if (window.crypto?.getRandomValues) {
-            const bytes = new Uint8Array(16)
-            window.crypto.getRandomValues(bytes)
-            const raw = String.fromCharCode(...bytes)
-            return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
-        }
-        return `${Utils.generateId()}${Date.now().toString(36)}`
-    },
-    buildShareUrl(token) {
-        const url = new URL(window.location.href)
-        url.searchParams.set("share", token)
-        return url.toString()
-    },
-    getShareTokenFromUrl() {
-        const url = new URL(window.location.href)
-        const token = url.searchParams.get("share")
-        return token ? token.trim() : ""
-    },
-    captureShareToken() {
-        const token = this.getShareTokenFromUrl()
-        if (!token) return ""
-        SafeStorage.session.set(this.pendingTokenKey, token)
-        const url = new URL(window.location.href)
-        url.searchParams.delete("share")
-        window.history.replaceState({}, document.title, url.toString())
-        return token
-    },
-    async acceptPendingShare(user) {
-        const token = SafeStorage.session.get(this.pendingTokenKey)
-        if (!token) return null
-        SafeStorage.session.remove(this.pendingTokenKey)
-        return this.acceptShareToken(token, user)
-    },
-    async createShareLink(note, permission) {
-        const user = StateStore.read().user
-        if (!db || !user || !note) return ""
-        const access = this.getAccess(note)
-        const ownerUid = access?.ownerUid || user.uid
-        if (ownerUid !== user.uid) return ""
-        const noteId = this.getWorkspaceNoteId(note, access)
-        if (!noteId) return ""
-        const token = await this.generateToken()
-        const ownerCollection = this.getShareOwnerCollection(note, access)
-        const noteRef = this.getNoteReferencePath(note, access)
-        const payload = {
-            ownerUid,
-            ownerCollection,
-            noteId,
-            permission: this.normalizePermission(permission),
-            createdAt: Utils.serverTimestamp()
-        }
-        if (noteRef) payload.noteRef = noteRef
-        if (access?.workspaceId) payload.workspaceId = String(access.workspaceId)
-        await db.collection(this.shareCollection).doc(token).set(payload)
-        return this.buildShareUrl(token)
-    },
-    async acceptShareToken(token, user) {
-        if (!db || !user) return null
-        const trimmed = String(token || "").trim()
-        if (!trimmed) return null
-        const doc = await db.collection(this.shareCollection).doc(trimmed).get()
-        if (!doc.exists) return null
-        const data = doc.data() || {}
-        if (!data.ownerUid || !data.noteId) return null
-        const permission = this.normalizePermission(data.permission)
-        const entryId = `${data.ownerUid}_${data.noteId}`
-        const entry = {
-            ownerUid: data.ownerUid,
-            ownerCollection: data.ownerCollection ? String(data.ownerCollection) : "users",
-            noteId: data.noteId,
-            permission,
-            shareToken: trimmed,
-            updatedAt: Utils.serverTimestamp()
-        }
-        if (data.noteRef) entry.noteRef = String(data.noteRef)
-        if (data.workspaceId) entry.workspaceId = String(data.workspaceId)
-        await DataPath.getUserSharedCollection(user, this.sharedNotesCollection).doc(entryId).set(entry, { merge: true })
-        return { id: entryId, ...entry }
-    },
     getNoteReference(note, user) {
-        if (!db || !user || !note) return null
+        if (!user || !note) return null
         if (window.AppFeatures?.sharedAccess !== true && window.AppFeatures?.workspaces !== true) {
             return DataPath.getUserNotesCollection(user).doc(note.id)
         }
         const access = this.getAccess(note)
-        const referencePath = this.getNoteReferencePath(note, access)
-        if (referencePath && typeof db.doc === "function") {
-            return db.doc(referencePath)
-        }
         const workspaceId = access?.workspaceId || note.workspaceId
         const noteId = this.getWorkspaceNoteId(note, access)
         if (workspaceId && window.AppFeatures?.workspaces === true) {

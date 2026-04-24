@@ -76,7 +76,6 @@ const UI = {
     showFeatureDisabledToast(featureKey = "") {
         const normalizedFeatureKey = String(featureKey || "").trim()
         const fallbackByFeature = {
-            sharedAccess: "Совместный доступ временно отключен",
             workspaces: "Совместные папки временно отключены",
             googleDrive: "Google Drive временно отключён",
             feedback: "Обратная связь временно отключена",
@@ -87,15 +86,8 @@ const UI = {
     },
 
     applyFeatureAvailability() {
-        const sharedAccessEnabled = this.isFeatureEnabled("sharedAccess") && this.isFeatureEnabled("workspaces")
         const feedbackEnabled = this.isFeatureEnabled("feedback") || this.isFeatureEnabled("poll")
         const driveEnabled = this.isFeatureEnabled("googleDrive")
-
-        document.querySelectorAll('[data-view="shared_access"]').forEach(element => {
-            element.classList.toggle("hidden", !sharedAccessEnabled)
-            if ("disabled" in element) element.disabled = !sharedAccessEnabled
-            element.setAttribute("aria-hidden", sharedAccessEnabled ? "false" : "true")
-        })
 
         document.querySelectorAll('[data-modal="feedback-menu-modal"]').forEach(element => {
             element.classList.toggle("hidden", !feedbackEnabled)
@@ -663,8 +655,8 @@ Object.assign(UI, {
                 break
             }
             case "switch-view":
-              if (el.dataset.view === "shared_access" && (!this.isFeatureEnabled("sharedAccess") || !this.isFeatureEnabled("workspaces"))) {
-                this.showFeatureDisabledToast("sharedAccess")
+              if (el.dataset.view === "shared_workspace" && !this.isFeatureEnabled("workspaces")) {
+                this.showFeatureDisabledToast("workspaces")
                 break
               }
               switchView(el.dataset.view)
@@ -1945,10 +1937,10 @@ Object.assign(UI, {
 
     canShowPrimaryAction(view = StateStore.read().view) {
         const normalizedView = String(view || "notes")
-        if ((normalizedView === "shared_access" || normalizedView === "shared_workspace") && (!this.isFeatureEnabled("sharedAccess") || !this.isFeatureEnabled("workspaces"))) {
+        if (normalizedView === "shared_workspace" && !this.isFeatureEnabled("workspaces")) {
             return false
         }
-        return new Set(["notes", "folder", "folders", "shared_access", "shared_workspace"]).has(normalizedView)
+        return new Set(["notes", "folder", "folders", "shared_workspace"]).has(normalizedView)
     },
 
     primaryAction() {
@@ -1956,14 +1948,6 @@ Object.assign(UI, {
         if (!this.canShowPrimaryAction(currentView)) return
         if (currentView === "folders") {
             this.createFolder()
-            return
-        }
-        if (currentView === "shared_access") {
-            if (!this.isFeatureEnabled("workspaces")) {
-                this.showFeatureDisabledToast("workspaces")
-                return
-            }
-            this.createSharedWorkspace()
             return
         }
         if (currentView === "shared_workspace") {
@@ -2130,7 +2114,6 @@ Object.assign(UI, {
             locked: dict.view_locked || dict.lock_center || "Note Protection",
             hidden_folders: dict.hidden_folders || "Hidden folders",
             admin_tools: dict.admin_tools || "Admin tools",
-            shared_access: dict.shared_access || "Совместный доступ",
             shared_workspace: dict.shared_workspace || "Совместная папка"
         }
         const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
@@ -2179,7 +2162,7 @@ Object.assign(UI, {
         const view = StateStore.read().view
         const label = view === "folders"
             ? this.getText("create_folder", "Create folder")
-            : (view === "shared_access" ? this.getText("shared_workspace_create", "Новая совместная папка") : this.getText("create_note", "Create note"))
+            : this.getText("create_note", "Create note")
         this.els.fab.setAttribute("aria-label", label)
         this.els.fab.classList.toggle("hidden", !this.canShowPrimaryAction(view))
         this.updateActiveFolderMenu()
@@ -2209,7 +2192,7 @@ Object.assign(UI, {
         }
         const currentView = StateStore.read().view
         if (currentView === "shared_workspace") {
-            switchView("shared_access")
+            switchView("notes")
             return true
         }
         if (currentView !== "notes") {
