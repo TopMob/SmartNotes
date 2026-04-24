@@ -34,7 +34,13 @@ function applyMobilePlatformAttributes() {
 
 function deferUntilAfterPaint(callback) {
     if (typeof callback !== "function") return
-    const run = () => window.setTimeout(callback, 0)
+    const run = () => {
+        if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+            window.requestIdleCallback(() => callback(), { timeout: 2000 })
+            return
+        }
+        window.setTimeout(callback, 0)
+    }
     if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
         window.requestAnimationFrame(() => run())
         return

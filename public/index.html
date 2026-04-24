@@ -11,13 +11,18 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico?v=2026-02-22-1e1b181">
     <link rel="apple-touch-icon" href="Logo.png?v=2026-02-22-1e1b181">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="css/base.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/layout.css?v=2026-04-19-final">
-    <link rel="stylesheet" href="css/editor.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/components.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/responsive.css?v=2026-04-19-final">
-    <script>window.APP_VERSION = "2026-02-22-1e1b181"</script>
+    <link rel="stylesheet" href="css/editor.css?v=2026-04-19-final" media="print" data-deferred-stylesheet>
+    <script>
+        window.APP_VERSION = "2026-02-22-1e1b181"
+        window.SmartNotesSupabaseConfig = {
+            url: "https://your-project-ref.supabase.co",
+            publishableKey: "sb_publishable_your_publishable_key"
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin"></script>
     <script src="js/core/backendConfig.js?v=2026-04-19-final" type="module"></script>
     <script src="js/core/infra-engine.js?v=2026-04-19-final" type="module"></script>
@@ -30,7 +35,7 @@
     <script src="js/load-ui-core.js?v=2026-04-19-final" defer></script>
     <script src="js/load-ui-render.js?v=2026-04-19-final" defer></script>
     <script src="js/load-notes-stack.js?v=2026-04-19-final" defer></script>
-    <script src="js/editor/core.js?v=2026-04-19-final" type="module"></script>
+    <script src="js/editor/core.js?v=2026-04-19-final" type="module" fetchpriority="low"></script>
     <script src="js/load-app.js?v=2026-04-19-final" defer></script>
 </head>
 <body>

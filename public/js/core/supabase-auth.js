@@ -63,6 +63,11 @@ export async function createSupabaseAuth() {
     let lastResolvedAccessToken = ""
     let inFlightProfileSync = null
     const authStateSubscribers = new Set()
+    let initialAuthStateReady = false
+    let initialAuthStatePromiseResolve = null
+    const initialAuthStatePromise = new Promise(resolve => {
+        initialAuthStatePromiseResolve = resolve
+    })
     const resolveUserFromSession = async (session) => {
         const accessToken = getSessionAccessToken(session)
         if (!session?.user || !accessToken) {
@@ -180,7 +185,7 @@ export async function createSupabaseAuth() {
         onAuthStateChanged(next, error) {
             const callback = typeof next === "function" ? next : () => {}
             authStateSubscribers.add(callback)
-            Promise.resolve(callback(currentUser)).catch(err => {
+            initialAuthStatePromise.then(() => Promise.resolve(callback(currentUser))).catch(err => {
                 if (typeof error === "function") error(err)
             })
             return () => {
@@ -191,6 +196,10 @@ export async function createSupabaseAuth() {
 
     const emitAuthState = async (session) => {
         currentUser = session?.user ? await resolveUserFromSession(session) : null
+        if (!initialAuthStateReady) {
+            initialAuthStateReady = true
+            initialAuthStatePromiseResolve?.()
+        }
 
         authStateSubscribers.forEach(callback => {
             Promise.resolve(callback(currentUser)).catch(error => {

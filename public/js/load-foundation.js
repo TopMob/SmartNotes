@@ -73,6 +73,28 @@
         setTimeout(callback, 0)
     }
 
+    function deferUntilAfterPaint(callback) {
+        if (typeof callback !== "function") return
+        const run = () => setTimeout(callback, 0)
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => run())
+            return
+        }
+        run()
+    }
+
+    function activateDeferredStylesheets() {
+        document.querySelectorAll("link[data-deferred-stylesheet]").forEach((linkElement) => {
+            if (!(linkElement instanceof HTMLLinkElement)) return
+            if (linkElement.media === "all") return
+            linkElement.media = "all"
+        })
+    }
+
+    deferUntilAfterPaint(() => {
+        activateDeferredStylesheets()
+    })
+
     deferNonCriticalWork(() => {
         wrapConsoleMethod("log")
         wrapConsoleMethod("info")

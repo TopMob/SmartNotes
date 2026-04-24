@@ -97,6 +97,16 @@ function nextPaint() {
     })
 }
 
+function yieldToMainThread() {
+    if (typeof scheduler !== "undefined" && typeof scheduler.yield === "function") {
+        return scheduler.yield()
+    }
+
+    return new Promise(resolve => {
+        setTimeout(resolve, 0)
+    })
+}
+
 function createStartupSplashController(hideSplash) {
     let finished = false
     const watchdogId = setTimeout(() => {
@@ -122,27 +132,30 @@ function createStartupSplashController(hideSplash) {
     }
 }
 
-async function loadSupabaseConfig() {
-    const configResponse = await fetch("/api/supabase/config")
-    if (!configResponse.ok) {
+function validateSupabaseConfig() {
+    const config = window.SmartNotesSupabaseConfig || null
+    const url = String(config?.url || "").trim()
+    const publishableKey = String(config?.publishableKey || "").trim()
+
+    if (!url || !publishableKey) {
         throw new Error("Supabase config unavailable")
     }
 
-    const configPayload = await configResponse.json()
-    window.SmartNotesSupabaseConfig = {
-        url: String(configPayload?.url || ""),
-        publishableKey: String(configPayload?.publishableKey || "")
-    }
+    window.SmartNotesSupabaseConfig = { url, publishableKey }
 }
 
-async function initializeSupabaseDeferred() {
-    try {
-        await loadSupabaseConfig()
-        await initSupabase()
-    } catch (error) {
-        console.error("[Core] Supabase startup failed", error)
-        showRuntimeErrorMessage("Некоторые облачные функции временно недоступны")
+let supabaseStartupPromise = null
+
+function ensureSupabaseReady() {
+    if (!supabaseStartupPromise) {
+        supabaseStartupPromise = (async () => {
+            validateSupabaseConfig()
+            await initSupabase()
+            return true
+        })()
     }
+
+    return supabaseStartupPromise
 }
 
 function showRuntimeErrorMessage(messageText) {
@@ -161,7 +174,14 @@ const hideSplashScreen = initializeSplashScreen()
 const startupSplash = createStartupSplashController(hideSplashScreen)
 
 async function startCore() {
-    const supabaseStartup = initializeSupabaseDeferred()
+    try {
+        await ensureSupabaseReady()
+    } catch (error) {
+        startupSplash.fail()
+        console.error("[Core] Supabase startup failed", error)
+        showRuntimeErrorMessage("Облачные функции временно недоступны")
+        return
+    }
 
     if (!core.auth || !core.db) {
         const infraState = await InfraEngine.init()
@@ -172,6 +192,7 @@ async function startCore() {
     }
 
     await startupSplash.finish()
+    await yieldToMainThread()
 
     const authManager = await InfraEngine.createAuth()
     core.Auth = authManager
@@ -181,8 +202,6 @@ async function startCore() {
         console.error("[Core] Auth manager init failed", error)
         showRuntimeErrorMessage("Некоторые функции входа временно недоступны")
     })
-
-    await supabaseStartup
 }
 
 bootstrapCore({ ThemeManager, Auth: core.Auth })

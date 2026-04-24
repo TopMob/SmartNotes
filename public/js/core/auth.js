@@ -10,8 +10,7 @@ export function createAuthManager({ auth }) {
         localAuthManager: null,
         persistenceReady: false,
         authStateResolved: false,
-        driveInteractiveAllowed: false,
-        startupScreenQueued: false
+        driveInteractiveAllowed: false
     }
 
     const manager = {
@@ -59,19 +58,6 @@ export function createAuthManager({ auth }) {
             if (typeof window.hideSplashScreen === "function") {
                 window.hideSplashScreen()
             }
-        },
-        _queueStartupScreenResolve() {
-            if (state.authStateResolved || state.startupScreenQueued) return
-            state.startupScreenQueued = true
-            const resolve = () => {
-                state.startupScreenQueued = false
-                this._resolveStartupScreen()
-            }
-            if (typeof window.requestAnimationFrame === "function") {
-                window.requestAnimationFrame(() => resolve())
-                return
-            }
-            setTimeout(resolve, 0)
         },
         handleAuthError(err) {
             const code = err && err.code ? err.code : "auth/unknown"
@@ -365,20 +351,21 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
-            this._queueStartupScreenResolve()
+            if (typeof window.requestAnimationFrame === "function") {
+                window.requestAnimationFrame(() => this._resolveStartupScreen())
+            } else {
+                setTimeout(() => this._resolveStartupScreen(), 0)
+            }
 
             auth.onAuthStateChanged(async user => {
                 this._setLoginBusy(false)
-                this._resolveStartupScreen()
                 await this._handleAuthState(user)
             }, error => {
                 this._setLoginBusy(false)
-                this._resolveStartupScreen()
                 this.handleAuthError(error)
             })
 
             if (auth.currentUser) {
-                this._resolveStartupScreen()
                 await this._handleAuthState(auth.currentUser)
             }
 
@@ -386,8 +373,6 @@ export function createAuthManager({ auth }) {
                 await this._preparePersistenceForRedirectResult()
             } catch (error) {
                 console.warn("[Auth] Persistence setup failed", error)
-            } finally {
-                this._queueStartupScreenResolve()
             }
 
             try {
@@ -401,7 +386,6 @@ export function createAuthManager({ auth }) {
                 }
             } finally {
                 this._setLoginBusy(false)
-                this._resolveStartupScreen()
             }
         }
     }
