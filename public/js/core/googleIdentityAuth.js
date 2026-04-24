@@ -129,7 +129,6 @@ export async function requestGoogleIdentityToken({
     return new Promise((resolve, reject) => {
         let settled = false
         let promptDisplayed = false
-        let fallbackTimerId = null
 
         const timeoutId = setTimeout(() => {
             finishWithReject(createError("auth/google-identity-timeout", "Google identity timeout"))
@@ -139,7 +138,6 @@ export async function requestGoogleIdentityToken({
             if (settled) return
             settled = true
             clearTimeout(timeoutId)
-            if (fallbackTimerId) clearTimeout(fallbackTimerId)
             resolve(token)
         }
 
@@ -147,7 +145,6 @@ export async function requestGoogleIdentityToken({
             if (settled) return
             settled = true
             clearTimeout(timeoutId)
-            if (fallbackTimerId) clearTimeout(fallbackTimerId)
             reject(error)
         }
 
@@ -180,19 +177,10 @@ export async function requestGoogleIdentityToken({
             }
 
             if (moment.status === "not_displayed" || moment.status === "skipped") {
-                if (!interactive || promptDisplayed) {
-                    finishWithReject(createError("auth/google-identity-not-displayed", "Google identity prompt not displayed", moment))
-                    return
-                }
-
-                fallbackTimerId = setTimeout(() => {
-                    if (settled) return
-                    try {
-                        window.google.accounts.id.prompt()
-                    } catch {
-                        finishWithReject(createError("auth/google-identity-not-displayed", "Google identity prompt not displayed", moment))
-                    }
-                }, 250)
+                const code = moment.status === "skipped"
+                    ? "auth/google-identity-skipped"
+                    : "auth/google-identity-not-displayed"
+                finishWithReject(createError(code, "Google identity prompt not displayed", moment))
             }
         })
     })

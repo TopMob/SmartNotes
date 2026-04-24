@@ -168,6 +168,22 @@ export function createAuthManager({ auth }) {
         async _preparePersistenceForRedirectResult() {
             return this._ensureLocalPersistence()
         },
+        _shouldUseGoogleRedirectFallback(error) {
+            const errorCode = String(error?.code || "")
+            const errorMessage = String(error?.message || "").toLowerCase()
+            return [
+                "auth/google-identity-not-displayed",
+                "auth/google-identity-skipped",
+                "auth/google-identity-timeout",
+                "auth/google-identity-unavailable",
+                "auth/google-identity-script-timeout",
+                "auth/google-identity-script-failed",
+                "auth/google-identity-empty-token"
+            ].includes(errorCode)
+                || errorMessage.includes("client_id and issuer required")
+                || errorMessage.includes("invalid request")
+                || errorMessage.includes("issuer required")
+        },
         async login() {
             if (!auth) {
                 console.error("[Auth] auth is unavailable: SDK not initialized")
@@ -194,18 +210,7 @@ export function createAuthManager({ auth }) {
                     await this._handleAuthState(result.user)
                 }
             } catch (error) {
-                const errorCode = String(error?.code || "")
-                const errorMessage = String(error?.message || "").toLowerCase()
-                const canFallbackToRedirect = [
-                    "auth/google-identity-not-displayed",
-                    "auth/google-identity-skipped",
-                    "auth/google-identity-dismissed",
-                    "auth/google-identity-timeout",
-                    "auth/google-identity-unavailable"
-                ].includes(errorCode)
-                    || errorMessage.includes("client_id and issuer required")
-                    || errorMessage.includes("invalid request")
-                    || errorMessage.includes("issuer required")
+                const canFallbackToRedirect = this._shouldUseGoogleRedirectFallback(error)
                 if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
                     this._setAuthFeedback(this._t("auth_google_waiting", "Continuing with standard Google sign-in..."), "info")
                     await auth.signInWithRedirect().catch(redirectError => this.handleAuthError(redirectError))

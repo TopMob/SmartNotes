@@ -221,8 +221,8 @@
             </nav>
             <footer class="sidebar-footer">
                 <button type="button" class="footer-link" data-action="open-modal" data-modal="feedback-menu-modal">
-                    <i class="material-icons-round" aria-hidden="true">forum</i>
-                    <span data-lang="feedback_menu">Обратная связь</span>
+                    <i class="material-icons-round" aria-hidden="true">info</i>
+                    <span data-lang="about_menu">О приложении</span>
                 </button>
                 <button type="button" class="footer-link" data-action="open-settings">
                     <i class="material-icons-round" aria-hidden="true">settings</i>
@@ -661,16 +661,15 @@
     <div id="feedback-menu-modal" class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card">
             <header class="modal-header">
-                <h2 data-lang="feedback_menu">Обратная связь</h2>
+                <h2 data-lang="about_menu">О приложении</h2>
                 <button type="button" class="btn-icon" data-action="close-modal" data-modal="feedback-menu-modal" aria-label="Закрыть" data-lang-aria="close">
                     <i class="material-icons-round" aria-hidden="true">close</i>
                 </button>
             </header>
             <div class="modal-body">
                 <div class="modal-actions-grid">
-                    <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="rate-modal" data-lang="rate">Оценить</button>
-                    <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="poll-modal" data-lang="poll">Опрос</button>
                     <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="about-modal" data-lang="about">О нас</button>
+                    <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="rate-modal" data-lang="rate">Оценить</button>
                 </div>
             </div>
         </div>
@@ -720,33 +719,6 @@
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-primary" data-action="submit-feedback" data-lang="send">Отправить</button>
-            </footer>
-        </div>
-    </div>
-    <div id="poll-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Опрос" data-lang-aria="poll_title">
-        <div class="modal-card">
-            <header class="modal-header">
-                <h2 data-lang="poll">Опрос</h2>
-                <button type="button" class="btn-icon" data-action="close-modal" data-modal="poll-modal" aria-label="Закрыть" data-lang-aria="close">
-                    <i class="material-icons-round" aria-hidden="true">close</i>
-                </button>
-            </header>
-            <div class="modal-body">
-                <div class="survey-header">
-                    <span id="survey-step" class="survey-step">1/10</span>
-                    <span id="survey-progress" class="survey-progress" data-lang="survey_progress">Опрос</span>
-                </div>
-                <div id="survey-question" class="survey-question" data-lang="survey_question">Вопрос</div>
-                <textarea id="survey-answer" rows="4" class="input-area" aria-label="Ответ" data-lang-aria="poll_answer_label"></textarea>
-                <div id="survey-decision" class="survey-decision hidden">
-                    <p id="survey-decision-title" data-lang="survey_continue_prompt">Хотите продолжить опрос?</p>
-                    <button type="button" class="btn-secondary" data-action="survey-finish" data-lang="survey_finish">Завершить</button>
-                    <button type="button" class="btn-primary" data-action="survey-continue" data-lang="survey_continue">Продолжить</button>
-                </div>
-            </div>
-            <footer class="modal-footer">
-                <button type="button" class="btn-secondary" data-action="survey-prev" data-lang="back">Назад</button>
-                <button type="button" class="btn-primary" data-action="survey-next" data-lang="survey_next">Далее</button>
             </footer>
         </div>
     </div>

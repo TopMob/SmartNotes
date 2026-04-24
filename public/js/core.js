@@ -47,8 +47,8 @@ window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayl
 window.AppFeatures = Object.assign({
     workspaces: false,
     googleDrive: false,
-    feedback: false,
-    poll: false
+    about: true,
+    feedback: true
 }, window.AppFeatures || {})
 window.GoogleDriveMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
 window.ExternalMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null

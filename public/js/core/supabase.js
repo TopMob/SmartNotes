@@ -5,9 +5,12 @@ const storageKey = "smartnotes.supabase.session"
 const authStateSubscribers = new Set()
 let authStateListenerBound = false
 let currentSessionCache = null
+let sessionLifecycleBound = false
+let sessionRefreshInFlight = null
 
 const DEFAULT_AUTH_TIMEOUT_MS = 9000
 const BACKGROUND_AUTH_TIMEOUT_MS = 14000
+const SESSION_REFRESH_MARGIN_MS = 5 * 60 * 1000
 const AUTH_PROXY_ENDPOINT = "/api/supabase/auth"
 
 function normalizeUser(user) {
@@ -101,6 +104,11 @@ function writeStoredSession(session) {
     } catch {
         return
     }
+}
+
+function hasRefreshableSession() {
+    const session = currentSessionCache || readStoredSession()
+    return !!session?.refresh_token
 }
 
 function createAuthHeaders(publishableKey, accessToken = "") {
@@ -247,14 +255,23 @@ function isSessionExpired(session) {
 function shouldRefreshSoon(session) {
     const expiresAtMs = getSessionExpiryMs(session)
     if (!expiresAtMs) return false
-    return expiresAtMs - Date.now() <= 5 * 60 * 1000
+    return expiresAtMs - Date.now() <= SESSION_REFRESH_MARGIN_MS
 }
 
 async function refreshSessionIfNeeded() {
+    if (sessionRefreshInFlight) return sessionRefreshInFlight
+
+    sessionRefreshInFlight = refreshSessionIfNeededInternal().finally(() => {
+        sessionRefreshInFlight = null
+    })
+    return sessionRefreshInFlight
+}
+
+async function refreshSessionIfNeededInternal() {
     const currentSession = readStoredSession()
     if (!currentSession?.refresh_token) return currentSession && !isSessionExpired(currentSession) ? currentSession : null
     const expiresAtMs = getSessionExpiryMs(currentSession)
-    if (expiresAtMs && expiresAtMs - Date.now() > 30000) {
+    if (expiresAtMs && expiresAtMs - Date.now() > SESSION_REFRESH_MARGIN_MS) {
         return currentSession
     }
 
@@ -269,6 +286,15 @@ async function refreshSessionIfNeeded() {
     }
     writeStoredSession(refreshedSession)
     return refreshedSession
+}
+
+function scheduleLifecycleRefresh() {
+    if (!hasRefreshableSession()) return
+    refreshSessionIfNeeded().then((refreshedSession) => {
+        if (refreshedSession) emitAuthState("TOKEN_REFRESHED", refreshedSession)
+    }).catch((error) => {
+        console.warn("[SupabaseClient] lifecycle session refresh failed", error)
+    })
 }
 
 async function validateSession(session, { allowRefresh = true } = {}) {
@@ -397,6 +423,16 @@ function bindStorageListener() {
     })
 }
 
+function bindSessionLifecycle() {
+    if (sessionLifecycleBound) return
+    sessionLifecycleBound = true
+    window.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") scheduleLifecycleRefresh()
+    })
+    window.addEventListener("focus", () => scheduleLifecycleRefresh())
+    window.addEventListener("online", () => scheduleLifecycleRefresh())
+}
+
 function resolveRedirectTo(options = {}) {
     const candidate = String(options?.redirectTo || options?.emailRedirectTo || "").trim()
     if (candidate) return candidate
@@ -422,6 +458,7 @@ function buildOAuthUrl({ provider, options = {} } = {}) {
 
 function createClient() {
     bindStorageListener()
+    bindSessionLifecycle()
 
     return {
         auth: {

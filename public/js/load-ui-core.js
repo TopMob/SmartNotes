@@ -76,23 +76,23 @@ const UI = {
     showFeatureDisabledToast(featureKey = "") {
         const normalizedFeatureKey = String(featureKey || "").trim()
         const fallbackByFeature = {
+            about: "Раздел о приложении временно отключён",
             workspaces: "Совместные папки временно отключены",
             googleDrive: "Google Drive временно отключён",
-            feedback: "Обратная связь временно отключена",
-            poll: "Опрос временно отключён"
+            feedback: "Обратная связь временно отключена"
         }
         const fallbackMessage = fallbackByFeature[normalizedFeatureKey] || "Функция временно отключена"
         this.showToast(this.getText(`feature_${normalizedFeatureKey}_disabled`, fallbackMessage))
     },
 
     applyFeatureAvailability() {
-        const feedbackEnabled = this.isFeatureEnabled("feedback") || this.isFeatureEnabled("poll")
+        const aboutMenuEnabled = this.isFeatureEnabled("about") || this.isFeatureEnabled("feedback")
         const driveEnabled = this.isFeatureEnabled("googleDrive")
 
         document.querySelectorAll('[data-modal="feedback-menu-modal"]').forEach(element => {
-            element.classList.toggle("hidden", !feedbackEnabled)
-            if ("disabled" in element) element.disabled = !feedbackEnabled
-            element.setAttribute("aria-hidden", feedbackEnabled ? "false" : "true")
+            element.classList.toggle("hidden", !aboutMenuEnabled)
+            if ("disabled" in element) element.disabled = !aboutMenuEnabled
+            element.setAttribute("aria-hidden", aboutMenuEnabled ? "false" : "true")
         })
 
         document.querySelectorAll('[data-action="settings-backup-all-notes"], [data-action="settings-backup-folder"]').forEach(element => {
@@ -974,8 +974,12 @@ Object.assign(UI, {
                 break
             }
             case "open-feedback-modal":
-                if ((el.dataset.modal === "rate-modal" && !this.isFeatureEnabled("feedback")) || (el.dataset.modal === "poll-modal" && !this.isFeatureEnabled("poll"))) {
-                    this.showFeatureDisabledToast(el.dataset.modal === "poll-modal" ? "poll" : "feedback")
+                if (el.dataset.modal === "about-modal" && !this.isFeatureEnabled("about")) {
+                    this.showFeatureDisabledToast("about")
+                    break
+                }
+                if (el.dataset.modal === "rate-modal" && !this.isFeatureEnabled("feedback")) {
+                    this.showFeatureDisabledToast("feedback")
                     break
                 }
                 this.closeModal("feedback-menu-modal")
@@ -1081,18 +1085,6 @@ Object.assign(UI, {
                 break
             case "editor-align":
                 window.SmartNotesEditor?.alignMediaOrText(el.dataset.align)
-                break
-            case "survey-next":
-                this.advanceSurvey()
-                break
-            case "survey-prev":
-                this.goBackSurvey()
-                break
-            case "survey-continue":
-                this.continueSurvey()
-                break
-            case "survey-finish":
-                this.finishSurvey()
                 break
             case "photo-undo":
                 PhotoEditor.undo()
@@ -2799,10 +2791,6 @@ Object.assign(UI, {
         el.classList.add("active")
         el.setAttribute("aria-hidden", "false")
         this.toggleSidebar(false)
-        if (id === "poll-modal") {
-            if (!this.isFeatureEnabled("poll")) return false
-            this.startSurvey()
-        }
         if (id === "lock-center-modal") {
             this.renderLockCenter()
         }
