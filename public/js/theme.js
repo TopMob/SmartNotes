@@ -343,7 +343,7 @@ export const ThemeManager = {
             const settingsService = typeof SettingsSyncService !== "undefined" ? SettingsSyncService : null
             if (!settingsService?.saveUserSettings || !StateStore.read().user) return
             const baseSettings = settingsService.normalizeUserSettings(StateStore.read().originalUserSettings || {})
-            await settingsService.saveUserSettings({
+            const savedSettings = await settingsService.saveUserSettings({
                 ...baseSettings,
                 ...buildThemeCloudPayload(normalizedSettings),
                 customTheme: {
@@ -352,6 +352,9 @@ export const ThemeManager = {
                 },
                 customPresets: this.getCustomPresets()
             })
+            if (savedSettings) {
+                StateStore.update("originalUserSettings", JSON.parse(JSON.stringify(savedSettings)))
+            }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
         }
