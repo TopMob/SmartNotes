@@ -2,6 +2,9 @@ let googleIdentityScriptPromise = null
 let googleOneTapInitialized = false
 
 const GOOGLE_IDENTITY_SCRIPT_SRC = "https://accounts.google.com/gsi/client"
+const GOOGLE_IDENTITY_SCRIPT_TIMEOUT_MS = 4500
+const GOOGLE_IDENTITY_INTERACTIVE_TIMEOUT_MS = 6500
+const GOOGLE_IDENTITY_PRELOAD_TIMEOUT_MS = 3500
 
 function createError(code, message, details = {}) {
     const error = new Error(message)
@@ -69,6 +72,14 @@ function loadGoogleIdentityScript(timeoutMilliseconds = 9000) {
     return googleIdentityScriptPromise
 }
 
+function shouldUseFedCmPrompt() {
+    const userAgent = String(navigator.userAgent || "").toLowerCase()
+    const isFirefox = userAgent.includes("firefox")
+    const isChromiumFamily = userAgent.includes("chrome") || userAgent.includes("chromium") || userAgent.includes("edg/") || userAgent.includes("opr/")
+    if (isFirefox) return false
+    return isChromiumFamily
+}
+
 function ensureGoogleIdentityAvailable() {
     if (typeof window === "undefined" || !window.google?.accounts?.id) {
         throw createError("auth/google-identity-unavailable", "Google identity API unavailable")
@@ -106,7 +117,7 @@ function initializeGoogleOneTap({ clientId, callback, context = "signin" }) {
         cancel_on_tap_outside: true,
         context,
         itp_support: true,
-        use_fedcm_for_prompt: true,
+        use_fedcm_for_prompt: shouldUseFedCmPrompt(),
         ux_mode: "popup",
         callback
     })
@@ -116,14 +127,14 @@ function initializeGoogleOneTap({ clientId, callback, context = "signin" }) {
 
 export async function requestGoogleIdentityToken({
     clientId,
-    timeoutMilliseconds = 18000,
+    timeoutMilliseconds = GOOGLE_IDENTITY_INTERACTIVE_TIMEOUT_MS,
     interactive = true
 }) {
     if (!clientId) {
         throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
     }
 
-    await loadGoogleIdentityScript()
+    await loadGoogleIdentityScript(GOOGLE_IDENTITY_SCRIPT_TIMEOUT_MS)
     ensureGoogleIdentityAvailable()
 
     return new Promise((resolve, reject) => {
@@ -189,7 +200,7 @@ export async function requestGoogleIdentityToken({
 export async function preloadGoogleIdentity({ clientId } = {}) {
     if (!clientId) return false
     try {
-        await loadGoogleIdentityScript(7000)
+        await loadGoogleIdentityScript(GOOGLE_IDENTITY_PRELOAD_TIMEOUT_MS)
         ensureGoogleIdentityAvailable()
         if (!googleOneTapInitialized) {
             initializeGoogleOneTap({ clientId, callback() {} })

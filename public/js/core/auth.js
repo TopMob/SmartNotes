@@ -1,7 +1,6 @@
 import { createLocalAuthManager } from "./localAuth.js"
 
 export function createAuthManager({ auth }) {
-    const GOOGLE_REDIRECT_COOLDOWN_MS = 5000
     const state = {
         initialized: false,
         loginInFlight: false,
@@ -9,8 +8,6 @@ export function createAuthManager({ auth }) {
         currentUser: null,
         authActionElements: [],
         localAuthManager: null,
-        redirectFallbackReadyAt: 0,
-        redirectFallbackTimerId: null,
         persistenceReady: false,
         authStateResolved: false,
         driveInteractiveAllowed: false
@@ -55,25 +52,16 @@ export function createAuthManager({ auth }) {
             }
         },
         _clearRedirectFallbackState() {
-            if (state.redirectFallbackTimerId) {
-                clearTimeout(state.redirectFallbackTimerId)
-                state.redirectFallbackTimerId = null
-            }
-            state.redirectFallbackReadyAt = 0
+            return
         },
-        _scheduleRedirectFallback() {
-            this._clearRedirectFallbackState()
-            state.redirectFallbackReadyAt = Date.now() + GOOGLE_REDIRECT_COOLDOWN_MS
+        async _startRedirectFallback() {
             this._setLoginBusy(true)
-            this._setAuthFeedback(this._t("auth_google_redirect_ready_soon", "If Google sign-in does not open, wait 5 seconds and press the button again"), "info")
-            state.redirectFallbackTimerId = setTimeout(() => {
-                state.redirectFallbackTimerId = null
+            this._setAuthFeedback(this._t("auth_google_redirect_starting", "Opening backup Google sign-in..."), "info")
+            try {
+                await auth.signInWithRedirect()
+            } finally {
                 this._setLoginBusy(false)
-                this._setAuthFeedback(this._t("auth_google_redirect_ready", "Google sign-in did not open. Press the button again to continue"), "info")
-            }, GOOGLE_REDIRECT_COOLDOWN_MS)
-        },
-        _shouldUseRedirectFallbackNow() {
-            return state.redirectFallbackReadyAt > 0 && Date.now() >= state.redirectFallbackReadyAt
+            }
         },
         _setAuthInteractivity(flag) {
             const interactive = !!flag
@@ -198,6 +186,7 @@ export function createAuthManager({ auth }) {
             return [
                 "auth/google-identity-not-displayed",
                 "auth/google-identity-skipped",
+                "auth/google-identity-dismissed",
                 "auth/google-identity-timeout",
                 "auth/google-identity-unavailable",
                 "auth/google-identity-script-timeout",
@@ -222,20 +211,6 @@ export function createAuthManager({ auth }) {
                 return
             }
 
-            if (this._shouldUseRedirectFallbackNow() && typeof auth.signInWithRedirect === "function") {
-                this._clearRedirectFallbackState()
-                this._setLoginBusy(true)
-                this._setAuthFeedback(this._t("auth_google_redirect_starting", "Opening standard Google sign-in..."), "info")
-                try {
-                    await auth.signInWithRedirect()
-                } catch (error) {
-                    this.handleAuthError(error)
-                } finally {
-                    this._setLoginBusy(false)
-                }
-                return
-            }
-
             state.driveInteractiveAllowed = true
             await this._ensureLocalPersistence()
             this._setLoginBusy(true)
@@ -250,15 +225,17 @@ export function createAuthManager({ auth }) {
             } catch (error) {
                 const canFallbackToRedirect = this._shouldUseGoogleRedirectFallback(error)
                 if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
-                    this._scheduleRedirectFallback()
+                    try {
+                        await this._startRedirectFallback()
+                    } catch (redirectError) {
+                        this.handleAuthError(redirectError)
+                    }
                 } else {
                     this._clearRedirectFallbackState()
                     this.handleAuthError(error)
                 }
             } finally {
-                if (!state.redirectFallbackTimerId) {
-                    this._setLoginBusy(false)
-                }
+                this._setLoginBusy(false)
             }
         },
         _ensureLocalAuthManager() {
