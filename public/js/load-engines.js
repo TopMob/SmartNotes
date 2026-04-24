@@ -6,6 +6,131 @@ const SAVED_NOTES_FILTERS_KEY = "saved-notes-filters"
 const NOTES_CACHE_KEY = "notes-cache"
 
 const getRefs = () => window.InfraEngine?.getRefs?.() || window.DataPath
+const createApiEndpoint = (path) => window.SmartNotesBackendConfig?.createApiEndpoint?.(path) || `/api/${String(path || "").replace(/^\/+/, "")}`
+
+const buildAuthorizedHeaders = (user) => {
+    const accessToken = String(user?.accessToken || "")
+    return {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    }
+}
+
+const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
+
+const readNotesState = () => Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+
+const updateCurrentNoteState = (noteId, note) => {
+    if (String(StateStore.read().currentNote?.id || "") !== String(noteId || "")) return
+    StateStore.update("currentNote", note ? NoteIO.normalizeNote(note) : null)
+}
+
+const applyNotesState = (nextNotes) => {
+    StateActions.setNotes(nextNotes)
+    NotesStorage.syncFavoritesStorage(nextNotes)
+    updateSearchQuery(document.getElementById("search-input")?.value || "")
+    UI.renderLockCenter?.()
+    const currentActionId = String(UI.currentNoteActionId || "")
+    if (currentActionId) UI.renderNoteActions?.(currentActionId)
+}
+
+const replaceNoteInState = (noteId, nextNote) => {
+    const normalizedNoteId = String(noteId || "")
+    if (!normalizedNoteId) return null
+    const previousNotes = readNotesState()
+    let previousNote = null
+    const normalizedNextNote = NoteIO.normalizeNote(nextNote)
+    const nextNotes = previousNotes.map((note) => {
+        if (String(note?.id || "") !== normalizedNoteId) return note
+        previousNote = note
+        return normalizedNextNote
+    })
+    if (!previousNote) return null
+    applyNotesState(nextNotes)
+    updateCurrentNoteState(normalizedNoteId, normalizedNextNote)
+    return { previousNotes, previousNote, nextNotes, nextNote: normalizedNextNote }
+}
+
+const updateNoteInState = (noteId, updater) => {
+    const normalizedNoteId = String(noteId || "")
+    if (!normalizedNoteId || typeof updater !== "function") return null
+    const previousNotes = readNotesState()
+    let previousNote = null
+    let nextNote = null
+    const nextNotes = previousNotes.map((note) => {
+        if (String(note?.id || "") !== normalizedNoteId) return note
+        previousNote = note
+        nextNote = NoteIO.normalizeNote(updater(note))
+        return nextNote
+    })
+    if (!previousNote || !nextNote) return null
+    applyNotesState(nextNotes)
+    updateCurrentNoteState(normalizedNoteId, nextNote)
+    return { previousNotes, previousNote, nextNotes, nextNote }
+}
+
+const restoreNotesState = (snapshot) => {
+    if (!snapshot?.previousNotes) return
+    applyNotesState(snapshot.previousNotes)
+    if (snapshot.previousNote) updateCurrentNoteState(snapshot.previousNote.id, snapshot.previousNote)
+}
+
+const removeNoteFromState = (noteId) => {
+    const normalizedNoteId = String(noteId || "")
+    if (!normalizedNoteId) return null
+    const previousNotes = readNotesState()
+    const previousNote = previousNotes.find(note => String(note?.id || "") === normalizedNoteId) || null
+    if (!previousNote) return null
+    const nextNotes = previousNotes.filter(note => String(note?.id || "") !== normalizedNoteId)
+    applyNotesState(nextNotes)
+    if (String(StateStore.read().currentNote?.id || "") === normalizedNoteId) {
+        StateStore.update("currentNote", null)
+    }
+    return { previousNotes, previousNote, nextNotes }
+}
+
+const resolveNoteActionErrorCode = async (response) => {
+    try {
+        const payload = await response.json()
+        return String(payload?.error || "")
+    } catch {
+        return ""
+    }
+}
+
+const NoteActionService = {
+    async patch(noteId, updates) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getNotesEndpoint(), {
+            method: "PUT",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({ id: String(noteId || ""), partial: true, ...(updates || {}) })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `NOTE_PATCH_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.note || null
+    },
+
+    async remove(noteId) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(`${getNotesEndpoint()}?id=${encodeURIComponent(String(noteId || ""))}`, {
+            method: "DELETE",
+            headers: buildAuthorizedHeaders(user)
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `NOTE_DELETE_HTTP_${response.status}`)
+        }
+        return response.json()
+    }
+}
+
+window.NoteActionService = NoteActionService
 
 const shrinkNoteForCache = (note) => {
     const normalizedNote = NoteIO.normalizeNote(note || {})
@@ -316,42 +441,59 @@ async function deleteNoteById(noteId) {
     if (!note || !ensureManageAccess(note)) return
     UI.closeModal("note-actions-modal")
     UI.confirm("delete", async () => {
-        const user = StateStore.read().user
-        if (!db || !user) return
-        const ref = getNoteReference(note, user)
-        if (!ref) return
         if (note.trashedAt) {
-            await ref.delete()
-            StateActions.setNotes(StateStore.read().notes.filter(item => item.id !== noteId))
-            if (StateStore.read().currentNote?.id === noteId) window.SmartNotesEditor?.close?.()
-            UI.showToast(UI.getText("note_deleted_permanent", "Deleted permanently"))
-            refreshCurrentList()
+            const snapshot = removeNoteFromState(noteId)
+            if (!snapshot) return
+            try {
+                await NoteActionService.remove(noteId)
+                if (String(snapshot.previousNote?.id || "") === String(noteId || "")) {
+                    window.SmartNotesEditor?.close?.()
+                }
+                UI.showToast(UI.getText("note_deleted_permanent", "Deleted permanently"))
+            } catch (error) {
+                restoreNotesState(snapshot)
+                UI.showToast(UI.getText("delete_failed", "Unable to delete note"))
+                console.error("Permanent delete failed", error)
+            }
             return
         }
-        await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ trashedAt: firebase.firestore.FieldValue.serverTimestamp() }))
-        StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, trashedAt: new Date().toISOString() } : item))
-        if (StateStore.read().currentNote?.id === noteId) window.SmartNotesEditor?.close?.()
-        UI.showToast(UI.getText("note_deleted", "Moved to trash"))
-        refreshCurrentList()
+        const trashedAt = new Date().toISOString()
+        const snapshot = updateNoteInState(noteId, item => ({ ...item, trashedAt }))
+        if (!snapshot) return
+        try {
+            const savedNote = await NoteActionService.patch(noteId, { trashedAt })
+            if (savedNote) replaceNoteInState(noteId, savedNote)
+            if (String(snapshot.previousNote?.id || "") === String(noteId || "")) {
+                window.SmartNotesEditor?.close?.()
+            }
+            UI.showToast(UI.getText("note_deleted", "Moved to trash"))
+        } catch (error) {
+            restoreNotesState(snapshot)
+            UI.showToast(UI.getText("delete_failed", "Unable to delete note"))
+            console.error("Trash move failed", error)
+        }
     })
 }
 
 async function restoreNoteById(noteId) {
-    const user = StateStore.read().user
     const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note)) return
-    const ref = getNoteReference(note, user)
-    if (!ref) return
-    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ trashedAt: null }))
-    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, trashedAt: null } : item))
-    UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
-    refreshCurrentList()
+    if (!note || !ensureManageAccess(note)) return
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, trashedAt: null }))
+    if (!snapshot) return
+    try {
+        const savedNote = await NoteActionService.patch(noteId, { trashedAt: null })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+        UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("restore_failed", "Unable to restore note"))
+        console.error("Restore failed", error)
+    }
 }
 
 async function scheduleReminder(noteId) {
-    const user = StateStore.read().user
     const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note)) return
+    if (!note || !ensureManageAccess(note)) return
     const input = document.querySelector(`.note-reminder-input[data-note-id="${encodeURIComponent(noteId)}"]`)
     const value = input ? input.value : ""
     const date = new Date(value)
@@ -359,28 +501,40 @@ async function scheduleReminder(noteId) {
         UI.showToast(UI.getText("reminder_required", "Pick date and time"))
         return
     }
-    const ref = getNoteReference(note, user)
-    if (!ref) return
-    await ref.update({ reminderAt: date.toISOString(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, reminderAt: date.toISOString() } : item))
-    const permissionResult = await window.NotificationService?.ensurePermission?.() || null
-    if (permissionResult?.supported && permissionResult.permission === "denied") {
-        UI.showToast(UI.getText("notification_permission_denied", "Browser notifications are blocked"))
+    const reminderAt = date.toISOString()
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, reminderAt }))
+    if (!snapshot) return
+    try {
+        const savedNote = await NoteActionService.patch(noteId, { reminderAt })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+        const permissionResult = await window.NotificationService?.ensurePermission?.() || null
+        if (permissionResult?.supported && permissionResult.permission === "denied") {
+            UI.showToast(UI.getText("notification_permission_denied", "Browser notifications are blocked"))
+        }
+        UI.showToast(UI.getText("reminder_saved", "Reminder saved"))
+        UI.closeModal("note-actions-modal")
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("reminder_failed", "Unable to save reminder"))
+        console.error("Reminder save failed", error)
     }
-    UI.showToast(UI.getText("reminder_saved", "Reminder saved"))
-    UI.closeModal("note-actions-modal")
 }
 
 async function clearReminder(noteId) {
-    const user = StateStore.read().user
     const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note)) return
-    const ref = getNoteReference(note, user)
-    if (!ref) return
-    await ref.update({ reminderAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, reminderAt: null } : item))
-    UI.showToast(UI.getText("reminder_cleared", "Reminder cleared"))
-    UI.closeModal("note-actions-modal")
+    if (!note || !ensureManageAccess(note)) return
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, reminderAt: null }))
+    if (!snapshot) return
+    try {
+        const savedNote = await NoteActionService.patch(noteId, { reminderAt: null })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+        UI.showToast(UI.getText("reminder_cleared", "Reminder cleared"))
+        UI.closeModal("note-actions-modal")
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("reminder_failed", "Unable to save reminder"))
+        console.error("Reminder clear failed", error)
+    }
 }
 
 async function copyNoteTextById(noteId) {
@@ -401,69 +555,72 @@ async function toggleFavorite(noteId) {
     const note = getNoteById(noteId)
     if (!note || isHiddenLocked(note)) return
     const nextValue = !note.isFavorite
-    const nextNotes = StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: nextValue } : n)
-    StateActions.setNotes(nextNotes)
-    NotesStorage.syncFavoritesStorage(nextNotes)
-    updateSearchQuery(document.getElementById("search-input")?.value || "")
-    const user = StateStore.read().user
-    if (!db || !user) return
-    if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) return
-    const ref = getNoteReference(note, user)
-    if (!ref) return
+    const snapshot = updateNoteInState(noteId, n => ({ ...n, isFavorite: nextValue }))
+    if (!snapshot) return
     try {
-        await ref.update({ isFavorite: nextValue })
-    } catch {
-        StateActions.setNotes(StateStore.read().notes.map(n => n.id === noteId ? { ...n, isFavorite: note.isFavorite } : n))
+        const savedNote = await NoteActionService.patch(noteId, { isFavorite: nextValue })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("favorite_failed", "Unable to update favorite"))
+        console.error("Favorite update failed", error)
     }
 }
 
 async function togglePin(noteId, options = {}) {
-    const user = StateStore.read().user
     const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
-    const ref = getNoteReference(note, user)
-    if (!ref) return
+    if (!note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const nextPinned = !note.isPinned
-    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isPinned: nextPinned } : item))
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, isPinned: nextPinned }))
+    if (!snapshot) return
     try {
-        await ref.update({ isPinned: nextPinned })
-    } catch {
-        StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isPinned: note.isPinned } : item))
+        const savedNote = await NoteActionService.patch(noteId, { isPinned: nextPinned })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("pin_failed", "Unable to update pin"))
+        console.error("Pin update failed", error)
         throw new Error("PIN_UPDATE_FAILED")
     }
 }
 
 async function toggleArchive(noteId, archive, options = {}) {
-    const user = StateStore.read().user
     const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
-    const ref = getNoteReference(note, user)
-    if (!ref) return
+    if (!note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const nextArchived = !!archive
-    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isArchived: nextArchived } : item))
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, isArchived: nextArchived }))
+    if (!snapshot) return
     try {
-        await ref.update({ isArchived: nextArchived, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    } catch {
-        StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isArchived: note.isArchived } : item))
+        const savedNote = await NoteActionService.patch(noteId, { isArchived: nextArchived })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("archive_failed", "Unable to update archive"))
+        console.error("Archive update failed", error)
         throw new Error("ARCHIVE_UPDATE_FAILED")
     }
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
 }
 
 async function moveNoteToFolder(noteId, folderId, options = {}) {
-    const user = StateStore.read().user
     const note = getNoteById(noteId)
-    if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
+    if (!note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const targetFolder = StateStore.read().folders.find(folder => folder.id === folderId) || null
     if (folderId && !window.Validators.canAssignToFolder(targetFolder)) {
         UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.moveToTrashedFolderDenied))
         return
     }
-    const ref = getNoteReference(note, user)
-    if (!ref) return
-    await ref.update(window.NoteHelpers.buildNoteUpdatePayload({ folderId: folderId || null }, { updateTimestamp: false }))
-    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, folderId: folderId || null } : item))
-    refreshCurrentList()
+    const nextFolderId = folderId || null
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, folderId: nextFolderId }))
+    if (!snapshot) return
+    try {
+        const savedNote = await NoteActionService.patch(noteId, { folderId: nextFolderId })
+        if (savedNote) replaceNoteInState(noteId, savedNote)
+    } catch (error) {
+        restoreNotesState(snapshot)
+        UI.showToast(UI.getText("move_failed", "Unable to move note"))
+        console.error("Move to folder failed", error)
+    }
 }
 
 

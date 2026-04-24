@@ -169,7 +169,16 @@ export function createAuthManager({ auth }) {
             if (typeof user.updateProfile === "function") {
                 await user.updateProfile({ displayName: normalizedName })
             }
-            await DataPath.getUserRootReference(user)?.set({ displayName: normalizedName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const accessToken = String(user?.accessToken || auth?.currentUser?.accessToken || "")
+            if (accessToken) {
+                await fetch("/api/supabase/session", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${accessToken}`
+                    }
+                })
+            }
             this.applySignedInUI({ ...user, displayName: normalizedName })
             const workspaceId = StateStore.read().activeSharedWorkspaceId
             if (workspaceId && typeof WorkspaceAccessService !== "undefined") {
@@ -207,7 +216,16 @@ export function createAuthManager({ auth }) {
             if (typeof user.updateProfile === "function") {
                 await user.updateProfile({ photoURL: avatarDataUrl })
             }
-            await DataPath.getUserRootReference(user)?.set({ avatarUrl: avatarDataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const accessToken = String(user?.accessToken || auth?.currentUser?.accessToken || "")
+            if (accessToken) {
+                await fetch("/api/supabase/session", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${accessToken}`
+                    }
+                })
+            }
             this.applySignedInUI({ ...user, photoURL: avatarDataUrl })
             return true
         },

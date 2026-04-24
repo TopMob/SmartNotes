@@ -42,21 +42,66 @@ const FoldersRepository = (() => {
 })()
 
 const SettingsRepository = (() => {
-    async function resolveReference(user) {
-        const primaryReference = DataPath.getUserSettingsReference(user)
-        const fallbackReference = DataPath.getUserLegacySettingsReference(user)
-        if (!primaryReference && !fallbackReference) return { reference: null, snapshot: null, storageType: null }
-        if (primaryReference) {
-            try {
-                const snapshot = await primaryReference.get()
-                return { reference: primaryReference, snapshot, storageType: "settings" }
-            } catch (error) {
-                if (String(error?.code || "") !== "permission-denied") throw error
+    function buildHeaders(user) {
+        const accessToken = String(user?.accessToken || "")
+        return {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        }
+    }
+    function createSettingsReference(user) {
+        if (!user?.uid) return null
+        const endpoint = "/api/supabase/settings"
+        const get = async () => {
+            const response = await fetch(endpoint, { method: "GET", headers: buildHeaders(user) })
+            if (!response.ok) throw new Error(`supabase-settings-http-${response.status}`)
+            const payload = await response.json()
+            const settings = payload?.settings && typeof payload.settings === "object" ? payload.settings : null
+            return {
+                exists: !!settings,
+                data: () => (settings ? JSON.parse(JSON.stringify(settings)) : {})
             }
         }
-        if (!fallbackReference) return { reference: null, snapshot: null, storageType: null }
-        const snapshot = await fallbackReference.get()
-        return { reference: fallbackReference, snapshot, storageType: "preferences" }
+        const set = async (payload, options = {}) => {
+            const body = options?.merge ? { settings: payload || {} } : { settings: payload || {} }
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: buildHeaders(user),
+                body: JSON.stringify(body)
+            })
+            if (!response.ok) throw new Error(`supabase-settings-save-http-${response.status}`)
+            const result = await response.json()
+            return result?.settings || null
+        }
+        const onSnapshot = (next, error) => {
+            let cancelled = false
+            let lastSerialized = ""
+            const poll = async () => {
+                if (cancelled) return
+                try {
+                    const snapshot = await get()
+                    const serialized = JSON.stringify(snapshot.data())
+                    if (serialized === lastSerialized) return
+                    lastSerialized = serialized
+                    if (typeof next === "function") next(snapshot)
+                } catch (pollError) {
+                    if (typeof error === "function") error(pollError)
+                }
+            }
+            poll()
+            const intervalId = setInterval(poll, 5000)
+            return () => {
+                cancelled = true
+                clearInterval(intervalId)
+            }
+        }
+        return { get, set, onSnapshot }
+    }
+    async function resolveReference(user) {
+        const reference = createSettingsReference(user)
+        if (!reference) return { reference: null, snapshot: null, storageType: null }
+        const snapshot = await reference.get()
+        return { reference, snapshot, storageType: "settings" }
     }
     async function write(reference, payload) {
         if (!reference) return
@@ -423,9 +468,13 @@ const SettingsSyncService = (() => {
         const source = rawSettings && typeof rawSettings === "object" ? rawSettings : {}
         const notesPerPageOptions = new Set([5, 10, 20, 50])
         const notesPerPage = notesPerPageOptions.has(Number(source.notesPerPage)) ? Number(source.notesPerPage) : 20
+        const themeId = typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId
+        const presetTheme = ThemeManager.resolvePreset(themeId)
         const customThemeSource = source.customTheme && typeof source.customTheme === "object" ? source.customTheme : defaults.customTheme
         const normalizedTheme = {
-            p: ThemeManager.normalizeHex(customThemeSource.p), bg: ThemeManager.normalizeHex(customThemeSource.bg), t: ThemeManager.normalizeHex(customThemeSource.t),
+            p: typeof customThemeSource.p === "string" && customThemeSource.p.trim() ? ThemeManager.normalizeHex(customThemeSource.p) : presetTheme.p,
+            bg: typeof customThemeSource.bg === "string" && customThemeSource.bg.trim() ? ThemeManager.normalizeHex(customThemeSource.bg) : presetTheme.bg,
+            t: typeof customThemeSource.t === "string" && customThemeSource.t.trim() ? ThemeManager.normalizeHex(customThemeSource.t) : presetTheme.t,
             mainBackgroundUrl: String(customThemeSource.mainBackgroundUrl || ""), sidebarBackgroundUrl: String(customThemeSource.sidebarBackgroundUrl || ""),
             mainBackgroundImage: String(customThemeSource.mainBackgroundImage || ""), sidebarBackgroundImage: String(customThemeSource.sidebarBackgroundImage || ""),
             uiOpacity: typeof customThemeSource.uiOpacity === "number" ? customThemeSource.uiOpacity : 0.78,
@@ -433,7 +482,7 @@ const SettingsSyncService = (() => {
         }
         return {
             notesPerPage,
-            themeId: typeof source.themeId === "string" && source.themeId ? source.themeId : defaults.themeId,
+            themeId,
             customTheme: normalizedTheme,
             backgroundType: ThemeManager.pickRuntimeBackgroundValue(normalizedTheme.mainBackgroundUrl, normalizedTheme.mainBackgroundImage) ? "image" : "none",
             backgroundValue: ThemeManager.pickRuntimeBackgroundValue(normalizedTheme.mainBackgroundUrl, normalizedTheme.mainBackgroundImage),
@@ -450,7 +499,17 @@ const SettingsSyncService = (() => {
         }
     }
     function getCacheKey(uid) { return `user-settings-cache:${String(uid || "")}` }
-    function writeOriginal(settings) { StateStore.update("originalUserSettings", JSON.parse(JSON.stringify(settings))) }
+    function cloneSettings(settings) {
+        return JSON.parse(JSON.stringify(settings))
+    }
+    function writeOriginal(settings) {
+        const cloned = cloneSettings(settings)
+        StateStore.set(previousState => ({
+            ...previousState,
+            originalUserSettings: cloned,
+            draftUserSettings: cloneSettings(cloned)
+        }))
+    }
     async function externalizeAppearanceMedia(settings) {
         const source = settings && typeof settings === "object" ? settings : null
         if (!source?.customTheme) return source
@@ -473,9 +532,9 @@ const SettingsSyncService = (() => {
     }
     function applyToRuntime(userSettings, options = {}) {
         const settings = normalizeUserSettings(userSettings)
-        ThemeManager.applySettings({ preset: settings.themeId, ...settings.customTheme }, options.persistTheme !== false)
         const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(ThemeManager.getCustomPresets(), settings.customPresets)
         ThemeManager.setCustomPresets(mergedCustomPresets)
+        ThemeManager.applySettings({ preset: settings.themeId, ...settings.customTheme }, options.persistTheme !== false)
         StateActions.updateConfig({ lang: settings.lang, folderViewMode: settings.folderViewMode, reduceMotion: settings.reduceMotion, interface: settings.interface })
         PaginationService.configureFromSettings(settings)
         if (options.resetVisibleLimit) PaginationService.resetVisibleLimit()

@@ -149,6 +149,26 @@ const buildThemeCloudPayload = (theme) => {
     }
 }
 
+const cloneThemePayload = value => JSON.parse(JSON.stringify(value || {}))
+
+const normalizeThemeSettingsPayload = (settings) => {
+    const safeSettings = settings && typeof settings === "object" ? settings : {}
+    const preset = String(safeSettings.preset || "oled")
+    const presetTheme = ThemeManager.themes[preset] || ThemeManager.themes.oled
+    return {
+        preset,
+        p: typeof safeSettings.p === "string" && safeSettings.p.trim() ? ThemeManager.normalizeHex(safeSettings.p) : presetTheme.p,
+        bg: typeof safeSettings.bg === "string" && safeSettings.bg.trim() ? ThemeManager.normalizeHex(safeSettings.bg) : presetTheme.bg,
+        t: typeof safeSettings.t === "string" && safeSettings.t.trim() ? ThemeManager.normalizeHex(safeSettings.t) : presetTheme.t,
+        mainBackgroundUrl: normalizeThemeUrlValue(safeSettings.mainBackgroundUrl),
+        sidebarBackgroundUrl: normalizeThemeUrlValue(safeSettings.sidebarBackgroundUrl),
+        mainBackgroundImage: normalizeLocalImageValue(safeSettings.mainBackgroundImage),
+        sidebarBackgroundImage: normalizeLocalImageValue(safeSettings.sidebarBackgroundImage),
+        uiOpacity: normalizeNumberInRange(safeSettings.uiOpacity, 0.4, 1, 0.78),
+        cardsOpacity: normalizeNumberInRange(safeSettings.cardsOpacity, 0.5, 1, 0.9)
+    }
+}
+
 export const ThemeManager = {
     themes: {
         oled: createPreset("#000000", "#FFFFFF", "#2563EB"),
@@ -183,7 +203,7 @@ export const ThemeManager = {
     getSavedSettings() {
         try {
             const parsed = SafeStorage.local.getJson(this.storageKey, null)
-            if (parsed && typeof parsed === "object") return parsed
+            if (parsed && typeof parsed === "object") return normalizeThemeSettingsPayload(parsed)
         } catch {}
         return this.getDefaultSettings()
     },
@@ -305,22 +325,32 @@ export const ThemeManager = {
     },
     getThemeSettingsReference(user) {
         if (!user || !user.uid) return null
-        return DataPath.getUserSettingsReference(user)
+        return null
     },
     async loadAccountSettings(user) {
         try {
             const settingsService = typeof SettingsSyncService !== "undefined" ? SettingsSyncService : null
-            if (!settingsService?.normalizeUserSettings) return null
-            const currentSettings = StateStore.read().originalUserSettings || null
-            if (!currentSettings) return null
-            const settings = buildThemeCloudPayload(currentSettings)
-            const localSettings = this.getSavedSettings()
-            if (settings) {
-                const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, settings)
-                this.saveSettings(mergedSettings)
-                return mergedSettings
+            if (!settingsService?.normalizeUserSettings || !user?.uid) return null
+            const accessToken = String(user?.accessToken || "")
+            if (!accessToken) return this.getSavedSettings()
+            const response = await fetch("/api/supabase/settings", {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`
+                }
+            })
+            if (!response.ok) throw new Error(`supabase-settings-http-${response.status}`)
+            const payload = await response.json()
+            const normalizedSettings = settingsService.normalizeUserSettings(payload?.settings || {})
+            const settings = {
+                preset: normalizedSettings.themeId,
+                ...(normalizedSettings.customTheme || {})
             }
-            return settings
+            const localSettings = this.getSavedSettings()
+            const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, settings)
+            this.saveSettings(mergedSettings)
+            return mergedSettings
         } catch (error) {
             UI?.showToast?.(`Theme sync load failed${error?.code ? `: ${error.code}` : ""}`)
             return this.getSavedSettings()
@@ -339,22 +369,28 @@ export const ThemeManager = {
             uiOpacity: normalizeNumberInRange(settings?.uiOpacity, 0.4, 1, 0.78),
             cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
         }
-        this.saveSettings(normalizedSettings)
+        const safeThemeSettings = normalizeThemeSettingsPayload(normalizedSettings)
+        this.saveSettings(safeThemeSettings)
         try {
             const settingsService = typeof SettingsSyncService !== "undefined" ? SettingsSyncService : null
             if (!settingsService?.saveUserSettings || !StateStore.read().user) return
             const baseSettings = settingsService.normalizeUserSettings(StateStore.read().originalUserSettings || {})
             const savedSettings = await settingsService.saveUserSettings({
                 ...baseSettings,
-                ...buildThemeCloudPayload(normalizedSettings),
+                themeId: safeThemeSettings.preset || "oled",
+                ...buildThemeCloudPayload(safeThemeSettings),
                 customTheme: {
                     ...(baseSettings.customTheme || {}),
-                    ...normalizedSettings
+                    ...safeThemeSettings
                 },
                 customPresets: this.getCustomPresets()
             })
             if (savedSettings) {
-                StateStore.update("originalUserSettings", JSON.parse(JSON.stringify(savedSettings)))
+                StateStore.set(previousState => ({
+                    ...previousState,
+                    originalUserSettings: cloneThemePayload(savedSettings),
+                    draftUserSettings: cloneThemePayload(savedSettings)
+                }))
             }
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
@@ -394,7 +430,7 @@ export const ThemeManager = {
         this.applyToRoot({ ...applied, mainBackgroundImage: this.prepareBackgroundImage(mainBackgroundImage), sidebarBackgroundImage: this.prepareBackgroundImage(sidebarBackgroundImage) })
         document.documentElement.dataset.themePreset = presetKey
         if (persist) {
-            this.saveSettings({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundUrl: normalizeThemeUrlValue(settings?.mainBackgroundUrl), sidebarBackgroundUrl: normalizeThemeUrlValue(settings?.sidebarBackgroundUrl), mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage), sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage), uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity })
+            this.saveSettings(normalizeThemeSettingsPayload({ preset: presetKey, p: applied.p, bg: applied.bg, t: applied.t, mainBackgroundUrl: normalizeThemeUrlValue(settings?.mainBackgroundUrl), sidebarBackgroundUrl: normalizeThemeUrlValue(settings?.sidebarBackgroundUrl), mainBackgroundImage: normalizeLocalImageValue(settings?.mainBackgroundImage), sidebarBackgroundImage: normalizeLocalImageValue(settings?.sidebarBackgroundImage), uiOpacity: applied.uiOpacity, cardsOpacity: applied.cardsOpacity }))
         }
     },
     applyToRoot(theme) {

@@ -44,6 +44,7 @@ type NoteInput = {
   pageDrawingsRevision?: string | null
   lock?: JsonObject | null
   workspaceId?: string | null
+  lockHidden?: boolean | null
 }
 
 type NoteRow = {
@@ -82,6 +83,159 @@ function normalizeOptionalObject(value: unknown): JsonObject | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as JsonObject
     : null
+}
+
+function normalizeThemeSettingsMetadata(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject
+    : {}
+  return {
+    preset: typeof source.preset === "string" && source.preset ? source.preset : "oled",
+    p: typeof source.p === "string" ? source.p : "",
+    bg: typeof source.bg === "string" ? source.bg : "",
+    t: typeof source.t === "string" ? source.t : "",
+    mainBackgroundUrl: typeof source.mainBackgroundUrl === "string" ? source.mainBackgroundUrl : "",
+    sidebarBackgroundUrl: typeof source.sidebarBackgroundUrl === "string" ? source.sidebarBackgroundUrl : "",
+    mainBackgroundImage: typeof source.mainBackgroundImage === "string" ? source.mainBackgroundImage : "",
+    sidebarBackgroundImage: typeof source.sidebarBackgroundImage === "string" ? source.sidebarBackgroundImage : "",
+    uiOpacity: Number.isFinite(Number(source.uiOpacity)) ? Number(source.uiOpacity) : 0.78,
+    cardsOpacity: Number.isFinite(Number(source.cardsOpacity)) ? Number(source.cardsOpacity) : 0.9
+  }
+}
+
+function normalizeInterfaceMetadata(value: unknown) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonObject
+    : {}
+  return {
+    showSavedFilters: source.showSavedFilters !== false,
+    showTagFilter: source.showTagFilter !== false,
+    showUpdatedPeriodFilter: source.showUpdatedPeriodFilter !== false
+  }
+}
+
+function normalizeCustomPresets(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(item => item && typeof item === "object" && !Array.isArray(item)) as JsonObject[]
+    : []
+}
+
+function hasOwn(source: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(source, key)
+}
+
+function sanitizeLockValue(value: unknown, fallback: JsonObject | null = null) {
+  if (value === null) return null
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback
+  const source = value as JsonObject
+  const nextLock: JsonObject = {
+    ...(fallback && typeof fallback === "object" ? fallback : {})
+  }
+
+  if (typeof source.v === "number") nextLock.v = source.v
+  if (typeof source.hash === "string") nextLock.hash = source.hash
+  if (typeof source.hidden === "boolean") nextLock.hidden = source.hidden
+
+  return Object.keys(nextLock).length ? nextLock : null
+}
+
+function buildNotePatchPayload(existingRow: NoteRow, updates: Record<string, unknown>) {
+  const metadata = existingRow.metadata && typeof existingRow.metadata === "object" ? { ...existingRow.metadata as JsonObject } : {}
+  const payload: Record<string, unknown> = {}
+
+  if (hasOwn(updates, "title")) {
+    const title = String(updates.title || "")
+    payload.title = title.slice(0, 200)
+  }
+
+  if (hasOwn(updates, "content")) {
+    const content = String(updates.content || "")
+    payload.content_raw = content
+    payload.content_plain = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 50000)
+    payload.char_count = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().length
+  }
+
+  if (hasOwn(updates, "folderId")) {
+    payload.folder_id = updates.folderId ? String(updates.folderId) : null
+  }
+
+  if (hasOwn(updates, "isArchived")) {
+    payload.is_archived = updates.isArchived === true
+  }
+
+  if (hasOwn(updates, "reminderAt")) {
+    payload.reminder_at = normalizeOptionalString(updates.reminderAt)
+  }
+
+  if (hasOwn(updates, "trashedAt")) {
+    const trashedAt = normalizeOptionalString(updates.trashedAt)
+    payload.is_deleted = Boolean(trashedAt)
+    metadata.trashedAt = trashedAt
+  }
+
+  if (hasOwn(updates, "tags")) {
+    payload.user_tags = Array.isArray(updates.tags) ? updates.tags : []
+  }
+
+  if (hasOwn(updates, "hiddenTags")) {
+    payload.hidden_tags = Array.isArray(updates.hiddenTags) ? updates.hiddenTags : []
+  }
+
+  if (hasOwn(updates, "isFavorite")) {
+    metadata.isFavorite = updates.isFavorite === true
+  }
+
+  if (hasOwn(updates, "isPinned")) {
+    metadata.isPinned = updates.isPinned === true
+  }
+
+  if (hasOwn(updates, "folderOrder")) {
+    metadata.folderOrder = Number.isFinite(Number(updates.folderOrder)) ? Number(updates.folderOrder) : 0
+  }
+
+  if (hasOwn(updates, "order")) {
+    metadata.order = Number.isFinite(Number(updates.order)) ? Number(updates.order) : metadata.order || Date.now()
+  }
+
+  if (hasOwn(updates, "aiTags")) {
+    metadata.aiTags = Array.isArray(updates.aiTags) ? updates.aiTags : []
+  }
+
+  if (hasOwn(updates, "pageTitles")) {
+    metadata.pageTitles = Array.isArray(updates.pageTitles) ? updates.pageTitles : []
+  }
+
+  if (hasOwn(updates, "pageDrawings")) {
+    metadata.pageDrawings = Array.isArray(updates.pageDrawings) ? updates.pageDrawings : []
+  }
+
+  if (hasOwn(updates, "pageDrawingsRevision")) {
+    metadata.pageDrawingsRevision = typeof updates.pageDrawingsRevision === "string" ? updates.pageDrawingsRevision : ""
+  }
+
+  if (hasOwn(updates, "workspaceId")) {
+    metadata.workspaceId = normalizeOptionalString(updates.workspaceId)
+  }
+
+  if (hasOwn(updates, "lock")) {
+    const currentLock = normalizeOptionalObject(metadata.lock)
+    const nextLock = sanitizeLockValue(updates.lock, currentLock)
+    metadata.lock = nextLock
+    metadata.lockHidden = Boolean(nextLock?.hidden)
+  }
+
+  if (hasOwn(updates, "lock.hidden")) {
+    const currentLock = sanitizeLockValue(metadata.lock, null) || {}
+    const nextLock = {
+      ...currentLock,
+      hidden: updates["lock.hidden"] === true
+    }
+    metadata.lock = nextLock
+    metadata.lockHidden = nextLock.hidden === true
+  }
+
+  payload.metadata = metadata
+  return payload
 }
 
 function normalizeFolderName(name: unknown) {
@@ -235,11 +389,25 @@ export async function getSupabaseProfile(userId: string) {
 
 export async function ensureSupabaseProfile({ userId, email = "", displayName = "", avatarUrl = "" }: { userId: string, email?: string, displayName?: string, avatarUrl?: string }) {
   const supabase = getSupabaseAdminClient()
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from("profiles")
+    .select("metadata, app_language")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (existingProfileError) throw existingProfileError
+
+  const currentMetadata = existingProfile?.metadata && typeof existingProfile.metadata === "object"
+    ? existingProfile.metadata as JsonObject
+    : {}
+
   const { error } = await supabase.from("profiles").upsert({
     id: userId,
     email: email || null,
     display_name: displayName || "",
-    avatar_url: avatarUrl || ""
+    avatar_url: avatarUrl || "",
+    app_language: typeof existingProfile?.app_language === "string" && existingProfile.app_language === "en" ? "en" : "ru",
+    metadata: currentMetadata
   })
 
   if (error) throw error
@@ -257,19 +425,16 @@ export async function getSupabaseUserSettings(userId: string) {
   if (error) throw error
 
   const metadata = data?.metadata && typeof data.metadata === "object" ? data.metadata as JsonObject : {}
+  const normalizedCustomTheme = normalizeThemeSettingsMetadata(metadata.customTheme)
   return {
     lang: typeof data?.app_language === "string" && data.app_language === "en" ? "en" : "ru",
-    notesPerPage: Number(metadata.notesPerPage || 20),
+    notesPerPage: [5, 10, 20, 50].includes(Number(metadata.notesPerPage)) ? Number(metadata.notesPerPage) : 20,
     folderViewMode: metadata.folderViewMode === "full" ? "full" : "compact",
     reduceMotion: metadata.reduceMotion === true,
-    interface: metadata.interface && typeof metadata.interface === "object" ? metadata.interface : {
-      showSavedFilters: true,
-      showTagFilter: true,
-      showUpdatedPeriodFilter: true
-    },
+    interface: normalizeInterfaceMetadata(metadata.interface),
     themeId: typeof metadata.themeId === "string" ? metadata.themeId : "oled",
-    customTheme: metadata.customTheme && typeof metadata.customTheme === "object" ? metadata.customTheme : {},
-    customPresets: Array.isArray(metadata.customPresets) ? metadata.customPresets : [],
+    customTheme: normalizedCustomTheme,
+    customPresets: normalizeCustomPresets(metadata.customPresets),
     schemaVersion: 1
   }
 }
@@ -288,22 +453,27 @@ export async function saveSupabaseUserSettings(userId: string, settings: Record<
     ? existingProfile.metadata as JsonObject
     : {}
 
+  const normalizedThemeId = typeof settings?.themeId === "string" && settings.themeId ? settings.themeId : (typeof currentMetadata.themeId === "string" ? String(currentMetadata.themeId) : "oled")
+  const normalizedCustomTheme = normalizeThemeSettingsMetadata(settings?.customTheme)
+  const normalizedInterface = normalizeInterfaceMetadata(settings?.interface)
+  const normalizedNotesPerPage = [5, 10, 20, 50].includes(Number(settings?.notesPerPage)) ? Number(settings?.notesPerPage) : 20
+
   const { error } = await supabase
     .from("profiles")
-    .update({
+    .upsert({
+      id: userId,
       app_language: settings?.lang === "en" ? "en" : "ru",
       metadata: {
         ...currentMetadata,
-        notesPerPage: Number(settings?.notesPerPage || 20),
+        notesPerPage: normalizedNotesPerPage,
         folderViewMode: settings?.folderViewMode === "full" ? "full" : "compact",
         reduceMotion: settings?.reduceMotion === true,
-        interface: settings?.interface && typeof settings.interface === "object" ? settings.interface : currentMetadata.interface || {},
-        themeId: typeof settings?.themeId === "string" ? settings.themeId : currentMetadata.themeId || "oled",
-        customTheme: settings?.customTheme && typeof settings.customTheme === "object" ? settings.customTheme : currentMetadata.customTheme || {},
+        interface: normalizedInterface,
+        themeId: normalizedThemeId,
+        customTheme: normalizedCustomTheme,
         customPresets: Array.isArray(settings?.customPresets) ? settings.customPresets : currentMetadata.customPresets || []
       }
     })
-    .eq("id", userId)
 
   if (error) throw error
 
@@ -502,19 +672,12 @@ export async function patchSupabaseNote({ userId, noteId, updates }: { userId: s
   if (!existingRow?.id) throw new Error("NOTE_NOT_FOUND")
 
   const currentNote = mapNoteRow(existingRow as NoteRow)
-  const payload = buildNotePayload(userId, {
-    ...currentNote,
+  const payload = buildNotePatchPayload(existingRow as NoteRow, {
     ...updates,
-    lock: Object.prototype.hasOwnProperty.call(updates, "lock")
-      ? (updates.lock as JsonObject | null)
-      : (Object.prototype.hasOwnProperty.call(updates, "lock.hidden")
-          ? {
-              ...(currentNote?.lock && typeof currentNote.lock === "object" ? currentNote.lock : {}),
-              hidden: Boolean(updates["lock.hidden"])
-            }
-          : currentNote?.lock || null),
-    id: normalizedNoteId
-  }, (existingRow.metadata && typeof existingRow.metadata === "object") ? existingRow.metadata as JsonObject : {})
+    id: normalizedNoteId,
+    ownerUid: currentNote.ownerUid,
+    access: currentNote.access
+  })
 
   const { data, error } = await supabase
     .from("notes")

@@ -56,6 +56,7 @@ const UI = {
         this.resizeListenersController = new AbortController()
         window.addEventListener("resize", () => this.updateSidebarLayout(), { signal: this.resizeListenersController.signal })
         this.applyAppearanceSettings()
+        this.applyFeatureAvailability()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
         this.applyInputAutocompletePolicy()
@@ -83,6 +84,30 @@ const UI = {
         }
         const fallbackMessage = fallbackByFeature[normalizedFeatureKey] || "Функция временно отключена"
         this.showToast(this.getText(`feature_${normalizedFeatureKey}_disabled`, fallbackMessage))
+    },
+
+    applyFeatureAvailability() {
+        const sharedAccessEnabled = this.isFeatureEnabled("sharedAccess") && this.isFeatureEnabled("workspaces")
+        const feedbackEnabled = this.isFeatureEnabled("feedback") || this.isFeatureEnabled("poll")
+        const driveEnabled = this.isFeatureEnabled("googleDrive")
+
+        document.querySelectorAll('[data-view="shared_access"]').forEach(element => {
+            element.classList.toggle("hidden", !sharedAccessEnabled)
+            if ("disabled" in element) element.disabled = !sharedAccessEnabled
+            element.setAttribute("aria-hidden", sharedAccessEnabled ? "false" : "true")
+        })
+
+        document.querySelectorAll('[data-modal="feedback-menu-modal"]').forEach(element => {
+            element.classList.toggle("hidden", !feedbackEnabled)
+            if ("disabled" in element) element.disabled = !feedbackEnabled
+            element.setAttribute("aria-hidden", feedbackEnabled ? "false" : "true")
+        })
+
+        document.querySelectorAll('[data-action="settings-backup-all-notes"], [data-action="settings-backup-folder"]').forEach(element => {
+            element.classList.toggle("hidden", !driveEnabled)
+            if ("disabled" in element) element.disabled = !driveEnabled
+            element.setAttribute("aria-hidden", driveEnabled ? "false" : "true")
+        })
     },
 
     resolveNoteById(noteId) {
@@ -1281,15 +1306,21 @@ window.UINoteActionsPanel = {
                 this.showToast(this.getText("lock_invalid_password", "Invalid password"))
                 return
             }
-            const user = StateStore.read().user
-            if (!user || !db) return
-            const ref = DataPath.getUserNotesCollection(user).doc(note.id)
-            const payload = { lock: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
-            if (firebase?.firestore?.FieldValue?.delete) payload.lock = firebase.firestore.FieldValue.delete()
-            await ref.update(payload)
-            StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: null } : item))
-            this.showToast(this.getText("unlock_success", "Note unlocked"))
-            this.closeModal("note-actions-modal")
+            const previousNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+            const nextNotes = previousNotes.map(item => item.id === note.id ? NoteIO.normalizeNote({ ...item, lock: null }) : item)
+            StateActions.setNotes(nextNotes)
+            try {
+                const savedNote = await window.NoteActionService.patch(note.id, { lock: null })
+                if (savedNote) {
+                    StateActions.setNotes((Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []).map(item => item.id === note.id ? NoteIO.normalizeNote(savedNote) : item))
+                }
+                this.showToast(this.getText("unlock_success", "Note unlocked"))
+                this.closeModal("note-actions-modal")
+            } catch (error) {
+                StateActions.setNotes(previousNotes)
+                this.showToast(this.getText("unlock_failed", "Unable to unlock note"))
+                console.error("Unlock failed", error)
+            }
             return
         }
         const password = await this.showPasswordPrompt(this.getText("lock_title", "Lock"), this.getText("lock_password", "Password"))
@@ -1299,14 +1330,22 @@ window.UINoteActionsPanel = {
             this.showToast(this.getText("lock_password_empty", "Password is empty"))
             return
         }
-        const user = StateStore.read().user
-        if (!user || !db) return
-        const lockedNote = await LockService.setLock(note, normalizedPassword)
-        const ref = DataPath.getUserNotesCollection(user).doc(note.id)
-        await ref.update({ lock: lockedNote.lock || null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        StateActions.setNotes(StateStore.read().notes.map(item => item.id === note.id ? { ...item, lock: lockedNote.lock } : item))
-        this.showToast(this.getText("lock_hidden", "Note hidden"))
-        this.closeModal("note-actions-modal")
+        const lockedNote = await LockService.setLock({ ...note }, normalizedPassword)
+        const previousNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        const nextNotes = previousNotes.map(item => item.id === note.id ? NoteIO.normalizeNote({ ...item, lock: lockedNote.lock || null }) : item)
+        StateActions.setNotes(nextNotes)
+        try {
+            const savedNote = await window.NoteActionService.patch(note.id, { lock: lockedNote.lock || null })
+            if (savedNote) {
+                StateActions.setNotes((Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []).map(item => item.id === note.id ? NoteIO.normalizeNote(savedNote) : item))
+            }
+            this.showToast(this.getText("lock_hidden", "Note hidden"))
+            this.closeModal("note-actions-modal")
+        } catch (error) {
+            StateActions.setNotes(previousNotes)
+            this.showToast(this.getText("lock_failed", "Unable to lock note"))
+            console.error("Lock failed", error)
+        }
     },
     async toggleSelectedPin(noteId) {
         if (!noteId) return
@@ -2048,12 +2087,12 @@ Object.assign(UI, {
     },
 
     applyAppearanceSettings() {
-        const saved = SafeStorage.local.getJson("app-preferences") || {}
-        StateActions.updateConfig({
-            folderViewMode: saved.folderViewMode || StateStore.read().config.folderViewMode,
-            reduceMotion: !!saved.reduceMotion
-        })
-        ThemeManager.revertToLastSaved()
+        const currentSettings = StateStore.read().originalUserSettings || StateStore.read().draftUserSettings || null
+        if (currentSettings) {
+            SettingsSyncService.applyUserSettingsToRuntime(currentSettings, { resetVisibleLimit: false, persistTheme: false })
+        } else {
+            ThemeManager.revertToLastSaved()
+        }
         this.renderFolders()
         this.syncSettingsUI()
     },
@@ -3239,7 +3278,11 @@ Object.assign(UI, {
         try {
             const nextSavedSettings = await SettingsSyncService.saveUserSettings(currentDraftSettings)
             if (!nextSavedSettings) return
-            StateStore.update("draftUserSettings", JSON.parse(JSON.stringify(nextSavedSettings)))
+            StateStore.set(previousState => ({
+                ...previousState,
+                originalUserSettings: JSON.parse(JSON.stringify(nextSavedSettings)),
+                draftUserSettings: JSON.parse(JSON.stringify(nextSavedSettings))
+            }))
             SettingsSyncService.applyUserSettingsToRuntime(nextSavedSettings, { resetVisibleLimit: true, persistTheme: true })
             if (this.settingsPage === "appearance") {
                 this.initAppearanceDraft()

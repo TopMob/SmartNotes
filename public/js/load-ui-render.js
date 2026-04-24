@@ -115,16 +115,25 @@ Object.assign(UI, {
             this.showToast(this.getText("lock_invalid_password", "Invalid password"))
             return
         }
-        const nextNotes = StateStore.read().notes.map(n => n.id === id ? { ...n, lock: { ...n.lock, hidden: false } } : n)
+        const previousNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        const nextNotes = previousNotes.map(n => n.id === id ? NoteIO.normalizeNote({ ...n, lock: { ...n.lock, hidden: false } }) : n)
+        const nextNote = nextNotes.find(n => n.id === id) || null
         StateActions.setNotes(nextNotes)
         updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderLockCenter()
-        if (!db || !StateStore.read().user) return
         try {
-            await DataPath.getUserNotesCollection(StateStore.read().user).doc(id).update({
-                "lock.hidden": false
+            const savedNote = await window.NoteActionService.patch(id, {
+                lock: nextNote?.lock || null
             })
+            if (savedNote) {
+                const syncedNotes = (Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []).map(n => n.id === id ? NoteIO.normalizeNote(savedNote) : n)
+                StateActions.setNotes(syncedNotes)
+                this.renderLockCenter()
+            }
         } catch (error) {
+            StateActions.setNotes(previousNotes)
+            updateSearchQuery(document.getElementById("search-input")?.value || "")
+            this.renderLockCenter()
             this.showToast(this.getText("unlock_failed", "Unable to unlock"))
             console.error("Unlock failed", error)
         }
@@ -142,18 +151,22 @@ Object.assign(UI, {
             this.showToast(this.getText("lock_invalid_password", "Invalid password"))
             return
         }
-        const nextNotes = StateStore.read().notes.map(n => n.id === id ? { ...n, lock: null } : n)
+        const previousNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        const nextNotes = previousNotes.map(n => n.id === id ? NoteIO.normalizeNote({ ...n, lock: null }) : n)
         StateActions.setNotes(nextNotes)
         updateSearchQuery(document.getElementById("search-input")?.value || "")
         this.renderLockCenter()
-        if (!db || !StateStore.read().user) return
         try {
-            const payload = { lock: null }
-            if (firebase?.firestore?.FieldValue?.delete) {
-                payload.lock = firebase.firestore.FieldValue.delete()
+            const savedNote = await window.NoteActionService.patch(id, { lock: null })
+            if (savedNote) {
+                const syncedNotes = (Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []).map(n => n.id === id ? NoteIO.normalizeNote(savedNote) : n)
+                StateActions.setNotes(syncedNotes)
+                this.renderLockCenter()
             }
-            await DataPath.getUserNotesCollection(StateStore.read().user).doc(id).update(payload)
         } catch (error) {
+            StateActions.setNotes(previousNotes)
+            updateSearchQuery(document.getElementById("search-input")?.value || "")
+            this.renderLockCenter()
             this.showToast(this.getText("unlock_failed", "Unable to unlock note"))
             console.error("Unlock failed", error)
         }

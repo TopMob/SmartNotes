@@ -5,7 +5,7 @@ export const runtime = "nodejs"
 
 function mapNoteError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "NOTE_ID_REQUIRED" || message === "NOTE_NOT_FOUND") {
+  if (message === "NOTE_ID_REQUIRED" || message === "NOTE_NOT_FOUND" || message === "BAD_REQUEST") {
     return new ApiRouteError(400, message)
   }
 
@@ -42,16 +42,26 @@ export async function PUT(request: Request) {
     const payload = await readJsonBody(request)
     const bodyNote = payload?.note || payload
     const normalizedNoteId = String(payload?.id || bodyNote?.id || "").trim()
-    const note = Object.keys(bodyNote || {}).some(key => ["content", "title", "tags", "hiddenTags", "pageTitles", "pageDrawings", "pageDrawingsRevision", "workspaceId", "lock"].includes(key))
+    if (!normalizedNoteId) {
+      throw new ApiRouteError(400, "NOTE_ID_REQUIRED")
+    }
+
+    const shouldPatch = payload?.partial === true || !Object.keys(bodyNote || {}).some(key => ["content", "title", "tags", "hiddenTags", "pageTitles", "pageDrawings", "pageDrawingsRevision", "workspaceId"].includes(key))
+    const note = shouldPatch
+      ? await patchSupabaseNote({
+        userId: user.id,
+        noteId: normalizedNoteId,
+        updates: bodyNote
+      })
       ? await updateSupabaseNote({
         userId: user.id,
         noteId: normalizedNoteId,
         note: bodyNote
       })
-      : await patchSupabaseNote({
+      : await updateSupabaseNote({
         userId: user.id,
         noteId: normalizedNoteId,
-        updates: bodyNote
+        note: bodyNote
       })
 
     return ok({ note })
