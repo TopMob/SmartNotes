@@ -42,7 +42,9 @@ function createPersistenceEnum() {
 
 export async function createSupabaseAuth() {
     const client = await initSupabase()
-    if (!client) return null
+    if (!client) {
+        throw new Error("supabase-client-unavailable")
+    }
 
     let currentUser = null
     const authStateSubscribers = new Set()

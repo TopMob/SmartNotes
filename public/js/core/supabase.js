@@ -3,19 +3,19 @@ let supabaseClientSingleton = null
 export async function initSupabase() {
     if (supabaseClientSingleton) return supabaseClientSingleton
 
-    const url = String(window.__SUPABASE_URL__ || "").trim()
-    const publishableKey = String(window.__SUPABASE_PUBLISHABLE_KEY__ || "").trim()
+    const url = String(window.SmartNotesSupabaseConfig?.url || "").trim()
+    const publishableKey = String(window.SmartNotesSupabaseConfig?.publishableKey || "").trim()
 
     if (!url || !publishableKey) {
-        return null
+        throw new Error("supabase-config-missing")
     }
 
-    const globalSupabase = window.supabase
-    if (!globalSupabase || typeof globalSupabase.createClient !== "function") {
-        return null
+    const supabaseGlobal = window.supabase
+    if (!supabaseGlobal || typeof supabaseGlobal.createClient !== "function") {
+        throw new Error("supabase-global-missing")
     }
 
-    supabaseClientSingleton = globalSupabase.createClient(url, publishableKey, {
+    supabaseClientSingleton = supabaseGlobal.createClient(url, publishableKey, {
         auth: {
             persistSession: true,
             autoRefreshToken: true,
