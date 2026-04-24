@@ -621,27 +621,6 @@ Object.assign(UI, {
         return card
     },
 
-    renderSharedAccessView() {
-        if (!this.isFeatureEnabled("sharedAccess") || !this.isFeatureEnabled("workspaces")) {
-            this.updateEmptyState("groups_off", this.getText("shared_workspace_disabled", "Shared notes are temporarily unavailable"))
-            this.resetContentGridLayout()
-            this.els.empty.classList.remove("hidden")
-            this.els.grid.replaceChildren()
-            return
-        }
-        this.updateEmptyState("groups", this.getText("shared_access_empty", "У вас пока нет совместных папок"))
-        const workspaces = Array.isArray(StateStore.read().sharedWorkspaces) ? StateStore.read().sharedWorkspaces : []
-        this.resetContentGridLayout()
-        this.els.grid.classList.add("folder-grid")
-        this.els.empty.classList.add("hidden")
-        const fragment = document.createDocumentFragment()
-        fragment.append(this.createJoinWorkspaceCard())
-        workspaces.forEach(workspace => {
-            const card = this.createSharedWorkspaceCard(workspace)
-            if (card) fragment.append(card)
-        })
-        this.els.grid.replaceChildren(fragment)
-    }
 });
 
 Object.assign(UI, {

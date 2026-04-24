@@ -1229,7 +1229,7 @@ window.UINoteActionsPanel = {
             const selected = note.folderId === f.id ? "selected" : ""
             folderOptions.push(`<option value="${f.id}" ${selected}>${Utils.escapeHtml(f.name)}</option>`)
         })
-        const reminderStamp = note.reminderAt?.toDate ? note.reminderAt.toDate() : (note.reminderAt ? new Date(note.reminderAt) : null)
+        const reminderStamp = note.reminderAt instanceof Date ? note.reminderAt : (note.reminderAt ? new Date(note.reminderAt) : null)
         const reminderValue = reminderStamp ? new Date(reminderStamp.getTime() - reminderStamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
         const reminderClearButton = reminderValue
             ? `<button type="button" class="btn-secondary" data-action="note-reminder-clear" data-note-id="${encodeURIComponent(note.id)}">
@@ -1464,20 +1464,6 @@ Object.assign(UI, {
         const toIsoString = (value) => {
             if (value instanceof Date) {
                 return Number.isFinite(value.getTime()) ? value.toISOString() : null
-            }
-            if (typeof value?.toDate === "function") {
-                const convertedDate = value.toDate()
-                return convertedDate instanceof Date && Number.isFinite(convertedDate.getTime())
-                    ? convertedDate.toISOString()
-                    : null
-            }
-            if (value && typeof value === "object") {
-                const seconds = Number.isFinite(value.seconds) ? value.seconds : value._seconds
-                const nanoseconds = Number.isFinite(value.nanoseconds) ? value.nanoseconds : value._nanoseconds
-                if (Number.isFinite(seconds)) {
-                    const convertedDate = new Date((seconds * 1000) + (Number.isFinite(nanoseconds) ? nanoseconds / 1000000 : 0))
-                    return Number.isFinite(convertedDate.getTime()) ? convertedDate.toISOString() : null
-                }
             }
             if (typeof value === "number" && Number.isFinite(value)) {
                 const timestamp = Math.abs(value) < 1000000000000 ? value * 1000 : value

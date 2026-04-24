@@ -131,18 +131,6 @@ const collectImportedNotes = (payload, visited = new Set()) => {
 const NoteIO = {
     toTimestampMillis(dateValue) {
         if (dateValue === null || dateValue === undefined || dateValue === "") return 0
-        if (typeof dateValue?.toMillis === "function") {
-            const millis = dateValue.toMillis()
-            return Number.isFinite(millis) ? millis : 0
-        }
-        if (typeof dateValue?.toDate === "function") {
-            const millis = dateValue.toDate().getTime()
-            return Number.isFinite(millis) ? millis : 0
-        }
-        if (dateValue && typeof dateValue === "object" && Number.isFinite(dateValue.seconds)) {
-            const millis = dateValue.seconds * 1000
-            return Number.isFinite(millis) ? millis : 0
-        }
         if (dateValue instanceof Date) {
             const millis = dateValue.getTime()
             return Number.isFinite(millis) ? millis : 0
@@ -156,10 +144,6 @@ const NoteIO = {
 
     normalizeDateInput(dateValue) {
         if (dateValue === null || dateValue === undefined || dateValue === "") return null
-        if (typeof dateValue?.toDate === "function") return dateValue
-        if (dateValue && typeof dateValue === "object" && Number.isFinite(dateValue.seconds)) {
-            return new Date(dateValue.seconds * 1000)
-        }
         if (dateValue instanceof Date) {
             return Number.isFinite(dateValue.getTime()) ? new Date(dateValue.getTime()) : null
         }
@@ -737,7 +721,7 @@ const CollaborationService = {
     },
     getNoteReference(note, user) {
         if (!user || !note) return null
-        if (window.AppFeatures?.sharedAccess !== true && window.AppFeatures?.workspaces !== true) {
+        if (window.AppFeatures?.workspaces !== true) {
             return DataPath.getUserNotesCollection(user).doc(note.id)
         }
         const access = this.getAccess(note)
@@ -829,15 +813,8 @@ const EXPORTABLE_FOLDER_FIELDS = [
 
 const serializeExportDate = (value) => {
     if (value === null || value === undefined || value === "") return null
-    if (typeof value?.toDate === "function") {
-        const dateValue = value.toDate()
-        return Number.isFinite(dateValue?.getTime?.()) ? dateValue.toISOString() : null
-    }
     if (value instanceof Date) {
         return Number.isFinite(value.getTime()) ? value.toISOString() : null
-    }
-    if (value && typeof value === "object" && Number.isFinite(value.seconds)) {
-        return new Date(value.seconds * 1000).toISOString()
     }
     if (typeof value === "number") {
         const dateValue = new Date(value)

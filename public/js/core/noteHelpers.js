@@ -1,13 +1,5 @@
 export const normalizeDateValue = (value) => {
     if (value === null || value === undefined || value === "") return 0
-    if (typeof value?.toDate === "function") {
-        const timestamp = value.toDate().getTime()
-        return Number.isFinite(timestamp) ? timestamp : 0
-    }
-    if (value && typeof value === "object" && Number.isFinite(value.seconds)) {
-        const timestamp = value.seconds * 1000
-        return Number.isFinite(timestamp) ? timestamp : 0
-    }
     if (value instanceof Date) {
         const timestamp = value.getTime()
         return Number.isFinite(timestamp) ? timestamp : 0

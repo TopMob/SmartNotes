@@ -427,8 +427,7 @@ const NotesSortingStrategy = (() => {
             const parsedDate = Date.parse(value)
             return Number.isNaN(parsedDate) ? 0 : parsedDate
         }
-        if (value.seconds) return value.seconds * 1000
-        if (value.toDate) return value.toDate().getTime()
+        if (value instanceof Date) return value.getTime()
         return 0
     }
     function sortOwnedNotes(notes, languageCode = "ru") {
@@ -466,7 +465,7 @@ const RemindersService = (() => {
         reminderTimers.clear()
     }
     function normalizeReminderTime(value) {
-        if (value?.toDate) return value.toDate().getTime()
+        if (value instanceof Date) return value.getTime()
         const parsedTime = Date.parse(value || "")
         return Number.isNaN(parsedTime) ? 0 : parsedTime
     }
@@ -1191,8 +1190,8 @@ const SessionService = (() => {
     const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], workspaceNotes: [] }
     function sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
-            const firstCreatedAt = firstFolder?.createdAt?.toDate ? firstFolder.createdAt.toDate().getTime() : Date.parse(firstFolder?.createdAt || "") || 0
-            const secondCreatedAt = secondFolder?.createdAt?.toDate ? secondFolder.createdAt.toDate().getTime() : Date.parse(secondFolder?.createdAt || "") || 0
+            const firstCreatedAt = firstFolder?.createdAt instanceof Date ? firstFolder.createdAt.getTime() : Date.parse(firstFolder?.createdAt || "") || 0
+            const secondCreatedAt = secondFolder?.createdAt instanceof Date ? secondFolder.createdAt.getTime() : Date.parse(secondFolder?.createdAt || "") || 0
             if (firstCreatedAt !== secondCreatedAt) return firstCreatedAt - secondCreatedAt
             return String(firstFolder?.name || "").localeCompare(String(secondFolder?.name || ""), StateStore.read().config.lang || "ru")
         })
@@ -1290,8 +1289,7 @@ const NotesQueryService = (() => {
             const parsedDate = Date.parse(value)
             return Number.isNaN(parsedDate) ? 0 : parsedDate
         }
-        if (value.seconds) return value.seconds * 1000
-        if (value.toDate) return value.toDate().getTime()
+        if (value instanceof Date) return value.getTime()
         return 0
     }
 

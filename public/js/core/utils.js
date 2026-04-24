@@ -14,10 +14,6 @@ export const Utils = {
         let date = null
         if (value instanceof Date) {
             date = new Date(value.getTime())
-        } else if (value && typeof value.toDate === "function") {
-            date = value.toDate()
-        } else if (value && typeof value === "object" && Number.isFinite(value.seconds)) {
-            date = new Date(value.seconds * 1000)
         } else if (typeof value === "string") {
             const parsedTimestamp = Date.parse(value)
             date = new Date(parsedTimestamp)

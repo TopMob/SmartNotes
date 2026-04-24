@@ -794,8 +794,8 @@ const NotesListEngine = (() => {
             refs.p.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : NoteText.buildPreviewText(note)
         }
 
-        const t1 = note.updatedAt?.seconds || 0
-        const t2 = data.updatedAt?.seconds || 0
+        const t1 = Date.parse(String(note.updatedAt || "")) || 0
+        const t2 = Date.parse(String(data.updatedAt || "")) || 0
         if (t1 !== t2) refs.dateSpan.textContent = Utils.formatDate(note.updatedAt || note.createdAt || Date.now())
 
         if (!areTagListsEqual(note.tags, data.tags) || isLockedView) {
