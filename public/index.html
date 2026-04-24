@@ -15,12 +15,35 @@
     <link rel="stylesheet" href="css/layout.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/components.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/responsive.css?v=2026-04-19-final">
-    <link rel="stylesheet" href="css/editor.css?v=2026-04-19-final" media="print" data-deferred-stylesheet>
+    <link rel="preload" href="css/editor.css?v=2026-04-19-final" as="style" fetchpriority="low" data-deferred-stylesheet>
+    <noscript><link rel="stylesheet" href="css/editor.css?v=2026-04-19-final"></noscript>
     <script>
         window.APP_VERSION = "2026-02-22-1e1b181"
-        window.SmartNotesSupabaseConfig = null
+        window.SmartNotesSupabaseConfig = (() => {
+            const cookiePrefix = "smartnotes-supabase-config="
+            const encodedCookie = document.cookie
+                .split(';')
+                .map((part) => part.trim())
+                .find((part) => part.startsWith(cookiePrefix))
+
+            if (!encodedCookie) {
+                return null
+            }
+
+            try {
+                const cookieValue = encodedCookie.slice(cookiePrefix.length)
+                const parsedValue = JSON.parse(decodeURIComponent(cookieValue))
+
+                if (!parsedValue || typeof parsedValue.url !== 'string' || typeof parsedValue.publishableKey !== 'string') {
+                    return null
+                }
+
+                return parsedValue
+            } catch {
+                return null
+            }
+        })()
     </script>
-    <script src="/api/supabase/config?format=script" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin"></script>
     <script src="js/core/backendConfig.js?v=2026-04-19-final" type="module"></script>
     <script src="js/core/infra-engine.js?v=2026-04-19-final" type="module"></script>

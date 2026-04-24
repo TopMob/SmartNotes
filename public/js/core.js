@@ -54,40 +54,6 @@ window.AppFeatures = Object.assign({
 window.GoogleDriveMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
 window.ExternalMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
 
-function createFirebaseCompatibilityShim() {
-    return {
-        firestore: {
-            FieldValue: {
-                serverTimestamp() {
-                    return new Date().toISOString()
-                },
-                delete() {
-                    return null
-                }
-            }
-        }
-    }
-}
-
-function installFirebaseCompatibilityShim() {
-    if (typeof window.firebase !== "undefined") return window.firebase
-    let cachedShim = null
-    Object.defineProperty(window, "firebase", {
-        configurable: true,
-        enumerable: true,
-        get() {
-            if (!cachedShim) cachedShim = createFirebaseCompatibilityShim()
-            return cachedShim
-        },
-        set(value) {
-            cachedShim = value
-        }
-    })
-    return window.firebase
-}
-
-installFirebaseCompatibilityShim()
-
 
 function initializeSplashScreen() {
     const splashScreen = document.getElementById("splash-screen")

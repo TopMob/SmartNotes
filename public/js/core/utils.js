@@ -55,9 +55,6 @@ export const Utils = {
             .replace(/'/g, "&#39;")
     },
     serverTimestamp: () => {
-        if (typeof firebase !== "undefined" && firebase.firestore && firebase.firestore.FieldValue) {
-            return firebase.firestore.FieldValue.serverTimestamp()
-        }
         return Date.now()
     },
     sanitizeHtml: (html) => {

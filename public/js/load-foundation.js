@@ -86,8 +86,14 @@
     function activateDeferredStylesheets() {
         document.querySelectorAll("link[data-deferred-stylesheet]").forEach((linkElement) => {
             if (!(linkElement instanceof HTMLLinkElement)) return
-            if (linkElement.media === "all") return
-            linkElement.media = "all"
+            if (linkElement.rel === "stylesheet" && linkElement.media === "all") return
+            if (linkElement.rel === "preload" && linkElement.as === "style") {
+                linkElement.rel = "stylesheet"
+                return
+            }
+            if (linkElement.media !== "all") {
+                linkElement.media = "all"
+            }
         })
     }
 

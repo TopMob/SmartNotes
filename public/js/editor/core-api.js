@@ -60,7 +60,7 @@ export const EditorAPI = (() => {
             pageDrawings: normalized,
             pageDrawingsRevision: buildPageDrawingsRevision(normalized)
         }
-        if (updateTimestamp) nextNote.updatedAt = Utils.serverTimestamp()
+        if (updateTimestamp) nextNote.updatedAt = Date.now()
         return nextNote
     }
 
@@ -397,7 +397,7 @@ export const EditorAPI = (() => {
         state.isSaving = true
         SaveStateService?.markSaving?.()
         try {
-            const savedResult = await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const savedResult = await ref.set(payload, { merge: true })
             const persistedNote = savedResult?.note || savedResult?.data?.note || note
             upsertSavedNoteIntoState(persistedNote)
             if (persistedNote?.id && persistedNote.id !== note.id) {
@@ -1009,7 +1009,7 @@ export const EditorAPI = (() => {
             : NoteIO.normalizeNote({
                 id: Utils.generateId(),
                 folderId,
-                createdAt: Utils.serverTimestamp(),
+                createdAt: Date.now(),
                 order: Date.now(),
                 ownerUid: user?.uid || globalThis.auth?.currentUser?.uid || null,
                 workspaceId
