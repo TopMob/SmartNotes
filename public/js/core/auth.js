@@ -198,12 +198,16 @@ export function createAuthManager({ auth }) {
                 }
             } catch (error) {
                 const errorCode = String(error?.code || "")
+                const errorMessage = String(error?.message || "").toLowerCase()
                 const canFallbackToRedirect = [
                     "auth/google-identity-not-displayed",
                     "auth/google-identity-skipped",
                     "auth/google-identity-timeout",
                     "auth/google-identity-unavailable"
                 ].includes(errorCode)
+                    || errorMessage.includes("client_id and issuer required")
+                    || errorMessage.includes("invalid request")
+                    || errorMessage.includes("issuer required")
                 if (canFallbackToRedirect && typeof auth.signInWithGoogleAccountChooser === "function") {
                     this._setAuthFeedback(this._t("auth_google_waiting", "Opening Google sign-in page..."), "info")
                     const chooserResult = await auth.signInWithGoogleAccountChooser().catch(async chooserError => {

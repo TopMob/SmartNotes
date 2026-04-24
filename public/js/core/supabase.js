@@ -512,17 +512,26 @@ function createClient() {
                 })
                 return { data: {}, error: null }
             },
-            async signInWithIdToken({ provider, token }) {
+            async signInWithIdToken({ provider, token, clientId = "", issuer = "", nonce = "" }) {
                 const normalizedProvider = String(provider || "").trim()
                 const idToken = String(token || "").trim()
+                const normalizedClientId = String(clientId || "").trim()
+                const normalizedIssuer = String(issuer || "").trim()
+                const normalizedNonce = String(nonce || "").trim()
                 if (!normalizedProvider || !idToken) {
                     return { data: { session: null, user: null }, error: new Error("supabase-id-token-missing") }
                 }
 
                 try {
-                    const payload = await authRequest(`token?grant_type=id_token&provider=${encodeURIComponent(normalizedProvider)}`, {
+                    const payload = await authRequest("token?grant_type=id_token", {
                         method: "POST",
-                        body: { id_token: idToken }
+                        body: {
+                            provider: normalizedProvider,
+                            id_token: idToken,
+                            ...(normalizedClientId ? { client_id: normalizedClientId } : {}),
+                            ...(normalizedIssuer ? { issuer: normalizedIssuer } : {}),
+                            ...(normalizedNonce ? { nonce: normalizedNonce } : {})
+                        }
                     })
                     const session = normalizeSession(payload)
                     if (!session) {

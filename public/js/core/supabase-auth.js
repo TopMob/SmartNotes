@@ -70,6 +70,22 @@ function getGoogleClientId() {
     return String(window.SmartNotesSupabaseConfig?.googleClientId || "").trim()
 }
 
+function decodeBase64UrlValue(value) {
+    const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/")
+    const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4))
+    return atob(normalized + padding)
+}
+
+function decodeJwtPayload(token) {
+    try {
+        const [, payload] = String(token || "").split(".")
+        if (!payload) return null
+        return JSON.parse(decodeBase64UrlValue(payload))
+    } catch {
+        return null
+    }
+}
+
 async function resolveRuntimeGoogleClientId() {
     const currentClientId = getGoogleClientId()
     if (currentClientId) return currentClientId
@@ -219,7 +235,14 @@ export async function createSupabaseAuth() {
                 clientId,
                 interactive: options?.interactive !== false
             })
-            const result = await client.auth.signInWithIdToken({ provider: "google", token: idToken })
+            const tokenPayload = decodeJwtPayload(idToken)
+            const result = await client.auth.signInWithIdToken({
+                provider: "google",
+                token: idToken,
+                clientId,
+                issuer: String(tokenPayload?.iss || "https://accounts.google.com"),
+                nonce: typeof tokenPayload?.nonce === "string" ? tokenPayload.nonce : ""
+            })
             if (result.error) throw result.error
             const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
             currentUser = await resolveUserFromSession(session)
