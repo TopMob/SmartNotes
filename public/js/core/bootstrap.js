@@ -48,9 +48,29 @@ function deferUntilAfterPaint(callback) {
     run()
 }
 
+function registerServiceWorker() {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => null)
+    }, { once: true })
+}
+
+function setupInstallPromptCapture() {
+    if (typeof window === "undefined") return
+    window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault()
+        window.SmartNotesInstallPrompt = event
+    })
+    window.addEventListener("appinstalled", () => {
+        window.SmartNotesInstallPrompt = null
+    })
+}
+
 export function bootstrapCore({ ThemeManager, Auth }) {
     const boot = () => {
         applyMobilePlatformAttributes()
+        registerServiceWorker()
+        setupInstallPromptCapture()
         if (ThemeManager && typeof ThemeManager.init === "function") {
             ThemeManager.init()
         }

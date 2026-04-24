@@ -59,14 +59,14 @@ function getSessionExpiryMs(session) {
 }
 
 function normalizeSession(session) {
-    if (!session?.access_token || !session?.refresh_token || !session?.user?.id) {
+    if (!session?.access_token || !session?.user?.id) {
         return null
     }
 
     const expiresAtMs = getSessionExpiryMs(session)
     return {
         access_token: String(session.access_token),
-        refresh_token: String(session.refresh_token),
+        refresh_token: typeof session.refresh_token === "string" ? String(session.refresh_token) : "",
         token_type: String(session.token_type || "bearer"),
         expires_in: Number(session.expires_in || 0),
         expires_at: expiresAtMs > 0 ? Math.floor(expiresAtMs / 1000) : 0,
@@ -252,7 +252,7 @@ function shouldRefreshSoon(session) {
 
 async function refreshSessionIfNeeded() {
     const currentSession = readStoredSession()
-    if (!currentSession?.refresh_token) return null
+    if (!currentSession?.refresh_token) return currentSession && !isSessionExpired(currentSession) ? currentSession : null
     const expiresAtMs = getSessionExpiryMs(currentSession)
     if (expiresAtMs && expiresAtMs - Date.now() > 30000) {
         return currentSession
@@ -280,6 +280,10 @@ async function validateSession(session, { allowRefresh = true } = {}) {
             writeStoredSession(null)
         }
         return refreshedSession
+    }
+
+    if (!session?.refresh_token) {
+        return session
     }
 
     const user = await fetchCurrentUser(session.access_token).catch(async () => {
@@ -351,7 +355,7 @@ async function resolveCurrentSession() {
 }
 
 function verifyCurrentSessionInBackground(session) {
-    if (!session?.access_token || isSessionExpired(session)) return
+    if (!session?.access_token || isSessionExpired(session) || !session?.refresh_token) return
     let timeoutId = null
     const timeoutPromise = new Promise(resolve => {
         timeoutId = setTimeout(() => resolve(null), BACKGROUND_AUTH_TIMEOUT_MS)

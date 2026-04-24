@@ -417,20 +417,6 @@ window.Calculator = Calculator;
 })();
 
 (() => {
-    const disableServiceWorkerCaching = async () => {
-        try {
-            if (!("serviceWorker" in navigator)) return
-            const registrations = await navigator.serviceWorker.getRegistrations()
-            await Promise.all(registrations.map(registration => registration.unregister()))
-            if ("caches" in window) {
-                const cacheKeys = await caches.keys()
-                await Promise.all(cacheKeys.map(cacheKey => caches.delete(cacheKey)))
-            }
-        } catch (error) {
-            console.warn("[Core] service worker cleanup skipped", { message: error?.message || String(error || "") })
-        }
-    }
-
     const createRuntimeInitializer = () => {
         let initializationPromise = null
 
@@ -439,7 +425,6 @@ window.Calculator = Calculator;
         const networkLifecycle = window.AppNetworkLifecycle?.createNetworkLifecycleController?.()
 
         const initializeRuntime = async () => {
-            disableServiceWorkerCaching()
             if (typeof UI.init === "function") UI.init()
             if (typeof window.SmartNotesEditor?.init === "function") window.SmartNotesEditor.init()
             stateRenderer?.start?.()
