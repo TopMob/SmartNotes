@@ -304,7 +304,8 @@ export const ThemeManager = {
         this.applySettings(this.getDefaultSettings(), true)
     },
     getThemeSettingsReference(user) {
-        return null
+        if (!user || !user.uid) return null
+        return DataPath.getUserSettingsReference(user)
     },
     async loadAccountSettings(user) {
         try {

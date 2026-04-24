@@ -166,7 +166,9 @@ export function createAuthManager({ auth }) {
             const normalizedName = String(nextName || "").trim()
             if (!user || !normalizedName) return false
             if (normalizedName.length > 50) return false
-            await user.updateProfile({ displayName: normalizedName })
+            if (typeof user.updateProfile === "function") {
+                await user.updateProfile({ displayName: normalizedName })
+            }
             await DataPath.getUserRootReference(user)?.set({ displayName: normalizedName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             this.applySignedInUI({ ...user, displayName: normalizedName })
             const workspaceId = StateStore.read().activeSharedWorkspaceId
@@ -202,7 +204,9 @@ export function createAuthManager({ auth }) {
             if (!context) return false
             context.drawImage(image, 0, 0, canvas.width, canvas.height)
             const avatarDataUrl = canvas.toDataURL("image/jpeg", 0.82)
-            await user.updateProfile({ photoURL: avatarDataUrl })
+            if (typeof user.updateProfile === "function") {
+                await user.updateProfile({ photoURL: avatarDataUrl })
+            }
             await DataPath.getUserRootReference(user)?.set({ avatarUrl: avatarDataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
             this.applySignedInUI({ ...user, photoURL: avatarDataUrl })
             return true
