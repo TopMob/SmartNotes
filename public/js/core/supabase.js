@@ -217,9 +217,7 @@ function readSessionFromUrlValue(urlValue) {
         user: payload ? {
             id: String(payload.sub || ""),
             email: String(payload.email || ""),
-            user_metadata: {
-                ...(searchParams.get("type") ? { auth_flow_type: String(searchParams.get("type") || "") } : {})
-            }
+            user_metadata: {}
         } : null
     })
 }
@@ -258,20 +256,21 @@ function shouldRefreshSoon(session) {
     return expiresAtMs - Date.now() <= SESSION_REFRESH_MARGIN_MS
 }
 
-async function refreshSessionIfNeeded() {
+async function refreshSessionIfNeeded(options = {}) {
     if (sessionRefreshInFlight) return sessionRefreshInFlight
 
-    sessionRefreshInFlight = refreshSessionIfNeededInternal().finally(() => {
+    sessionRefreshInFlight = refreshSessionIfNeededInternal(options).finally(() => {
         sessionRefreshInFlight = null
     })
     return sessionRefreshInFlight
 }
 
-async function refreshSessionIfNeededInternal() {
+async function refreshSessionIfNeededInternal(options = {}) {
     const currentSession = readStoredSession()
     if (!currentSession?.refresh_token) return currentSession && !isSessionExpired(currentSession) ? currentSession : null
+    const forceRefresh = options?.force === true
     const expiresAtMs = getSessionExpiryMs(currentSession)
-    if (expiresAtMs && expiresAtMs - Date.now() > SESSION_REFRESH_MARGIN_MS) {
+    if (!forceRefresh && expiresAtMs && expiresAtMs - Date.now() > SESSION_REFRESH_MARGIN_MS) {
         return currentSession
     }
 
@@ -312,20 +311,26 @@ async function validateSession(session, { allowRefresh = true } = {}) {
         return session
     }
 
+    let resolvedSession = null
     const user = await fetchCurrentUser(session.access_token).catch(async () => {
         if (!allowRefresh) return null
-        const refreshedSession = await refreshSessionIfNeeded().catch(() => null)
+        const refreshedSession = await refreshSessionIfNeeded({ force: true }).catch(() => null)
         if (!refreshedSession?.access_token) return null
         const refreshedUser = await fetchCurrentUser(refreshedSession.access_token).catch(() => null)
         if (!refreshedUser) return null
         const nextSession = normalizeSession({ ...refreshedSession, user: refreshedUser })
         writeStoredSession(nextSession)
+        resolvedSession = nextSession
         return nextSession?.user || null
     })
 
     if (!user) {
         writeStoredSession(null)
         return null
+    }
+
+    if (resolvedSession) {
+        return resolvedSession
     }
 
     const nextSession = normalizeSession({ ...session, user })
@@ -610,4 +615,16 @@ export function initSupabase() {
     getRuntimeConfig()
     supabaseClientSingleton = createClient()
     return supabaseClientSingleton
+}
+
+export const __supabaseClientTestUtils = {
+    normalizeSession,
+    validateSession,
+    writeStoredSession,
+    readStoredSession,
+    reset() {
+        supabaseClientSingleton = null
+        currentSessionCache = null
+        sessionRefreshInFlight = null
+    }
 }
