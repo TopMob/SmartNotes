@@ -7,6 +7,8 @@ type ProfileRow = {
   email: string | null
   display_name: string | null
   avatar_url: string | null
+  app_language?: string | null
+  metadata?: JsonObject | null
 }
 
 type FolderRow = {
@@ -127,6 +129,9 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
       pageDrawings: Array.isArray(note?.pageDrawings) ? note.pageDrawings : [],
       pageDrawingsRevision: typeof note?.pageDrawingsRevision === "string" ? note.pageDrawingsRevision : "",
       lock: note?.lock && typeof note.lock === "object" ? note.lock : null,
+      lockHidden: note?.lock && typeof note.lock === "object"
+        ? Boolean((note.lock as JsonObject).hidden)
+        : Boolean(metadata.lockHidden),
       workspaceId: note?.workspaceId || null,
       trashedAt: note?.trashedAt || null
     }
@@ -203,6 +208,7 @@ function mapNoteRow(note: NoteRow) {
     pageDrawings: normalizeStringArray(metadata.pageDrawings),
     pageDrawingsRevision: typeof metadata.pageDrawingsRevision === "string" ? metadata.pageDrawingsRevision : "",
     lock: normalizeOptionalObject(metadata.lock),
+    lockHidden: Boolean(metadata.lockHidden),
     workspaceId: normalizeOptionalString(metadata.workspaceId),
     createdAt: note.created_at || null,
     updatedAt: note.updated_at || null,
@@ -237,6 +243,70 @@ export async function ensureSupabaseProfile({ userId, email = "", displayName = 
 
   if (error) throw error
   return getSupabaseProfile(userId)
+}
+
+export async function getSupabaseUserSettings(userId: string) {
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("app_language, metadata")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (error) throw error
+
+  const metadata = data?.metadata && typeof data.metadata === "object" ? data.metadata as JsonObject : {}
+  return {
+    lang: typeof data?.app_language === "string" && data.app_language === "en" ? "en" : "ru",
+    notesPerPage: Number(metadata.notesPerPage || 20),
+    folderViewMode: metadata.folderViewMode === "full" ? "full" : "compact",
+    reduceMotion: metadata.reduceMotion === true,
+    interface: metadata.interface && typeof metadata.interface === "object" ? metadata.interface : {
+      showSavedFilters: true,
+      showTagFilter: true,
+      showUpdatedPeriodFilter: true
+    },
+    themeId: typeof metadata.themeId === "string" ? metadata.themeId : "oled",
+    customTheme: metadata.customTheme && typeof metadata.customTheme === "object" ? metadata.customTheme : {},
+    customPresets: Array.isArray(metadata.customPresets) ? metadata.customPresets : [],
+    schemaVersion: 1
+  }
+}
+
+export async function saveSupabaseUserSettings(userId: string, settings: Record<string, unknown>) {
+  const supabase = getSupabaseAdminClient()
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from("profiles")
+    .select("metadata")
+    .eq("id", userId)
+    .maybeSingle()
+
+  if (existingProfileError) throw existingProfileError
+
+  const currentMetadata = existingProfile?.metadata && typeof existingProfile.metadata === "object"
+    ? existingProfile.metadata as JsonObject
+    : {}
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      app_language: settings?.lang === "en" ? "en" : "ru",
+      metadata: {
+        ...currentMetadata,
+        notesPerPage: Number(settings?.notesPerPage || 20),
+        folderViewMode: settings?.folderViewMode === "full" ? "full" : "compact",
+        reduceMotion: settings?.reduceMotion === true,
+        interface: settings?.interface && typeof settings.interface === "object" ? settings.interface : currentMetadata.interface || {},
+        themeId: typeof settings?.themeId === "string" ? settings.themeId : currentMetadata.themeId || "oled",
+        customTheme: settings?.customTheme && typeof settings.customTheme === "object" ? settings.customTheme : currentMetadata.customTheme || {},
+        customPresets: Array.isArray(settings?.customPresets) ? settings.customPresets : currentMetadata.customPresets || []
+      }
+    })
+    .eq("id", userId)
+
+  if (error) throw error
+
+  return getSupabaseUserSettings(userId)
 }
 
 export async function listSupabaseFolders(userId: string) {
@@ -446,6 +516,14 @@ export async function patchSupabaseNote({ userId, noteId, updates }: { userId: s
   const payload = buildNotePayload(userId, {
     ...currentNote,
     ...updates,
+    lock: Object.prototype.hasOwnProperty.call(updates, "lock")
+      ? (updates.lock as JsonObject | null)
+      : (Object.prototype.hasOwnProperty.call(updates, "lock.hidden")
+          ? {
+              ...(currentNote?.lock && typeof currentNote.lock === "object" ? currentNote.lock : {}),
+              hidden: Boolean(updates["lock.hidden"])
+            }
+          : currentNote?.lock || null),
     id: normalizedNoteId
   }, (existingRow.metadata && typeof existingRow.metadata === "object") ? existingRow.metadata as JsonObject : {})
 

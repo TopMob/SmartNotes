@@ -304,18 +304,15 @@ export const ThemeManager = {
         this.applySettings(this.getDefaultSettings(), true)
     },
     getThemeSettingsReference(user) {
-        if (!user || !user.uid) return null
-        const rootReference = typeof DataPath !== "undefined" ? DataPath.getUserRootReference(user) : null
-        return rootReference ? rootReference.collection("preferences").doc("theme") : null
+        return null
     },
     async loadAccountSettings(user) {
-        const reference = this.getThemeSettingsReference(user)
-        if (!reference) return null
         try {
-            const snapshot = await reference.get()
-            if (!snapshot.exists) return null
-            const data = snapshot.data() || {}
-            const settings = buildThemeCloudPayload(data)
+            const settingsService = typeof SettingsSyncService !== "undefined" ? SettingsSyncService : null
+            if (!settingsService?.normalizeUserSettings) return null
+            const currentSettings = StateStore.read().originalUserSettings || null
+            if (!currentSettings) return null
+            const settings = buildThemeCloudPayload(currentSettings)
             const localSettings = this.getSavedSettings()
             if (settings) {
                 const mergedSettings = mergeCloudSettingsWithLocalSettings(localSettings, settings)
@@ -329,7 +326,6 @@ export const ThemeManager = {
         }
     },
     async saveAccountSettings(user, settings) {
-        const reference = this.getThemeSettingsReference(user)
         const normalizedSettings = {
             preset: settings?.preset || "oled",
             p: this.normalizeHex(settings?.p),
@@ -343,19 +339,19 @@ export const ThemeManager = {
             cardsOpacity: normalizeNumberInRange(settings?.cardsOpacity, 0.5, 1, 0.9)
         }
         this.saveSettings(normalizedSettings)
-        if (!reference) return
         try {
-            const cloudSettings = buildThemeCloudPayload(normalizedSettings)
-            const payload = {
-                ...cloudSettings,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }
-            try {
-                await reference.set(payload, { merge: true })
-            } catch (error) {
-                if (String(error?.code || "") !== "invalid-argument") throw error
-                await reference.set({ ...cloudSettings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-            }
+            const settingsService = typeof SettingsSyncService !== "undefined" ? SettingsSyncService : null
+            if (!settingsService?.saveUserSettings || !StateStore.read().user) return
+            const baseSettings = settingsService.normalizeUserSettings(StateStore.read().originalUserSettings || {})
+            await settingsService.saveUserSettings({
+                ...baseSettings,
+                ...buildThemeCloudPayload(normalizedSettings),
+                customTheme: {
+                    ...(baseSettings.customTheme || {}),
+                    ...normalizedSettings
+                },
+                customPresets: this.getCustomPresets()
+            })
         } catch (error) {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
         }

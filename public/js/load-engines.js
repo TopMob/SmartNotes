@@ -454,8 +454,8 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
 async function restoreFolderById(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
-    await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null } : folder))
+    await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, isArchived: false, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null, isArchived: false } : folder))
     UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
     refreshCurrentList()
 }

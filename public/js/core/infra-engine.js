@@ -23,6 +23,21 @@ const createDocumentSnapshot = (record) => ({
     ref: null
 })
 
+const mergePatchIntoRecord = (record, patch = {}) => {
+    const sourceRecord = record && typeof record === "object" ? record : {}
+    const sourcePatch = patch && typeof patch === "object" ? patch : {}
+    const nextRecord = { ...sourceRecord, ...sourcePatch }
+
+    if (Object.prototype.hasOwnProperty.call(sourcePatch, "lock.hidden")) {
+        nextRecord.lock = {
+            ...(sourceRecord.lock && typeof sourceRecord.lock === "object" ? sourceRecord.lock : {}),
+            hidden: !!sourcePatch["lock.hidden"]
+        }
+    }
+
+    return nextRecord
+}
+
 const applyFilters = (rows, filters = []) => {
     return (Array.isArray(rows) ? rows : []).filter(row => {
         return filters.every(filter => {
@@ -112,10 +127,13 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
             },
             async update(data) {
                 const method = endpoint === "supabase/notes" || endpoint === "supabase/folders" ? "PUT" : "POST"
+                const payload = method === "PUT"
+                    ? mergePatchIntoRecord((await this.get()).data(), { ...(data || {}), id: documentId })
+                    : { ...(data || {}), id: documentId }
                 const response = await fetch(createApiEndpoint(endpoint), {
                     method,
                     headers: buildAuthorizedHeaders(user),
-                    body: JSON.stringify({ ...(data || {}), id: documentId })
+                    body: JSON.stringify(payload)
                 })
                 if (!response.ok) throw new Error(`supabase-doc-update-http-${response.status}`)
                 return response.json()
@@ -214,8 +232,49 @@ const createRefsApi = () => ({
     getUserSharedCollection() {
         return null
     },
-    getUserSettingsReference() {
-        return null
+    getUserSettingsReference(user) {
+        return {
+            async get() {
+                const response = await fetch(createApiEndpoint("supabase/settings"), {
+                    method: "GET",
+                    headers: buildAuthorizedHeaders(user)
+                })
+                if (!response.ok) throw new Error(`supabase-settings-http-${response.status}`)
+                const payload = await response.json()
+                const settings = payload?.settings || null
+                return {
+                    exists: !!settings,
+                    data: () => settings || {}
+                }
+            },
+            async set(data) {
+                const response = await fetch(createApiEndpoint("supabase/settings"), {
+                    method: "POST",
+                    headers: buildAuthorizedHeaders(user),
+                    body: JSON.stringify({ settings: data })
+                })
+                if (!response.ok) throw new Error(`supabase-settings-save-http-${response.status}`)
+                return response.json()
+            },
+            onSnapshot(next, error) {
+                let cancelled = false
+                const poll = async () => {
+                    if (cancelled) return
+                    try {
+                        const snapshot = await this.get()
+                        next(snapshot)
+                    } catch (pollError) {
+                        if (typeof error === "function") error(pollError)
+                    }
+                }
+                poll()
+                const intervalId = setInterval(poll, 15000)
+                return () => {
+                    cancelled = true
+                    clearInterval(intervalId)
+                }
+            }
+        }
     },
     getUserLegacySettingsReference() {
         return null
