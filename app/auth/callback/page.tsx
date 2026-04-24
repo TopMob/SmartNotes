@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 
 import { SUPABASE_BROWSER_STORAGE_KEY, getSupabaseBrowserClient } from "@/lib/supabase/client"
 
-const CALLBACK_PATH = "/auth/callback"
 const PROFILE_SYNC_ENDPOINT = "/api/supabase/session"
 
 type CallbackState = "processing" | "error"

@@ -139,7 +139,6 @@ export async function requestGoogleIdentityToken({
 
     return new Promise((resolve, reject) => {
         let settled = false
-        let promptDisplayed = false
 
         const timeoutId = setTimeout(() => {
             finishWithReject(createError("auth/google-identity-timeout", "Google identity timeout"))
@@ -177,7 +176,6 @@ export async function requestGoogleIdentityToken({
             if (!moment) return
 
             if (moment.status === "displayed") {
-                promptDisplayed = true
                 return
             }
 

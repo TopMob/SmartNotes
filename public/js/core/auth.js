@@ -51,9 +51,6 @@ export function createAuthManager({ auth }) {
                 this._setAuthFeedback("")
             }
         },
-        _clearRedirectFallbackState() {
-            return
-        },
         async _startRedirectFallback() {
             this._setLoginBusy(true)
             this._setAuthFeedback(this._t("auth_google_redirect_starting", "Opening backup Google sign-in..."), "info")
@@ -231,7 +228,6 @@ export function createAuthManager({ auth }) {
                         this.handleAuthError(redirectError)
                     }
                 } else {
-                    this._clearRedirectFallbackState()
                     this.handleAuthError(error)
                 }
             } finally {
@@ -255,7 +251,6 @@ export function createAuthManager({ auth }) {
         },
         async logout() {
             if (!auth) return
-            this._clearRedirectFallbackState()
             this._setLoginBusy(false)
             state.driveInteractiveAllowed = false
             try {
@@ -424,10 +419,6 @@ export function createAuthManager({ auth }) {
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             state.currentUser = normalizedUser
-            if (normalizedUser) {
-                this._clearRedirectFallbackState()
-            }
-            console.info("[Auth] state changed", normalizedUser ? "logged in" : "logged out")
             state.authReady = true
             this.setAuthReady(true)
             this._resolveStartupScreen()
