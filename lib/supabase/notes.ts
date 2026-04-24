@@ -402,21 +402,9 @@ export async function deleteSupabaseFolder(userId: string, folderId: string) {
   }
 
   const supabase = getSupabaseAdminClient()
-  const { data: existingFolder, error: existingFolderError } = await supabase
-    .from("folders")
-    .select("metadata")
-    .eq("id", normalizedFolderId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (existingFolderError) throw existingFolderError
-
   const { error } = await supabase
     .from("folders")
-    .update({
-      is_archived: true,
-      metadata: mergeFolderMetadata({ trashedAt: new Date().toISOString() }, (existingFolder?.metadata && typeof existingFolder.metadata === "object") ? existingFolder.metadata as JsonObject : {})
-    })
+    .delete()
     .eq("id", normalizedFolderId)
     .eq("user_id", userId)
 
@@ -546,25 +534,9 @@ export async function deleteSupabaseNote(userId: string, noteId: string) {
   }
 
   const supabase = getSupabaseAdminClient()
-  const { data: existingNote, error: existingNoteError } = await supabase
-    .from("notes")
-    .select("metadata")
-    .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (existingNoteError) throw existingNoteError
-
-  const currentMetadata = (existingNote?.metadata && typeof existingNote.metadata === "object") ? existingNote.metadata as JsonObject : {}
   const { error } = await supabase
     .from("notes")
-    .update({
-      is_deleted: true,
-      metadata: {
-        ...currentMetadata,
-        trashedAt: new Date().toISOString()
-      }
-    })
+    .delete()
     .eq("id", normalizedNoteId)
     .eq("user_id", userId)
 

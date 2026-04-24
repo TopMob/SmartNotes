@@ -1980,7 +1980,7 @@ Object.assign(UI, {
                 return this.showToast(this.getText("folder_exists", "Folder already exists"))
             }
             if (!db || !StateStore.read().user) return
-            await DataPath.getUserFoldersCollection(StateStore.read().user).add({
+            const createdFolder = await DataPath.getUserFoldersCollection(StateStore.read().user).add({
                 name: validatedName,
                 description: validatedDescription,
                 isHidden: false,
@@ -1989,6 +1989,11 @@ Object.assign(UI, {
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 ownerUid: StateStore.read().user.uid
             })
+            if (createdFolder?.id) {
+                StateStore.update("folders", [...StateStore.read().folders, createdFolder])
+                this.renderFolders()
+                this.updateViewTitle()
+            }
         }, "", {
             maxLength: 50,
             showCounter: true,
@@ -2025,6 +2030,9 @@ Object.assign(UI, {
                 name: validatedName,
                 description: validatedDescription
             })
+            StateStore.update("folders", StateStore.read().folders.map(item => item.id === id ? { ...item, name: validatedName, description: validatedDescription } : item))
+            this.renderFolders()
+            this.updateViewTitle()
         }, String(folder.name || ""), {
             maxLength: 50,
             showCounter: true,
@@ -2165,6 +2173,8 @@ Object.assign(UI, {
         const user = StateStore.read().user
         if (!db || !user || !folderId) return
         await DataPath.getUserFoldersCollection(user).doc(folderId).update({ isHidden: !!hiddenState })
+        StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, isHidden: !!hiddenState } : folder))
+        this.renderFolders()
     },
 
     async toggleFolderHidden(folderId, options = {}) {
@@ -2194,6 +2204,9 @@ Object.assign(UI, {
             batch.update(ref, { folderOrder: index + 1 })
         })
         await batch.commit()
+        const nextOrderMap = new Map(reordered.map((folder, index) => [folder.id, index + 1]))
+        StateStore.update("folders", StateStore.read().folders.map(folder => nextOrderMap.has(folder.id) ? { ...folder, folderOrder: nextOrderMap.get(folder.id) } : folder))
+        this.renderFolders()
     },
 
     toggleActiveWorkspaceMenu(force) {

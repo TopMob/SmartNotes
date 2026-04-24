@@ -362,6 +362,7 @@ async function scheduleReminder(noteId) {
     const ref = getNoteReference(note, user)
     if (!ref) return
     await ref.update({ reminderAt: date.toISOString(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, reminderAt: date.toISOString() } : item))
     const permissionResult = await window.NotificationService?.ensurePermission?.() || null
     if (permissionResult?.supported && permissionResult.permission === "denied") {
         UI.showToast(UI.getText("notification_permission_denied", "Browser notifications are blocked"))
@@ -377,6 +378,7 @@ async function clearReminder(noteId) {
     const ref = getNoteReference(note, user)
     if (!ref) return
     await ref.update({ reminderAt: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, reminderAt: null } : item))
     UI.showToast(UI.getText("reminder_cleared", "Reminder cleared"))
     UI.closeModal("note-actions-modal")
 }
@@ -421,7 +423,14 @@ async function togglePin(noteId, options = {}) {
     if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ isPinned: !note.isPinned })
+    const nextPinned = !note.isPinned
+    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isPinned: nextPinned } : item))
+    try {
+        await ref.update({ isPinned: nextPinned })
+    } catch {
+        StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isPinned: note.isPinned } : item))
+        throw new Error("PIN_UPDATE_FAILED")
+    }
 }
 
 async function toggleArchive(noteId, archive, options = {}) {
@@ -430,7 +439,14 @@ async function toggleArchive(noteId, archive, options = {}) {
     if (!db || !user || !note || !ensureManageAccess(note) || (isHiddenLocked(note) && !options.allowLocked)) return
     const ref = getNoteReference(note, user)
     if (!ref) return
-    await ref.update({ isArchived: !!archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    const nextArchived = !!archive
+    StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isArchived: nextArchived } : item))
+    try {
+        await ref.update({ isArchived: nextArchived, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    } catch {
+        StateActions.setNotes(StateStore.read().notes.map(item => item.id === noteId ? { ...item, isArchived: note.isArchived } : item))
+        throw new Error("ARCHIVE_UPDATE_FAILED")
+    }
     UI.showToast(archive ? UI.getText("archived", "Archived") : UI.getText("restored", "Restored"))
 }
 
@@ -456,6 +472,7 @@ async function restoreFolderById(folderId) {
     if (!db || !user || !folderId) return
     await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, isArchived: false, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null, isArchived: false } : folder))
+    UI.renderFolders?.()
     UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
     refreshCurrentList()
 }
@@ -465,6 +482,7 @@ async function deleteFolderPermanently(folderId) {
     if (!db || !user || !folderId) return
     await getRefs().getUserFoldersCollection(user).doc(folderId).delete()
     StateStore.update("folders", StateStore.read().folders.filter(folder => folder.id !== folderId))
+    UI.renderFolders?.()
     UI.showToast(UI.getText("folder_deleted_permanent", "Folder deleted permanently"))
     refreshCurrentList()
 }
