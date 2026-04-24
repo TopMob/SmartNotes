@@ -213,6 +213,29 @@ function showAuthStartupFailure(messageText) {
     })
 }
 
+function resolveSupabaseStartupFailure(error) {
+    const message = String(error?.message || "").toLowerCase()
+
+    if (message.includes("supabase-config-missing") || message.includes("config unavailable")) {
+        return {
+            authMessage: "Настройки входа не загружены. Обновите страницу.",
+            runtimeMessage: "Конфигурация авторизации недоступна"
+        }
+    }
+
+    if (message.includes("supabase-browser-script-failed") || message.includes("supabase-create-client-missing")) {
+        return {
+            authMessage: "Модуль авторизации не загрузился. Проверьте сеть и блокировщики.",
+            runtimeMessage: "Не удалось загрузить модуль авторизации"
+        }
+    }
+
+    return {
+        authMessage: "Вход временно недоступен. Проверьте подключение и попробуйте снова.",
+        runtimeMessage: "Авторизация временно недоступна"
+    }
+}
+
 const hideSplashScreen = initializeSplashScreen()
 const startupSplash = createStartupSplashController(hideSplashScreen)
 
@@ -222,8 +245,9 @@ async function startCore() {
     } catch (error) {
         startupSplash.fail()
         console.error("[Core] Supabase startup failed", error)
-        showAuthStartupFailure("Вход временно недоступен. Проверьте подключение и попробуйте снова.")
-        showRuntimeErrorMessage("Облачные функции временно недоступны")
+        const failure = resolveSupabaseStartupFailure(error)
+        showAuthStartupFailure(failure.authMessage)
+        showRuntimeErrorMessage(failure.runtimeMessage)
         return
     }
 
