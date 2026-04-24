@@ -112,25 +112,30 @@ function createAuthHeaders(publishableKey, accessToken = "") {
 
 async function authRequest(path, { method = "GET", body = null, accessToken = "" } = {}) {
     const { url, publishableKey } = getRuntimeConfig()
-    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
-    const timeoutId = controller
-        ? setTimeout(() => controller.abort(), DEFAULT_AUTH_TIMEOUT_MS)
-        : null
-
-    let response = null
-    try {
-        response = await fetch(AUTH_PROXY_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: path.replace(/^\/+/, ""), method, body, accessToken }),
-            ...(controller ? { signal: controller.signal } : {})
-        })
-    } finally {
-        if (timeoutId) clearTimeout(timeoutId)
+    const requestWithTimeout = async (input, init) => {
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+        const timeoutId = controller
+            ? setTimeout(() => controller.abort(), DEFAULT_AUTH_TIMEOUT_MS)
+            : null
+        try {
+            return await fetch(input, {
+                ...init,
+                ...(controller ? { signal: controller.signal } : {})
+            })
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId)
+        }
     }
 
+    let response = null
+    response = await requestWithTimeout(AUTH_PROXY_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path.replace(/^\/+/, ""), method, body, accessToken })
+    })
+
     if (response.status === 404 || response.status === 405) {
-        response = await fetch(`${url}/auth/v1/${path.replace(/^\/+/, "")}`, {
+        response = await requestWithTimeout(`${url}/auth/v1/${path.replace(/^\/+/, "")}`, {
             method,
             headers: createAuthHeaders(publishableKey, accessToken),
             body: body ? JSON.stringify(body) : undefined
