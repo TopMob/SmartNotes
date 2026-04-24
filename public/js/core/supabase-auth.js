@@ -2,20 +2,29 @@ import { initSupabase } from "./supabase.js"
 
 const sessionEndpoint = "/api/supabase/session"
 
-function normalizeUser(user, session) {
+function readProfileValue(user, ...keys) {
+    for (const key of keys) {
+        const value = user?.[key] ?? user?.user_metadata?.[key]
+        if (typeof value === "string" && value) return value
+    }
+    return ""
+}
+
+function normalizeUser(user, session, updateProfile) {
     if (!user) return null
     return {
         uid: String(user.id || ""),
         id: String(user.id || ""),
         email: String(user.email || ""),
-        displayName: String(user.display_name || user.user_metadata?.display_name || ""),
-        photoURL: String(user.avatar_url || user.user_metadata?.avatar_url || ""),
+        displayName: String(readProfileValue(user, "display_name", "displayName", "full_name")),
+        photoURL: String(readProfileValue(user, "avatar_url", "photoURL", "picture")),
         providerData: [],
-        accessToken: String(session?.access_token || "")
+        accessToken: String(session?.access_token || ""),
+        updateProfile
     }
 }
 
-async function syncProfile(session) {
+async function syncProfile(session, updateProfile) {
     const accessToken = String(session?.access_token || "")
     if (!accessToken) return null
 
@@ -31,7 +40,7 @@ async function syncProfile(session) {
     }
 
     const payload = await response.json()
-    return normalizeUser(payload?.user || null, session)
+    return normalizeUser(payload?.user || null, session, updateProfile)
 }
 
 function createPersistenceEnum() {
@@ -48,6 +57,33 @@ export async function createSupabaseAuth() {
 
     let currentUser = null
     const authStateSubscribers = new Set()
+    const applyUserProfileUpdate = async ({ displayName, photoURL } = {}) => {
+        const currentSession = (await client.auth.getSession())?.data?.session || null
+        if (!currentSession?.user) {
+            throw new Error("supabase-session-missing")
+        }
+
+        const nextUserMetadata = {
+            ...(currentSession.user.user_metadata || {})
+        }
+
+        if (displayName !== undefined) {
+            nextUserMetadata.display_name = String(displayName || "").trim()
+        }
+        if (photoURL !== undefined) {
+            nextUserMetadata.avatar_url = String(photoURL || "")
+        }
+
+        const { error } = await client.auth.updateUser({
+            data: nextUserMetadata
+        })
+        if (error) throw error
+
+        const nextSession = (await client.auth.getSession())?.data?.session || currentSession
+        currentUser = await syncProfile(nextSession, applyUserProfileUpdate)
+        return currentUser
+    }
+
     const authApi = {
         app: { options: { clientId: "" } },
         Auth: {
@@ -63,7 +99,7 @@ export async function createSupabaseAuth() {
             const { error } = await client.auth.signInWithPassword({ email, password })
             if (error) throw error
             const sessionResult = await client.auth.getSession()
-            currentUser = await syncProfile(sessionResult?.data?.session || null)
+            currentUser = await syncProfile(sessionResult?.data?.session || null, applyUserProfileUpdate)
             return { user: currentUser }
         },
         async createUserWithEmailAndPassword(email, password) {
@@ -71,7 +107,7 @@ export async function createSupabaseAuth() {
             if (result.error) throw result.error
 
             const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
-            currentUser = session ? await syncProfile(session) : null
+            currentUser = session ? await syncProfile(session, applyUserProfileUpdate) : null
             return {
                 user: currentUser,
                 pendingConfirmation: !session && !!result?.data?.user
@@ -113,7 +149,7 @@ export async function createSupabaseAuth() {
 
     const emitAuthState = async (session) => {
         try {
-            currentUser = session?.user ? await syncProfile(session) : null
+            currentUser = session?.user ? await syncProfile(session, applyUserProfileUpdate) : null
         } catch (error) {
             console.error("[SupabaseAuth] session sync failed", error)
             currentUser = null

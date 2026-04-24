@@ -166,10 +166,11 @@ export function createAuthManager({ auth }) {
             const normalizedName = String(nextName || "").trim()
             if (!user || !normalizedName) return false
             if (normalizedName.length > 50) return false
+            let updatedUser = user
             if (typeof user.updateProfile === "function") {
-                await user.updateProfile({ displayName: normalizedName })
+                updatedUser = await user.updateProfile({ displayName: normalizedName }) || user
             }
-            const accessToken = String(user?.accessToken || auth?.currentUser?.accessToken || "")
+            const accessToken = String(updatedUser?.accessToken || auth?.currentUser?.accessToken || "")
             if (accessToken) {
                 await fetch("/api/supabase/session", {
                     method: "POST",
@@ -179,10 +180,10 @@ export function createAuthManager({ auth }) {
                     }
                 })
             }
-            this.applySignedInUI({ ...user, displayName: normalizedName })
+            this.applySignedInUI({ ...updatedUser, displayName: normalizedName })
             const workspaceId = StateStore.read().activeSharedWorkspaceId
             if (workspaceId && typeof WorkspaceAccessService !== "undefined") {
-                WorkspaceAccessService.updateMemberDisplayName(workspaceId, user.uid, normalizedName).catch(() => {})
+                WorkspaceAccessService.updateMemberDisplayName(workspaceId, updatedUser.uid, normalizedName).catch(() => {})
             }
             return true
         },
@@ -213,10 +214,11 @@ export function createAuthManager({ auth }) {
             if (!context) return false
             context.drawImage(image, 0, 0, canvas.width, canvas.height)
             const avatarDataUrl = canvas.toDataURL("image/jpeg", 0.82)
+            let updatedUser = user
             if (typeof user.updateProfile === "function") {
-                await user.updateProfile({ photoURL: avatarDataUrl })
+                updatedUser = await user.updateProfile({ photoURL: avatarDataUrl }) || user
             }
-            const accessToken = String(user?.accessToken || auth?.currentUser?.accessToken || "")
+            const accessToken = String(updatedUser?.accessToken || auth?.currentUser?.accessToken || "")
             if (accessToken) {
                 await fetch("/api/supabase/session", {
                     method: "POST",
@@ -226,7 +228,7 @@ export function createAuthManager({ auth }) {
                     }
                 })
             }
-            this.applySignedInUI({ ...user, photoURL: avatarDataUrl })
+            this.applySignedInUI({ ...updatedUser, photoURL: avatarDataUrl })
             return true
         },
 

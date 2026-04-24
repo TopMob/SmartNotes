@@ -18,6 +18,8 @@ const buildAuthorizedHeaders = (user) => {
 
 const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
 
+const createNeutralTimestamp = () => new Date().toISOString()
+
 const readNotesState = () => Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
 
 const updateCurrentNoteState = (noteId, note) => {
@@ -320,7 +322,7 @@ async function deleteFolder(folderId) {
         if (!db || !user) return
         const foldersCollection = getRefs().getUserFoldersCollection(user)
         const notesCollection = getRefs().getUserNotesCollection(user)
-        const movedAt = firebase.firestore.FieldValue.serverTimestamp()
+        const movedAt = createNeutralTimestamp()
         const folderRef = foldersCollection.doc(folderId)
         const notesSnapshot = await notesCollection.where("folderId", "==", folderId).get()
         const batch = db.batch()
@@ -333,8 +335,8 @@ async function deleteFolder(folderId) {
         })
         batch.update(folderRef, { trashedAt: movedAt, isHidden: false })
         await batch.commit()
-        const updatedFolders = StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: new Date().toISOString(), isHidden: false } : folder)
-        const updatedNotes = StateStore.read().notes.map(item => item.folderId === folderId ? { ...item, folderId: null, trashedAt: new Date().toISOString() } : item)
+        const updatedFolders = StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: movedAt, isHidden: false } : folder)
+        const updatedNotes = StateStore.read().notes.map(item => item.folderId === folderId ? { ...item, folderId: null, trashedAt: movedAt, updatedAt: movedAt } : item)
         StateStore.update("folders", updatedFolders)
         StateActions.setNotes(updatedNotes)
         if (StateStore.read().activeFolderId === folderId) switchView("notes")
@@ -627,8 +629,9 @@ async function moveNoteToFolder(noteId, folderId, options = {}) {
 async function restoreFolderById(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
-    await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, isArchived: false, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null, isArchived: false } : folder))
+    const restoredAt = createNeutralTimestamp()
+    await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, isArchived: false, updatedAt: restoredAt })
+    StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null, isArchived: false, updatedAt: restoredAt } : folder))
     UI.renderFolders?.()
     UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
     refreshCurrentList()

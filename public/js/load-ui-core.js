@@ -1468,25 +1468,41 @@ Object.assign(UI, {
         return this.getText(descriptor.messageKey, descriptor.fallbackMessage)
     },
 
-    normalizeImportedDate(inputValue) {
-        const timestampType = firebase?.firestore?.Timestamp
-        if (timestampType && typeof inputValue?.toDate === "function") return inputValue
-        if (timestampType && inputValue && typeof inputValue === "object" && Number.isFinite(inputValue.seconds)) {
-            return timestampType.fromMillis(inputValue.seconds * 1000)
-        }
-        if (timestampType && typeof inputValue === "number" && Number.isFinite(inputValue)) {
-            return timestampType.fromMillis(inputValue)
-        }
-        if (timestampType && typeof inputValue === "string") {
-            const parsedDate = new Date(inputValue)
-            if (Number.isFinite(parsedDate.getTime())) {
-                return timestampType.fromDate(parsedDate)
+    normalizeImportedDate(inputValue, fallbackValue = Date.now()) {
+        const toIsoString = (value) => {
+            if (value instanceof Date) {
+                return Number.isFinite(value.getTime()) ? value.toISOString() : null
             }
+            if (typeof value?.toDate === "function") {
+                const convertedDate = value.toDate()
+                return convertedDate instanceof Date && Number.isFinite(convertedDate.getTime())
+                    ? convertedDate.toISOString()
+                    : null
+            }
+            if (value && typeof value === "object") {
+                const seconds = Number.isFinite(value.seconds) ? value.seconds : value._seconds
+                const nanoseconds = Number.isFinite(value.nanoseconds) ? value.nanoseconds : value._nanoseconds
+                if (Number.isFinite(seconds)) {
+                    const convertedDate = new Date((seconds * 1000) + (Number.isFinite(nanoseconds) ? nanoseconds / 1000000 : 0))
+                    return Number.isFinite(convertedDate.getTime()) ? convertedDate.toISOString() : null
+                }
+            }
+            if (typeof value === "number" && Number.isFinite(value)) {
+                const timestamp = Math.abs(value) < 1000000000000 ? value * 1000 : value
+                const convertedDate = new Date(timestamp)
+                return Number.isFinite(convertedDate.getTime()) ? convertedDate.toISOString() : null
+            }
+            if (typeof value === "string") {
+                const convertedDate = new Date(value)
+                return Number.isFinite(convertedDate.getTime()) ? convertedDate.toISOString() : null
+            }
+            return null
         }
-        if (inputValue instanceof Date && Number.isFinite(inputValue.getTime()) && timestampType) {
-            return timestampType.fromDate(inputValue)
-        }
-        return firebase.firestore.FieldValue.serverTimestamp()
+
+        const normalizedValue = toIsoString(inputValue)
+        if (normalizedValue) return normalizedValue
+        if (fallbackValue == null) return null
+        return toIsoString(fallbackValue)
     },
 
     normalizeImportedTags(rawTags) {
@@ -1515,14 +1531,17 @@ Object.assign(UI, {
             access: null,
             hiddenTags: []
         })
+        const importedAt = Date.now()
+        const createdAt = this.normalizeImportedDate(normalizedNote.createdAt, importedAt)
+        const updatedAt = this.normalizeImportedDate(normalizedNote.updatedAt, createdAt || importedAt)
         return {
             ...normalizedNote,
             tags: this.normalizeImportedTags(normalizedNote.tags),
             pageTitles: Array.isArray(normalizedNote.pageTitles) ? normalizedNote.pageTitles : [],
             pageDrawings: Array.isArray(normalizedNote.pageDrawings) ? normalizedNote.pageDrawings : [],
             pageDrawingsRevision: String(normalizedNote.pageDrawingsRevision || ""),
-            createdAt: this.normalizeImportedDate(normalizedNote.createdAt),
-            updatedAt: this.normalizeImportedDate(normalizedNote.updatedAt),
+            createdAt,
+            updatedAt,
             ownerUid: String(ownerUid || ""),
             access: {
                 ownerUid: String(ownerUid || ""),
@@ -1542,7 +1561,7 @@ Object.assign(UI, {
             relevance: 0,
             folderId: null,
             trashedAt: null,
-            reminderAt: normalizedNote.reminderAt || null,
+            reminderAt: this.normalizeImportedDate(normalizedNote.reminderAt, null),
             order: Date.now()
         }
     },
@@ -1626,6 +1645,7 @@ Object.assign(UI, {
                     return
                 }
                 const current = StateStore.read()
+                const importedNotes = Array.isArray(importBundle.notes) ? importBundle.notes : []
                 const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid))
                 await this.saveImportedNotes(current.user, notesToImport)
                 this.showToast(this.getText("import_success", "Imported"))
@@ -2025,7 +2045,7 @@ Object.assign(UI, {
                 isHidden: false,
                 trashedAt: null,
                 folderOrder: Date.now(),
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdAt: new Date().toISOString(),
                 ownerUid: StateStore.read().user.uid
             })
             if (createdFolder?.id) {
