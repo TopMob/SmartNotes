@@ -32,6 +32,16 @@ function applyMobilePlatformAttributes() {
     bodyElement.dataset.mobilePlatform = platformType
 }
 
+function deferUntilAfterPaint(callback) {
+    if (typeof callback !== "function") return
+    const run = () => window.setTimeout(callback, 0)
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => run())
+        return
+    }
+    run()
+}
+
 export function bootstrapCore({ ThemeManager, Auth }) {
     const boot = () => {
         applyMobilePlatformAttributes()
@@ -47,10 +57,11 @@ export function bootstrapCore({ ThemeManager, Auth }) {
             })
         }
 
-
-        document.addEventListener("dblclick", (event) => {
-            event.preventDefault()
-        }, { passive: false })
+        deferUntilAfterPaint(() => {
+            document.addEventListener("dblclick", (event) => {
+                event.preventDefault()
+            }, { passive: false })
+        })
     }
 
     if (document.readyState === "loading") {

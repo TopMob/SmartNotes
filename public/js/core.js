@@ -89,6 +89,62 @@ function initializeSplashScreen() {
     return wrappedHide
 }
 
+function nextPaint() {
+    return new Promise(resolve => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(resolve)
+        })
+    })
+}
+
+function createStartupSplashController(hideSplash) {
+    let finished = false
+    const watchdogId = setTimeout(() => {
+        if (finished) return
+        finished = true
+        hideSplash()
+    }, 8000)
+
+    return {
+        async finish() {
+            if (finished) return
+            finished = true
+            clearTimeout(watchdogId)
+            await nextPaint()
+            hideSplash()
+        },
+        fail() {
+            if (finished) return
+            finished = true
+            clearTimeout(watchdogId)
+            hideSplash()
+        }
+    }
+}
+
+async function loadSupabaseConfig() {
+    const configResponse = await fetch("/api/supabase/config")
+    if (!configResponse.ok) {
+        throw new Error("Supabase config unavailable")
+    }
+
+    const configPayload = await configResponse.json()
+    window.SmartNotesSupabaseConfig = {
+        url: String(configPayload?.url || ""),
+        publishableKey: String(configPayload?.publishableKey || "")
+    }
+}
+
+async function initializeSupabaseDeferred() {
+    try {
+        await loadSupabaseConfig()
+        await initSupabase()
+    } catch (error) {
+        console.error("[Core] Supabase startup failed", error)
+        showRuntimeErrorMessage("Некоторые облачные функции временно недоступны")
+    }
+}
+
 function showRuntimeErrorMessage(messageText) {
     const message = String(messageText || "")
     if (!message) return
@@ -102,21 +158,10 @@ function showRuntimeErrorMessage(messageText) {
 }
 
 const hideSplashScreen = initializeSplashScreen()
+const startupSplash = createStartupSplashController(hideSplashScreen)
 
 async function startCore() {
-    const configResponse = await fetch("/api/supabase/config")
-    if (!configResponse.ok) {
-        hideSplashScreen()
-        showRuntimeErrorMessage("Не удалось загрузить Supabase config")
-        throw new Error("Supabase config unavailable")
-    }
-
-    const configPayload = await configResponse.json()
-    window.SmartNotesSupabaseConfig = {
-        url: String(configPayload?.url || ""),
-        publishableKey: String(configPayload?.publishableKey || "")
-    }
-    await initSupabase()
+    const supabaseStartup = initializeSupabaseDeferred()
 
     if (!core.auth || !core.db) {
         const infraState = await InfraEngine.init()
@@ -126,18 +171,23 @@ async function startCore() {
         window.db = core.db
     }
 
+    await startupSplash.finish()
+
     const authManager = await InfraEngine.createAuth()
     core.Auth = authManager
     window.Auth = core.Auth
     resolveAuthReady(authManager)
     authManager.init().catch(error => {
         console.error("[Core] Auth manager init failed", error)
+        showRuntimeErrorMessage("Некоторые функции входа временно недоступны")
     })
+
+    await supabaseStartup
 }
 
 bootstrapCore({ ThemeManager, Auth: core.Auth })
 startCore().catch(error => {
-    hideSplashScreen()
+    startupSplash.fail()
     console.error("[Core] Startup failed", error)
     showRuntimeErrorMessage("Не удалось запустить приложение. Перезагрузите страницу")
 })

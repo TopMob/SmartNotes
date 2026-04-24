@@ -7,6 +7,74 @@ const createApiEndpoint = path => window.SmartNotesBackendConfig?.createApiEndpo
 
 const createServerTimestamp = () => new Date().toISOString()
 
+const POLLING_INTERVAL_MS = 15000
+const HIDDEN_POLLING_INTERVAL_MS = 60000
+const ERROR_POLLING_INTERVAL_MS = 30000
+
+const getPollingInterval = ({ hadError = false } = {}) => {
+    if (hadError) return ERROR_POLLING_INTERVAL_MS
+    if (typeof document !== "undefined" && document.hidden) return HIDDEN_POLLING_INTERVAL_MS
+    return POLLING_INTERVAL_MS
+}
+
+const createPollingSubscription = ({ loadSnapshot, next, error, suppressErrors = false }) => {
+    let cancelled = false
+    let pollTimerId = null
+    let isPolling = false
+    let hasLoadedOnce = false
+
+    const clearScheduledPoll = () => {
+        if (pollTimerId !== null) {
+            clearTimeout(pollTimerId)
+            pollTimerId = null
+        }
+    }
+
+    const scheduleNextPoll = (options = {}) => {
+        if (cancelled) return
+        clearScheduledPoll()
+        pollTimerId = setTimeout(runPoll, getPollingInterval(options))
+    }
+
+    const handleVisibilityChange = () => {
+        if (cancelled || typeof document === "undefined" || document.hidden) return
+        if (!hasLoadedOnce) return
+        scheduleNextPoll({ hadError: false })
+        void runPoll()
+    }
+
+    const runPoll = async () => {
+        if (cancelled || isPolling) return
+        isPolling = true
+        clearScheduledPoll()
+        try {
+            const snapshot = await loadSnapshot()
+            hasLoadedOnce = true
+            next(snapshot)
+            scheduleNextPoll({ hadError: false })
+        } catch (pollError) {
+            if (!suppressErrors && typeof error === "function") error(pollError)
+            scheduleNextPoll({ hadError: true })
+        } finally {
+            isPolling = false
+        }
+    }
+
+    if (typeof document !== "undefined") {
+        document.addEventListener("visibilitychange", handleVisibilityChange)
+    }
+
+    void runPoll()
+
+    return () => {
+        cancelled = true
+        clearScheduledPoll()
+        if (typeof document !== "undefined") {
+            document.removeEventListener("visibilitychange", handleVisibilityChange)
+        }
+    }
+}
+
 const buildAuthorizedHeaders = user => {
     const accessToken = String(user?.accessToken || "")
     return {
@@ -74,7 +142,16 @@ const createBatchApi = () => {
     }
 }
 
-const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument = null, limitValue = null }) => ({
+const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument = null, limitValue = null }) => {
+    let docApiFactory = null
+    const getDocApiFactory = () => {
+        if (!docApiFactory) {
+            docApiFactory = id => createCollectionApi({ user, endpoint, filters }).doc(id)
+        }
+        return docApiFactory
+    }
+
+    return {
     async get() {
         const query = new URLSearchParams()
         if (Number.isFinite(Number(limitValue)) && Number(limitValue) > 0) {
@@ -97,9 +174,10 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
         const limitedRows = Number.isFinite(Number(limitValue)) && Number(limitValue) > 0
             ? sortedRows.slice(0, Number(limitValue))
             : sortedRows
+        const resolveDoc = getDocApiFactory()
         const docs = limitedRows.map(record => {
             const snapshot = createDocumentSnapshot(record)
-            snapshot.ref = createCollectionApi({ user, endpoint, filters }).doc(snapshot.id)
+            snapshot.ref = resolveDoc(snapshot.id)
             return snapshot
         })
         return { docs, forEach(callback) { docs.forEach(callback) } }
@@ -153,20 +231,11 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
                 return matched || { id: documentId, exists: false, data: () => ({}), ref: this }
             },
             onSnapshot(next) {
-                let cancelled = false
-                const poll = async () => {
-                    if (cancelled) return
-                    try {
-                        const snapshot = await this.get()
-                        next(snapshot)
-                    } catch {}
-                }
-                poll()
-                const intervalId = setInterval(poll, 15000)
-                return () => {
-                    cancelled = true
-                    clearInterval(intervalId)
-                }
+                return createPollingSubscription({
+                    loadSnapshot: () => this.get(),
+                    next,
+                    suppressErrors: true
+                })
             }
         }
     },
@@ -186,24 +255,14 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
         })
     },
     onSnapshot(next, error) {
-        let cancelled = false
-        const poll = async () => {
-            if (cancelled) return
-            try {
-                const snapshot = await this.get()
-                next(snapshot)
-            } catch (pollError) {
-                if (typeof error === "function") error(pollError)
-            }
-        }
-        poll()
-        const intervalId = setInterval(poll, 15000)
-        return () => {
-            cancelled = true
-            clearInterval(intervalId)
-        }
+        return createPollingSubscription({
+            loadSnapshot: () => this.get(),
+            next,
+            error
+        })
     }
-})
+}
+}
 
 const createRefsApi = () => ({
     getUserStorageCollectionName: () => "profiles",
@@ -258,22 +317,11 @@ const createRefsApi = () => ({
                 return response.json()
             },
             onSnapshot(next, error) {
-                let cancelled = false
-                const poll = async () => {
-                    if (cancelled) return
-                    try {
-                        const snapshot = await this.get()
-                        next(snapshot)
-                    } catch (pollError) {
-                        if (typeof error === "function") error(pollError)
-                    }
-                }
-                poll()
-                const intervalId = setInterval(poll, 15000)
-                return () => {
-                    cancelled = true
-                    clearInterval(intervalId)
-                }
+                return createPollingSubscription({
+                    loadSnapshot: () => this.get(),
+                    next,
+                    error
+                })
             }
         }
     },

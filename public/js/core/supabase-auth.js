@@ -24,8 +24,12 @@ function normalizeUser(user, session, updateProfile) {
     }
 }
 
+function getSessionAccessToken(session) {
+    return String(session?.access_token || "")
+}
+
 async function syncProfile(session, updateProfile) {
-    const accessToken = String(session?.access_token || "")
+    const accessToken = getSessionAccessToken(session)
     if (!accessToken) return null
 
     const response = await fetch(sessionEndpoint, {
@@ -56,7 +60,45 @@ export async function createSupabaseAuth() {
     }
 
     let currentUser = null
+    let lastResolvedAccessToken = ""
+    let inFlightProfileSync = null
     const authStateSubscribers = new Set()
+    const resolveUserFromSession = async (session) => {
+        const accessToken = getSessionAccessToken(session)
+        if (!session?.user || !accessToken) {
+            lastResolvedAccessToken = ""
+            inFlightProfileSync = null
+            return null
+        }
+
+        if (accessToken === lastResolvedAccessToken && currentUser) {
+            return currentUser
+        }
+
+        if (inFlightProfileSync?.accessToken === accessToken) {
+            return inFlightProfileSync.promise
+        }
+
+        const fallbackUser = normalizeUser(session.user, session, applyUserProfileUpdate)
+        const promise = syncProfile(session, applyUserProfileUpdate)
+            .catch((error) => {
+                console.error("[SupabaseAuth] session sync failed", error)
+                return fallbackUser
+            })
+            .then((resolvedUser) => {
+                const nextUser = resolvedUser || fallbackUser
+                currentUser = nextUser
+                lastResolvedAccessToken = accessToken
+                if (inFlightProfileSync?.accessToken === accessToken) {
+                    inFlightProfileSync = null
+                }
+                return nextUser
+            })
+
+        inFlightProfileSync = { accessToken, promise }
+        return promise
+    }
+
     const applyUserProfileUpdate = async ({ displayName, photoURL } = {}) => {
         const currentSession = (await client.auth.getSession())?.data?.session || null
         if (!currentSession?.user) {
@@ -80,7 +122,7 @@ export async function createSupabaseAuth() {
         if (error) throw error
 
         const nextSession = (await client.auth.getSession())?.data?.session || currentSession
-        currentUser = await syncProfile(nextSession, applyUserProfileUpdate)
+        currentUser = await resolveUserFromSession(nextSession)
         return currentUser
     }
 
@@ -99,7 +141,7 @@ export async function createSupabaseAuth() {
             const { error } = await client.auth.signInWithPassword({ email, password })
             if (error) throw error
             const sessionResult = await client.auth.getSession()
-            currentUser = await syncProfile(sessionResult?.data?.session || null, applyUserProfileUpdate)
+            currentUser = await resolveUserFromSession(sessionResult?.data?.session || null)
             return { user: currentUser }
         },
         async createUserWithEmailAndPassword(email, password) {
@@ -107,7 +149,7 @@ export async function createSupabaseAuth() {
             if (result.error) throw result.error
 
             const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
-            currentUser = session ? await syncProfile(session, applyUserProfileUpdate) : null
+            currentUser = session ? await resolveUserFromSession(session) : null
             return {
                 user: currentUser,
                 pendingConfirmation: !session && !!result?.data?.user
@@ -148,12 +190,7 @@ export async function createSupabaseAuth() {
     }
 
     const emitAuthState = async (session) => {
-        try {
-            currentUser = session?.user ? await syncProfile(session, applyUserProfileUpdate) : null
-        } catch (error) {
-            console.error("[SupabaseAuth] session sync failed", error)
-            currentUser = null
-        }
+        currentUser = session?.user ? await resolveUserFromSession(session) : null
 
         authStateSubscribers.forEach(callback => {
             Promise.resolve(callback(currentUser)).catch(error => {

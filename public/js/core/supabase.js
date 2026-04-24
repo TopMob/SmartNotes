@@ -1,6 +1,6 @@
 let supabaseClientSingleton = null
 
-export async function initSupabase() {
+export function initSupabase() {
     if (supabaseClientSingleton) return supabaseClientSingleton
 
     const url = String(window.SmartNotesSupabaseConfig?.url || "").trim()

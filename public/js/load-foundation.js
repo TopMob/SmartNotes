@@ -64,10 +64,22 @@
         }
     }
 
-    wrapConsoleMethod("log")
-    wrapConsoleMethod("info")
-    wrapConsoleMethod("warn")
-    wrapConsoleMethod("error")
+    function deferNonCriticalWork(callback, timeout = 1500) {
+        if (typeof callback !== "function") return
+        if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+            window.requestIdleCallback(() => callback(), { timeout })
+            return
+        }
+        setTimeout(callback, 0)
+    }
+
+    deferNonCriticalWork(() => {
+        wrapConsoleMethod("log")
+        wrapConsoleMethod("info")
+        wrapConsoleMethod("warn")
+        wrapConsoleMethod("error")
+        console.info("SmartNotes version:", window.APP_VERSION || "unknown")
+    })
 
     window.sanitizeLogValue = sanitizeLogValue;
     window.ConsoleLogStore = {
@@ -75,8 +87,6 @@
             return consoleEntries.slice()
         }
     };
-
-    console.info("SmartNotes version:", window.APP_VERSION || "unknown");
 })();
 
 function isQuotaError(error) {
@@ -186,9 +196,14 @@ function createIndexedDbStore() {
 
 function createStorageAdapter(storageAccessor) {
     const registryKey = "__smartnotes_cache_registry__"
-    const indexedDbStore = createIndexedDbStore()
     const priorityRank = { low: 0, normal: 1, high: 2 }
     const largeEditorKeys = new Set(["pending-note-save", "pending-images", "editor-content", "editor-media", "editor-draft"])
+    let indexedDbStore = null
+
+    const getIndexedDbStore = () => {
+        if (!indexedDbStore) indexedDbStore = createIndexedDbStore()
+        return indexedDbStore
+    }
 
     const isAvailable = () => {
         try {
@@ -296,7 +311,8 @@ function createStorageAdapter(storageAccessor) {
     }
 
     const canFallbackToIndexedDb = (key, value, options = {}) => {
-        if (!indexedDbStore.isSupported()) return false
+        const fallbackStore = getIndexedDbStore()
+        if (!fallbackStore.isSupported()) return false
         const normalizedKey = String(key)
         const sizeThreshold = Number(options.indexedDbThreshold || 120000)
         const serializedLength = String(value).length
@@ -335,7 +351,7 @@ function createStorageAdapter(storageAccessor) {
             if (localValue !== null) return localValue
             if (!options.allowIndexedDbFallback) return defaultValue
             try {
-                const fallbackValue = await indexedDbStore.get(normalizedKey)
+                const fallbackValue = await getIndexedDbStore().get(normalizedKey)
                 return typeof fallbackValue === "string" ? fallbackValue : defaultValue
             } catch {
                 return defaultValue
@@ -373,7 +389,7 @@ function createStorageAdapter(storageAccessor) {
             if (localResult.errorType !== "quota_exceeded") return localResult
             if (!canFallbackToIndexedDb(normalizedKey, normalizedValue, options)) return localResult
             try {
-                await indexedDbStore.set(normalizedKey, normalizedValue)
+                await getIndexedDbStore().set(normalizedKey, normalizedValue)
                 return createStorageResult({ success: true, key: normalizedKey, storage: "indexeddb", errorType: "quota_exceeded" })
             } catch {
                 return createStorageResult({ success: false, key: normalizedKey, errorType: "indexeddb_write_failed" })
@@ -394,7 +410,7 @@ function createStorageAdapter(storageAccessor) {
             const localResult = this.remove(key)
             if (options.includeIndexedDb !== true) return localResult
             try {
-                await indexedDbStore.remove(String(key))
+                await getIndexedDbStore().remove(String(key))
                 return localResult.success
                     ? localResult
                     : createStorageResult({ success: true, key: String(key), storage: "indexeddb" })
