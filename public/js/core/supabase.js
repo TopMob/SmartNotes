@@ -1,5 +1,6 @@
 let supabaseClientSingleton = null
 
+const AUTH_CALLBACK_PATH = "/auth/callback"
 const storageKey = "smartnotes.supabase.session"
 const authStateSubscribers = new Set()
 let authStateListenerBound = false
@@ -179,6 +180,9 @@ function clearAuthParamsFromUrl() {
         "provider_token",
         "provider_refresh_token"
     ].forEach((key) => url.searchParams.delete(key))
+    if (url.pathname === AUTH_CALLBACK_PATH) {
+        url.pathname = "/"
+    }
     window.history.replaceState({}, document.title, url.toString())
 }
 
@@ -223,6 +227,9 @@ function clearCodeFromUrl() {
     const url = new URL(window.location.href)
     url.searchParams.delete("code")
     url.searchParams.delete("state")
+    if (url.pathname === AUTH_CALLBACK_PATH) {
+        url.pathname = "/"
+    }
     window.history.replaceState({}, document.title, url.toString())
 }
 
@@ -389,7 +396,7 @@ function bindStorageListener() {
 function resolveRedirectTo(options = {}) {
     const candidate = String(options?.redirectTo || options?.emailRedirectTo || "").trim()
     if (candidate) return candidate
-    return window.location.origin + window.location.pathname
+    return window.location.origin + AUTH_CALLBACK_PATH
 }
 
 function buildOAuthUrl({ provider, options = {} } = {}) {
@@ -407,61 +414,6 @@ function buildOAuthUrl({ provider, options = {} } = {}) {
     if (scopes) query.set("scopes", scopes)
 
     return `${url}/auth/v1/authorize?${query.toString()}&apikey=${encodeURIComponent(publishableKey)}`
-}
-
-function openCenteredPopup(url, name = "smartnotes-google-auth") {
-    const width = Math.min(520, Math.max(420, Math.floor(window.screen?.availWidth || 520)))
-    const height = Math.min(720, Math.max(560, Math.floor(window.screen?.availHeight || 720)))
-    const left = Math.max(0, Math.floor(((window.screen?.availWidth || width) - width) / 2 + (window.screen?.availLeft || 0)))
-    const top = Math.max(0, Math.floor(((window.screen?.availHeight || height) - height) / 2 + (window.screen?.availTop || 0)))
-    return window.open(
-        url,
-        name,
-        `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=yes`
-    )
-}
-
-function waitForOAuthPopupSession(popupWindow, { timeoutMilliseconds = 120000 } = {}) {
-    return new Promise((resolve, reject) => {
-        if (!popupWindow) {
-            const error = new Error("Google sign-in popup was blocked")
-            error.code = "auth/oauth-popup-blocked"
-            reject(error)
-            return
-        }
-
-        const startedAt = Date.now()
-        const intervalId = setInterval(() => {
-            if (popupWindow.closed) {
-                clearInterval(intervalId)
-                const error = new Error("Google sign-in popup was closed")
-                error.code = "auth/oauth-popup-closed"
-                reject(error)
-                return
-            }
-
-            if (Date.now() - startedAt > timeoutMilliseconds) {
-                clearInterval(intervalId)
-                popupWindow.close()
-                const error = new Error("Google sign-in popup timeout")
-                error.code = "auth/oauth-popup-timeout"
-                reject(error)
-                return
-            }
-
-            try {
-                const popupUrl = popupWindow.location.href
-                if (!popupUrl || new URL(popupUrl).origin !== window.location.origin) return
-                const session = readSessionFromUrlValue(popupUrl)
-                if (!session) return
-                clearInterval(intervalId)
-                popupWindow.close()
-                resolve(session)
-            } catch {
-                return
-            }
-        }, 250)
-    })
 }
 
 function createClient() {
@@ -554,18 +506,6 @@ function createClient() {
                     return { data: { url }, error: null }
                 } catch (error) {
                     return { data: { url: null }, error }
-                }
-            },
-            async signInWithOAuthPopup({ provider, options = {} }) {
-                try {
-                    const url = buildOAuthUrl({ provider, options })
-                    const popupWindow = openCenteredPopup(url)
-                    const session = await waitForOAuthPopupSession(popupWindow, options)
-                    writeStoredSession(session)
-                    emitAuthState("SIGNED_IN", session)
-                    return { data: { session, user: session?.user || null }, error: null }
-                } catch (error) {
-                    return { data: { session: null, user: null }, error }
                 }
             },
             async updateUser({ data = {} } = {}) {

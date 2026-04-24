@@ -174,7 +174,8 @@ export async function requestGoogleIdentityToken({
             }
 
             if (moment.status === "dismissed") {
-                finishWithReject(createError("auth/google-identity-dismissed", "Google sign-in dismissed", moment))
+                const code = interactive ? "auth/google-identity-dismissed" : "auth/google-identity-not-displayed"
+                finishWithReject(createError(code, "Google sign-in dismissed", moment))
                 return
             }
 

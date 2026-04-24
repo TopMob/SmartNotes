@@ -129,9 +129,6 @@ export function createAuthManager({ auth }) {
                 "auth/google-identity-dismissed": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-skipped": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
-                "auth/oauth-popup-blocked": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
-                "auth/oauth-popup-closed": this._t("auth_popup_closed", "Sign-in canceled"),
-                "auth/oauth-popup-timeout": this._t("auth_network_failed", "No internet connection"),
                 "invalid_credentials": this._t("login_failed", "Sign-in failed")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
@@ -202,27 +199,15 @@ export function createAuthManager({ auth }) {
                 const canFallbackToRedirect = [
                     "auth/google-identity-not-displayed",
                     "auth/google-identity-skipped",
+                    "auth/google-identity-dismissed",
                     "auth/google-identity-timeout",
                     "auth/google-identity-unavailable"
                 ].includes(errorCode)
                     || errorMessage.includes("client_id and issuer required")
                     || errorMessage.includes("invalid request")
                     || errorMessage.includes("issuer required")
-                if (canFallbackToRedirect && typeof auth.signInWithGoogleAccountChooser === "function") {
-                    this._setAuthFeedback(this._t("auth_google_waiting", "Opening Google sign-in page..."), "info")
-                    const chooserResult = await auth.signInWithGoogleAccountChooser().catch(async chooserError => {
-                        const chooserCode = String(chooserError?.code || "")
-                        if ((chooserCode === "auth/oauth-popup-blocked" || chooserCode === "auth/oauth-popup-timeout") && typeof auth.signInWithRedirect === "function") {
-                            await auth.signInWithRedirect()
-                            return null
-                        }
-                        throw chooserError
-                    })
-                    if (chooserResult?.user) {
-                        await this._handleAuthState(chooserResult.user)
-                    }
-                } else if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
-                    this._setAuthFeedback(this._t("auth_google_waiting", "Opening Google sign-in page..."), "info")
+                if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
+                    this._setAuthFeedback(this._t("auth_google_waiting", "Continuing with standard Google sign-in..."), "info")
                     await auth.signInWithRedirect().catch(redirectError => this.handleAuthError(redirectError))
                 } else {
                     this.handleAuthError(error)

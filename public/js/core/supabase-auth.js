@@ -255,25 +255,12 @@ export async function createSupabaseAuth() {
             const result = await client.auth.signInWithOAuth({
                 provider: "google",
                 options: {
-                    redirectTo: window.location.origin + window.location.pathname,
+                    redirectTo: window.location.origin + "/auth/callback",
                     scopes: "openid email profile"
                 }
             })
             if (result.error) throw result.error
             return { user: null }
-        },
-        async signInWithGoogleAccountChooser() {
-            const result = await client.auth.signInWithOAuthPopup({
-                provider: "google",
-                options: {
-                    redirectTo: window.location.origin + window.location.pathname,
-                    scopes: "openid email profile"
-                }
-            })
-            if (result.error) throw result.error
-            const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
-            currentUser = await resolveUserFromSession(session)
-            return { user: currentUser }
         },
         onAuthStateChanged(next, error) {
             const callback = typeof next === "function" ? next : () => {}
