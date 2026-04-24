@@ -18,12 +18,36 @@ export async function findProfileByLegacyFirebaseUid(firebaseUid: string) {
   return data || null
 }
 
-export async function getIdentityMigrationStatus(firebaseUid: string) {
-  const profile = await findProfileByLegacyFirebaseUid(firebaseUid)
+export async function getIdentityMigrationStatus(profileId: string) {
+  const normalizedProfileId = String(profileId || "").trim()
+  if (!normalizedProfileId) {
+    return {
+      firebaseUid: "",
+      mapped: false,
+      profileId: null,
+      profile: null
+    }
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, display_name, avatar_url, legacy_firebase_uid")
+    .eq("id", normalizedProfileId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  const profile = data || null
+  const firebaseUid = typeof profile?.legacy_firebase_uid === "string"
+    ? profile.legacy_firebase_uid.trim()
+    : ""
 
   return {
-    firebaseUid: String(firebaseUid || "").trim(),
-    mapped: Boolean(profile?.id),
+    firebaseUid,
+    mapped: Boolean(firebaseUid),
     profileId: profile?.id || null,
     profile
   }

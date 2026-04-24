@@ -50,7 +50,8 @@ const applyFilters = (rows, filters = []) => {
 const sortByUpdatedDesc = rows => [...rows].sort((first, second) => {
     const firstTime = Date.parse(String(first?.updatedAt || first?.createdAt || "")) || 0
     const secondTime = Date.parse(String(second?.updatedAt || second?.createdAt || "")) || 0
-    return secondTime - firstTime
+    if (secondTime !== firstTime) return secondTime - firstTime
+    return String(second?.id || "").localeCompare(String(first?.id || ""))
 })
 
 const createBatchApi = () => {

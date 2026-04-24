@@ -18,7 +18,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const limit = Number(url.searchParams.get("limit") || 500)
     const offset = Number(url.searchParams.get("offset") || 0)
-    const notes = await listSupabaseNotes(user.id, { limit, offset })
+    const startAfterId = String(url.searchParams.get("startAfterId") || "").trim() || undefined
+    const notes = await listSupabaseNotes(user.id, { limit, offset, startAfterId })
     return ok({ notes })
   } catch (error) {
     return handleRouteError(mapNoteError(error), "NOTES_FAILED")

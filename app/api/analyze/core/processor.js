@@ -1,4 +1,3 @@
-import admin from "firebase-admin"
 import { analyzeWithProvider } from "../providers/index.js"
 import { clampRelevance, mergeAndNormalizeTags, normalizeAnalyzedItem, normalizeTagArray } from "../providers/utils.js"
 import {
@@ -65,7 +64,7 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
     return 0
   }
 
-  const writeBatch = database.batch()
+  const pendingUpdates = []
   let updatedCount = 0
 
   for (const rawAnalyzedItem of modelResult) {
@@ -84,8 +83,6 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
       continue
     }
 
-    const noteReference = database.collection("users").doc(uid).collection("notes").doc(analyzedItem.id)
-
     const mergedUserTags = mergeAndNormalizeTags(note.currentUserTags, analyzedItem.userTags, 5)
     const mergedHiddenTags = mergeAndNormalizeTags(note.currentHiddenTags, analyzedItem.hiddenTags, 15)
     const normalizedRelevance = clampRelevance(analyzedItem.relevance)
@@ -94,7 +91,8 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
       ? analyzedItem.resurfacingClass
       : "reference"
 
-    writeBatch.update(noteReference, {
+    pendingUpdates.push({
+      id: analyzedItem.id,
       tags: normalizeTagArray(mergedUserTags, 5),
       hiddenTags: normalizeTagArray(mergedHiddenTags, 15),
       relevance: normalizedRelevance,
@@ -110,14 +108,14 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
       aiFolder: toAiFolderId(resolvedFolderId),
       aiResurfacingClass: resurfacingClass,
       aiProcessed: true,
-      aiLastAnalyzed: admin.firestore.FieldValue.serverTimestamp()
+      aiLastAnalyzed: new Date().toISOString()
     })
 
     updatedCount += 1
   }
 
   if (updatedCount > 0) {
-    await writeBatch.commit()
+    await database.updateNotes(uid, pendingUpdates)
   } else {
     console.error("Analyze chunk produced no writable updates", {
       provider: ANALYZE_PROVIDER,
@@ -132,12 +130,7 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
 }
 
 export async function processUserNotes({ database, uid, reindexAll }) {
-  const userReference = database.collection("users").doc(uid)
-  const [userDocument, foldersSnapshot, notesSnapshot] = await Promise.all([
-    userReference.get(),
-    userReference.collection("folders").get(),
-    userReference.collection("notes").get()
-  ])
+  const { userDocument, foldersSnapshot, notesSnapshot } = await database.getUserAnalyzeData(uid)
 
   const userContext = buildAnalysisUserContext({ userDocument })
   const allFolders = buildFolderCandidates(foldersSnapshot)

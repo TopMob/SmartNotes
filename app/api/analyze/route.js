@@ -1,7 +1,7 @@
 export const runtime = "nodejs"
 
-import { getFirestoreDatabase } from "@/lib/firebaseAdmin"
 import { readJsonObject } from "@/lib/http/jsonBody"
+import { getAnalyzeDatabase } from "@/lib/supabase/analyze"
 import { ANALYZE_PROVIDER, API_SECRET, CORS_HEADERS, PROMPT_VERSION } from "./core/config"
 import { processUserNotes } from "./core/processor"
 
@@ -47,7 +47,7 @@ export async function POST(request) {
   )
 
   try {
-    const database = getFirestoreDatabase()
+    const database = getAnalyzeDatabase()
     let processedCount = 0
     let processedUsers = 0
 
@@ -59,12 +59,12 @@ export async function POST(request) {
       })
       processedUsers = 1
     } else {
-      const usersSnapshot = await database.collection("users").get()
+      const userIds = await database.listUserIds()
 
-      for (const userDocument of usersSnapshot.docs) {
+      for (const uid of userIds) {
         processedCount += await processUserNotes({
           database,
-          uid: userDocument.id,
+          uid,
           reindexAll
         })
         processedUsers += 1

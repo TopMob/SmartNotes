@@ -1,5 +1,5 @@
 import { getIdentityMigrationStatus } from "@/lib/supabase/identity"
-import { requireRequestAuth } from "@/lib/auth"
+import { ApiRouteError, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
 
@@ -9,14 +9,18 @@ function getErrorMessage(error: unknown) {
 
 export async function GET(request: Request) {
   try {
-    const firebaseUid = await requireRequestAuth(request)
-    const status = await getIdentityMigrationStatus(firebaseUid)
+    const user = await requireSupabaseUser(request)
+    const status = await getIdentityMigrationStatus(user.id)
 
     return Response.json({
       ok: true,
       ...status
     })
   } catch (error) {
+    if (error instanceof ApiRouteError && error.code === "UNAUTHORIZED") {
+      return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
+    }
+
     if (getErrorMessage(error) === "UNAUTHORIZED") {
       return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }

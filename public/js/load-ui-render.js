@@ -663,20 +663,29 @@ Object.assign(UI, {
         const consoleLogs = window.ConsoleLogStore?.getEntries ? window.ConsoleLogStore.getEntries() : []
         const { user, tempRating, config } = StateStore.read()
         const rawPayload = {
+            type: "feedback",
             uid: user.uid,
             email: user.email || "",
             displayName: user.displayName || "",
             rating: tempRating,
             text: String(sanitize(text.trim()) || ""),
             consoleLogs: sanitize(consoleLogs),
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: new Date().toISOString(),
             userAgent: navigator.userAgent || "",
             appVersion: "web",
             language: config.lang
         }
         try {
             const payload = sanitize(rawPayload)
-            await db.collection("feedback").add(payload)
+            const response = await fetch("/api/supabase/feedback", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {})
+                },
+                body: JSON.stringify(payload)
+            })
+            if (!response.ok) throw new Error(`supabase-feedback-http-${response.status}`)
             StateActions.setTempRating(0)
             document.querySelectorAll(".star").forEach(s => {
                 s.textContent = "star_border"
@@ -826,14 +835,22 @@ Object.assign(UI, {
                 displayName: user.displayName || "",
                 answers: sanitize(payloadAnswers),
                 consoleLogs: sanitize(consoleLogs),
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdAt: new Date().toISOString(),
                 userAgent: navigator.userAgent || "",
                 appVersion: "web",
                 language: config.lang,
                 type: "survey"
             }
             const payload = sanitize(rawPayload)
-            await db.collection("feedback").add(payload)
+            const response = await fetch("/api/supabase/feedback", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {})
+                },
+                body: JSON.stringify(payload)
+            })
+            if (!response.ok) throw new Error(`supabase-survey-http-${response.status}`)
             this.showToast(this.getText("poll_thanks", "Thanks!"))
             this.closeModal("poll-modal")
         } catch {

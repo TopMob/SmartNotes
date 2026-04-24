@@ -583,15 +583,35 @@ export async function deleteSupabaseFolder(userId: string, folderId: string) {
   return { id: normalizedFolderId }
 }
 
-export async function listSupabaseNotes(userId: string, { limit = 500, offset = 0 }: { limit?: number, offset?: number } = {}) {
+export async function listSupabaseNotes(userId: string, { limit = 500, offset = 0, startAfterId }: { limit?: number, offset?: number, startAfterId?: string } = {}) {
   const supabase = getSupabaseAdminClient()
   const from = Math.max(0, Number(offset) || 0)
   const to = from + Math.max(1, Number(limit) || 500) - 1
-  const { data, error } = await supabase
+  let query = supabase
     .from("notes")
     .select("*")
     .eq("user_id", userId)
+
+  const normalizedStartAfterId = String(startAfterId || "").trim()
+  if (normalizedStartAfterId) {
+    const { data: cursorRow, error: cursorError } = await supabase
+      .from("notes")
+      .select("id, updated_at")
+      .eq("id", normalizedStartAfterId)
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    if (cursorError) throw cursorError
+
+    if (cursorRow?.id) {
+      const cursorUpdatedAt = cursorRow.updated_at || "1970-01-01T00:00:00.000Z"
+      query = query.or(`updated_at.lt.${cursorUpdatedAt},and(updated_at.eq.${cursorUpdatedAt},id.lt.${normalizedStartAfterId})`)
+    }
+  }
+
+  const { data, error } = await query
     .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(from, to)
 
   if (error) throw error

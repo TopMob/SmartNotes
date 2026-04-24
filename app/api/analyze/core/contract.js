@@ -7,6 +7,14 @@ function trimText(value, maxLength) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength)
 }
 
+function getDocumentData(document) {
+  if (typeof document?.data === "function") {
+    return document.data()
+  }
+
+  return document && typeof document === "object" ? document : {}
+}
+
 function tokenize(value) {
   return trimText(value, 10000)
     .toLowerCase()
@@ -56,7 +64,7 @@ function scoreFolderCandidate(folder, note) {
 }
 
 function normalizeFolderCandidate(document) {
-  const folderData = document.data()
+  const folderData = getDocumentData(document)
   const name = trimText(folderData.name, 120)
 
   return {
@@ -91,7 +99,7 @@ function resolveLanguage(noteData) {
 }
 
 export function buildAnalysisUserContext({ userDocument }) {
-  const userData = typeof userDocument?.data === "function" ? userDocument.data() : {}
+  const userData = getDocumentData(userDocument)
 
   return {
     language: typeof userData?.lang === "string" && userData.lang.trim() ? userData.lang.trim().slice(0, 16) : "unknown"
@@ -143,7 +151,7 @@ export function selectFolderCandidatesForNote(folders, note, maxItems = MAX_FOLD
 }
 
 export function buildNoteInput(document, noteTextLimit) {
-  const noteData = document.data()
+  const noteData = getDocumentData(document)
   const cleanText = trimText(stripHtml(noteData.content || ""), noteTextLimit)
   const currentFolderId = typeof noteData.folderId === "string" && noteData.folderId
     ? noteData.folderId

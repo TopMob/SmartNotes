@@ -1,6 +1,5 @@
-import admin from "firebase-admin"
-import { getFirestoreDatabase } from "@/lib/firebaseAdmin"
 import { readJsonObject } from "@/lib/http/jsonBody"
+import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
 
@@ -28,6 +27,8 @@ function sanitizeSettings(settings) {
     p: String(settings.p ?? ""),
     bg: String(settings.bg ?? ""),
     t: String(settings.t ?? ""),
+    mainBackgroundUrl: String(settings.mainBackgroundUrl ?? ""),
+    sidebarBackgroundUrl: String(settings.sidebarBackgroundUrl ?? ""),
     mainBackgroundImage: String(settings.mainBackgroundImage ?? ""),
     sidebarBackgroundImage: String(settings.sidebarBackgroundImage ?? ""),
     uiOpacity: toOpacity(settings.uiOpacity, 0.78),
@@ -45,6 +46,8 @@ function sanitizeCustomPresets(customPresets) {
     p: String(customPreset?.p ?? ""),
     bg: String(customPreset?.bg ?? ""),
     t: String(customPreset?.t ?? ""),
+    mainBackgroundUrl: String(customPreset?.mainBackgroundUrl ?? ""),
+    sidebarBackgroundUrl: String(customPreset?.sidebarBackgroundUrl ?? ""),
     mainBackgroundImage: String(customPreset?.mainBackgroundImage ?? ""),
     sidebarBackgroundImage: String(customPreset?.sidebarBackgroundImage ?? "")
   }))
@@ -65,16 +68,40 @@ export async function POST(request) {
       return Response.json({ error: "Invalid settings" }, { status: 400 })
     }
 
-    const database = getFirestoreDatabase()
+    const supabase = getSupabaseAdminClient()
+    const normalizedUid = uid.trim()
+    const sanitizedSettings = sanitizeSettings(settings)
+    const sanitizedCustomPresets = sanitizeCustomPresets(customPresets)
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from("profiles")
+      .select("metadata, app_language")
+      .eq("id", normalizedUid)
+      .maybeSingle()
 
-    await database.doc(`users/${uid}/preferences/theme`).set(
-      {
-        settings: sanitizeSettings(settings),
-        customPresets: sanitizeCustomPresets(customPresets),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      },
-      { merge: true }
-    )
+    if (existingProfileError) {
+      throw existingProfileError
+    }
+
+    const currentMetadata = existingProfile?.metadata && typeof existingProfile.metadata === "object" && !Array.isArray(existingProfile.metadata)
+      ? existingProfile.metadata
+      : {}
+
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({
+        id: normalizedUid,
+        app_language: existingProfile?.app_language === "en" ? "en" : "ru",
+        metadata: {
+          ...currentMetadata,
+          themeId: sanitizedSettings.preset || "oled",
+          customTheme: sanitizedSettings,
+          customPresets: sanitizedCustomPresets
+        }
+      })
+
+    if (error) {
+      throw error
+    }
 
     return Response.json({ success: true }, { status: 200 })
   } catch (error) {
