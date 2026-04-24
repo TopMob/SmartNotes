@@ -665,6 +665,44 @@ const CollaborationService = {
     shareCollection: "noteShares",
     sharedNotesCollection: "sharedNotes",
     pendingTokenKey: "pending-share-token",
+    getWorkspaceNoteId(note, access = null) {
+        const resolvedAccess = access || this.getAccess(note)
+        const workspaceId = String(resolvedAccess?.workspaceId || note?.workspaceId || "").trim()
+        const explicitNoteId = String(resolvedAccess?.noteId || "").trim()
+        if (explicitNoteId) return explicitNoteId
+        const rawNoteId = String(note?.id || "").trim()
+        if (!workspaceId || !rawNoteId) return rawNoteId
+        const workspacePrefix = `workspace_${workspaceId}_`
+        return rawNoteId.startsWith(workspacePrefix) ? rawNoteId.slice(workspacePrefix.length) : rawNoteId
+    },
+    getNoteReferencePath(note, access = null) {
+        const resolvedAccess = access || this.getAccess(note)
+        const pathCandidates = [
+            resolvedAccess?.noteRef,
+            resolvedAccess?.notePath,
+            resolvedAccess?.referencePath,
+            note?.noteRef,
+            note?.notePath,
+            note?.referencePath
+        ]
+        for (const candidate of pathCandidates) {
+            const normalizedCandidate = String(candidate || "").trim()
+            if (normalizedCandidate) return normalizedCandidate
+        }
+        return ""
+    },
+    getShareOwnerCollection(note, access = null) {
+        const resolvedAccess = access || this.getAccess(note)
+        const collectionCandidates = [
+            resolvedAccess?.ownerCollection,
+            note?.ownerCollection
+        ]
+        for (const candidate of collectionCandidates) {
+            const normalizedCandidate = String(candidate || "").trim()
+            if (normalizedCandidate) return normalizedCandidate
+        }
+        return "users"
+    },
     getAccess(note) {
         const access = note && typeof note === "object" ? note.access : null
         return access && typeof access === "object" ? access : null
@@ -771,9 +809,11 @@ const CollaborationService = {
         const access = this.getAccess(note)
         const ownerUid = access?.ownerUid || user.uid
         if (ownerUid !== user.uid) return ""
-        const noteId = access?.noteId || note.id
+        const noteId = this.getWorkspaceNoteId(note, access)
+        if (!noteId) return ""
         const token = await this.generateToken()
-        const ownerCollection = "users"
+        const ownerCollection = this.getShareOwnerCollection(note, access)
+        const noteRef = this.getNoteReferencePath(note, access)
         const payload = {
             ownerUid,
             ownerCollection,
@@ -781,6 +821,8 @@ const CollaborationService = {
             permission: this.normalizePermission(permission),
             createdAt: Utils.serverTimestamp()
         }
+        if (noteRef) payload.noteRef = noteRef
+        if (access?.workspaceId) payload.workspaceId = String(access.workspaceId)
         await db.collection(this.shareCollection).doc(token).set(payload)
         return this.buildShareUrl(token)
     },
@@ -796,12 +838,14 @@ const CollaborationService = {
         const entryId = `${data.ownerUid}_${data.noteId}`
         const entry = {
             ownerUid: data.ownerUid,
-            ownerCollection: "users",
+            ownerCollection: data.ownerCollection ? String(data.ownerCollection) : "users",
             noteId: data.noteId,
             permission,
             shareToken: trimmed,
             updatedAt: Utils.serverTimestamp()
         }
+        if (data.noteRef) entry.noteRef = String(data.noteRef)
+        if (data.workspaceId) entry.workspaceId = String(data.workspaceId)
         await DataPath.getUserSharedCollection(user, this.sharedNotesCollection).doc(entryId).set(entry, { merge: true })
         return { id: entryId, ...entry }
     },
@@ -811,12 +855,23 @@ const CollaborationService = {
             return DataPath.getUserNotesCollection(user).doc(note.id)
         }
         const access = this.getAccess(note)
-        const workspaceId = access?.workspaceId || note.workspaceId
-        if (workspaceId && window.AppFeatures?.workspaces === true && typeof db.collection === "function") {
-            const noteId = access?.noteId || String(note.id || "").replace(`workspace_${workspaceId}_`, "")
-            return db.collection("workspaces").doc(workspaceId).collection("notes").doc(noteId)
+        const referencePath = this.getNoteReferencePath(note, access)
+        if (referencePath && typeof db.doc === "function") {
+            return db.doc(referencePath)
         }
-        const noteId = access?.noteId || note.id
+        const workspaceId = access?.workspaceId || note.workspaceId
+        const noteId = this.getWorkspaceNoteId(note, access)
+        if (workspaceId && window.AppFeatures?.workspaces === true) {
+            if (typeof DataPath?.getWorkspaceNotesCollection === "function") {
+                return DataPath.getWorkspaceNotesCollection(workspaceId).doc(noteId)
+            }
+            if (typeof DataPath?.getWorkspaceNoteDocument === "function") {
+                return DataPath.getWorkspaceNoteDocument(workspaceId, noteId)
+            }
+            if (typeof DataPath?.getWorkspaceNoteReference === "function") {
+                return DataPath.getWorkspaceNoteReference(workspaceId, noteId)
+            }
+        }
         return DataPath.getUserNotesCollection(user).doc(noteId)
     },
     async copyToClipboard(text) {
