@@ -140,3 +140,148 @@ test('stored session survives reload by forcing refresh when user endpoint rejec
   delete globalThis.document
   delete globalThis.fetch
 })
+
+test('stored session is preserved on reload when profile verification temporarily fails', async () => {
+  const storage = new Map()
+  const fetchCalls = []
+  const storedSession = createSession({ refreshToken: 'refresh-stable', exp: Math.floor(Date.now() / 1000) + 7200 })
+
+  storage.set('smartnotes.supabase.session', JSON.stringify(storedSession))
+
+  globalThis.window = {
+    location: {
+      href: 'https://smartnotes.local/',
+      origin: 'https://smartnotes.local',
+      hash: '',
+      search: '',
+      pathname: '/'
+    },
+    localStorage: {
+      getItem(key) {
+        return storage.has(key) ? storage.get(key) : null
+      },
+      setItem(key, value) {
+        storage.set(key, String(value))
+      },
+      removeItem(key) {
+        storage.delete(key)
+      }
+    },
+    addEventListener() {},
+    history: {
+      replaceState() {}
+    },
+    SmartNotesSupabaseConfig: runtimeConfig
+  }
+  globalThis.document = {
+    title: 'SmartNotes',
+    visibilityState: 'visible'
+  }
+  globalThis.atob = (value) => Buffer.from(value, 'base64').toString('binary')
+  globalThis.fetch = async (input, init = {}) => {
+    fetchCalls.push({ input: String(input), method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null })
+
+    if (String(input) === '/api/supabase/auth') {
+      const body = init.body ? JSON.parse(init.body) : {}
+      if (body.path === 'user') {
+        return new Response(JSON.stringify({ error: 'temporary upstream outage' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+    }
+
+    throw new Error(`Unexpected fetch: ${String(input)}`)
+  }
+
+  const module = await import(`../public/js/core/supabase.js?test-preserve=${Date.now()}`)
+  module.__supabaseClientTestUtils.reset()
+
+  const client = module.initSupabase()
+  const initialResult = await client.auth.getSession()
+  const initialSession = initialResult?.data?.session || null
+
+  assert.ok(initialSession)
+  assert.equal(initialSession.access_token, storedSession.access_token)
+  assert.equal(initialSession.refresh_token, 'refresh-stable')
+  assert.equal(JSON.parse(storage.get('smartnotes.supabase.session')).refresh_token, 'refresh-stable')
+  const persisted = JSON.parse(storage.get('smartnotes.supabase.session'))
+  assert.equal(persisted.access_token, storedSession.access_token)
+  assert.equal(persisted.refresh_token, 'refresh-stable')
+
+  module.__supabaseClientTestUtils.reset()
+  delete globalThis.window
+  delete globalThis.document
+  delete globalThis.fetch
+})
+
+test('expired stored session is preserved during temporary refresh outage until a real auth failure occurs', async () => {
+  const storage = new Map()
+  const expiredSession = createSession({
+    refreshToken: 'refresh-survives',
+    exp: Math.floor(Date.now() / 1000) - 60,
+    expiresAt: Math.floor(Date.now() / 1000) - 60
+  })
+
+  storage.set('smartnotes.supabase.session', JSON.stringify(expiredSession))
+
+  globalThis.window = {
+    location: {
+      href: 'https://smartnotes.local/',
+      origin: 'https://smartnotes.local',
+      hash: '',
+      search: '',
+      pathname: '/'
+    },
+    localStorage: {
+      getItem(key) {
+        return storage.has(key) ? storage.get(key) : null
+      },
+      setItem(key, value) {
+        storage.set(key, String(value))
+      },
+      removeItem(key) {
+        storage.delete(key)
+      }
+    },
+    addEventListener() {},
+    history: {
+      replaceState() {}
+    },
+    SmartNotesSupabaseConfig: runtimeConfig
+  }
+  globalThis.document = {
+    title: 'SmartNotes',
+    visibilityState: 'visible'
+  }
+  globalThis.atob = (value) => Buffer.from(value, 'base64').toString('binary')
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input) === '/api/supabase/auth') {
+      const body = init.body ? JSON.parse(init.body) : {}
+      if (body.path === 'token?grant_type=refresh_token') {
+        return new Response(JSON.stringify({ error: 'temporary outage' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+    }
+
+    throw new Error(`Unexpected fetch: ${String(input)}`)
+  }
+
+  const module = await import(`../public/js/core/supabase.js?test-expired=${Date.now()}`)
+  module.__supabaseClientTestUtils.reset()
+
+  const client = module.initSupabase()
+  const result = await client.auth.getSession()
+  const session = result?.data?.session || null
+
+  assert.ok(session)
+  assert.equal(session.refresh_token, 'refresh-survives')
+  assert.equal(JSON.parse(storage.get('smartnotes.supabase.session')).refresh_token, 'refresh-survives')
+
+  module.__supabaseClientTestUtils.reset()
+  delete globalThis.window
+  delete globalThis.document
+  delete globalThis.fetch
+})

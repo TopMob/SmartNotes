@@ -256,6 +256,28 @@ function shouldRefreshSoon(session) {
     return expiresAtMs - Date.now() <= SESSION_REFRESH_MARGIN_MS
 }
 
+function isPermanentAuthFailure(error) {
+    const status = Number(error?.status || 0)
+    const code = String(error?.code || "").toLowerCase()
+    const message = String(error?.message || "").toLowerCase()
+
+    if (status === 400) return true
+    if (status === 401 && code !== "bad_jwt") return true
+
+    return [
+        "invalid_grant",
+        "refresh_token_not_found",
+        "refresh_token_already_used",
+        "session_not_found",
+        "user_not_found",
+        "invalid_refresh_token"
+    ].some((token) => code.includes(token) || message.includes(token))
+}
+
+function shouldPreserveSession(error) {
+    return !isPermanentAuthFailure(error)
+}
+
 async function refreshSessionIfNeeded(options = {}) {
     if (sessionRefreshInFlight) return sessionRefreshInFlight
 
@@ -300,7 +322,12 @@ async function validateSession(session, { allowRefresh = true } = {}) {
     if (!session?.access_token) return null
 
     if (isSessionExpired(session) && allowRefresh) {
-        const refreshedSession = await refreshSessionIfNeeded().catch(() => null)
+        const refreshedSession = await refreshSessionIfNeeded().catch((error) => {
+            if (shouldPreserveSession(error)) {
+                return session
+            }
+            return null
+        })
         if (!refreshedSession) {
             writeStoredSession(null)
         }
@@ -312,12 +339,27 @@ async function validateSession(session, { allowRefresh = true } = {}) {
     }
 
     let resolvedSession = null
-    const user = await fetchCurrentUser(session.access_token).catch(async () => {
-        if (!allowRefresh) return null
-        const refreshedSession = await refreshSessionIfNeeded({ force: true }).catch(() => null)
+    const user = await fetchCurrentUser(session.access_token).catch(async (error) => {
+        if (!allowRefresh) {
+            resolvedSession = shouldPreserveSession(error) ? session : null
+            return resolvedSession?.user || null
+        }
+        const refreshedSession = await refreshSessionIfNeeded({ force: true }).catch((refreshError) => {
+            if (shouldPreserveSession(refreshError)) {
+                return session
+            }
+            return null
+        })
+        if (refreshedSession === session) {
+            resolvedSession = session
+            return session.user || null
+        }
         if (!refreshedSession?.access_token) return null
         const refreshedUser = await fetchCurrentUser(refreshedSession.access_token).catch(() => null)
-        if (!refreshedUser) return null
+        if (!refreshedUser) {
+            resolvedSession = shouldPreserveSession(error) ? session : null
+            return resolvedSession?.user || null
+        }
         const nextSession = normalizeSession({ ...refreshedSession, user: refreshedUser })
         writeStoredSession(nextSession)
         resolvedSession = nextSession
