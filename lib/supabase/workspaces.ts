@@ -38,6 +38,18 @@ export type WorkspaceInviteRecord = {
   created_at?: string
 }
 
+export type WorkspaceClientShape = {
+  id: string
+  name: string
+  description: string | null
+  ownerUid: string
+  role: WorkspaceRole
+  members: Record<string, WorkspaceRole>
+  memberNames: Record<string, string>
+  createdAt: string | null
+  updatedAt: string | null
+}
+
 export class ApiError extends Error {
   status: number
   details?: Json
@@ -212,6 +224,174 @@ export async function requireWorkspaceExists(adminClient: SupabaseClient, worksp
   }
 
   return data
+}
+
+function resolveUserDisplayName(user: User | null | undefined, fallbackUserId: string): string {
+  const metadata = user?.user_metadata && typeof user.user_metadata === 'object' ? user.user_metadata : {}
+  const appMetadata = user?.app_metadata && typeof user.app_metadata === 'object' ? user.app_metadata : {}
+  const candidates = [
+    typeof metadata.displayName === 'string' ? metadata.displayName : null,
+    typeof metadata.display_name === 'string' ? metadata.display_name : null,
+    typeof metadata.name === 'string' ? metadata.name : null,
+    typeof appMetadata.displayName === 'string' ? appMetadata.displayName : null,
+    typeof appMetadata.display_name === 'string' ? appMetadata.display_name : null,
+    typeof user?.email === 'string' ? user.email.split('@')[0] : null,
+    fallbackUserId,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = typeof candidate === 'string' ? candidate.trim() : ''
+    if (normalized) return normalized
+  }
+
+  return fallbackUserId
+}
+
+async function loadUserDisplayNames(adminClient: SupabaseClient, userIds: string[]): Promise<Map<string, string>> {
+  const displayNames = new Map<string, string>()
+  const uniqueUserIds = Array.from(new Set(userIds.map(userId => userId.trim()).filter(Boolean)))
+
+  await Promise.all(
+    uniqueUserIds.map(async userId => {
+      try {
+        const { data, error } = await adminClient.auth.admin.getUserById(userId)
+        if (error) {
+          displayNames.set(userId, userId)
+          return
+        }
+        displayNames.set(userId, resolveUserDisplayName(data.user, userId))
+      } catch {
+        displayNames.set(userId, userId)
+      }
+    }),
+  )
+
+  return displayNames
+}
+
+function buildWorkspaceClientShape(
+  workspace: WorkspaceRecord,
+  actorMembership: WorkspaceMemberRecord,
+  members: WorkspaceMemberRecord[],
+  displayNames: Map<string, string>,
+): WorkspaceClientShape {
+  const membersRecord: Record<string, WorkspaceRole> = {}
+  const memberNames: Record<string, string> = {}
+
+  members.forEach(member => {
+    if (!member.user_id) return
+    membersRecord[member.user_id] = member.role
+    memberNames[member.user_id] = displayNames.get(member.user_id) ?? member.user_id
+  })
+
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    description: workspace.description ?? null,
+    ownerUid: workspace.owner_user_id,
+    role: actorMembership.role,
+    members: membersRecord,
+    memberNames,
+    createdAt: workspace.created_at ?? null,
+    updatedAt: workspace.updated_at ?? null,
+  }
+}
+
+export async function listUserWorkspaces(
+  adminClient: SupabaseClient,
+  userId: string,
+): Promise<{ workspaces: WorkspaceClientShape[] }> {
+  const { data: memberships, error: membershipsError } = await adminClient
+    .from(MEMBERS_TABLE)
+    .select('id, workspace_id, user_id, role, created_at, updated_at')
+    .eq('user_id', userId)
+    .returns<WorkspaceMemberRecord[]>()
+
+  if (membershipsError) {
+    throw new ApiError(500, 'Failed to load user workspaces', membershipsError.message)
+  }
+
+  if (!memberships?.length) {
+    return { workspaces: [] }
+  }
+
+  const workspaceIds = Array.from(new Set(memberships.map(membership => membership.workspace_id).filter(Boolean)))
+
+  const [{ data: workspaces, error: workspacesError }, { data: allMembers, error: membersError }] = await Promise.all([
+    adminClient
+      .from(WORKSPACES_TABLE)
+      .select('id, name, description, owner_user_id, created_at, updated_at')
+      .in('id', workspaceIds)
+      .returns<WorkspaceRecord[]>(),
+    adminClient
+      .from(MEMBERS_TABLE)
+      .select('id, workspace_id, user_id, role, created_at, updated_at')
+      .in('workspace_id', workspaceIds)
+      .returns<WorkspaceMemberRecord[]>(),
+  ])
+
+  if (workspacesError) {
+    throw new ApiError(500, 'Failed to load workspaces', workspacesError.message)
+  }
+
+  if (membersError) {
+    throw new ApiError(500, 'Failed to load workspace members', membersError.message)
+  }
+
+  const safeWorkspaces = workspaces ?? []
+  const safeMembers = allMembers ?? []
+  const membershipByWorkspaceId = new Map(memberships.map(membership => [membership.workspace_id, membership]))
+  const membersByWorkspaceId = new Map<string, WorkspaceMemberRecord[]>()
+
+  safeMembers.forEach(member => {
+    const existing = membersByWorkspaceId.get(member.workspace_id) ?? []
+    existing.push(member)
+    membersByWorkspaceId.set(member.workspace_id, existing)
+  })
+
+  const displayNames = await loadUserDisplayNames(adminClient, safeMembers.map(member => member.user_id))
+
+  return {
+    workspaces: safeWorkspaces
+      .map(workspace => {
+        const actorMembership = membershipByWorkspaceId.get(workspace.id)
+        if (!actorMembership) return null
+        return buildWorkspaceClientShape(
+          workspace,
+          actorMembership,
+          membersByWorkspaceId.get(workspace.id) ?? [],
+          displayNames,
+        )
+      })
+      .filter((workspace): workspace is WorkspaceClientShape => workspace !== null),
+  }
+}
+
+export async function getWorkspaceForUser(
+  adminClient: SupabaseClient,
+  workspaceId: string,
+  userId: string,
+): Promise<{ workspace: WorkspaceClientShape }> {
+  const actorMembership = await requireWorkspaceAccess(adminClient, workspaceId, userId)
+  const [workspace, membersResult] = await Promise.all([
+    requireWorkspaceExists(adminClient, workspaceId),
+    adminClient
+      .from(MEMBERS_TABLE)
+      .select('id, workspace_id, user_id, role, created_at, updated_at')
+      .eq('workspace_id', workspaceId)
+      .returns<WorkspaceMemberRecord[]>(),
+  ])
+
+  if (membersResult.error) {
+    throw new ApiError(500, 'Failed to load workspace members', membersResult.error.message)
+  }
+
+  const members = membersResult.data ?? []
+  const displayNames = await loadUserDisplayNames(adminClient, members.map(member => member.user_id))
+
+  return {
+    workspace: buildWorkspaceClientShape(workspace, actorMembership, members, displayNames),
+  }
 }
 
 export async function createWorkspace(

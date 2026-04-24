@@ -116,15 +116,115 @@ const SettingsRepository = (() => {
 
 const WorkspacesRepository = (() => {
     const isWorkspacesEnabled = () => window.AppFeatures?.workspaces === true
-    function getWorkspaceReference(workspaceId) {
-        const normalizedWorkspaceId = String(workspaceId || "")
-        if (!isWorkspacesEnabled() || !db || !normalizedWorkspaceId) return null
-        return db.collection("workspaces").doc(normalizedWorkspaceId)
+    const WORKSPACES_ENDPOINT = "/api/supabase/workspaces"
+    const POLL_INTERVAL_MS = 5000
+
+    function buildHeaders(user) {
+        const accessToken = String(user?.accessToken || "")
+        return {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        }
     }
 
-    function getWorkspaceNotesCollection(workspaceId) {
-        const workspaceReference = getWorkspaceReference(workspaceId)
-        return workspaceReference ? workspaceReference.collection("notes") : null
+    function normalizeRole(role) {
+        if (role === "owner") return "owner"
+        if (role === "admin") return "editor"
+        if (role === "member") return "viewer"
+        if (role === "editor") return "editor"
+        return "viewer"
+    }
+
+    function cloneWorkspace(workspace) {
+        return JSON.parse(JSON.stringify(workspace || null))
+    }
+
+    function normalizeWorkspacePayload(rawWorkspace, fallbackWorkspaceId = "") {
+        const source = rawWorkspace && typeof rawWorkspace === "object" ? rawWorkspace : {}
+        const membersSource = source.members && typeof source.members === "object" ? source.members : {}
+        const memberNamesSource = source.memberNames && typeof source.memberNames === "object" ? source.memberNames : {}
+        const members = {}
+        Object.entries(membersSource).forEach(([uid, role]) => {
+            const normalizedUid = String(uid || "").trim()
+            if (!normalizedUid) return
+            members[normalizedUid] = normalizeRole(role)
+        })
+        const memberNames = {}
+        Object.entries(memberNamesSource).forEach(([uid, value]) => {
+            const normalizedUid = String(uid || "").trim()
+            if (!normalizedUid) return
+            memberNames[normalizedUid] = String(value || normalizedUid)
+        })
+        return {
+            id: String(source.id || fallbackWorkspaceId || ""),
+            name: String(source.name || "Совместная папка"),
+            description: source.description == null ? "" : String(source.description),
+            ownerUid: String(source.ownerUid || source.owner_user_id || ""),
+            role: normalizeRole(source.role),
+            members,
+            memberNames,
+            createdAt: source.createdAt || source.created_at || null,
+            updatedAt: source.updatedAt || source.updated_at || null
+        }
+    }
+
+    async function request(user, method, endpoint, body) {
+        const response = await fetch(endpoint, {
+            method,
+            headers: buildHeaders(user),
+            ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+        if (!response.ok) throw new Error(`supabase-workspaces-http-${response.status}`)
+        return response.json()
+    }
+
+    async function listUserWorkspaces(user) {
+        const payload = await request(user, "GET", WORKSPACES_ENDPOINT)
+        const items = Array.isArray(payload?.workspaces) ? payload.workspaces : []
+        return items.map(item => normalizeWorkspacePayload(item, item?.id || "")).filter(item => item.id)
+    }
+
+    async function getWorkspace(user, workspaceId) {
+        const normalizedWorkspaceId = String(workspaceId || "").trim()
+        if (!normalizedWorkspaceId) {
+            return { exists: false, data: () => ({}) }
+        }
+        try {
+            const payload = await request(user, "GET", `${WORKSPACES_ENDPOINT}?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}`)
+            const workspace = payload?.workspace ? normalizeWorkspacePayload(payload.workspace, normalizedWorkspaceId) : null
+            return {
+                exists: !!workspace,
+                data: () => cloneWorkspace(workspace) || {}
+            }
+        } catch (error) {
+            if (String(error?.message || "").includes("-404")) {
+                return { exists: false, data: () => ({}) }
+            }
+            throw error
+        }
+    }
+
+    function createPollingSubscription(loader, next, error, projectSnapshot) {
+        let cancelled = false
+        let lastSerialized = ""
+        const poll = async () => {
+            if (cancelled) return
+            try {
+                const payload = await loader()
+                const serialized = JSON.stringify(payload)
+                if (serialized === lastSerialized) return
+                lastSerialized = serialized
+                if (typeof next === "function") next(projectSnapshot(payload))
+            } catch (pollError) {
+                if (typeof error === "function") error(pollError)
+            }
+        }
+        poll()
+        const intervalId = setInterval(poll, POLL_INTERVAL_MS)
+        return () => {
+            cancelled = true
+            clearInterval(intervalId)
+        }
     }
 
     function subscribeUserWorkspaces(user, next, error) {
@@ -132,26 +232,53 @@ const WorkspacesRepository = (() => {
             if (typeof next === "function") next({ forEach() {} })
             return () => {}
         }
-        const collection = DataPath.getUserSharedCollection(user, "sharedWorkspaces")
-        if (!collection) return () => {}
-        return collection.onSnapshot(next, error)
+        return createPollingSubscription(
+            () => listUserWorkspaces(user),
+            next,
+            error,
+            items => ({
+                forEach(callback) {
+                    items.forEach(item => {
+                        callback({
+                            id: item.id,
+                            data: () => ({
+                                workspaceId: item.id,
+                                workspaceName: item.name,
+                                ownerUid: item.ownerUid,
+                                role: item.role
+                            })
+                        })
+                    })
+                }
+            })
+        )
     }
 
-    function subscribeWorkspace(workspaceId, next, error) {
-        const workspaceReference = getWorkspaceReference(workspaceId)
-        if (!workspaceReference) return () => {}
-        return workspaceReference.onSnapshot(next, error)
+    function subscribeWorkspace(user, workspaceId, next, error) {
+        const normalizedWorkspaceId = String(workspaceId || "").trim()
+        if (!normalizedWorkspaceId || !user?.uid) return () => {}
+        return createPollingSubscription(
+            () => getWorkspace(user, normalizedWorkspaceId),
+            next,
+            error,
+            snapshot => ({
+                exists: !!snapshot.exists,
+                data: () => snapshot.data()
+            })
+        )
     }
 
     function subscribeWorkspaceNotes(workspaceId, next, error) {
-        const collection = getWorkspaceNotesCollection(workspaceId)
-        if (!collection) return () => {}
-        return collection.onSnapshot(next, error)
+        if (!db) return () => {}
+        const normalizedWorkspaceId = String(workspaceId || "")
+        if (!normalizedWorkspaceId) return () => {}
+        return db.collection("workspaces").doc(normalizedWorkspaceId).collection("notes").onSnapshot(next, error)
     }
 
     return {
-        getWorkspaceReference,
-        getWorkspaceNotesCollection,
+        normalizeRole,
+        listUserWorkspaces,
+        getWorkspace,
         subscribeUserWorkspaces,
         subscribeWorkspace,
         subscribeWorkspaceNotes
@@ -728,11 +855,43 @@ const SharedNotesService = (() => {
 
 const WorkspaceAccessService = (() => {
     const isWorkspacesEnabled = () => window.AppFeatures?.workspaces === true
-    const shareCollection = "workspaceShares"
     const pendingTokenKey = "pending-workspace-share-token"
+    const WORKSPACES_ENDPOINT = "/api/supabase/workspaces"
+    const MEMBERS_ENDPOINT = "/api/supabase/workspace-members"
+    const INVITES_ENDPOINT = "/api/supabase/workspace-invites"
 
     function normalizeRole(role) {
-        return role === "owner" || role === "editor" || role === "viewer" ? role : "editor"
+        if (role === "owner") return "owner"
+        if (role === "admin" || role === "editor") return "editor"
+        return "viewer"
+    }
+
+    function toBackendRole(role) {
+        if (role === "owner") return "owner"
+        if (role === "editor" || role === "admin") return "admin"
+        return "member"
+    }
+
+    function buildHeaders(user) {
+        const accessToken = String(user?.accessToken || "")
+        return {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        }
+    }
+
+    async function request(user, method, endpoint, body) {
+        const response = await fetch(endpoint, {
+            method,
+            headers: buildHeaders(user),
+            ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+        if (!response.ok) return null
+        return response.json()
+    }
+
+    function getDefaultDisplayName(user) {
+        return String(user?.displayName || (user?.email ? user.email.split("@")[0] : user?.uid) || user?.uid || "")
     }
 
     function buildWorkspaceShareUrl(token) {
@@ -758,16 +917,6 @@ const WorkspaceAccessService = (() => {
         }
     }
 
-    async function generateToken() {
-        if (window.crypto?.getRandomValues) {
-            const bytes = new Uint8Array(16)
-            window.crypto.getRandomValues(bytes)
-            const raw = String.fromCharCode(...bytes)
-            return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
-        }
-        return `${Utils.generateId()}${Date.now().toString(36)}`
-    }
-
     function getWorkspaceRole(workspace) {
         const userUid = StateStore.read().user?.uid || ""
         if (!workspace || !userUid) return "viewer"
@@ -788,85 +937,62 @@ const WorkspaceAccessService = (() => {
     async function createWorkspace(name, description = "") {
         if (!isWorkspacesEnabled()) return null
         const user = StateStore.read().user
-        if (!db || !user?.uid) return null
+        if (!user?.uid) return null
         const normalizedName = String(name || "").trim()
         const normalizedDescription = String(description || "").trim()
         if (!normalizedName || normalizedName.length > 50 || normalizedDescription.length > 300) return null
-        const workspaceReference = db.collection("workspaces").doc()
-        const payload = {
+        const result = await request(user, "POST", WORKSPACES_ENDPOINT, {
             name: normalizedName,
-            ownerUid: user.uid,
+            description: normalizedDescription
+        })
+        const workspace = result?.workspace
+        if (!workspace?.id) return null
+        return {
+            id: String(workspace.id),
+            name: String(workspace.name || normalizedName),
+            ownerUid: String(workspace.owner_user_id || user.uid),
             members: { [user.uid]: "owner" },
-            memberNames: { [user.uid]: String(user.displayName || (user.email ? user.email.split("@")[0] : user.uid) || user.uid) },
-            description: normalizedDescription,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            memberNames: { [user.uid]: getDefaultDisplayName(user) },
+            description: workspace.description == null ? normalizedDescription : String(workspace.description),
+            createdAt: workspace.created_at || null,
+            updatedAt: workspace.updated_at || null,
+            role: "owner"
         }
-        const membershipPayload = {
-            workspaceId: workspaceReference.id,
-            role: "owner",
-            workspaceName: normalizedName,
-            ownerUid: user.uid,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }
-        const batch = db.batch()
-        batch.set(workspaceReference, payload)
-        batch.set(DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(workspaceReference.id), membershipPayload, { merge: true })
-        await batch.commit()
-        return { id: workspaceReference.id, ...payload }
     }
 
     async function addMemberByUid(workspaceId, targetUid, role = "editor") {
         if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
-        if (!db || !user?.uid) return false
+        if (!user?.uid) return false
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedTargetUid = String(targetUid || "").trim()
         if (!normalizedWorkspaceId || !normalizedTargetUid) return false
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
-        if (!workspaceReference) return false
-        const workspaceSnapshot = await workspaceReference.get()
-        if (!workspaceSnapshot.exists) return false
-        const workspace = workspaceSnapshot.data() || {}
+        const workspace = getWorkspaceById(normalizedWorkspaceId)
+        if (!workspace) return false
         if (String(workspace.ownerUid || "") !== user.uid) return false
-        const userProfileSnapshot = await db.collection("users").doc(normalizedTargetUid).get().catch(() => null)
-        const userProfile = userProfileSnapshot?.data?.() || {}
-        const targetDisplayName = String(userProfile.displayName || normalizedTargetUid)
-        await workspaceReference.update({
-            [`members.${normalizedTargetUid}`]: normalizeRole(role),
-            [`memberNames.${normalizedTargetUid}`]: targetDisplayName,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        })
-        await db.collection("users").doc(normalizedTargetUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).set({
+        const result = await request(user, "POST", MEMBERS_ENDPOINT, {
             workspaceId: normalizedWorkspaceId,
-            role: normalizeRole(role),
-            workspaceName: String(workspace.name || ""),
-            ownerUid: workspace.ownerUid,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-        return true
+            userId: normalizedTargetUid,
+            role: toBackendRole(role)
+        })
+        return !!result?.membership
     }
 
     async function createInviteLink(workspaceId, role = "editor") {
         if (!isWorkspacesEnabled()) return ""
         const user = StateStore.read().user
-        if (!db || !user?.uid) return ""
+        if (!user?.uid) return ""
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         if (!normalizedWorkspaceId) return ""
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
-        if (!workspaceReference) return ""
-        const workspaceSnapshot = await workspaceReference.get()
-        if (!workspaceSnapshot.exists) return ""
-        const workspace = workspaceSnapshot.data() || {}
+        const workspace = getWorkspaceById(normalizedWorkspaceId)
+        if (!workspace) return ""
         if (String(workspace.ownerUid || "") !== user.uid) return ""
-        const token = await generateToken()
-        await db.collection(shareCollection).doc(token).set({
+        const result = await request(user, "POST", INVITES_ENDPOINT, {
             workspaceId: normalizedWorkspaceId,
-            workspaceName: String(workspace.name || ""),
-            ownerUid: user.uid,
-            role: normalizeRole(role),
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            role: toBackendRole(role)
         })
+        const token = String(result?.token || "")
+        if (!token) return ""
         return buildWorkspaceShareUrl(token)
     }
 
@@ -883,34 +1009,13 @@ const WorkspaceAccessService = (() => {
 
     async function acceptWorkspaceShareToken(value, user) {
         if (!isWorkspacesEnabled()) return null
-        if (!db || !user?.uid) return null
+        if (!user?.uid) return null
         const normalizedToken = normalizeShareToken(value)
         if (!normalizedToken) return null
-        const shareSnapshot = await db.collection(shareCollection).doc(normalizedToken).get()
-        if (!shareSnapshot.exists) return null
-        const shareData = shareSnapshot.data() || {}
-        const workspaceId = String(shareData.workspaceId || "")
+        const result = await request(user, "PATCH", INVITES_ENDPOINT, { token: normalizedToken })
+        const workspaceId = String(result?.membership?.workspace_id || result?.invite?.workspace_id || "")
         if (!workspaceId) return null
-        const role = normalizeRole(shareData.role)
-        const displayName = String(user.displayName || (user.email ? user.email.split("@")[0] : user.uid) || user.uid)
-        await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(workspaceId).set({
-            workspaceId,
-            role,
-            workspaceName: String(shareData.workspaceName || ""),
-            ownerUid: String(shareData.ownerUid || ""),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(workspaceId)
-        if (workspaceReference) {
-            try {
-                await workspaceReference.set({
-                    members: { [user.uid]: role },
-                    memberNames: { [user.uid]: displayName },
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true })
-            } catch {
-            }
-        }
+        const role = normalizeRole(result?.membership?.role || result?.invite?.role)
         return { workspaceId, role }
     }
 
@@ -942,27 +1047,18 @@ const WorkspaceAccessService = (() => {
         if (!isWorkspacesEnabled()) return false
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
-        if (!db || !user?.uid || !normalizedWorkspaceId) return false
+        if (!user?.uid || !normalizedWorkspaceId) return false
         const workspace = getWorkspaceById(normalizedWorkspaceId)
         if (!workspace || !canManageWorkspace(workspace)) return false
         const nextName = updates.name === undefined ? workspace.name : String(updates.name || "").trim()
         const nextDescription = updates.description === undefined ? String(workspace.description || "") : String(updates.description || "").trim()
         if (!nextName || nextName.length > 50 || nextDescription.length > 300) return false
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
-        if (!workspaceReference) return false
-        await workspaceReference.set({
-            name: nextName,
-            description: nextDescription,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-        await DataPath.getUserSharedCollection(user, "sharedWorkspaces").doc(normalizedWorkspaceId).set({
+        const result = await request(user, "PATCH", WORKSPACES_ENDPOINT, {
             workspaceId: normalizedWorkspaceId,
-            workspaceName: nextName,
-            ownerUid: workspace.ownerUid,
-            role: workspace.role || "owner",
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-        return true
+            name: nextName,
+            description: nextDescription
+        })
+        return !!result?.workspace
     }
 
     function getWorkspaceMembers(workspaceId) {
@@ -985,23 +1081,15 @@ const WorkspaceAccessService = (() => {
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedMemberUid = String(memberUid || "").trim()
         const normalizedRole = normalizeRole(role)
-        if (!db || !user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
+        if (!user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
         const workspace = getWorkspaceById(normalizedWorkspaceId)
         if (!workspace || !canManageWorkspace(workspace)) return false
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
-        if (!workspaceReference) return false
-        await workspaceReference.update({
-            [`members.${normalizedMemberUid}`]: normalizedRole,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        })
-        await db.collection("users").doc(normalizedMemberUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).set({
+        const result = await request(user, "PATCH", MEMBERS_ENDPOINT, {
             workspaceId: normalizedWorkspaceId,
-            role: normalizedRole,
-            workspaceName: String(workspace.name || ""),
-            ownerUid: workspace.ownerUid,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
-        return true
+            userId: normalizedMemberUid,
+            role: toBackendRole(normalizedRole)
+        })
+        return !!result?.membership
     }
 
     async function removeMember(workspaceId, memberUid) {
@@ -1009,34 +1097,30 @@ const WorkspaceAccessService = (() => {
         const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedMemberUid = String(memberUid || "").trim()
-        if (!db || !user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
+        if (!user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
         const workspace = getWorkspaceById(normalizedWorkspaceId)
         if (!workspace || !canManageWorkspace(workspace)) return false
         if (normalizedMemberUid === workspace.ownerUid) return false
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
-        if (!workspaceReference) return false
-        await workspaceReference.update({
-            [`members.${normalizedMemberUid}`]: firebase.firestore.FieldValue.delete(),
-            [`memberNames.${normalizedMemberUid}`]: firebase.firestore.FieldValue.delete(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        const result = await request(user, "DELETE", MEMBERS_ENDPOINT, {
+            workspaceId: normalizedWorkspaceId,
+            userId: normalizedMemberUid
         })
-        await db.collection("users").doc(normalizedMemberUid).collection("sharedWorkspaces").doc(normalizedWorkspaceId).delete().catch(() => {})
-        return true
+        return result?.removed === true
     }
 
     async function updateMemberDisplayName(workspaceId, memberUid, displayName) {
         if (!isWorkspacesEnabled()) return false
-        const user = StateStore.read().user
         const normalizedWorkspaceId = String(workspaceId || "").trim()
         const normalizedMemberUid = String(memberUid || "").trim()
         const normalizedDisplayName = String(displayName || "").trim()
-        if (!db || !user?.uid || !normalizedWorkspaceId || !normalizedMemberUid || !normalizedDisplayName || normalizedDisplayName.length > 50) return false
-        const workspaceReference = WorkspacesRepository.getWorkspaceReference(normalizedWorkspaceId)
-        if (!workspaceReference) return false
-        await workspaceReference.set({
-            memberNames: { [normalizedMemberUid]: normalizedDisplayName },
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true })
+        if (!normalizedWorkspaceId || !normalizedMemberUid || !normalizedDisplayName || normalizedDisplayName.length > 50) return false
+        const workspace = getWorkspaceById(normalizedWorkspaceId)
+        if (!workspace) return false
+        const nextMemberNames = { ...(workspace.memberNames || {}), [normalizedMemberUid]: normalizedDisplayName }
+        StateStore.update("sharedWorkspaces", (StateStore.read().sharedWorkspaces || []).map(item => {
+            if (item.id !== normalizedWorkspaceId) return item
+            return { ...item, memberNames: nextMemberNames }
+        }))
         return true
     }
 
@@ -1070,7 +1154,6 @@ const WorkspacesService = (() => {
     const state = {
         user: null,
         unsubscribeEntries: null,
-        workspaceUnsubscribers: new Map(),
         workspaceNotesUnsubscribers: new Map(),
         workspaceEntries: new Map(),
         workspaces: new Map(),
@@ -1078,9 +1161,6 @@ const WorkspacesService = (() => {
     }
 
     function cleanupWorkspace(workspaceId) {
-        const unsubscribeWorkspace = state.workspaceUnsubscribers.get(workspaceId)
-        if (unsubscribeWorkspace) unsubscribeWorkspace()
-        state.workspaceUnsubscribers.delete(workspaceId)
         const unsubscribeWorkspaceNotes = state.workspaceNotesUnsubscribers.get(workspaceId)
         if (unsubscribeWorkspaceNotes) unsubscribeWorkspaceNotes()
         state.workspaceNotesUnsubscribers.delete(workspaceId)
@@ -1093,7 +1173,7 @@ const WorkspacesService = (() => {
         const userUid = state.user?.uid || ""
         const items = [...state.workspaces.values()].map(workspace => {
             const entry = state.workspaceEntries.get(workspace.id) || {}
-            const role = workspace.ownerUid === userUid ? "owner" : (entry.role || workspace.members?.[userUid] || "viewer")
+            const role = workspace.ownerUid === userUid ? "owner" : WorkspacesRepository.normalizeRole(entry.role || workspace.role || workspace.members?.[userUid] || "viewer")
             return { ...workspace, role }
         }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), StateStore.read().config.lang || "ru"))
         StateStore.update("sharedWorkspaces", items)
@@ -1105,15 +1185,8 @@ const WorkspacesService = (() => {
     }
 
     function bindWorkspace(workspaceId, entry) {
-        if (state.workspaceUnsubscribers.has(workspaceId)) return
-        const unsubscribeWorkspace = WorkspacesRepository.subscribeWorkspace(workspaceId, snapshot => {
-            if (!snapshot.exists) {
-                cleanupWorkspace(workspaceId)
-                publishWorkspaces()
-                publishWorkspaceNotes()
-                return
-            }
-            const data = snapshot.data() || {}
+        const upsertWorkspaceState = workspace => {
+            const data = workspace && typeof workspace === "object" ? workspace : {}
             const members = data.members && typeof data.members === "object" ? data.members : {}
             const memberNames = data.memberNames && typeof data.memberNames === "object" ? data.memberNames : {}
             state.workspaces.set(workspaceId, {
@@ -1121,15 +1194,32 @@ const WorkspacesService = (() => {
                 name: String(data.name || entry.workspaceName || "Совместная папка"),
                 ownerUid: String(data.ownerUid || entry.ownerUid || ""),
                 description: String(data.description || ""),
-                role: entry.role || "viewer",
+                role: WorkspacesRepository.normalizeRole(data.role || entry.role || "viewer"),
                 members,
                 memberNames,
                 createdAt: data.createdAt || null,
                 updatedAt: data.updatedAt || null
             })
             publishWorkspaces()
+        }
+        WorkspacesRepository.getWorkspace(state.user, workspaceId).then(snapshot => {
+            if (!snapshot?.exists) {
+                cleanupWorkspace(workspaceId)
+                publishWorkspaces()
+                publishWorkspaceNotes()
+                return
+            }
+            upsertWorkspaceState(snapshot.data())
+        }).catch(error => EventBus.publish("sharedSyncError", error))
+        const unsubscribeWorkspace = WorkspacesRepository.subscribeWorkspace(state.user, workspaceId, snapshot => {
+            if (!snapshot.exists) {
+                cleanupWorkspace(workspaceId)
+                publishWorkspaces()
+                publishWorkspaceNotes()
+                return
+            }
+            upsertWorkspaceState(snapshot.data())
         }, error => EventBus.publish("sharedSyncError", error))
-        state.workspaceUnsubscribers.set(workspaceId, unsubscribeWorkspace)
 
         const unsubscribeWorkspaceNotes = WorkspacesRepository.subscribeWorkspaceNotes(workspaceId, snapshot => {
             const workspace = state.workspaces.get(workspaceId) || { id: workspaceId, ownerUid: entry.ownerUid || "", members: {}, memberNames: {}, role: entry.role || "viewer" }
@@ -1152,7 +1242,10 @@ const WorkspacesService = (() => {
             state.workspaceNotes.set(workspaceId, notes)
             publishWorkspaceNotes()
         }, error => EventBus.publish("sharedSyncError", error))
-        state.workspaceNotesUnsubscribers.set(workspaceId, unsubscribeWorkspaceNotes)
+        state.workspaceNotesUnsubscribers.set(workspaceId, () => {
+            if (typeof unsubscribeWorkspace === "function") unsubscribeWorkspace()
+            if (typeof unsubscribeWorkspaceNotes === "function") unsubscribeWorkspaceNotes()
+        })
     }
 
     function subscribe(user) {
@@ -1197,9 +1290,7 @@ const WorkspacesService = (() => {
     function clear() {
         if (state.unsubscribeEntries) state.unsubscribeEntries()
         state.unsubscribeEntries = null
-        state.workspaceUnsubscribers.forEach(unsubscribe => unsubscribe())
         state.workspaceNotesUnsubscribers.forEach(unsubscribe => unsubscribe())
-        state.workspaceUnsubscribers.clear()
         state.workspaceNotesUnsubscribers.clear()
         state.workspaceEntries.clear()
         state.workspaces.clear()

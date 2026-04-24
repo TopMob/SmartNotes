@@ -1,7 +1,9 @@
 import {
   createAdminClient,
   createWorkspace,
+  getWorkspaceForUser,
   handleRouteError,
+  listUserWorkspaces,
   readJsonBody,
   requireAuthenticatedUser,
   toJsonResponse,
@@ -29,6 +31,22 @@ export async function POST(request: Request): Promise<Response> {
     const result = await createWorkspace(adminClient, user.id, body)
 
     return toJsonResponse(result, { status: 201 })
+  } catch (error) {
+    return handleRouteError(error)
+  }
+}
+
+export async function GET(request: Request): Promise<Response> {
+  try {
+    const adminClient = createAdminClient()
+    const user = await requireAuthenticatedUser(request, adminClient)
+    const url = new URL(request.url)
+    const workspaceId = (url.searchParams.get('workspaceId') ?? '').trim()
+    const result = workspaceId
+      ? await getWorkspaceForUser(adminClient, workspaceId, user.id)
+      : await listUserWorkspaces(adminClient, user.id)
+
+    return toJsonResponse(result)
   } catch (error) {
     return handleRouteError(error)
   }
