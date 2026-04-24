@@ -37,11 +37,33 @@
                     return null
                 }
 
-                return parsedValue
+                return {
+                    ...parsedValue,
+                    googleClientId: typeof parsedValue.googleClientId === 'string' ? parsedValue.googleClientId : ''
+                }
             } catch {
                 return null
             }
         })()
+
+        window.__smartnotesSupabaseConfigPromise = fetch('/api/supabase/config', {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-store' }
+        })
+            .then((response) => response.ok ? response.json() : null)
+            .then((payload) => {
+                if (!payload || payload.ok !== true) return window.SmartNotesSupabaseConfig
+                const nextConfig = {
+                    url: typeof payload.url === 'string' ? payload.url : '',
+                    publishableKey: typeof payload.publishableKey === 'string' ? payload.publishableKey : '',
+                    googleClientId: typeof payload.googleClientId === 'string' ? payload.googleClientId : ''
+                }
+                if (nextConfig.url && nextConfig.publishableKey) {
+                    window.SmartNotesSupabaseConfig = nextConfig
+                }
+                return window.SmartNotesSupabaseConfig
+            })
+            .catch(() => window.SmartNotesSupabaseConfig)
 
         window.SmartNotesAuthUi = {
             ready: false,

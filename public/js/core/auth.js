@@ -126,8 +126,12 @@ export function createAuthManager({ auth }) {
                 "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
                 "auth/google-identity-unavailable": this._t("auth_env_failed", "Authentication is blocked in this browser"),
                 "auth/google-identity-not-displayed": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
+                "auth/google-identity-dismissed": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-skipped": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/oauth-popup-blocked": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
+                "auth/oauth-popup-closed": this._t("auth_popup_closed", "Sign-in canceled"),
+                "auth/oauth-popup-timeout": this._t("auth_network_failed", "No internet connection"),
                 "invalid_credentials": this._t("login_failed", "Sign-in failed")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
@@ -186,12 +190,39 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(true)
             this._setAuthFeedback(this._t("auth_google_starting", "Opening Google sign-in..."), "info")
             try {
-                const result = await auth.signInWithPopup()
+                const result = typeof auth.signInWithGoogleOneTap === "function"
+                    ? await auth.signInWithGoogleOneTap()
+                    : await auth.signInWithPopup()
                 if (result?.user) {
                     await this._handleAuthState(result.user)
                 }
             } catch (error) {
-                this.handleAuthError(error)
+                const errorCode = String(error?.code || "")
+                const canFallbackToRedirect = [
+                    "auth/google-identity-not-displayed",
+                    "auth/google-identity-skipped",
+                    "auth/google-identity-timeout",
+                    "auth/google-identity-unavailable"
+                ].includes(errorCode)
+                if (canFallbackToRedirect && typeof auth.signInWithGoogleAccountChooser === "function") {
+                    this._setAuthFeedback(this._t("auth_google_waiting", "Opening Google sign-in page..."), "info")
+                    const chooserResult = await auth.signInWithGoogleAccountChooser().catch(async chooserError => {
+                        const chooserCode = String(chooserError?.code || "")
+                        if ((chooserCode === "auth/oauth-popup-blocked" || chooserCode === "auth/oauth-popup-timeout") && typeof auth.signInWithRedirect === "function") {
+                            await auth.signInWithRedirect()
+                            return null
+                        }
+                        throw chooserError
+                    })
+                    if (chooserResult?.user) {
+                        await this._handleAuthState(chooserResult.user)
+                    }
+                } else if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
+                    this._setAuthFeedback(this._t("auth_google_waiting", "Opening Google sign-in page..."), "info")
+                    await auth.signInWithRedirect().catch(redirectError => this.handleAuthError(redirectError))
+                } else {
+                    this.handleAuthError(error)
+                }
             } finally {
                 this._setLoginBusy(false)
             }
@@ -418,6 +449,9 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
             this.setAuthReady(true)
+            if (!auth.currentUser && typeof auth.preloadGoogleSignIn === "function") {
+                auth.preloadGoogleSignIn().catch(() => false)
+            }
             if (typeof window.requestAnimationFrame === "function") {
                 window.requestAnimationFrame(() => this._resolveStartupScreen())
             } else {

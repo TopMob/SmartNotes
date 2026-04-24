@@ -94,9 +94,9 @@ function writeStoredSession(session) {
     try {
         if (!session) {
             window.localStorage.removeItem(storageKey)
-            return
+        } else {
+            window.localStorage.setItem(storageKey, JSON.stringify(session))
         }
-        window.localStorage.setItem(storageKey, JSON.stringify(session))
     } catch {
         return
     }
@@ -183,8 +183,14 @@ function clearAuthParamsFromUrl() {
 }
 
 function readSessionFromUrl() {
-    const hashParams = getHashParams()
-    const searchParams = getSearchParams()
+    return readSessionFromUrlValue(window.location.href)
+}
+
+function readSessionFromUrlValue(urlValue) {
+    const url = new URL(String(urlValue || window.location.href), window.location.origin)
+    const normalizedHash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash
+    const hashParams = new URLSearchParams(normalizedHash)
+    const searchParams = url.searchParams
     const accessToken = String(hashParams.get("access_token") || "")
     const refreshToken = String(hashParams.get("refresh_token") || "")
     if (!accessToken || !refreshToken) return null
@@ -204,6 +210,20 @@ function readSessionFromUrl() {
             }
         } : null
     })
+}
+
+function readCodeFromUrl() {
+    const searchParams = getSearchParams()
+    const code = String(searchParams.get("code") || "").trim()
+    if (!code) return ""
+    return code
+}
+
+function clearCodeFromUrl() {
+    const url = new URL(window.location.href)
+    url.searchParams.delete("code")
+    url.searchParams.delete("state")
+    window.history.replaceState({}, document.title, url.toString())
 }
 
 async function fetchCurrentUser(accessToken) {
@@ -284,6 +304,27 @@ async function resolveCurrentSession() {
         return validatedUrlSession
     }
 
+    const authCode = readCodeFromUrl()
+    if (authCode) {
+        try {
+            const payload = await authRequest("token?grant_type=authorization_code", {
+                method: "POST",
+                body: {
+                    auth_code: authCode,
+                    code: authCode,
+                    redirect_to: resolveRedirectTo()
+                }
+            })
+            const session = normalizeSession(payload)
+            writeStoredSession(session)
+            clearCodeFromUrl()
+            return session
+        } catch (error) {
+            clearCodeFromUrl()
+            console.warn("[SupabaseClient] auth code exchange failed", error)
+        }
+    }
+
     const storedSession = currentSessionCache || readStoredSession()
     if (!storedSession) return null
     if (!isSessionExpired(storedSession)) {
@@ -351,6 +392,78 @@ function resolveRedirectTo(options = {}) {
     return window.location.origin + window.location.pathname
 }
 
+function buildOAuthUrl({ provider, options = {} } = {}) {
+    const { url, publishableKey } = getRuntimeConfig()
+    const normalizedProvider = String(provider || "").trim()
+    if (!normalizedProvider) throw new Error("supabase-provider-missing")
+
+    const query = new URLSearchParams()
+    query.set("provider", normalizedProvider)
+    query.set("redirect_to", resolveRedirectTo(options))
+    query.set("skip_http_redirect", "false")
+    query.set("flow_type", "implicit")
+
+    const scopes = String(options?.scopes || "").trim()
+    if (scopes) query.set("scopes", scopes)
+
+    return `${url}/auth/v1/authorize?${query.toString()}&apikey=${encodeURIComponent(publishableKey)}`
+}
+
+function openCenteredPopup(url, name = "smartnotes-google-auth") {
+    const width = Math.min(520, Math.max(420, Math.floor(window.screen?.availWidth || 520)))
+    const height = Math.min(720, Math.max(560, Math.floor(window.screen?.availHeight || 720)))
+    const left = Math.max(0, Math.floor(((window.screen?.availWidth || width) - width) / 2 + (window.screen?.availLeft || 0)))
+    const top = Math.max(0, Math.floor(((window.screen?.availHeight || height) - height) / 2 + (window.screen?.availTop || 0)))
+    return window.open(
+        url,
+        name,
+        `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=yes`
+    )
+}
+
+function waitForOAuthPopupSession(popupWindow, { timeoutMilliseconds = 120000 } = {}) {
+    return new Promise((resolve, reject) => {
+        if (!popupWindow) {
+            const error = new Error("Google sign-in popup was blocked")
+            error.code = "auth/oauth-popup-blocked"
+            reject(error)
+            return
+        }
+
+        const startedAt = Date.now()
+        const intervalId = setInterval(() => {
+            if (popupWindow.closed) {
+                clearInterval(intervalId)
+                const error = new Error("Google sign-in popup was closed")
+                error.code = "auth/oauth-popup-closed"
+                reject(error)
+                return
+            }
+
+            if (Date.now() - startedAt > timeoutMilliseconds) {
+                clearInterval(intervalId)
+                popupWindow.close()
+                const error = new Error("Google sign-in popup timeout")
+                error.code = "auth/oauth-popup-timeout"
+                reject(error)
+                return
+            }
+
+            try {
+                const popupUrl = popupWindow.location.href
+                if (!popupUrl || new URL(popupUrl).origin !== window.location.origin) return
+                const session = readSessionFromUrlValue(popupUrl)
+                if (!session) return
+                clearInterval(intervalId)
+                popupWindow.close()
+                resolve(session)
+            } catch {
+                return
+            }
+        }, 250)
+    })
+}
+
 function createClient() {
     bindStorageListener()
 
@@ -415,6 +528,30 @@ function createClient() {
                     if (!session) {
                         throw new Error("supabase-session-missing")
                     }
+                    writeStoredSession(session)
+                    emitAuthState("SIGNED_IN", session)
+                    return { data: { session, user: session?.user || null }, error: null }
+                } catch (error) {
+                    return { data: { session: null, user: null }, error }
+                }
+            },
+            async signInWithOAuth({ provider, options = {} }) {
+                try {
+                    const url = buildOAuthUrl({ provider, options })
+                    if (options?.skipBrowserRedirect) {
+                        return { data: { url }, error: null }
+                    }
+                    window.location.assign(url)
+                    return { data: { url }, error: null }
+                } catch (error) {
+                    return { data: { url: null }, error }
+                }
+            },
+            async signInWithOAuthPopup({ provider, options = {} }) {
+                try {
+                    const url = buildOAuthUrl({ provider, options })
+                    const popupWindow = openCenteredPopup(url)
+                    const session = await waitForOAuthPopupSession(popupWindow, options)
                     writeStoredSession(session)
                     emitAuthState("SIGNED_IN", session)
                     return { data: { session, user: session?.user || null }, error: null }

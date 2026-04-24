@@ -1,5 +1,5 @@
 import { initSupabase } from "./supabase.js"
-import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
+import { preloadGoogleIdentity, requestGoogleIdentityToken } from "./googleIdentityAuth.js"
 
 const sessionEndpoint = "/api/supabase/session"
 const PROFILE_SYNC_TIMEOUT_MS = 8000
@@ -68,6 +68,18 @@ function createPersistenceEnum() {
 
 function getGoogleClientId() {
     return String(window.SmartNotesSupabaseConfig?.googleClientId || "").trim()
+}
+
+async function resolveRuntimeGoogleClientId() {
+    const currentClientId = getGoogleClientId()
+    if (currentClientId) return currentClientId
+
+    const configPromise = window.__smartnotesSupabaseConfigPromise
+    if (configPromise && typeof configPromise.then === "function") {
+        await configPromise.catch(() => null)
+    }
+
+    return getGoogleClientId()
 }
 
 export async function createSupabaseAuth() {
@@ -193,21 +205,52 @@ export async function createSupabaseAuth() {
         async getRedirectResult() {
             return null
         },
-        async signInWithPopup() {
-            const clientId = getGoogleClientId()
+        async preloadGoogleSignIn() {
+            const clientId = await resolveRuntimeGoogleClientId()
+            return preloadGoogleIdentity({ clientId })
+        },
+        async signInWithGoogleOneTap(options = {}) {
+            const clientId = await resolveRuntimeGoogleClientId()
             if (!clientId) {
                 throw { code: "auth/google-identity-client-id-missing", message: "Google client id is missing" }
             }
 
-            const idToken = await requestGoogleIdentityToken({ clientId })
+            const idToken = await requestGoogleIdentityToken({
+                clientId,
+                interactive: options?.interactive !== false
+            })
             const result = await client.auth.signInWithIdToken({ provider: "google", token: idToken })
             if (result.error) throw result.error
             const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
             currentUser = await resolveUserFromSession(session)
             return { user: currentUser }
         },
+        async signInWithPopup(options = {}) {
+            return this.signInWithGoogleOneTap(options)
+        },
         async signInWithRedirect() {
-            return this.signInWithPopup()
+            const result = await client.auth.signInWithOAuth({
+                provider: "google",
+                options: {
+                    redirectTo: window.location.origin + window.location.pathname,
+                    scopes: "openid email profile"
+                }
+            })
+            if (result.error) throw result.error
+            return { user: null }
+        },
+        async signInWithGoogleAccountChooser() {
+            const result = await client.auth.signInWithOAuthPopup({
+                provider: "google",
+                options: {
+                    redirectTo: window.location.origin + window.location.pathname,
+                    scopes: "openid email profile"
+                }
+            })
+            if (result.error) throw result.error
+            const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
+            currentUser = await resolveUserFromSession(session)
+            return { user: currentUser }
         },
         onAuthStateChanged(next, error) {
             const callback = typeof next === "function" ? next : () => {}
@@ -235,9 +278,12 @@ export async function createSupabaseAuth() {
         })
     }
 
-        const initialSessionResult = await client.auth.getSession()
-        const initialSession = initialSessionResult?.data?.session || null
-        await emitAuthState(initialSession)
+    const initialSessionResult = await client.auth.getSession()
+    const initialSession = initialSessionResult?.data?.session || null
+    await emitAuthState(initialSession)
+    if (!initialSession) {
+        authApi.preloadGoogleSignIn().catch(() => false)
+    }
 
     client.auth.onAuthStateChange((_event, session) => {
         emitAuthState(session)

@@ -134,9 +134,23 @@ function validateSupabaseConfig() {
 
 let supabaseStartupPromise = null
 
+async function hydrateSupabaseRuntimeConfig() {
+    const runtimeConfigPromise = window.__smartnotesSupabaseConfigPromise
+    if (!runtimeConfigPromise || typeof runtimeConfigPromise.then !== "function") {
+        return window.SmartNotesSupabaseConfig || null
+    }
+
+    try {
+        return await runtimeConfigPromise
+    } catch {
+        return window.SmartNotesSupabaseConfig || null
+    }
+}
+
 function ensureSupabaseReady() {
     if (!supabaseStartupPromise) {
         supabaseStartupPromise = (async () => {
+            await hydrateSupabaseRuntimeConfig()
             validateSupabaseConfig()
             await initSupabase()
             return true
