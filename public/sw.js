@@ -4,6 +4,7 @@ const CORE_ASSETS = [
   "/manifest.webmanifest",
   "/favicon.ico",
   "/Logo.png",
+  "/vendor/supabase.js",
   "/css/base.css?v=2026-04-19-final",
   "/css/layout.css?v=2026-04-19-final",
   "/css/components.css?v=2026-04-19-final",

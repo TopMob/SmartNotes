@@ -4,6 +4,7 @@ let officialClientLoadPromise = null
 const AUTH_CALLBACK_PATH = "/auth/callback"
 const OFFICIAL_STORAGE_KEY = "sb-smartnotes-auth-token"
 const SUPABASE_BROWSER_SCRIPT_SRC = "/vendor/supabase.js"
+const SUPABASE_BROWSER_SCRIPT_TIMEOUT_MS = 12000
 
 function getRuntimeConfig() {
     const url = String(window.SmartNotesSupabaseConfig?.url || "").trim().replace(/\/+$/g, "")
@@ -46,25 +47,54 @@ function migrateLegacySession() {
 async function loadOfficialSupabaseCreateClient() {
     if (!officialClientLoadPromise) {
         officialClientLoadPromise = new Promise((resolve, reject) => {
-            const resolveFactory = () => {
-                const createClient = window.supabase?.createClient
-                if (typeof createClient !== "function") {
-                    reject(new Error("supabase-create-client-missing"))
-                    return false
-                }
+            let settled = false
+
+            const readCreateClientFactory = () => {
+                const globalFactory = window.supabase?.createClient
+                    || globalThis.supabase?.createClient
+                    || (typeof supabase !== "undefined" ? supabase?.createClient : null)
+                return typeof globalFactory === "function" ? globalFactory : null
+            }
+
+            const finishResolve = (createClient) => {
+                if (settled) return
+                settled = true
+                clearTimeout(timeoutId)
                 resolve(createClient)
+            }
+
+            const finishReject = (error) => {
+                if (settled) return
+                settled = true
+                clearTimeout(timeoutId)
+                officialClientLoadPromise = null
+                reject(error)
+            }
+
+            const resolveFactory = () => {
+                const createClient = readCreateClientFactory()
+                if (!createClient) return false
+                finishResolve(createClient)
                 return true
             }
+
+            const onScriptLoaded = () => {
+                if (!resolveFactory()) {
+                    finishReject(new Error("supabase-create-client-missing"))
+                }
+            }
+
+            const timeoutId = setTimeout(() => {
+                finishReject(new Error("supabase-browser-script-timeout"))
+            }, SUPABASE_BROWSER_SCRIPT_TIMEOUT_MS)
 
             if (resolveFactory()) return
 
             const existingScript = document.querySelector(`script[src="${SUPABASE_BROWSER_SCRIPT_SRC}"]`)
             if (existingScript) {
-                existingScript.addEventListener("load", () => {
-                    resolveFactory()
-                }, { once: true })
+                existingScript.addEventListener("load", onScriptLoaded, { once: true })
                 existingScript.addEventListener("error", () => {
-                    reject(new Error("supabase-browser-script-failed"))
+                    finishReject(new Error("supabase-browser-script-failed"))
                 }, { once: true })
                 return
             }
@@ -72,11 +102,9 @@ async function loadOfficialSupabaseCreateClient() {
             const scriptElement = document.createElement("script")
             scriptElement.src = SUPABASE_BROWSER_SCRIPT_SRC
             scriptElement.async = true
-            scriptElement.addEventListener("load", () => {
-                resolveFactory()
-            }, { once: true })
+            scriptElement.addEventListener("load", onScriptLoaded, { once: true })
             scriptElement.addEventListener("error", () => {
-                reject(new Error("supabase-browser-script-failed"))
+                finishReject(new Error("supabase-browser-script-failed"))
             }, { once: true })
             document.head.appendChild(scriptElement)
         })
