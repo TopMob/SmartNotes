@@ -1,5 +1,4 @@
 let googleIdentityScriptPromise = null
-let googleTokenScriptPromise = null
 
 function createError(code, message) {
     const error = new Error(message)
@@ -66,40 +65,6 @@ function loadGoogleIdentityScript(timeoutMilliseconds = 9000) {
     return googleIdentityScriptPromise
 }
 
-function loadGoogleTokenScript(timeoutMilliseconds = 9000) {
-    if (googleTokenScriptPromise) return googleTokenScriptPromise
-
-    googleTokenScriptPromise = new Promise((resolve, reject) => {
-        if (typeof window !== "undefined" && window.google?.accounts?.oauth2) {
-            resolve(true)
-            return
-        }
-
-        const scriptSource = "https://accounts.google.com/gsi/client"
-        const existingScriptElement = document.querySelector(`script[src="${scriptSource}"]`)
-        if (existingScriptElement) {
-            const waitStartedAt = Date.now()
-            const poll = () => {
-                if (typeof window !== "undefined" && window.google?.accounts?.oauth2) {
-                    resolve(true)
-                    return
-                }
-                if (Date.now() - waitStartedAt >= timeoutMilliseconds) {
-                    reject(createError("auth/google-identity-script-timeout", "Google identity script timeout"))
-                    return
-                }
-                setTimeout(poll, 40)
-            }
-            poll()
-            return
-        }
-
-        loadGoogleIdentityScript(timeoutMilliseconds).then(resolve).catch(reject)
-    })
-
-    return googleTokenScriptPromise
-}
-
 export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds = 12000 }) {
     if (!clientId) {
         throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
@@ -158,56 +123,5 @@ export async function requestGoogleIdentityToken({ clientId, timeoutMilliseconds
                 finishWithReject(createError("auth/google-identity-skipped", "Google identity prompt skipped"))
             }
         })
-    })
-}
-
-export async function requestGoogleAccessToken({ clientId, scope = "openid email profile", timeoutMilliseconds = 12000 }) {
-    if (!clientId) {
-        throw createError("auth/google-identity-client-id-missing", "Google client id is missing")
-    }
-
-    await loadGoogleTokenScript()
-
-    if (typeof window === "undefined" || !window.google?.accounts?.oauth2) {
-        throw createError("auth/google-identity-unavailable", "Google identity API unavailable")
-    }
-
-    return new Promise((resolve, reject) => {
-        let settled = false
-        const timeoutId = setTimeout(() => {
-            if (settled) return
-            settled = true
-            reject(createError("auth/google-identity-timeout", "Google identity timeout"))
-        }, timeoutMilliseconds)
-
-        const finish = (error, token = "") => {
-            if (settled) return
-            settled = true
-            clearTimeout(timeoutId)
-            if (error) {
-                reject(error)
-                return
-            }
-            resolve(token)
-        }
-
-        const tokenClient = window.google.accounts.oauth2.initTokenClient({
-            client_id: clientId,
-            scope,
-            prompt: "select_account consent",
-            callback: response => {
-                const accessToken = String(response?.access_token || "")
-                if (!accessToken) {
-                    finish(createError("auth/google-identity-empty-token", "Google access token is empty"))
-                    return
-                }
-                finish(null, accessToken)
-            },
-            error_callback: error => {
-                finish(createError("auth/google-identity-skipped", String(error?.message || error?.type || "Google sign-in canceled")))
-            }
-        })
-
-        tokenClient.requestAccessToken({ prompt: "select_account consent" })
     })
 }
