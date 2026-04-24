@@ -235,9 +235,6 @@ async function startCore() {
         window.db = core.db
     }
 
-    await startupSplash.finish()
-    await yieldToMainThread()
-
     const authManager = await InfraEngine.createAuth()
     core.Auth = authManager
     window.Auth = core.Auth
@@ -249,6 +246,8 @@ async function startCore() {
         }
         showRuntimeErrorMessage("Некоторые функции входа временно недоступны")
     })
+
+    await yieldToMainThread()
 }
 
 bootstrapCore({ ThemeManager, Auth: core.Auth })

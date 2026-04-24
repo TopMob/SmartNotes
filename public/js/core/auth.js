@@ -404,6 +404,7 @@ export function createAuthManager({ auth }) {
             console.info("[Auth] state changed", normalizedUser ? "logged in" : "logged out")
             state.authReady = true
             this.setAuthReady(true)
+            this._resolveStartupScreen()
             StateActions.setUser(normalizedUser)
 
             if (normalizedUser) {
@@ -440,11 +441,6 @@ export function createAuthManager({ auth }) {
             this.setAuthReady(true)
             if (!auth.currentUser && typeof auth.preloadGoogleSignIn === "function") {
                 auth.preloadGoogleSignIn().catch(() => false)
-            }
-            if (typeof window.requestAnimationFrame === "function") {
-                window.requestAnimationFrame(() => this._resolveStartupScreen())
-            } else {
-                setTimeout(() => this._resolveStartupScreen(), 0)
             }
 
             auth.onAuthStateChanged(async user => {
