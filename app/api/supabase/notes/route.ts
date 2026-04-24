@@ -53,11 +53,6 @@ export async function PUT(request: Request) {
         noteId: normalizedNoteId,
         updates: bodyNote
       })
-      ? await updateSupabaseNote({
-        userId: user.id,
-        noteId: normalizedNoteId,
-        note: bodyNote
-      })
       : await updateSupabaseNote({
         userId: user.id,
         noteId: normalizedNoteId,
