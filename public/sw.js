@@ -1,4 +1,4 @@
-const CACHE_NAME = "smartnotes-static-v1"
+const CACHE_NAME = "smartnotes-static-v2-auth-fix"
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",

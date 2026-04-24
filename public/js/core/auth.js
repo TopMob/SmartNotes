@@ -487,7 +487,7 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
-            this.setAuthReady(true)
+            this.setAuthReady(false)
             if (!auth.currentUser && typeof auth.preloadGoogleSignIn === "function") {
                 auth.preloadGoogleSignIn().catch(() => false)
             }
@@ -499,10 +499,6 @@ export function createAuthManager({ auth }) {
                 this._setLoginBusy(false)
                 this.handleAuthError(error)
             })
-
-            if (auth.currentUser) {
-                await this._handleAuthState(auth.currentUser)
-            }
 
             try {
                 await this._preparePersistenceForRedirectResult()

@@ -2,66 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 
-const SESSION_STORAGE_KEY = "smartnotes.supabase.session"
+import { SUPABASE_BROWSER_STORAGE_KEY, getSupabaseBrowserClient } from "@/lib/supabase/client"
+
 const CALLBACK_PATH = "/auth/callback"
 const PROFILE_SYNC_ENDPOINT = "/api/supabase/session"
 
 type CallbackState = "processing" | "error"
-
-type StoredSession = {
-  access_token: string
-  refresh_token: string
-  token_type: string
-  expires_in: number
-  expires_at: number
-  user: {
-    id: string
-    email: string
-    user_metadata: Record<string, unknown>
-  }
-}
-
-function decodeBase64Url(value: string) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/")
-  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4))
-  return atob(normalized + padding)
-}
-
-function decodeJwtPayload(token: string) {
-  try {
-    const [, payload] = String(token || "").split(".")
-    if (!payload) return null
-    return JSON.parse(decodeBase64Url(payload)) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
-function buildSessionFromUrl(url: URL): StoredSession | null {
-  const hashParams = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash)
-  const accessToken = String(hashParams.get("access_token") || "")
-  const refreshToken = String(hashParams.get("refresh_token") || "")
-  if (!accessToken || !refreshToken) return null
-
-  const payload = decodeJwtPayload(accessToken)
-  const userId = String(payload?.sub || "")
-  if (!userId) return null
-
-  const expiresAt = Number(hashParams.get("expires_at") || payload?.exp || 0)
-
-  return {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    token_type: String(hashParams.get("token_type") || "bearer"),
-    expires_in: Number(hashParams.get("expires_in") || 0),
-    expires_at: expiresAt,
-    user: {
-      id: userId,
-      email: String(payload?.email || ""),
-      user_metadata: {}
-    }
-  }
-}
 
 function buildRedirectUrl(url: URL) {
   const next = String(url.searchParams.get("next") || "/").trim()
@@ -106,13 +52,22 @@ export default function AuthCallbackPage() {
     const finalizeSignIn = async () => {
       const currentUrl = new URL(window.location.href)
       const nextPath = buildRedirectUrl(currentUrl)
-      const session = buildSessionFromUrl(currentUrl)
+      const supabase = getSupabaseBrowserClient()
+      const sessionResult = await supabase.auth.getSession()
+      const session = sessionResult.data.session
 
-      if (!session) {
-        throw new Error("oauth-session-missing")
+      if (!session?.access_token) {
+        throw sessionResult.error || new Error("oauth-session-missing")
       }
 
-      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+      try {
+        window.localStorage.removeItem("smartnotes.supabase.session")
+      } catch {}
+
+      if (!window.localStorage.getItem(SUPABASE_BROWSER_STORAGE_KEY)) {
+        throw new Error("oauth-session-storage-missing")
+      }
+
       await syncProfile(session.access_token)
       clearCallbackUrl(currentUrl, nextPath)
       window.location.replace(nextPath)
