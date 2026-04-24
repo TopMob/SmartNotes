@@ -143,7 +143,7 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
                     } catch {}
                 }
                 poll()
-                const intervalId = setInterval(poll, 5000)
+                const intervalId = setInterval(poll, 15000)
                 return () => {
                     cancelled = true
                     clearInterval(intervalId)
@@ -178,7 +178,7 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
             }
         }
         poll()
-        const intervalId = setInterval(poll, 5000)
+        const intervalId = setInterval(poll, 15000)
         return () => {
             cancelled = true
             clearInterval(intervalId)

@@ -86,6 +86,10 @@ function normalizeFolderName(name: unknown) {
   return String(name || "").trim()
 }
 
+function isUuid(value: unknown) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim())
+}
+
 function assertFolderName(name: unknown) {
   if (!normalizeFolderName(name)) {
     throw new Error("FOLDER_NAME_REQUIRED")
@@ -97,7 +101,7 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
   const metadata = currentMetadata && typeof currentMetadata === "object" ? currentMetadata : {}
 
   return {
-    id: note?.id || undefined,
+    id: isUuid(note?.id) ? String(note?.id) : undefined,
     user_id: userId,
     folder_id: note?.folderId || null,
     title: String(note?.title || "").slice(0, 200),
@@ -284,6 +288,43 @@ export async function upsertSupabaseFolder({ userId, folderId = null, name, desc
   return mapFolderRow(data)
 }
 
+export async function updateSupabaseFolder({ userId, folderId, updates }: { userId: string, folderId: string, updates: Record<string, unknown> }) {
+  const normalizedFolderId = String(folderId || "").trim()
+  if (!normalizedFolderId) {
+    throw new Error("FOLDER_ID_REQUIRED")
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data: existingFolder, error: existingFolderError } = await supabase
+    .from("folders")
+    .select("*")
+    .eq("id", normalizedFolderId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (existingFolderError) throw existingFolderError
+  if (!existingFolder?.id) throw new Error("FOLDER_NOT_FOUND")
+
+  const nextMetadata = mergeFolderMetadata(updates, (existingFolder.metadata && typeof existingFolder.metadata === "object") ? existingFolder.metadata as JsonObject : {})
+  const { data, error } = await supabase
+    .from("folders")
+    .update({
+      name: typeof updates.name === "string" ? normalizeFolderName(updates.name) : existingFolder.name,
+      description: typeof updates.description === "string" ? String(updates.description).trim() : existingFolder.description,
+      is_hidden: typeof updates.isHidden === "boolean" ? updates.isHidden : existingFolder.is_hidden,
+      is_archived: typeof updates.isArchived === "boolean" ? updates.isArchived : existingFolder.is_archived,
+      sort_order: Number.isFinite(Number(updates.folderOrder)) ? Number(updates.folderOrder) : existingFolder.sort_order,
+      metadata: nextMetadata
+    })
+    .eq("id", normalizedFolderId)
+    .eq("user_id", userId)
+    .select("id, name, description, sort_order, is_hidden, is_archived, metadata, created_at, updated_at, user_id")
+    .single()
+
+  if (error) throw error
+  return mapFolderRow(data)
+}
+
 export async function deleteSupabaseFolder(userId: string, folderId: string) {
   const normalizedFolderId = String(folderId || "").trim()
   if (!normalizedFolderId) {
@@ -372,6 +413,42 @@ export async function updateSupabaseNote({ userId, noteId, note }: { userId: str
 
   const currentNote = currentNoteRow ? mapNoteRow(currentNoteRow as NoteRow) : null
   const payload = buildNotePayload(userId, { ...(currentNote || {}), ...(note || {}), id: normalizedNoteId }, existing.metadata || {})
+  const { data, error } = await supabase
+    .from("notes")
+    .update(payload)
+    .eq("id", normalizedNoteId)
+    .eq("user_id", userId)
+    .select("*")
+    .single()
+
+  if (error) throw error
+  return mapNoteRow(data)
+}
+
+export async function patchSupabaseNote({ userId, noteId, updates }: { userId: string, noteId: string, updates: Record<string, unknown> }) {
+  const normalizedNoteId = String(noteId || "").trim()
+  if (!normalizedNoteId) {
+    throw new Error("NOTE_ID_REQUIRED")
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data: existingRow, error: existingRowError } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("id", normalizedNoteId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (existingRowError) throw existingRowError
+  if (!existingRow?.id) throw new Error("NOTE_NOT_FOUND")
+
+  const currentNote = mapNoteRow(existingRow as NoteRow)
+  const payload = buildNotePayload(userId, {
+    ...currentNote,
+    ...updates,
+    id: normalizedNoteId
+  }, (existingRow.metadata && typeof existingRow.metadata === "object") ? existingRow.metadata as JsonObject : {})
+
   const { data, error } = await supabase
     .from("notes")
     .update(payload)

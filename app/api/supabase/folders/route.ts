@@ -1,11 +1,11 @@
-import { deleteSupabaseFolder, listSupabaseFolders, upsertSupabaseFolder } from "@/lib/supabase/notes"
+import { deleteSupabaseFolder, listSupabaseFolders, updateSupabaseFolder, upsertSupabaseFolder } from "@/lib/supabase/notes"
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
 
 function mapFolderError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "FOLDER_ID_REQUIRED" || message === "FOLDER_NAME_REQUIRED") {
+  if (message === "FOLDER_ID_REQUIRED" || message === "FOLDER_NAME_REQUIRED" || message === "FOLDER_NOT_FOUND") {
     return new ApiRouteError(400, message)
   }
 
@@ -44,13 +44,10 @@ export async function PUT(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
     const payload = await readJsonBody(request)
-    const folder = await upsertSupabaseFolder({
+    const folder = await updateSupabaseFolder({
       userId: user.id,
       folderId: payload?.id,
-      name: payload?.name,
-      description: payload?.description || "",
-      isHidden: payload?.isHidden,
-      isArchived: payload?.isArchived || Boolean(payload?.trashedAt)
+      updates: payload
     })
 
     return ok({ folder })

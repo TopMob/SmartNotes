@@ -1,4 +1,4 @@
-import { deleteSupabaseNote, listSupabaseNotes, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
+import { deleteSupabaseNote, listSupabaseNotes, patchSupabaseNote, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
@@ -41,11 +41,18 @@ export async function PUT(request: Request) {
     const user = await requireSupabaseUser(request)
     const payload = await readJsonBody(request)
     const bodyNote = payload?.note || payload
-    const note = await updateSupabaseNote({
-      userId: user.id,
-      noteId: payload?.id || bodyNote?.id,
-      note: bodyNote
-    })
+    const normalizedNoteId = String(payload?.id || bodyNote?.id || "").trim()
+    const note = Object.keys(bodyNote || {}).some(key => ["content", "title", "tags", "hiddenTags", "pageTitles", "pageDrawings", "pageDrawingsRevision", "workspaceId", "lock"].includes(key))
+      ? await updateSupabaseNote({
+        userId: user.id,
+        noteId: normalizedNoteId,
+        note: bodyNote
+      })
+      : await patchSupabaseNote({
+        userId: user.id,
+        noteId: normalizedNoteId,
+        updates: bodyNote
+      })
 
     return ok({ note })
   } catch (error) {

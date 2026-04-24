@@ -397,8 +397,13 @@ export const EditorAPI = (() => {
         state.isSaving = true
         SaveStateService?.markSaving?.()
         try {
-            await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-            upsertSavedNoteIntoState(note)
+            const savedResult = await ref.set({ ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+            const persistedNote = savedResult?.note || savedResult?.data?.note || note
+            upsertSavedNoteIntoState(persistedNote)
+            if (persistedNote?.id && persistedNote.id !== note.id) {
+                note = { ...note, id: persistedNote.id }
+                StateStore.update("currentNote", note)
+            }
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()
             state.initialEditorState = serializeEditorStateSnapshot(note)
