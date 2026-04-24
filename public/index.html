@@ -82,11 +82,11 @@
         <div class="login-box">
             <h1 class="brand-text-fixed" data-brand-text>SmartNotes</h1>
             <p class="subtext" data-lang="login">Вход в систему</p>
-            <div class="auth-panel-switch" role="tablist" aria-label="Email authentication" data-lang-aria="email_authentication">
+            <div class="auth-panel-switch" role="tablist" aria-label="Email authentication" data-lang-aria="email_authentication" inert aria-busy="true">
                 <button type="button" class="btn-auth-tab active" id="email-signin-tab" data-auth-mode="signin" data-lang="email_signin_tab">Вход</button>
                 <button type="button" class="btn-auth-tab" id="email-signup-tab" data-auth-mode="signup" data-lang="email_signup_tab">Регистрация</button>
             </div>
-            <form id="email-signin-form" class="auth-form" method="post" action="#" novalidate>
+            <form id="email-signin-form" class="auth-form" method="post" action="#" novalidate inert aria-busy="true">
                 <label class="auth-field" for="email-signin-input">
                     <span data-lang="email_label">Email</span>
                     <input id="email-signin-input" type="email" autocomplete="email" required>
@@ -101,7 +101,7 @@
                 <button type="button" class="btn-auth-link" data-auth-action="forgot-password" data-lang="forgot_password">Забыли пароль?</button>
                 <button type="submit" class="btn-auth primary" data-lang="email_signin_button">Войти по email</button>
             </form>
-            <form id="email-signup-form" class="auth-form hidden" method="post" action="#" novalidate>
+            <form id="email-signup-form" class="auth-form hidden" method="post" action="#" novalidate inert aria-busy="true">
                 <label class="auth-field" for="email-signup-input">
                     <span data-lang="email_label">Email</span>
                     <input id="email-signup-input" type="email" autocomplete="email" required>
@@ -122,7 +122,7 @@
                 </label>
                 <button type="submit" class="btn-auth primary" data-lang="email_signup_button">Зарегистрироваться</button>
             </form>
-            <div id="email-auth-feedback" class="auth-feedback" role="status" aria-live="polite"></div>
+            <div id="email-auth-feedback" class="auth-feedback is-info" role="status" aria-live="polite">Подключение к сервису входа...</div>
             <div class="auth-buttons-group">
                 <button type="button" class="btn-auth google" data-action="login" disabled aria-disabled="true" title="Google login is temporarily disabled">
                     <img src="css/Glogo.svg" alt="" width="20" height="20">

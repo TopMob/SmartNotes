@@ -51,13 +51,29 @@ export function createAuthManager({ auth }) {
                 this._setAuthFeedback("")
             }
         },
+        _setAuthInteractivity(flag) {
+            const interactive = !!flag
+            document.querySelectorAll(".auth-panel-switch, #email-signin-form, #email-signup-form").forEach((element) => {
+                if (!(element instanceof HTMLElement)) return
+                if (interactive) {
+                    element.removeAttribute("inert")
+                    element.setAttribute("aria-busy", "false")
+                    return
+                }
+                element.setAttribute("inert", "")
+                element.setAttribute("aria-busy", "true")
+            })
+        },
         setAuthReady(flag) {
-            state.authReady = !!flag
-            if (window.SmartNotesAuthUi && typeof window.SmartNotesAuthUi.markReady === "function" && flag) {
+            const ready = !!flag
+            state.authReady = ready
+            this._setAuthInteractivity(ready)
+            if (window.SmartNotesAuthUi && typeof window.SmartNotesAuthUi.markReady === "function" && ready) {
                 window.SmartNotesAuthUi.markReady()
             }
         },
         setDegradedState(message) {
+            this._setAuthInteractivity(false)
             this._collectAuthActionElements()
             for (const actionElement of state.authActionElements) {
                 actionElement.disabled = true
