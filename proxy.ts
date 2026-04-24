@@ -23,8 +23,6 @@ export function proxy(request: NextRequest) {
   return applySecurityHeaders(request)
 }
 
-export const middleware = proxy
-
 export const config = {
   matcher: [
     {

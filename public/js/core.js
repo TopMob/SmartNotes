@@ -53,18 +53,40 @@ window.AppFeatures = Object.assign({
 }, window.AppFeatures || {})
 window.GoogleDriveMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
 window.ExternalMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
-window.firebase = {
-    firestore: {
-        FieldValue: {
-            serverTimestamp() {
-                return new Date().toISOString()
-            },
-            delete() {
-                return null
+
+function createFirebaseCompatibilityShim() {
+    return {
+        firestore: {
+            FieldValue: {
+                serverTimestamp() {
+                    return new Date().toISOString()
+                },
+                delete() {
+                    return null
+                }
             }
         }
     }
 }
+
+function installFirebaseCompatibilityShim() {
+    if (typeof window.firebase !== "undefined") return window.firebase
+    let cachedShim = null
+    Object.defineProperty(window, "firebase", {
+        configurable: true,
+        enumerable: true,
+        get() {
+            if (!cachedShim) cachedShim = createFirebaseCompatibilityShim()
+            return cachedShim
+        },
+        set(value) {
+            cachedShim = value
+        }
+    })
+    return window.firebase
+}
+
+installFirebaseCompatibilityShim()
 
 
 function initializeSplashScreen() {
@@ -138,7 +160,7 @@ function validateSupabaseConfig() {
     const publishableKey = String(config?.publishableKey || "").trim()
 
     if (!url || !publishableKey) {
-        throw new Error("Supabase config unavailable")
+        throw new Error("Supabase config unavailable at runtime bootstrap")
     }
 
     window.SmartNotesSupabaseConfig = { url, publishableKey }
