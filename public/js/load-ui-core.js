@@ -2175,6 +2175,7 @@ Object.assign(UI, {
         await DataPath.getUserFoldersCollection(user).doc(folderId).update({ isHidden: !!hiddenState })
         StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, isHidden: !!hiddenState } : folder))
         this.renderFolders()
+        this.updateViewTitle()
     },
 
     async toggleFolderHidden(folderId, options = {}) {

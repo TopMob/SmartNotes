@@ -143,6 +143,7 @@ function mergeFolderMetadata(folder: Record<string, unknown> = {}, currentMetada
   return {
     ...metadata,
     trashedAt: folder?.trashedAt || null,
+    isHidden: typeof folder?.isHidden === "boolean" ? folder.isHidden : Boolean(metadata.isHidden),
     folderOrder: Number.isFinite(Number(folder?.folderOrder))
       ? Number(folder.folderOrder)
       : (Number.isFinite(Number(metadata.folderOrder)) ? Number(metadata.folderOrder) : 0),
@@ -170,7 +171,7 @@ function mapFolderRow(folder: FolderRow) {
     name: folder.name || "",
     description: folder.description || "",
     folderOrder: Number.isFinite(Number(folder.sort_order)) ? Number(folder.sort_order) : 0,
-    isHidden: folder.is_hidden === true,
+    isHidden: typeof metadata.isHidden === "boolean" ? metadata.isHidden : folder.is_hidden === true,
     isArchived: folder.is_archived === true,
     trashedAt: Boolean(metadata.trashedAt) ? metadata.trashedAt : null,
     createdAt: folder.created_at || null,
@@ -345,7 +346,7 @@ export async function upsertSupabaseFolder({ userId, folderId = null, name, desc
     description: String(description || "").trim(),
     is_hidden: !!isHidden,
     is_archived: !!isArchived,
-    metadata: mergeFolderMetadata({}, currentMetadata)
+    metadata: mergeFolderMetadata({ isHidden }, currentMetadata)
   }
 
   const { data, error } = await supabase
