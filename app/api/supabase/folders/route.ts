@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       name: payload?.name,
       description: payload?.description || "",
       isHidden: payload?.isHidden,
-      isArchived: payload?.isArchived
+      isArchived: payload?.isArchived || Boolean(payload?.trashedAt)
     })
     return ok({ folder }, { status: 201 })
   } catch (error) {
@@ -50,7 +50,7 @@ export async function PUT(request: Request) {
       name: payload?.name,
       description: payload?.description || "",
       isHidden: payload?.isHidden,
-      isArchived: payload?.isArchived
+      isArchived: payload?.isArchived || Boolean(payload?.trashedAt)
     })
 
     return ok({ folder })

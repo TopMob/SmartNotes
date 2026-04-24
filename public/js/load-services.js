@@ -807,6 +807,9 @@ const CollaborationService = {
     },
     getNoteReference(note, user) {
         if (!db || !user || !note) return null
+        if (window.AppFeatures?.sharedAccess !== true && window.AppFeatures?.workspaces !== true) {
+            return DataPath.getUserNotesCollection(user).doc(note.id)
+        }
         const access = this.getAccess(note)
         const workspaceId = access?.workspaceId || note.workspaceId
         if (workspaceId && window.AppFeatures?.workspaces === true && typeof db.collection === "function") {

@@ -631,6 +631,11 @@ const SharedNotesService = (() => {
         publishSharedNotes()
     }
     function subscribe(user) {
+        if (window.AppFeatures?.sharedAccess !== true) {
+            state.user = user
+            publishSharedNotes()
+            return
+        }
         state.user = user
         if (state.unsubscribeEntries) state.unsubscribeEntries()
         state.unsubscribeEntries = NotesRepository.subscribeSharedEntries(user, snapshot => {
@@ -1092,6 +1097,12 @@ const WorkspacesService = (() => {
     }
 
     function subscribe(user) {
+        if (window.AppFeatures?.workspaces !== true) {
+            state.user = user
+            StateStore.update("sharedWorkspaces", [])
+            publishWorkspaceNotes()
+            return
+        }
         state.user = user
         if (state.unsubscribeEntries) state.unsubscribeEntries()
         state.unsubscribeEntries = WorkspacesRepository.subscribeUserWorkspaces(user, snapshot => {

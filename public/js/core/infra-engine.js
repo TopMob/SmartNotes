@@ -111,8 +111,9 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
                 return response.json()
             },
             async update(data) {
+                const method = endpoint === "supabase/notes" || endpoint === "supabase/folders" ? "PUT" : "POST"
                 const response = await fetch(createApiEndpoint(endpoint), {
-                    method: "PUT",
+                    method,
                     headers: buildAuthorizedHeaders(user),
                     body: JSON.stringify({ ...(data || {}), id: documentId })
                 })
@@ -130,7 +131,7 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
             async get() {
                 const collectionResult = await createCollectionApi({ user, endpoint, filters }).get()
                 const matched = collectionResult.docs.find(entry => entry.id === documentId)
-                return matched || { id: documentId, exists: false, data: () => ({}) }
+                return matched || { id: documentId, exists: false, data: () => ({}), ref: this }
             },
             onSnapshot(next) {
                 let cancelled = false
