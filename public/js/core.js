@@ -123,12 +123,13 @@ function validateSupabaseConfig() {
     const config = window.SmartNotesSupabaseConfig || null
     const url = String(config?.url || "").trim()
     const publishableKey = String(config?.publishableKey || "").trim()
+    const googleClientId = String(config?.googleClientId || "").trim()
 
     if (!url || !publishableKey) {
         throw new Error("Supabase config unavailable at runtime bootstrap")
     }
 
-    window.SmartNotesSupabaseConfig = { url, publishableKey }
+    window.SmartNotesSupabaseConfig = { url, publishableKey, googleClientId }
 }
 
 let supabaseStartupPromise = null

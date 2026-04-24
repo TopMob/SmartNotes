@@ -5,6 +5,10 @@ const authStateSubscribers = new Set()
 let authStateListenerBound = false
 let currentSessionCache = null
 
+const DEFAULT_AUTH_TIMEOUT_MS = 9000
+const BACKGROUND_AUTH_TIMEOUT_MS = 14000
+const AUTH_PROXY_ENDPOINT = "/api/supabase/auth"
+
 function normalizeUser(user) {
     if (!user || !user.id) return null
     return {
@@ -20,12 +24,13 @@ function normalizeUser(user) {
 function getRuntimeConfig() {
     const url = String(window.SmartNotesSupabaseConfig?.url || "").trim().replace(/\/+$/g, "")
     const publishableKey = String(window.SmartNotesSupabaseConfig?.publishableKey || "").trim()
+    const googleClientId = String(window.SmartNotesSupabaseConfig?.googleClientId || "").trim()
 
     if (!url || !publishableKey) {
         throw new Error("supabase-config-missing")
     }
 
-    return { url, publishableKey }
+    return { url, publishableKey, googleClientId }
 }
 
 function decodeBase64Url(value) {
@@ -107,11 +112,30 @@ function createAuthHeaders(publishableKey, accessToken = "") {
 
 async function authRequest(path, { method = "GET", body = null, accessToken = "" } = {}) {
     const { url, publishableKey } = getRuntimeConfig()
-    const response = await fetch(`${url}/auth/v1/${path.replace(/^\/+/, "")}`, {
-        method,
-        headers: createAuthHeaders(publishableKey, accessToken),
-        body: body ? JSON.stringify(body) : undefined
-    })
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+    const timeoutId = controller
+        ? setTimeout(() => controller.abort(), DEFAULT_AUTH_TIMEOUT_MS)
+        : null
+
+    let response = null
+    try {
+        response = await fetch(AUTH_PROXY_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: path.replace(/^\/+/, ""), method, body, accessToken }),
+            ...(controller ? { signal: controller.signal } : {})
+        })
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId)
+    }
+
+    if (response.status === 404 || response.status === 405) {
+        response = await fetch(`${url}/auth/v1/${path.replace(/^\/+/, "")}`, {
+            method,
+            headers: createAuthHeaders(publishableKey, accessToken),
+            body: body ? JSON.stringify(body) : undefined
+        })
+    }
 
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
@@ -188,6 +212,12 @@ function isSessionExpired(session) {
     return expiresAtMs <= Date.now()
 }
 
+function shouldRefreshSoon(session) {
+    const expiresAtMs = getSessionExpiryMs(session)
+    if (!expiresAtMs) return false
+    return expiresAtMs - Date.now() <= 5 * 60 * 1000
+}
+
 async function refreshSessionIfNeeded() {
     const currentSession = readStoredSession()
     if (!currentSession?.refresh_token) return null
@@ -251,9 +281,38 @@ async function resolveCurrentSession() {
 
     const storedSession = currentSessionCache || readStoredSession()
     if (!storedSession) return null
+    if (!isSessionExpired(storedSession)) {
+        if (shouldRefreshSoon(storedSession)) {
+            refreshSessionIfNeeded().then((refreshedSession) => {
+                if (refreshedSession) emitAuthState("TOKEN_REFRESHED", refreshedSession)
+            }).catch((error) => {
+                console.warn("[SupabaseClient] background session refresh failed", error)
+            })
+        }
+        return storedSession
+    }
     return validateSession(storedSession).catch(() => {
         writeStoredSession(null)
         return null
+    })
+}
+
+function verifyCurrentSessionInBackground(session) {
+    if (!session?.access_token || isSessionExpired(session)) return
+    let timeoutId = null
+    const timeoutPromise = new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve(null), BACKGROUND_AUTH_TIMEOUT_MS)
+    })
+    Promise.race([
+        validateSession(session).catch(() => null),
+        timeoutPromise
+    ]).then((validatedSession) => {
+        if (timeoutId) clearTimeout(timeoutId)
+        if (!validatedSession) return
+        emitAuthState("USER_VERIFIED", validatedSession)
+    }).catch((error) => {
+        if (timeoutId) clearTimeout(timeoutId)
+        console.warn("[SupabaseClient] background session verify failed", error)
     })
 }
 
@@ -335,6 +394,29 @@ function createClient() {
                 })
                 return { data: {}, error: null }
             },
+            async signInWithIdToken({ provider, token }) {
+                const normalizedProvider = String(provider || "").trim()
+                const idToken = String(token || "").trim()
+                if (!normalizedProvider || !idToken) {
+                    return { data: { session: null, user: null }, error: new Error("supabase-id-token-missing") }
+                }
+
+                try {
+                    const payload = await authRequest(`token?grant_type=id_token&provider=${encodeURIComponent(normalizedProvider)}`, {
+                        method: "POST",
+                        body: { id_token: idToken }
+                    })
+                    const session = normalizeSession(payload)
+                    if (!session) {
+                        throw new Error("supabase-session-missing")
+                    }
+                    writeStoredSession(session)
+                    emitAuthState("SIGNED_IN", session)
+                    return { data: { session, user: session?.user || null }, error: null }
+                } catch (error) {
+                    return { data: { session: null, user: null }, error }
+                }
+            },
             async updateUser({ data = {} } = {}) {
                 const session = await resolveCurrentSession()
                 if (!session?.access_token) {
@@ -371,7 +453,9 @@ function createClient() {
                 const subscriber = typeof callback === "function" ? callback : () => {}
                 authStateSubscribers.add(subscriber)
                 Promise.resolve(this.getSession()).then((result) => {
-                    subscriber(result?.data?.session ? "INITIAL_SESSION" : "SIGNED_OUT", result?.data?.session || null)
+                    const session = result?.data?.session || null
+                    subscriber(session ? "INITIAL_SESSION" : "SIGNED_OUT", session)
+                    verifyCurrentSessionInBackground(session)
                 }).catch((error) => {
                     console.error("[SupabaseClient] initial session failed", error)
                 })

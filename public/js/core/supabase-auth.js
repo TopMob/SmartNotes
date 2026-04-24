@@ -1,6 +1,8 @@
 import { initSupabase } from "./supabase.js"
+import { requestGoogleIdentityToken } from "./googleIdentityAuth.js"
 
 const sessionEndpoint = "/api/supabase/session"
+const PROFILE_SYNC_TIMEOUT_MS = 8000
 
 function readProfileValue(user, ...keys) {
     for (const key of keys) {
@@ -32,12 +34,23 @@ async function syncProfile(session, updateProfile) {
     const accessToken = getSessionAccessToken(session)
     if (!accessToken) return null
 
-    const response = await fetch(sessionEndpoint, {
-        method: "GET",
-        headers: {
-            Authorization: `Bearer ${accessToken}`
-        }
-    })
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null
+    const timeoutId = controller
+        ? setTimeout(() => controller.abort(), PROFILE_SYNC_TIMEOUT_MS)
+        : null
+
+    let response = null
+    try {
+        response = await fetch(sessionEndpoint, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            },
+            ...(controller ? { signal: controller.signal } : {})
+        })
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId)
+    }
 
     if (!response.ok) {
         throw new Error(`supabase-session-http-${response.status}`)
@@ -51,6 +64,10 @@ function createPersistenceEnum() {
     return {
         LOCAL: "local"
     }
+}
+
+function getGoogleClientId() {
+    return String(window.SmartNotesSupabaseConfig?.googleClientId || "").trim()
 }
 
 export async function createSupabaseAuth() {
@@ -177,10 +194,20 @@ export async function createSupabaseAuth() {
             return null
         },
         async signInWithPopup() {
-            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
+            const clientId = getGoogleClientId()
+            if (!clientId) {
+                throw { code: "auth/google-identity-client-id-missing", message: "Google client id is missing" }
+            }
+
+            const idToken = await requestGoogleIdentityToken({ clientId })
+            const result = await client.auth.signInWithIdToken({ provider: "google", token: idToken })
+            if (result.error) throw result.error
+            const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
+            currentUser = await resolveUserFromSession(session)
+            return { user: currentUser }
         },
         async signInWithRedirect() {
-            throw { code: "auth/operation-not-supported-in-this-environment", message: "Google auth is temporarily disabled during Supabase cutover" }
+            return this.signInWithPopup()
         },
         onAuthStateChanged(next, error) {
             const callback = typeof next === "function" ? next : () => {}
@@ -208,9 +235,9 @@ export async function createSupabaseAuth() {
         })
     }
 
-    const initialSessionResult = await client.auth.getSession()
-    const initialSession = initialSessionResult?.data?.session || null
-    await emitAuthState(initialSession)
+        const initialSessionResult = await client.auth.getSession()
+        const initialSession = initialSessionResult?.data?.session || null
+        await emitAuthState(initialSession)
 
     client.auth.onAuthStateChange((_event, session) => {
         emitAuthState(session)

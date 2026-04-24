@@ -12,7 +12,6 @@
 
 ## Required base environment variables
 
-- `FIREBASE_SERVICE_ACCOUNT`
 - `API_SECRET`
 - `CLIENT_ORIGIN`
 

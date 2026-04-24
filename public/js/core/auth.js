@@ -68,6 +68,12 @@ export function createAuthManager({ auth }) {
             const ready = !!flag
             state.authReady = ready
             this._setAuthInteractivity(ready)
+            this._collectAuthActionElements()
+            for (const actionElement of state.authActionElements) {
+                if (!ready) continue
+                actionElement.disabled = false
+                actionElement.removeAttribute("aria-disabled")
+            }
             if (window.SmartNotesAuthUi && typeof window.SmartNotesAuthUi.markReady === "function" && ready) {
                 window.SmartNotesAuthUi.markReady()
             }
@@ -115,6 +121,13 @@ export function createAuthManager({ auth }) {
                 "auth/user-not-found": this._t("auth_email_not_found", "No account found for this email"),
                 "auth/email-already-in-use": this._t("auth_email_exists", "An account with this email already exists. Please sign in"),
                 "auth/account-exists-with-different-credential": this._t("auth_email_provider_conflict", "A different sign-in method is used for this email"),
+                "auth/google-identity-client-id-missing": this._t("auth_service_unavailable", "Service temporarily unavailable"),
+                "auth/google-identity-script-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-identity-unavailable": this._t("auth_env_failed", "Authentication is blocked in this browser"),
+                "auth/google-identity-not-displayed": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
+                "auth/google-identity-skipped": this._t("auth_popup_closed", "Sign-in canceled"),
+                "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
                 "invalid_credentials": this._t("login_failed", "Sign-in failed")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
@@ -170,7 +183,18 @@ export function createAuthManager({ auth }) {
 
             state.driveInteractiveAllowed = true
             await this._ensureLocalPersistence()
-            await this.loginWithEmail()
+            this._setLoginBusy(true)
+            this._setAuthFeedback(this._t("auth_google_starting", "Opening Google sign-in..."), "info")
+            try {
+                const result = await auth.signInWithPopup()
+                if (result?.user) {
+                    await this._handleAuthState(result.user)
+                }
+            } catch (error) {
+                this.handleAuthError(error)
+            } finally {
+                this._setLoginBusy(false)
+            }
         },
         _ensureLocalAuthManager() {
             if (state.localAuthManager) return state.localAuthManager

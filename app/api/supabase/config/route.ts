@@ -5,7 +5,8 @@ export const runtime = "nodejs"
 function readPublicSupabaseConfig() {
   return {
     url: String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim(),
-    publishableKey: String(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "").trim()
+    publishableKey: String(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "").trim(),
+    googleClientId: String(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || "").trim()
   }
 }
 
@@ -53,7 +54,8 @@ export async function GET(request: Request) {
   return Response.json({
     ok: true,
     url: config.url,
-    publishableKey: config.publishableKey
+    publishableKey: config.publishableKey,
+    googleClientId: config.googleClientId
   }, {
     headers: {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=86400"
