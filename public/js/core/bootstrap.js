@@ -68,6 +68,13 @@ export function bootstrapCore({ ThemeManager, Auth }) {
                 event.preventDefault()
             }, { passive: false })
         })
+
+        document.addEventListener("submit", (event) => {
+            const formElement = event.target
+            if (!(formElement instanceof HTMLFormElement)) return
+            if (formElement.id !== "email-signin-form" && formElement.id !== "email-signup-form") return
+            event.preventDefault()
+        }, true)
     }
 
     if (document.readyState === "loading") {

@@ -1,27 +1,397 @@
 let supabaseClientSingleton = null
 
-export function initSupabase() {
-    if (supabaseClientSingleton) return supabaseClientSingleton
+const storageKey = "smartnotes.supabase.session"
+const authStateSubscribers = new Set()
+let authStateListenerBound = false
+let currentSessionCache = null
 
-    const url = String(window.SmartNotesSupabaseConfig?.url || "").trim()
+function normalizeUser(user) {
+    if (!user || !user.id) return null
+    return {
+        ...user,
+        id: String(user.id || ""),
+        email: String(user.email || ""),
+        user_metadata: user.user_metadata && typeof user.user_metadata === "object"
+            ? user.user_metadata
+            : {}
+    }
+}
+
+function getRuntimeConfig() {
+    const url = String(window.SmartNotesSupabaseConfig?.url || "").trim().replace(/\/+$/g, "")
     const publishableKey = String(window.SmartNotesSupabaseConfig?.publishableKey || "").trim()
 
     if (!url || !publishableKey) {
         throw new Error("supabase-config-missing")
     }
 
-    const supabaseGlobal = window.supabase
-    if (!supabaseGlobal || typeof supabaseGlobal.createClient !== "function") {
-        throw new Error("supabase-global-missing")
+    return { url, publishableKey }
+}
+
+function decodeBase64Url(value) {
+    const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/")
+    const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4))
+    return atob(normalized + padding)
+}
+
+function decodeJwtPayload(token) {
+    try {
+        const [, payload] = String(token || "").split(".")
+        if (!payload) return null
+        return JSON.parse(decodeBase64Url(payload))
+    } catch {
+        return null
+    }
+}
+
+function getSessionExpiryMs(session) {
+    const expiresAt = Number(session?.expires_at || 0)
+    if (expiresAt > 0) return expiresAt * 1000
+    const payload = decodeJwtPayload(session?.access_token)
+    const payloadExp = Number(payload?.exp || 0)
+    return payloadExp > 0 ? payloadExp * 1000 : 0
+}
+
+function normalizeSession(session) {
+    if (!session?.access_token || !session?.refresh_token || !session?.user?.id) {
+        return null
     }
 
-    supabaseClientSingleton = supabaseGlobal.createClient(url, publishableKey, {
-        auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true
+    const expiresAtMs = getSessionExpiryMs(session)
+    return {
+        access_token: String(session.access_token),
+        refresh_token: String(session.refresh_token),
+        token_type: String(session.token_type || "bearer"),
+        expires_in: Number(session.expires_in || 0),
+        expires_at: expiresAtMs > 0 ? Math.floor(expiresAtMs / 1000) : 0,
+        user: normalizeUser(session.user)
+    }
+}
+
+function readStoredSession() {
+    try {
+        const raw = window.localStorage.getItem(storageKey)
+        if (!raw) return null
+        const session = normalizeSession(JSON.parse(raw))
+        currentSessionCache = session
+        if (!session) {
+            window.localStorage.removeItem(storageKey)
         }
+        return session
+    } catch {
+        currentSessionCache = null
+        return null
+    }
+}
+
+function writeStoredSession(session) {
+    currentSessionCache = session || null
+    try {
+        if (!session) {
+            window.localStorage.removeItem(storageKey)
+            return
+        }
+        window.localStorage.setItem(storageKey, JSON.stringify(session))
+    } catch {
+        return
+    }
+}
+
+function createAuthHeaders(publishableKey, accessToken = "") {
+    return {
+        apikey: publishableKey,
+        Authorization: accessToken ? `Bearer ${accessToken}` : `Bearer ${publishableKey}`,
+        "Content-Type": "application/json"
+    }
+}
+
+async function authRequest(path, { method = "GET", body = null, accessToken = "" } = {}) {
+    const { url, publishableKey } = getRuntimeConfig()
+    const response = await fetch(`${url}/auth/v1/${path.replace(/^\/+/, "")}`, {
+        method,
+        headers: createAuthHeaders(publishableKey, accessToken),
+        body: body ? JSON.stringify(body) : undefined
     })
 
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) {
+        const error = new Error(String(payload?.msg || payload?.error_description || payload?.error || `supabase-auth-http-${response.status}`))
+        error.code = String(payload?.error_code || payload?.code || payload?.error || "auth/unknown")
+        error.status = response.status
+        throw error
+    }
+
+    return payload
+}
+
+function getHashParams() {
+    const hash = String(window.location.hash || "")
+    const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash
+    return new URLSearchParams(normalizedHash)
+}
+
+function getSearchParams() {
+    return new URLSearchParams(String(window.location.search || ""))
+}
+
+function clearAuthParamsFromUrl() {
+    const url = new URL(window.location.href)
+    url.hash = ""
+    ;[
+        "access_token",
+        "refresh_token",
+        "expires_at",
+        "expires_in",
+        "token_type",
+        "token_hash",
+        "type",
+        "code",
+        "next",
+        "provider_token",
+        "provider_refresh_token"
+    ].forEach((key) => url.searchParams.delete(key))
+    window.history.replaceState({}, document.title, url.toString())
+}
+
+function readSessionFromUrl() {
+    const hashParams = getHashParams()
+    const searchParams = getSearchParams()
+    const accessToken = String(hashParams.get("access_token") || "")
+    const refreshToken = String(hashParams.get("refresh_token") || "")
+    if (!accessToken || !refreshToken) return null
+
+    const payload = decodeJwtPayload(accessToken)
+    return normalizeSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        token_type: hashParams.get("token_type") || "bearer",
+        expires_in: Number(hashParams.get("expires_in") || 0),
+        expires_at: Number(hashParams.get("expires_at") || payload?.exp || 0),
+        user: payload ? {
+            id: String(payload.sub || ""),
+            email: String(payload.email || ""),
+            user_metadata: {
+                ...(searchParams.get("type") ? { auth_flow_type: String(searchParams.get("type") || "") } : {})
+            }
+        } : null
+    })
+}
+
+async function fetchCurrentUser(accessToken) {
+    const payload = await authRequest("user", { method: "GET", accessToken })
+    return payload?.user || null
+}
+
+function isSessionExpired(session) {
+    const expiresAtMs = getSessionExpiryMs(session)
+    if (!expiresAtMs) return false
+    return expiresAtMs <= Date.now()
+}
+
+async function refreshSessionIfNeeded() {
+    const currentSession = readStoredSession()
+    if (!currentSession?.refresh_token) return null
+    const expiresAtMs = getSessionExpiryMs(currentSession)
+    if (expiresAtMs && expiresAtMs - Date.now() > 30000) {
+        return currentSession
+    }
+
+    const payload = await authRequest("token?grant_type=refresh_token", {
+        method: "POST",
+        body: { refresh_token: currentSession.refresh_token }
+    })
+    const refreshedSession = normalizeSession(payload)
+    if (!refreshedSession) {
+        writeStoredSession(null)
+        return null
+    }
+    writeStoredSession(refreshedSession)
+    return refreshedSession
+}
+
+async function validateSession(session, { allowRefresh = true } = {}) {
+    if (!session?.access_token) return null
+
+    if (isSessionExpired(session) && allowRefresh) {
+        const refreshedSession = await refreshSessionIfNeeded().catch(() => null)
+        if (!refreshedSession) {
+            writeStoredSession(null)
+        }
+        return refreshedSession
+    }
+
+    const user = await fetchCurrentUser(session.access_token).catch(async () => {
+        if (!allowRefresh) return null
+        const refreshedSession = await refreshSessionIfNeeded().catch(() => null)
+        if (!refreshedSession?.access_token) return null
+        const refreshedUser = await fetchCurrentUser(refreshedSession.access_token).catch(() => null)
+        if (!refreshedUser) return null
+        const nextSession = normalizeSession({ ...refreshedSession, user: refreshedUser })
+        writeStoredSession(nextSession)
+        return nextSession?.user || null
+    })
+
+    if (!user) {
+        writeStoredSession(null)
+        return null
+    }
+
+    const nextSession = normalizeSession({ ...session, user })
+    writeStoredSession(nextSession)
+    return nextSession
+}
+
+async function resolveCurrentSession() {
+    const urlSession = readSessionFromUrl()
+    if (urlSession) {
+        const validatedUrlSession = await validateSession(urlSession, { allowRefresh: false }).catch(() => null)
+        clearAuthParamsFromUrl()
+        return validatedUrlSession
+    }
+
+    const storedSession = currentSessionCache || readStoredSession()
+    if (!storedSession) return null
+    return validateSession(storedSession).catch(() => {
+        writeStoredSession(null)
+        return null
+    })
+}
+
+function emitAuthState(eventName, session) {
+    currentSessionCache = session || null
+    authStateSubscribers.forEach((callback) => {
+        Promise.resolve(callback(eventName, session)).catch((error) => {
+            console.error("[SupabaseClient] auth subscriber failed", error)
+        })
+    })
+}
+
+function bindStorageListener() {
+    if (authStateListenerBound) return
+    authStateListenerBound = true
+    window.addEventListener("storage", (event) => {
+        if (event.key !== storageKey) return
+        let nextSession = null
+        try {
+            nextSession = event.newValue ? normalizeSession(JSON.parse(event.newValue)) : null
+        } catch {
+            nextSession = null
+        }
+        emitAuthState(nextSession ? "SIGNED_IN" : "SIGNED_OUT", nextSession)
+    })
+}
+
+function resolveRedirectTo(options = {}) {
+    const candidate = String(options?.redirectTo || options?.emailRedirectTo || "").trim()
+    if (candidate) return candidate
+    return window.location.origin + window.location.pathname
+}
+
+function createClient() {
+    bindStorageListener()
+
+    return {
+        auth: {
+            async signInWithPassword({ email, password }) {
+                const payload = await authRequest("token?grant_type=password", {
+                    method: "POST",
+                    body: { email, password }
+                })
+                const session = normalizeSession(payload)
+                if (!session) {
+                    throw new Error("supabase-session-missing")
+                }
+                writeStoredSession(session)
+                emitAuthState("SIGNED_IN", session)
+                return { data: { session, user: session?.user || null }, error: null }
+            },
+            async signUp({ email, password, options = {} }) {
+                const payload = await authRequest("signup", {
+                    method: "POST",
+                    body: {
+                        email,
+                        password,
+                        options: {
+                            ...(options && typeof options === "object" ? options : {}),
+                            emailRedirectTo: resolveRedirectTo(options)
+                        }
+                    }
+                })
+                const session = normalizeSession(payload)
+                writeStoredSession(session)
+                if (session) emitAuthState("SIGNED_IN", session)
+                return { data: { session, user: payload?.user || session?.user || null }, error: null }
+            },
+            async resetPasswordForEmail(email, options = {}) {
+                await authRequest("recover", {
+                    method: "POST",
+                    body: {
+                        email,
+                        code_challenge: null,
+                        code_challenge_method: null,
+                        gotrue_meta_security: {},
+                        redirect_to: resolveRedirectTo(options)
+                    }
+                })
+                return { data: {}, error: null }
+            },
+            async updateUser({ data = {} } = {}) {
+                const session = await resolveCurrentSession()
+                if (!session?.access_token) {
+                    return { data: { user: null }, error: new Error("supabase-session-missing") }
+                }
+                const payload = await authRequest("user", {
+                    method: "PUT",
+                    accessToken: session.access_token,
+                    body: { data }
+                })
+                const nextSession = normalizeSession({ ...session, user: payload?.user || session.user })
+                writeStoredSession(nextSession)
+                emitAuthState("USER_UPDATED", nextSession)
+                return { data: { user: nextSession?.user || null }, error: null }
+            },
+            async signOut() {
+                const session = readStoredSession()
+                if (session?.access_token) {
+                    await authRequest("logout", {
+                        method: "POST",
+                        accessToken: session.access_token,
+                        body: {}
+                    }).catch(() => {})
+                }
+                writeStoredSession(null)
+                emitAuthState("SIGNED_OUT", null)
+                return { error: null }
+            },
+            async getSession() {
+                const session = await resolveCurrentSession()
+                return { data: { session }, error: null }
+            },
+            onAuthStateChange(callback) {
+                const subscriber = typeof callback === "function" ? callback : () => {}
+                authStateSubscribers.add(subscriber)
+                Promise.resolve(this.getSession()).then((result) => {
+                    subscriber(result?.data?.session ? "INITIAL_SESSION" : "SIGNED_OUT", result?.data?.session || null)
+                }).catch((error) => {
+                    console.error("[SupabaseClient] initial session failed", error)
+                })
+                return {
+                    data: {
+                        subscription: {
+                            unsubscribe() {
+                                authStateSubscribers.delete(subscriber)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export function initSupabase() {
+    if (supabaseClientSingleton) return supabaseClientSingleton
+    getRuntimeConfig()
+    supabaseClientSingleton = createClient()
     return supabaseClientSingleton
 }

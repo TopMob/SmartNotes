@@ -158,6 +158,47 @@ function showRuntimeErrorMessage(messageText) {
     }
 }
 
+function showAuthStartupFailure(messageText) {
+    const feedbackElement = document.getElementById("email-auth-feedback")
+    if (feedbackElement) {
+        feedbackElement.textContent = String(messageText || "")
+        feedbackElement.classList.remove("is-success", "is-info")
+        feedbackElement.classList.add("is-error")
+    }
+
+    const loginScreen = document.getElementById("login-screen")
+    if (loginScreen) {
+        loginScreen.style.display = "flex"
+        loginScreen.classList.add("active")
+        loginScreen.style.opacity = "1"
+    }
+
+    const appScreen = document.getElementById("app")
+    if (appScreen) {
+        appScreen.style.display = "none"
+        appScreen.classList.remove("active")
+        appScreen.style.opacity = "0"
+    }
+
+    const selectors = [
+        "#email-signin-form button[type='submit']",
+        "#email-signup-form button[type='submit']",
+        "[data-auth-action='forgot-password']",
+        ".btn-auth-tab",
+        ".btn-auth-toggle-password",
+        "#email-signin-form input",
+        "#email-signup-form input"
+    ]
+
+    document.querySelectorAll(selectors.join(",")).forEach((element) => {
+        if (!(element instanceof HTMLElement)) return
+        if ("disabled" in element) {
+            element.disabled = true
+        }
+        element.setAttribute("aria-disabled", "true")
+    })
+}
+
 const hideSplashScreen = initializeSplashScreen()
 const startupSplash = createStartupSplashController(hideSplashScreen)
 
@@ -167,6 +208,7 @@ async function startCore() {
     } catch (error) {
         startupSplash.fail()
         console.error("[Core] Supabase startup failed", error)
+        showAuthStartupFailure("Вход временно недоступен. Проверьте подключение и попробуйте снова.")
         showRuntimeErrorMessage("Облачные функции временно недоступны")
         return
     }
@@ -188,6 +230,9 @@ async function startCore() {
     resolveAuthReady(authManager)
     authManager.init().catch(error => {
         console.error("[Core] Auth manager init failed", error)
+        if (typeof authManager.setDegradedState === "function") {
+            authManager.setDegradedState("Некоторые функции входа временно недоступны")
+        }
         showRuntimeErrorMessage("Некоторые функции входа временно недоступны")
     })
 }

@@ -10,7 +10,6 @@
     <title>SmartNotes</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico?v=2026-02-22-1e1b181">
     <link rel="apple-touch-icon" href="Logo.png?v=2026-02-22-1e1b181">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="css/base.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/layout.css?v=2026-04-19-final">
     <link rel="stylesheet" href="css/components.css?v=2026-04-19-final">
@@ -43,8 +42,21 @@
                 return null
             }
         })()
+
+        window.SmartNotesAuthUi = {
+            ready: false,
+            markReady() {
+                this.ready = true
+            }
+        }
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target
+            if (!(form instanceof HTMLFormElement)) return
+            if (form.id !== 'email-signin-form' && form.id !== 'email-signup-form') return
+            event.preventDefault()
+        }, true)
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin"></script>
     <script src="js/core/backendConfig.js?v=2026-04-19-final" type="module"></script>
     <script src="js/core/infra-engine.js?v=2026-04-19-final" type="module"></script>
     <script src="js/load-foundation.js?v=2026-04-19-final" defer></script>
@@ -74,7 +86,7 @@
                 <button type="button" class="btn-auth-tab active" id="email-signin-tab" data-auth-mode="signin" data-lang="email_signin_tab">Вход</button>
                 <button type="button" class="btn-auth-tab" id="email-signup-tab" data-auth-mode="signup" data-lang="email_signup_tab">Регистрация</button>
             </div>
-            <form id="email-signin-form" class="auth-form" novalidate>
+            <form id="email-signin-form" class="auth-form" method="post" action="#" novalidate>
                 <label class="auth-field" for="email-signin-input">
                     <span data-lang="email_label">Email</span>
                     <input id="email-signin-input" type="email" autocomplete="email" required>
@@ -89,7 +101,7 @@
                 <button type="button" class="btn-auth-link" data-auth-action="forgot-password" data-lang="forgot_password">Забыли пароль?</button>
                 <button type="submit" class="btn-auth primary" data-lang="email_signin_button">Войти по email</button>
             </form>
-            <form id="email-signup-form" class="auth-form hidden" novalidate>
+            <form id="email-signup-form" class="auth-form hidden" method="post" action="#" novalidate>
                 <label class="auth-field" for="email-signup-input">
                     <span data-lang="email_label">Email</span>
                     <input id="email-signup-input" type="email" autocomplete="email" required>

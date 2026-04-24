@@ -51,6 +51,31 @@ export function createAuthManager({ auth }) {
                 this._setAuthFeedback("")
             }
         },
+        setAuthReady(flag) {
+            state.authReady = !!flag
+            if (window.SmartNotesAuthUi && typeof window.SmartNotesAuthUi.markReady === "function" && flag) {
+                window.SmartNotesAuthUi.markReady()
+            }
+        },
+        setDegradedState(message) {
+            this._collectAuthActionElements()
+            for (const actionElement of state.authActionElements) {
+                actionElement.disabled = true
+                actionElement.setAttribute("aria-disabled", "true")
+            }
+            const forms = [document.getElementById("email-signin-form"), document.getElementById("email-signup-form")]
+            forms.forEach((formElement) => {
+                if (!(formElement instanceof HTMLFormElement)) return
+                Array.from(formElement.elements).forEach((field) => {
+                    if (!(field instanceof HTMLElement)) return
+                    if (field instanceof HTMLInputElement || field instanceof HTMLButtonElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+                        field.disabled = true
+                        field.setAttribute("aria-disabled", "true")
+                    }
+                })
+            })
+            this._setAuthFeedback(message || this._t("auth_service_unavailable", "Service temporarily unavailable"), "error")
+        },
 
         _resolveStartupScreen() {
             if (state.authStateResolved) return
@@ -318,6 +343,7 @@ export function createAuthManager({ auth }) {
             state.currentUser = normalizedUser
             console.info("[Auth] state changed", normalizedUser ? "logged in" : "logged out")
             state.authReady = true
+            this.setAuthReady(true)
             StateActions.setUser(normalizedUser)
 
             if (normalizedUser) {
@@ -351,6 +377,7 @@ export function createAuthManager({ auth }) {
 
             this._setLoginBusy(false)
             this._ensureLocalAuthManager().bindUi()
+            this.setAuthReady(true)
             if (typeof window.requestAnimationFrame === "function") {
                 window.requestAnimationFrame(() => this._resolveStartupScreen())
             } else {
