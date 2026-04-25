@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { SUPABASE_BROWSER_STORAGE_KEY, getSupabaseBrowserClient } from "@/lib/supabase/client"
 
 const PROFILE_SYNC_ENDPOINT = "/api/supabase/session"
+const PROFILE_SYNC_TIMEOUT_MS = 8000
 
 type CallbackState = "processing" | "error"
 
@@ -21,13 +22,22 @@ function clearCallbackUrl(url: URL, nextPath: string) {
 }
 
 async function syncProfile(accessToken: string) {
-  const response = await fetch(PROFILE_SYNC_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    }
-  })
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), PROFILE_SYNC_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(PROFILE_SYNC_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal
+    })
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 
   if (!response.ok) {
     throw new Error(`profile-sync-http-${response.status}`)
@@ -67,7 +77,9 @@ export default function AuthCallbackPage() {
         console.warn("[AuthCallback] Supabase storage key missing after redirect processing")
       }
 
-      await syncProfile(session.access_token)
+      await syncProfile(session.access_token).catch((error) => {
+        console.warn("[AuthCallback] Profile sync skipped", error)
+      })
       clearCallbackUrl(currentUrl, nextPath)
       window.location.replace(nextPath)
     }

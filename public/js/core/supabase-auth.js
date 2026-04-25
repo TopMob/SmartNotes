@@ -3,6 +3,27 @@ import { preloadGoogleIdentity, requestGoogleIdentityToken } from "./googleIdent
 
 const sessionEndpoint = "/api/supabase/session"
 const PROFILE_SYNC_TIMEOUT_MS = 8000
+const GOOGLE_ID_TOKEN_SIGN_IN_TIMEOUT_MS = 9000
+
+function createAuthError(code, message, details = {}) {
+    const error = new Error(message)
+    error.code = code
+    error.details = details
+    return error
+}
+
+function withTimeout(promise, timeoutMilliseconds, code, message) {
+    let timeoutId = null
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(createAuthError(code, message, { timeoutMilliseconds }))
+        }, timeoutMilliseconds)
+    })
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timeoutId) clearTimeout(timeoutId)
+    })
+}
 
 function readProfileValue(user, ...keys) {
     for (const key of keys) {
@@ -235,13 +256,18 @@ export async function createSupabaseAuth() {
                 interactive: options?.interactive !== false
             })
             const tokenPayload = decodeJwtPayload(idToken)
-            const result = await client.auth.signInWithIdToken({
-                provider: "google",
-                token: idToken,
-                clientId,
-                issuer: String(tokenPayload?.iss || "https://accounts.google.com"),
-                nonce: typeof tokenPayload?.nonce === "string" ? tokenPayload.nonce : ""
-            })
+            const result = await withTimeout(
+                client.auth.signInWithIdToken({
+                    provider: "google",
+                    token: idToken,
+                    clientId,
+                    issuer: String(tokenPayload?.iss || "https://accounts.google.com"),
+                    nonce: typeof tokenPayload?.nonce === "string" ? tokenPayload.nonce : ""
+                }),
+                GOOGLE_ID_TOKEN_SIGN_IN_TIMEOUT_MS,
+                "auth/google-id-token-sign-in-timeout",
+                "Google token sign-in timeout"
+            )
             if (result.error) throw result.error
             const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
             currentUser = await resolveUserFromSession(session)

@@ -10,7 +10,9 @@ export function createAuthManager({ auth }) {
         localAuthManager: null,
         persistenceReady: false,
         authStateResolved: false,
-        driveInteractiveAllowed: false
+        driveInteractiveAllowed: false,
+        googleRedirectFallbackReady: false,
+        googleRedirectFallbackTimer: null
     }
 
     const manager = {
@@ -52,6 +54,11 @@ export function createAuthManager({ auth }) {
             }
         },
         async _startRedirectFallback() {
+            state.googleRedirectFallbackReady = false
+            if (state.googleRedirectFallbackTimer) {
+                clearTimeout(state.googleRedirectFallbackTimer)
+                state.googleRedirectFallbackTimer = null
+            }
             this._setLoginBusy(true)
             this._setAuthFeedback(this._t("auth_google_redirect_starting", "Opening backup Google sign-in..."), "info")
             try {
@@ -59,6 +66,18 @@ export function createAuthManager({ auth }) {
             } finally {
                 this._setLoginBusy(false)
             }
+        },
+        _scheduleRedirectFallbackRetry() {
+            if (state.googleRedirectFallbackTimer) return
+            state.googleRedirectFallbackReady = false
+            this._setLoginBusy(true)
+            this._setAuthFeedback(this._t("auth_google_redirect_ready_soon", "If the Google window did not appear, wait 5 seconds and press the button again"), "info")
+            state.googleRedirectFallbackTimer = setTimeout(() => {
+                state.googleRedirectFallbackTimer = null
+                state.googleRedirectFallbackReady = true
+                this._setLoginBusy(false)
+                this._setAuthFeedback(this._t("auth_google_redirect_ready", "Google window did not open. Press the button again to continue with backup sign-in"), "info")
+            }, 5000)
         },
         _setAuthInteractivity(flag) {
             const interactive = !!flag
@@ -138,6 +157,7 @@ export function createAuthManager({ auth }) {
                 "auth/google-identity-dismissed": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-skipped": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-timeout": this._t("auth_network_failed", "No internet connection"),
+                "auth/google-id-token-sign-in-timeout": this._t("auth_network_failed", "No internet connection"),
                 "invalid_credentials": this._t("login_failed", "Sign-in failed")
             }
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
@@ -188,11 +208,20 @@ export function createAuthManager({ auth }) {
                 "auth/google-identity-unavailable",
                 "auth/google-identity-script-timeout",
                 "auth/google-identity-script-failed",
-                "auth/google-identity-empty-token"
+                "auth/google-identity-empty-token",
+                "auth/google-id-token-sign-in-timeout",
+                "network_error",
+                "request_timeout"
             ].includes(errorCode)
                 || errorMessage.includes("client_id and issuer required")
+                || errorMessage.includes("fetch failed")
+                || errorMessage.includes("failed to fetch")
                 || errorMessage.includes("invalid request")
                 || errorMessage.includes("issuer required")
+                || errorMessage.includes("load failed")
+                || errorMessage.includes("network")
+                || errorMessage.includes("abort")
+                || errorMessage.includes("timeout")
         },
         async login() {
             if (!auth) {
@@ -210,8 +239,18 @@ export function createAuthManager({ auth }) {
 
             state.driveInteractiveAllowed = true
             await this._ensureLocalPersistence()
+            if (state.googleRedirectFallbackReady && typeof auth.signInWithRedirect === "function") {
+                try {
+                    await this._startRedirectFallback()
+                } catch (error) {
+                    this.handleAuthError(error)
+                }
+                return
+            }
+
             this._setLoginBusy(true)
             this._setAuthFeedback(this._t("auth_google_starting", "Opening Google sign-in..."), "info")
+            let keepBusyForRedirectFallback = false
             try {
                 const result = typeof auth.signInWithGoogleOneTap === "function"
                     ? await auth.signInWithGoogleOneTap()
@@ -222,16 +261,15 @@ export function createAuthManager({ auth }) {
             } catch (error) {
                 const canFallbackToRedirect = this._shouldUseGoogleRedirectFallback(error)
                 if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
-                    try {
-                        await this._startRedirectFallback()
-                    } catch (redirectError) {
-                        this.handleAuthError(redirectError)
-                    }
+                    keepBusyForRedirectFallback = true
+                    this._scheduleRedirectFallbackRetry()
                 } else {
                     this.handleAuthError(error)
                 }
             } finally {
-                this._setLoginBusy(false)
+                if (!keepBusyForRedirectFallback) {
+                    this._setLoginBusy(false)
+                }
             }
         },
         _ensureLocalAuthManager() {
