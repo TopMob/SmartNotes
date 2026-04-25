@@ -2651,6 +2651,15 @@ Object.assign(UI, {
         return [processedLabel, usersLabel, providerLabel, uidLabel].filter(Boolean).join(". ")
     },
 
+    getNoteAnalysisStatusDescriptor(note = {}) {
+        const status = String(note?.aiStatus || (note?.aiProcessed ? "done" : "idle"))
+        if (status === "pending") return { label: this.getText("note_ai_pending", "Ожидает анализа"), tone: "pending" }
+        if (status === "analyzing") return { label: this.getText("note_ai_analyzing", "ИИ анализирует"), tone: "analyzing" }
+        if (status === "done") return { label: this.getText("note_ai_done", "Проанализировано"), tone: "done" }
+        if (status === "error") return { label: this.getText("note_ai_error", "Ошибка анализа"), tone: "error" }
+        return null
+    },
+
     async markNoteForReanalysis(noteId = "") {
         const user = StateStore.read().user
         const normalizedNoteId = String(noteId || "")
@@ -2667,6 +2676,8 @@ Object.assign(UI, {
             await noteReference.update({
                 analyzed: false,
                 aiProcessed: false,
+                aiStatus: "pending",
+                aiError: null,
                 tags: [],
                 hiddenTags: [],
                 relevance: null,

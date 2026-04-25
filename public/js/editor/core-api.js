@@ -378,6 +378,9 @@ export const EditorAPI = (() => {
 
         if (hasAiRelevantChanges(currentNote, note)) {
             note.aiProcessed = false
+            note.analyzed = false
+            note.aiStatus = "pending"
+            note.aiError = ""
             note.aiVersion = AI_ANALYSIS_VERSION
         }
 
@@ -400,6 +403,7 @@ export const EditorAPI = (() => {
             const savedResult = await ref.set(payload, { merge: true })
             const persistedNote = savedResult?.note || savedResult?.data?.note || note
             upsertSavedNoteIntoState(persistedNote)
+            window.NoteAnalysisService?.schedule?.(persistedNote?.id || note.id)
             if (persistedNote?.id && persistedNote.id !== note.id) {
                 note = { ...note, id: persistedNote.id }
                 StateStore.update("currentNote", note)

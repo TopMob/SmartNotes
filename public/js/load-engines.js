@@ -731,6 +731,8 @@ const NotesListEngine = (() => {
 
         const titleText = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || NoteText.buildAutoTitle(note))
         const h3 = el("h3", [], titleText)
+        const analysisStatus = UI.getNoteAnalysisStatusDescriptor?.(note)
+        const analysisBadge = analysisStatus ? el("span", ["lock-badge", `analysis-status-${analysisStatus.tone}`], analysisStatus.label) : null
 
         const contentText = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : NoteText.buildPreviewText(note)
         const p = el("p", [], contentText)
@@ -753,6 +755,10 @@ const NotesListEngine = (() => {
 
         const lockContainer = el("div")
         lockContainer.style.marginTop = "8px"
+        if (analysisBadge) {
+            analysisBadge.style.marginRight = "8px"
+            lockContainer.appendChild(analysisBadge)
+        }
         if (note.lock && note.lock.hidden) {
             const badge = el("span", ["lock-badge"])
             const i = createIcon("lock")
@@ -813,8 +819,16 @@ const NotesListEngine = (() => {
 
         const lockHash = note.lock?.hash || ""
         const prevHash = data.lock?.hash || ""
-        if (lockHash !== prevHash) {
+        const analysisStatus = UI.getNoteAnalysisStatusDescriptor?.(note)
+        const prevAnalysisStatus = UI.getNoteAnalysisStatusDescriptor?.(data)
+        const analysisChanged = analysisStatus?.label !== prevAnalysisStatus?.label || analysisStatus?.tone !== prevAnalysisStatus?.tone
+        if (lockHash !== prevHash || analysisChanged) {
             refs.lockContainer.replaceChildren()
+            if (analysisStatus) {
+                const badge = el("span", ["lock-badge", `analysis-status-${analysisStatus.tone}`], analysisStatus.label)
+                badge.style.marginRight = "8px"
+                refs.lockContainer.appendChild(badge)
+            }
             if (note.lock && note.lock.hidden) {
                 const badge = el("span", ["lock-badge"])
                 const i = createIcon("lock")

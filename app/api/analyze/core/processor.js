@@ -23,6 +23,15 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
   let resolvedModelName = ""
   const candidateFolders = selectFolderCandidatesForNote(allFolders, note)
 
+  await database.updateNotes(uid, [{
+    id: note.id,
+    aiStatus: "analyzing",
+    aiError: null,
+    analyzed: false,
+    aiProcessed: false,
+    aiLastAnalyzed: note.aiLastAnalyzed || null
+  }])
+
   while (!Array.isArray(modelResult) && attempt <= RETRY_COUNT) {
     try {
       const providerResult = await analyzeWithProvider({
@@ -53,6 +62,14 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
   }
 
   if (!Array.isArray(modelResult)) {
+    await database.updateNotes(uid, [{
+      id: note.id,
+      aiStatus: "error",
+      aiError: lastError ? String(lastError?.message || lastError) : "invalid_model_result",
+      analyzed: false,
+      aiProcessed: false,
+      aiLastAnalyzed: note.aiLastAnalyzed || null
+    }])
     console.error("Analyze chunk result is not a JSON array", {
       provider: ANALYZE_PROVIDER,
       uid,
@@ -107,6 +124,8 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
       aiRelevance: normalizedRelevance,
       aiFolder: toAiFolderId(resolvedFolderId),
       aiResurfacingClass: resurfacingClass,
+      aiStatus: "done",
+      aiError: null,
       aiProcessed: true,
       aiLastAnalyzed: new Date().toISOString()
     })
@@ -117,6 +136,14 @@ async function analyzeSingleNote({ database, uid, userContext, allFolders, folde
   if (updatedCount > 0) {
     await database.updateNotes(uid, pendingUpdates)
   } else {
+    await database.updateNotes(uid, [{
+      id: note.id,
+      aiStatus: "error",
+      aiError: "no_writable_updates",
+      analyzed: false,
+      aiProcessed: false,
+      aiLastAnalyzed: note.aiLastAnalyzed || null
+    }])
     console.error("Analyze chunk produced no writable updates", {
       provider: ANALYZE_PROVIDER,
       uid,

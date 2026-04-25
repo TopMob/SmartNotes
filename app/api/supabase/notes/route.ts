@@ -1,5 +1,7 @@
 import { deleteSupabaseNote, listSupabaseNotes, patchSupabaseNote, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
+import { getAnalyzeDatabase } from "@/lib/supabase/analyze"
+import { processUserNotes } from "@/app/api/analyze/core/processor"
 
 export const runtime = "nodejs"
 
@@ -63,6 +65,50 @@ export async function PUT(request: Request) {
     return ok({ note })
   } catch (error) {
     return handleRouteError(mapNoteError(error), "NOTE_UPDATE_FAILED")
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const user = await requireSupabaseUser(request)
+    const payload = await readJsonBody(request)
+    const normalizedNoteId = String(payload?.id || "").trim()
+    if (!normalizedNoteId) {
+      throw new ApiRouteError(400, "NOTE_ID_REQUIRED")
+    }
+
+    const action = String(payload?.action || "").trim()
+    if (action === "trigger-analysis") {
+      await patchSupabaseNote({
+        userId: user.id,
+        noteId: normalizedNoteId,
+        updates: {
+          aiStatus: "pending",
+          aiError: null,
+          analyzed: false,
+          aiProcessed: false
+        }
+      })
+
+      const database = getAnalyzeDatabase()
+      const processed = await processUserNotes({
+        database,
+        uid: user.id,
+        reindexAll: false
+      })
+
+      const note = await patchSupabaseNote({
+        userId: user.id,
+        noteId: normalizedNoteId,
+        updates: {}
+      })
+
+      return ok({ note, processed })
+    }
+
+    throw new ApiRouteError(400, "BAD_REQUEST")
+  } catch (error) {
+    return handleRouteError(mapNoteError(error), "NOTE_ACTION_FAILED")
   }
 }
 

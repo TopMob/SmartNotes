@@ -38,6 +38,7 @@ type NoteInput = {
   isPinned?: boolean | null
   reminderAt?: string | null
   trashedAt?: string | null
+  aiProcessed?: boolean | null
   aiTags?: unknown[] | null
   pageTitles?: unknown[] | null
   pageDrawings?: unknown[] | null
@@ -45,6 +46,9 @@ type NoteInput = {
   lock?: JsonObject | null
   workspaceId?: string | null
   lockHidden?: boolean | null
+  aiStatus?: string | null
+  analyzed?: boolean | null
+  aiError?: string | null
 }
 
 type NoteRow = {
@@ -201,6 +205,18 @@ function buildNotePatchPayload(existingRow: NoteRow, updates: Record<string, unk
     metadata.aiTags = Array.isArray(updates.aiTags) ? updates.aiTags : []
   }
 
+   if (hasOwn(updates, "aiStatus")) {
+    metadata.aiStatus = normalizeOptionalString(updates.aiStatus) || "pending"
+  }
+
+  if (hasOwn(updates, "analyzed")) {
+    metadata.analyzed = updates.analyzed === true
+  }
+
+  if (hasOwn(updates, "aiError")) {
+    metadata.aiError = normalizeOptionalString(updates.aiError)
+  }
+
   if (hasOwn(updates, "pageTitles")) {
     metadata.pageTitles = Array.isArray(updates.pageTitles) ? updates.pageTitles : []
   }
@@ -287,7 +303,10 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
         ? Boolean((note.lock as JsonObject).hidden)
         : Boolean(metadata.lockHidden),
       workspaceId: note?.workspaceId || null,
-      trashedAt: note?.trashedAt || null
+      trashedAt: note?.trashedAt || null,
+      analyzed: note?.analyzed === true,
+      aiStatus: normalizeOptionalString(note?.aiStatus) || (note?.aiProcessed === true ? "done" : "pending"),
+      aiError: normalizeOptionalString(note?.aiError)
     }
   }
 }
@@ -359,6 +378,9 @@ function mapNoteRow(note: NoteRow) {
     aiProcessed: note.ai_processed === true,
     aiVersion: 1,
     aiLastAnalyzed: note.ai_last_analyzed || null,
+    aiStatus: normalizeOptionalString(metadata.aiStatus) || (note.ai_processed === true ? "done" : "idle"),
+    analyzed: metadata.analyzed === true || note.ai_processed === true,
+    aiError: normalizeOptionalString(metadata.aiError),
     pageTitles: normalizeStringArray(metadata.pageTitles),
     pageDrawings: normalizeStringArray(metadata.pageDrawings),
     pageDrawingsRevision: typeof metadata.pageDrawingsRevision === "string" ? metadata.pageDrawingsRevision : "",

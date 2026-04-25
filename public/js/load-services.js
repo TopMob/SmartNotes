@@ -240,6 +240,9 @@ const NoteIO = {
             trashedAt: safe.trashedAt || null,
             contentType: safe.contentType ? String(safe.contentType) : "text",
             aiFolder: typeof safe.aiFolder === "string" ? safe.aiFolder : "",
+            aiStatus: typeof safe.aiStatus === "string" && safe.aiStatus ? safe.aiStatus : (safe.aiProcessed ? "done" : "idle"),
+            analyzed: safe.analyzed === true || safe.aiProcessed === true,
+            aiError: typeof safe.aiError === "string" ? safe.aiError : "",
             hiddenTags,
             aiTags: Array.isArray(safe.aiTags)
                 ? [...new Set(safe.aiTags
