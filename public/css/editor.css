@@ -57,6 +57,16 @@
     -webkit-overflow-scrolling: touch;
 }
 
+.editor-share-button {
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    letter-spacing: 0.02em;
+    background: color-mix(in srgb, var(--surface) 72%, var(--primary) 28%);
+    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
 .divider-vertical {
     width: 1px;
     height: 22px;

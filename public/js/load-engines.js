@@ -17,6 +17,7 @@ const buildAuthorizedHeaders = (user) => {
 }
 
 const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
+const getNoteShareEndpoint = () => createApiEndpoint("supabase/notes/share")
 const NOTE_ANALYZE_DEBOUNCE_MS = 12000
 
 const createNeutralTimestamp = () => new Date().toISOString()
@@ -147,6 +148,45 @@ const NoteActionService = {
         }
         const payload = await response.json()
         return payload?.note || null
+    },
+
+    async shareNote(noteId, email, role) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getNoteShareEndpoint(), {
+            method: "POST",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({
+                noteId: String(noteId || ""),
+                email: String(email || "").trim(),
+                role: role === "editor" ? "editor" : "viewer"
+            })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `NOTE_SHARE_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.permission || null
+    },
+
+    async revokeAccess(noteId, email) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getNoteShareEndpoint(), {
+            method: "DELETE",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({
+                noteId: String(noteId || ""),
+                email: String(email || "").trim()
+            })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `NOTE_REVOKE_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.permission || null
     }
 }
 

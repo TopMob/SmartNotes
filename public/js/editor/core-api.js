@@ -21,6 +21,7 @@ export const EditorAPI = (() => {
         pageNext: document.querySelector('[data-action="editor-next-page"]'),
         pageAdd: document.querySelector('[data-action="editor-add-page"]'),
         pagesList: document.getElementById("editor-pages-list"),
+        shareButton: document.querySelector('[data-action="share-note"]'),
         tagsInput: document.getElementById("note-tags-input"),
         tagsContainer: document.getElementById("note-tags-container"),
         ctxMenu: document.getElementById("media-context-menu"),
@@ -42,6 +43,62 @@ export const EditorAPI = (() => {
         return contentElement ? Array.from(contentElement.querySelectorAll(".note-page")) : []
     }
     const getActivePage = () => getPages()[state.pageIndex] || null
+
+    const canManageSharing = (note = StateStore.read().currentNote) => {
+        const currentUser = StateStore.read().user
+        if (!note || !currentUser?.uid) return false
+        return String(note.ownerUid || "") === String(currentUser.uid || "")
+    }
+
+    const updateShareButtonState = () => {
+        const shareButton = elements.shareButton || document.querySelector('[data-action="share-note"]')
+        if (!shareButton) return
+        shareButton.classList.toggle("hidden", !canManageSharing())
+    }
+
+    const openSharePrompt = () => {
+        const note = StateStore.read().currentNote
+        if (!note?.id) {
+            UI.showToast(UI.getText("save_note_before_sharing", "Сначала сохраните заметку"))
+            return
+        }
+        if (!canManageSharing(note)) {
+            UI.showToast(UI.getText("share_owner_only", "Делиться заметкой может только владелец"))
+            return
+        }
+
+        UI.showPrompt(
+            UI.getText("share_note_title", "Поделиться заметкой"),
+            UI.getText("share_note_email_placeholder", "email@example.com"),
+            async (email, roleValue) => {
+                const normalizedEmail = String(email || "").trim().toLowerCase()
+                const normalizedRole = String(roleValue || "").trim().toLowerCase()
+                if (!normalizedEmail) return
+
+                try {
+                    if (normalizedRole === "remove") {
+                        await window.NoteActionService.revokeAccess(note.id, normalizedEmail)
+                        UI.showToast(UI.getText("share_note_revoked", "Доступ отозван"))
+                        return
+                    }
+
+                    const role = normalizedRole === "editor" ? "editor" : "viewer"
+                    await window.NoteActionService.shareNote(note.id, normalizedEmail, role)
+                    UI.showToast(UI.getText("share_note_saved", "Доступ обновлен"))
+                } catch (error) {
+                    UI.showToast(`${UI.getText("share_note_failed", "Не удалось обновить доступ")} (${String(error?.message || error || "unknown")})`)
+                }
+            },
+            "",
+            {
+                secondaryField: {
+                    value: "viewer",
+                    placeholder: UI.getText("share_note_role_placeholder", "viewer | editor | remove"),
+                    ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
+                }
+            }
+        )
+    }
 
     const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
         const normalized = Array.isArray(drawings) ? drawings.map(value => typeof value === "string" ? value : "") : []
@@ -567,6 +624,13 @@ export const EditorAPI = (() => {
             }, { signal })
         }
 
+        if (boundElements.shareButton) {
+            boundElements.shareButton.addEventListener("click", (event) => {
+                event.preventDefault()
+                openSharePrompt()
+            }, { signal })
+        }
+
         const imageUploadInputElement = document.getElementById("img-upload")
         if (imageUploadInputElement) {
             imageUploadInputElement.addEventListener("change", async event => {
@@ -961,6 +1025,7 @@ export const EditorAPI = (() => {
         buildToolbar()
         layoutHandlers.activate()
         renderState()
+        updateShareButtonState()
         focusActivePage()
 
         const openedNoteSnapshot = captureSnapshot()
@@ -1069,6 +1134,7 @@ export const EditorAPI = (() => {
             mediaHandlers.makeMediaDraggable()
             mediaHandlers.syncMediaSizes()
             syncDrawingForActivePage()
+            updateShareButtonState()
             layoutHandlers.syncToolbarToggleState()
             layoutHandlers.syncBottomOffset()
             if (state.observer) {

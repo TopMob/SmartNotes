@@ -76,6 +76,14 @@ type NotePermissionRow = {
   role: "viewer" | "editor"
 }
 
+type SharePermissionInput = {
+  noteId: string
+  userId: string
+  userEmail: string
+  collaboratorEmail: string
+  role: "viewer" | "editor"
+}
+
 function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map(item => String(item || "")).filter(Boolean)
@@ -465,6 +473,27 @@ async function requireEditorNoteAccess(noteId: string, userId: string, userEmail
   return access.noteRow
 }
 
+async function requireOwnedNote(noteId: string, userId: string) {
+  const normalizedNoteId = String(noteId || "").trim()
+  if (!normalizedNoteId) {
+    throw new Error("NOTE_ID_REQUIRED")
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("notes")
+    .select("id, user_id")
+    .eq("id", normalizedNoteId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data?.id || data.user_id !== userId) {
+    throw new Error("NOTE_NOT_FOUND")
+  }
+
+  return data
+}
+
 export async function getSupabaseProfile(userId: string) {
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
@@ -787,4 +816,58 @@ export async function deleteSupabaseNote(userId: string, userEmail: string, note
 
   if (error) throw error
   return { id: normalizedNoteId }
+}
+
+export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, collaboratorEmail, role }: SharePermissionInput) {
+  const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
+  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+  const normalizedUserEmail = normalizeEmail(userEmail)
+
+  if (!normalizedRole || !normalizedCollaboratorEmail) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  if (normalizedCollaboratorEmail === normalizedUserEmail) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  await requireOwnedNote(noteId, userId)
+
+  const supabase = getSupabaseAdminClient()
+  const payload = {
+    note_id: String(noteId || "").trim(),
+    user_email: normalizedCollaboratorEmail,
+    role: normalizedRole
+  }
+
+  const { data, error } = await supabase
+    .from("note_permissions")
+    .upsert(payload)
+    .select("note_id, user_email, role")
+    .single()
+
+  if (error) throw error
+  return data as NotePermissionRow
+}
+
+export async function deleteSupabaseNotePermission({ noteId, userId, collaboratorEmail }: { noteId: string, userId: string, collaboratorEmail: string }) {
+  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+  if (!normalizedCollaboratorEmail) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  await requireOwnedNote(noteId, userId)
+
+  const supabase = getSupabaseAdminClient()
+  const { error } = await supabase
+    .from("note_permissions")
+    .delete()
+    .eq("note_id", String(noteId || "").trim())
+    .eq("user_email", normalizedCollaboratorEmail)
+
+  if (error) throw error
+  return {
+    note_id: String(noteId || "").trim(),
+    user_email: normalizedCollaboratorEmail
+  }
 }
