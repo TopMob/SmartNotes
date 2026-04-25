@@ -461,6 +461,11 @@ function isUuid(value: unknown) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim())
 }
 
+function normalizeUuid(value: unknown) {
+  const normalized = String(value || "").trim()
+  return isUuid(normalized) ? normalized : null
+}
+
 function assertFolderName(name: unknown) {
   if (!normalizeFolderName(name)) {
     throw new Error("FOLDER_NAME_REQUIRED")
@@ -474,7 +479,7 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
   return {
     id: isUuid(note?.id) ? String(note?.id) : undefined,
     user_id: userId,
-    folder_id: note?.folderId || null,
+    folder_id: normalizeUuid(note?.folderId),
     title: String(note?.title || "").slice(0, 200),
     content_raw: content,
     content_plain: content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 50000),
@@ -641,13 +646,13 @@ async function listOwnedFolderIds(userId: string) {
     .eq("user_id", normalizedUserId)
 
   if (error) throw error
-  return (data || []).map(row => String(row.id || "")).filter(Boolean)
+  return (data || []).map(row => normalizeUuid(row.id)).filter(Boolean) as string[]
 }
 
 async function getFolderAccessRow(folderId: string, userId: string, userEmail: string) {
-  const normalizedFolderId = String(folderId || "").trim()
+  const normalizedFolderId = normalizeUuid(folderId)
   if (!normalizedFolderId) {
-    throw new Error("FOLDER_ID_REQUIRED")
+    throw new Error("FOLDER_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -683,7 +688,7 @@ async function getFolderAccessRow(folderId: string, userId: string, userEmail: s
 }
 
 async function getFolderPermissionRow(folderId: string, userId: string) {
-  const normalizedFolderId = String(folderId || "").trim()
+  const normalizedFolderId = normalizeUuid(folderId)
   const normalizedUserId = String(userId || "").trim()
   if (!normalizedFolderId || !normalizedUserId) return null
 
@@ -701,9 +706,9 @@ async function getFolderPermissionRow(folderId: string, userId: string) {
 }
 
 async function getNoteAccessRow(noteId: string, userId: string, userEmail: string) {
-  const normalizedNoteId = String(noteId || "").trim()
+  const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
-    throw new Error("NOTE_ID_REQUIRED")
+    throw new Error("NOTE_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -772,9 +777,9 @@ async function requireEditorNoteAccess(noteId: string, userId: string, userEmail
 }
 
 async function requireOwnedNote(noteId: string, userId: string) {
-  const normalizedNoteId = String(noteId || "").trim()
+  const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
-    throw new Error("NOTE_ID_REQUIRED")
+    throw new Error("NOTE_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -956,7 +961,7 @@ export async function listSupabaseFolders(userId: string) {
 export async function listAccessibleSupabaseFolders(userId: string, userEmail: string) {
   const supabase = getSupabaseAdminClient()
   const permittedFolders = await listPermittedFolderRows(userId)
-  const permittedFolderIds = permittedFolders.map(row => String(row.folder_id || "")).filter(Boolean)
+  const permittedFolderIds = permittedFolders.map(row => normalizeUuid(row.folder_id)).filter(Boolean) as string[]
   const { data, error } = await supabase
     .from("folders")
     .select("id, name, description, sort_order, is_hidden, is_archived, metadata, created_at, updated_at, user_id")
@@ -1018,9 +1023,9 @@ export async function upsertSupabaseFolder({ userId, folderId = null, name, desc
 }
 
 export async function updateSupabaseFolder({ userId, folderId, updates }: { userId: string, folderId: string, updates: Record<string, unknown> }) {
-  const normalizedFolderId = String(folderId || "").trim()
+  const normalizedFolderId = normalizeUuid(folderId)
   if (!normalizedFolderId) {
-    throw new Error("FOLDER_ID_REQUIRED")
+    throw new Error("FOLDER_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -1055,9 +1060,9 @@ export async function updateSupabaseFolder({ userId, folderId, updates }: { user
 }
 
 export async function deleteSupabaseFolder(userId: string, folderId: string) {
-  const normalizedFolderId = String(folderId || "").trim()
+  const normalizedFolderId = normalizeUuid(folderId)
   if (!normalizedFolderId) {
-    throw new Error("FOLDER_ID_REQUIRED")
+    throw new Error("FOLDER_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -1075,12 +1080,12 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
   const supabase = getSupabaseAdminClient()
   const from = Math.max(0, Number(offset) || 0)
   const to = from + Math.max(1, Number(limit) || 500) - 1
-  const permittedNoteIds = await listPermittedNoteIds(userId)
+  const permittedNoteIds = (await listPermittedNoteIds(userId)).map(id => normalizeUuid(id)).filter(Boolean) as string[]
   const ownedFolderIds = await listOwnedFolderIds(userId)
   const permittedFolderRows = await listPermittedFolderRows(userId)
   const permittedFolderIds = [...new Set([
     ...ownedFolderIds,
-    ...permittedFolderRows.map(row => String(row.folder_id || "")).filter(Boolean)
+    ...permittedFolderRows.map(row => normalizeUuid(row.folder_id)).filter(Boolean) as string[]
   ])]
   let query = supabase
     .from("notes")
@@ -1091,7 +1096,7 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
       ...(permittedFolderIds.length ? [`folder_id.in.(${permittedFolderIds.join(",")})`] : [])
     ].join(","))
 
-  const normalizedStartAfterId = String(startAfterId || "").trim()
+  const normalizedStartAfterId = normalizeUuid(startAfterId)
   if (normalizedStartAfterId) {
     const cursorAccess = await getNoteAccessRow(normalizedStartAfterId, userId, userEmail).catch(error => {
       if (String(error instanceof Error ? error.message : error || "") === "NOTE_NOT_FOUND") {
@@ -1158,9 +1163,9 @@ export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: 
 }
 
 export async function updateSupabaseNote({ userId, userEmail, noteId, note }: { userId: string, userEmail: string, noteId?: string | null, note: NoteInput }) {
-  const normalizedNoteId = String(noteId || note?.id || "").trim()
+  const normalizedNoteId = normalizeUuid(noteId || note?.id)
   if (!normalizedNoteId) {
-    throw new Error("NOTE_ID_REQUIRED")
+    throw new Error("NOTE_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -1180,9 +1185,9 @@ export async function updateSupabaseNote({ userId, userEmail, noteId, note }: { 
 }
 
 export async function patchSupabaseNote({ userId, userEmail, noteId, updates }: { userId: string, userEmail: string, noteId: string, updates: Record<string, unknown> }) {
-  const normalizedNoteId = String(noteId || "").trim()
+  const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
-    throw new Error("NOTE_ID_REQUIRED")
+    throw new Error("NOTE_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -1205,9 +1210,9 @@ export async function patchSupabaseNote({ userId, userEmail, noteId, updates }: 
 }
 
 export async function deleteSupabaseNote(userId: string, userEmail: string, noteId: string) {
-  const normalizedNoteId = String(noteId || "").trim()
+  const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
-    throw new Error("NOTE_ID_REQUIRED")
+    throw new Error("NOTE_NOT_FOUND")
   }
 
   await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
@@ -1292,9 +1297,9 @@ export async function listSupabaseNotePermissions({ noteId, userId }: { noteId: 
 }
 
 async function requireOwnedFolder(folderId: string, userId: string) {
-  const normalizedFolderId = String(folderId || "").trim()
+  const normalizedFolderId = normalizeUuid(folderId)
   if (!normalizedFolderId) {
-    throw new Error("FOLDER_ID_REQUIRED")
+    throw new Error("FOLDER_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
@@ -1400,8 +1405,8 @@ export async function listSupabasePendingInvites(userId: string) {
   if (noteError) throw noteError
   if (folderError) throw folderError
 
-  const noteIds = (noteRows || []).map(row => String(row.note_id || "")).filter(Boolean)
-  const folderIds = (folderRows || []).map(row => String(row.folder_id || "")).filter(Boolean)
+  const noteIds = (noteRows || []).map(row => normalizeUuid(row.note_id)).filter(Boolean) as string[]
+  const folderIds = (folderRows || []).map(row => normalizeUuid(row.folder_id)).filter(Boolean) as string[]
   const inviterIds = [...new Set([
     ...(noteRows || []).map(row => String(row.invited_by_user_id || "")).filter(Boolean),
     ...(folderRows || []).map(row => String(row.invited_by_user_id || "")).filter(Boolean)
