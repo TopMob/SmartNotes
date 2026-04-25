@@ -218,6 +218,47 @@ async function getAuthUserByEmail(email: string) {
   return null
 }
 
+async function getAuthUserById(userId: string) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) return null
+
+  const supabase = getSupabaseAdminClient()
+  const getUserById = supabase.auth.admin.getUserById?.bind(supabase.auth.admin)
+  if (typeof getUserById === "function") {
+    const { data, error } = await getUserById(normalizedUserId)
+    if (!error && data?.user?.id) {
+      return {
+        id: String(data.user.id || ""),
+        email: normalizeEmail(data.user.email || ""),
+        displayName: String(data.user.user_metadata?.display_name || data.user.user_metadata?.full_name || "").trim(),
+        photoURL: String(data.user.user_metadata?.avatar_url || "").trim(),
+        uid: String(data.user.id || "")
+      }
+    }
+  }
+
+  let page = 1
+  while (page <= 10) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 })
+    if (error) throw new Error("COLLABORATOR_NOT_FOUND")
+    const users = Array.isArray(data?.users) ? data.users : []
+    const matchedUser = users.find(user => String(user?.id || "") === normalizedUserId) || null
+    if (matchedUser?.id) {
+      return {
+        id: String(matchedUser.id || ""),
+        email: normalizeEmail(matchedUser.email || ""),
+        displayName: String(matchedUser.user_metadata?.display_name || matchedUser.user_metadata?.full_name || "").trim(),
+        photoURL: String(matchedUser.user_metadata?.avatar_url || "").trim(),
+        uid: String(matchedUser.id || "")
+      }
+    }
+    if (users.length < 200) break
+    page += 1
+  }
+
+  return null
+}
+
 async function resolveProfileByEmail(email: string) {
   const normalizedEmail = normalizeEmail(email)
   if (!normalizedEmail) return null
@@ -228,6 +269,29 @@ async function resolveProfileByEmail(email: string) {
   const authUser = await getAuthUserByEmail(normalizedEmail)
   if (!authUser?.id) return null
   return authUser
+}
+
+async function resolveProfileById(userId: string) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) return null
+
+  const profile = await getSupabaseProfile(normalizedUserId).catch(() => null)
+  if (profile?.id) return profile
+
+  const authUser = await getAuthUserById(normalizedUserId)
+  if (!authUser?.id) return null
+  return authUser
+}
+
+async function ensureCollaboratorProfileRecord(collaborator: ResolvedCollaborator) {
+  const normalizedUserId = String(collaborator?.id || "").trim()
+  if (!normalizedUserId) throw new Error("COLLABORATOR_NOT_FOUND")
+  return ensureSupabaseProfile({
+    userId: normalizedUserId,
+    email: String(collaborator?.email || ""),
+    displayName: String(collaborator?.displayName || ""),
+    avatarUrl: String(collaborator?.photoURL || "")
+  })
 }
 
 async function listProfilesByIds(userIds: string[]) {
@@ -259,7 +323,7 @@ async function resolveCollaborator(collaboratorTarget: unknown): Promise<Resolve
     }
   }
 
-  const profile = await getSupabaseProfile(normalizedTarget)
+  const profile = await resolveProfileById(normalizedTarget)
   if (!profile?.id) throw new Error("COLLABORATOR_NOT_FOUND")
   return {
     id: String(profile.id || ""),
@@ -1240,6 +1304,10 @@ export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, 
   }
 
   await requireOwnedNote(noteId, userId)
+  await Promise.all([
+    ensureSupabaseProfile({ userId, email: userEmail }),
+    ensureCollaboratorProfileRecord(collaborator)
+  ])
 
   const supabase = getSupabaseAdminClient()
   const payload = {
@@ -1330,6 +1398,10 @@ export async function upsertSupabaseFolderPermission({ folderId, userId, userEma
   }
 
   await requireOwnedFolder(folderId, userId)
+  await Promise.all([
+    ensureSupabaseProfile({ userId, email: userEmail }),
+    ensureCollaboratorProfileRecord(collaborator)
+  ])
 
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
