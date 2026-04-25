@@ -664,13 +664,6 @@ Object.assign(UI, {
                 break
             }
             case "switch-view":
-              if (el.dataset.view === "shared_workspace") {
-                switchView("notes")
-                if (!window.matchMedia("(min-width: 1024px)").matches) {
-                  this.toggleSidebar(false)
-                }
-                break
-              }
               switchView(el.dataset.view)
               if (!window.matchMedia("(min-width: 1024px)").matches) {
                 this.toggleSidebar(false)
@@ -700,28 +693,6 @@ Object.assign(UI, {
                 }
                 const copied = await CollaborationService.copyToClipboard(uid)
                 this.showToast(copied ? this.getText("uid_copied", "UID скопирован") : uid)
-                break
-            }
-            case "join-shared-workspace-link": {
-                this.showFeatureDisabledToast("workspaces")
-                break
-            }
-            case "toggle-active-workspace-menu":
-            case "view-workspace-members":
-            case "rename-workspace":
-            case "edit-workspace-description":
-            case "open-shared-workspace":
-                switchView("notes")
-                if (!window.matchMedia("(min-width: 1024px)").matches) {
-                    this.toggleSidebar(false)
-                }
-                break
-            case "copy-shared-workspace-link": {
-                this.showFeatureDisabledToast("workspaces")
-                break
-            }
-            case "add-shared-workspace-user": {
-                this.showFeatureDisabledToast("workspaces")
                 break
             }
             case "folder-unhide":
@@ -784,32 +755,6 @@ Object.assign(UI, {
             case "settings-export-folder": {
                 if (el.disabled) break
                 this.exportFolderBySelection()
-                break
-            }
-            case "settings-backup-all-notes": {
-                if (el.disabled) break
-                if (!this.isFeatureEnabled("googleDrive")) {
-                    this.showFeatureDisabledToast("googleDrive")
-                    break
-                }
-                el.disabled = true
-                const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
-                try {
-                    await this.backupAllNotesToDrive()
-                } finally {
-                    this.stopLoading(loadingLock)
-                    el.disabled = false
-                    this.renderSettingsPage()
-                }
-                break
-            }
-            case "settings-backup-folder": {
-                if (el.disabled) break
-                if (!this.isFeatureEnabled("googleDrive")) {
-                    this.showFeatureDisabledToast("googleDrive")
-                    break
-                }
-                this.backupFolderBySelection()
                 break
             }
             case "settings-trigger-import":
@@ -1785,24 +1730,6 @@ Object.assign(UI, {
         )
     },
 
-    async backupAllNotesToDrive() {
-        if (!this.isFeatureEnabled("googleDrive")) {
-            this.showFeatureDisabledToast("googleDrive")
-            return null
-        }
-        try {
-            return await this.backupNotesBundleToDrive(this.getExportableNotes(), {
-                scope: "all",
-                emptyMessageKey: "export_empty",
-                emptyFallback: "No notes available for export"
-            })
-        } catch (error) {
-            console.error("Backup failed", error)
-            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
-            return null
-        }
-    },
-
     async exportActiveFolderNotes(folderId = null) {
         const { activeFolderId, folders } = StateStore.read()
         const targetFolderId = folderId || activeFolderId
@@ -1823,39 +1750,9 @@ Object.assign(UI, {
         }
     },
 
-    async backupActiveFolderToDrive(folderId = null) {
-        if (!this.isFeatureEnabled("googleDrive")) {
-            this.showFeatureDisabledToast("googleDrive")
-            return null
-        }
-        const { activeFolderId, folders } = StateStore.read()
-        const targetFolderId = folderId || activeFolderId
-        if (!targetFolderId) return null
-        const folder = folders.find(item => item.id === targetFolderId)
-        try {
-            return await this.backupNotesBundleToDrive(this.getExportableNotes(note => note.folderId === targetFolderId), {
-                scope: "folder",
-                folder,
-                folders: folder ? [folder] : [],
-                emptyMessageKey: "export_folder_empty",
-                emptyFallback: "This folder has no notes to export"
-            })
-        } catch (error) {
-            console.error("Backup failed", error)
-            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
-            return null
-        }
-    },
-
     exportFolderBySelection() {
         this.selectFolderForExport(folder => {
             this.exportActiveFolderNotes(folder.id)
-        })
-    },
-
-    backupFolderBySelection() {
-        this.selectFolderForExport(folder => {
-            this.backupActiveFolderToDrive(folder.id)
         })
     },
 
@@ -1878,9 +1775,6 @@ Object.assign(UI, {
 
     canShowPrimaryAction(view = StateStore.read().view) {
         const normalizedView = String(view || "notes")
-        if (normalizedView === "shared_workspace") {
-            return false
-        }
         return new Set(["notes", "folder", "folders"]).has(normalizedView)
     },
 
@@ -1891,13 +1785,7 @@ Object.assign(UI, {
             this.createFolder()
             return
         }
-        if (currentView === "shared_workspace") return
         window.SmartNotesEditor?.open()
-    },
-
-
-    createSharedWorkspace() {
-        this.showFeatureDisabledToast("workspaces")
     },
 
     updateFolderLimitControls() {
@@ -2012,17 +1900,13 @@ Object.assign(UI, {
             folders: dict.view_folders || "Folders",
             locked: dict.view_locked || dict.lock_center || "Note Protection",
             hidden_folders: dict.hidden_folders || "Hidden folders",
-            admin_tools: dict.admin_tools || "Admin tools",
-            shared_workspace: dict.shared_workspace || "Совместная папка"
+            admin_tools: dict.admin_tools || "Admin tools"
         }
-        const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
+        const { view, activeFolderId, folders } = StateStore.read()
         let title = titles[view] || "SmartNotes"
         if (view === "folder" && activeFolderId) {
             const folder = folders.find(f => f.id === activeFolderId)
             if (folder) title = folder.name
-        }
-        if (view === "shared_workspace") {
-            title = titles.notes || "SmartNotes"
         }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
@@ -2089,10 +1973,6 @@ Object.assign(UI, {
             return true
         }
         const currentView = StateStore.read().view
-        if (currentView === "shared_workspace") {
-            switchView("notes")
-            return true
-        }
         if (currentView !== "notes") {
             switchView("notes")
             return true
@@ -2552,10 +2432,7 @@ Object.assign(UI, {
 
 
     updateActiveWorkspaceMenu() {
-        const wrapper = this.els.activeWorkspaceMenuWrapper
-        if (!wrapper) return
-        wrapper.classList.add("hidden")
-        this.toggleActiveWorkspaceMenu(false)
+        return
     },
 
     updateActiveFolderMenu() {
@@ -2563,7 +2440,7 @@ Object.assign(UI, {
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
         if (!wrapper) return
-        const { view, activeFolderId, activeSharedWorkspaceId, folders, sharedWorkspaces } = StateStore.read()
+        const { view, activeFolderId, folders } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
         wrapper.classList.toggle("hidden", !isVisible)
         if (!isVisible) {
@@ -2721,15 +2598,6 @@ Object.assign(UI, {
                                 <option value="20">20</option>
                                 <option value="50">50</option>
                             </select>
-                        </div>
-                        <div class="field">
-                            <span class="field-label">${dict.settings_external_storage || "Google Drive"}</span>
-                            <div class="settings-toggle-item" style="padding:0; background:none; border:0; gap:12px; align-items:center;">
-                                <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
-                                    <span id="settings-drive-status">${dict.drive_not_connected || "Not connected"}</span>
-                                </div>
-                                <button type="button" id="settings-drive-connect" class="btn-secondary">${dict.drive_connect || "Connect"}</button>
-                            </div>
                         </div>
                         <div class="settings-toggle-item">
                             <span>${dict.reduce_motion || "Reduce motion"}</span>
@@ -3307,47 +3175,6 @@ Object.assign(UI, {
             })
         }
 
-        const driveConnectButton = document.getElementById("settings-drive-connect")
-        if (driveConnectButton && !driveConnectButton.dataset.bound) {
-            driveConnectButton.dataset.bound = "1"
-            driveConnectButton.addEventListener("click", async () => {
-                if (!this.isFeatureEnabled("googleDrive")) {
-                    this.showFeatureDisabledToast("googleDrive")
-                    this.syncSettingsUI()
-                    return
-                }
-                const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-                const driveStatus = mediaService?.getStatus?.() || null
-                const isDriveLinked = !!driveStatus?.linked || !!driveStatus?.connected
-                const canConnect = (!isDriveLinked || (isDriveLinked && !driveStatus?.connected && !!driveStatus?.errorCode)) && !!mediaService?.connect
-                const canUnlink = isDriveLinked && !!mediaService?.unlink
-                if ((!canConnect && !canUnlink) || !driveStatus?.configured) {
-                    this.showToast(this.getText("external_storage_unavailable", "External disk is temporarily unavailable"))
-                    this.syncSettingsUI()
-                    return
-                }
-                this.syncSettingsUI()
-                try {
-                    if (isDriveLinked && !driveStatus?.connected && driveStatus?.errorCode) {
-                        await mediaService.connect()
-                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
-                    } else if (isDriveLinked) {
-                        await mediaService.unlink()
-                        this.showToast(this.getText("drive_disconnected", "Google Drive disconnected"))
-                    } else {
-                        await mediaService.connect()
-                        this.showToast(this.getText("drive_connected", "Google Drive connected"))
-                    }
-                } catch (error) {
-                    const message = typeof this.resolveExternalMediaMessage === "function"
-                        ? this.resolveExternalMediaMessage(error, { attachmentOnly: true })
-                        : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
-                    this.showToast(message)
-                } finally {
-                    this.syncSettingsUI()
-                }
-            })
-        }
     },
     bindAppearanceBackgroundControls(root) {
         if (!root) return
@@ -3822,37 +3649,6 @@ Object.assign(UI, {
         if (reduceToggle) reduceToggle.checked = !!draftSettings.reduceMotion
         const notesPerPageSelect = document.getElementById("settings-notes-per-page")
         if (notesPerPageSelect) notesPerPageSelect.value = String(draftSettings.notesPerPage || 20)
-        const driveStatusElement = document.getElementById("settings-drive-status")
-        const driveConnectButton = document.getElementById("settings-drive-connect")
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const driveStatus = this.isFeatureEnabled("googleDrive") ? (mediaService?.getStatus?.() || null) : { configured: false, pending: false, linked: false, connected: false, errorCode: "feature-disabled" }
-        if (driveStatusElement) {
-            if (!driveStatus?.configured) {
-                driveStatusElement.textContent = this.getText("external_storage_unavailable", "External disk is temporarily unavailable")
-            } else if (driveStatus.pending) {
-                driveStatusElement.textContent = this.getText("drive_connecting", "Connecting...")
-            } else if (driveStatus.connected) {
-                driveStatusElement.textContent = this.getText("drive_connected", "Google Drive connected")
-            } else if (driveStatus.linked) {
-                driveStatusElement.textContent = this.getText("drive_linked", "Google Drive linked")
-            } else if (driveStatus.errorCode) {
-                driveStatusElement.textContent = typeof this.resolveExternalMediaMessage === "function"
-                    ? this.resolveExternalMediaMessage({ code: driveStatus.errorCode }, { attachmentOnly: true })
-                    : this.getText("external_attachment_unavailable", "Disk is not connected, attachment unavailable")
-            } else {
-                driveStatusElement.textContent = this.getText("drive_not_connected", "Not connected")
-            }
-        }
-        if (driveConnectButton) {
-            const isDriveLinked = !!driveStatus?.linked || !!driveStatus?.connected
-            const needsReconnect = isDriveLinked && !driveStatus?.connected && !!driveStatus?.errorCode
-            driveConnectButton.disabled = !driveStatus?.configured || !!driveStatus?.pending
-            driveConnectButton.textContent = driveStatus?.pending
-                ? this.getText("drive_connecting", "Connecting...")
-                : needsReconnect
-                    ? this.getText("drive_reconnect", "Reconnect")
-                    : this.getText(isDriveLinked ? "drive_disconnect" : "drive_connect", isDriveLinked ? "Disconnect" : "Connect")
-        }
         const saveButton = document.querySelector('[data-action="settings-save"]')
         if (saveButton) saveButton.disabled = !this.isSettingsDirty()
     },

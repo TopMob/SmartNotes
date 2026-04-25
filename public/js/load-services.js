@@ -206,16 +206,10 @@ const NoteIO = {
         })
         if (ownerUid) roles[ownerUid] = "owner"
         const noteAccessIdentifier = safe.access?.noteId ? String(safe.access.noteId) : ""
-        const shareIdentifier = safe.access?.shareId ? String(safe.access.shareId) : ""
-        const ownerCollectionName = safe.access?.ownerCollection ? String(safe.access.ownerCollection) : ""
-        const workspaceId = safe.workspaceId ? String(safe.workspaceId) : (safe.access?.workspaceId ? String(safe.access.workspaceId) : "")
         const access = {
             ownerUid,
             roles,
-            noteId: noteAccessIdentifier,
-            shareId: shareIdentifier,
-            ownerCollection: ownerCollectionName,
-            workspaceId
+            noteId: noteAccessIdentifier
         }
 
         return {
@@ -229,7 +223,6 @@ const NoteIO = {
                 : buildPageDrawingsRevision(pageDrawings),
             tags,
             folderId: safe.folderId ? String(safe.folderId) : null,
-            workspaceId: workspaceId || null,
             folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
@@ -649,16 +642,6 @@ const LockService = {
 }
 
 const CollaborationService = {
-    getWorkspaceNoteId(note, access = null) {
-        const resolvedAccess = access || this.getAccess(note)
-        const workspaceId = String(resolvedAccess?.workspaceId || note?.workspaceId || "").trim()
-        const explicitNoteId = String(resolvedAccess?.noteId || "").trim()
-        if (explicitNoteId) return explicitNoteId
-        const rawNoteId = String(note?.id || "").trim()
-        if (!workspaceId || !rawNoteId) return rawNoteId
-        const workspacePrefix = `workspace_${workspaceId}_`
-        return rawNoteId.startsWith(workspacePrefix) ? rawNoteId.slice(workspacePrefix.length) : rawNoteId
-    },
     getAccess(note) {
         const access = note && typeof note === "object" ? note.access : null
         return access && typeof access === "object" ? access : null
@@ -675,9 +658,6 @@ const CollaborationService = {
     },
     isLegacyOwnerNote(note, currentUserUid, access = null) {
         if (!note || typeof note !== "object") return false
-        const workspaceId = String(note.workspaceId || "").trim()
-        const accessWorkspaceId = String((access?.workspaceId || note?.access?.workspaceId || "")).trim()
-        if (workspaceId || accessWorkspaceId) return false
         const ownerCandidates = [
             note.ownerUid,
             note.ownerId,
@@ -692,13 +672,10 @@ const CollaborationService = {
             : (note?.access?.roles && typeof note.access.roles === "object" ? note.access.roles : {})
         const hasAnyRole = Object.keys(roles).length > 0
         const accessNoteId = String((access?.noteId || note?.access?.noteId || "")).trim()
-        const accessShareId = String((access?.shareId || note?.access?.shareId || "")).trim()
-        const accessOwnerCollection = String((access?.ownerCollection || note?.access?.ownerCollection || "")).trim()
-        const hasShareMetadata = !!(accessNoteId || accessShareId || accessOwnerCollection)
         if (hasAnyRole) {
             if (roles[currentUserUid] === "owner") return true
             const roleKeys = Object.keys(roles)
-            if (!hasShareMetadata && roleKeys.length === 1 && roleKeys[0] === currentUserUid) return true
+            if (!accessNoteId && roleKeys.length === 1 && roleKeys[0] === currentUserUid) return true
             return false
         }
         return true

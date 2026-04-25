@@ -798,12 +798,10 @@ const WorkspaceAccessService = (() => {
 
 const WorkspacesService = (() => {
     function subscribe() {
-        StateStore.update("sharedWorkspaces", [])
         EventBus.publish("workspaceNotesUpdated", [])
     }
 
     function clear() {
-        StateStore.update("sharedWorkspaces", [])
         EventBus.publish("workspaceNotesUpdated", [])
     }
 

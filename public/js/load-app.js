@@ -302,7 +302,6 @@ window.Calculator = Calculator;
                     || nextState.activeFolderId !== previousState.activeFolderId
                     || nextState.searchQuery !== previousState.searchQuery
                     || nextState.folders !== previousState.folders
-                    || nextState.sharedWorkspaces !== previousState.sharedWorkspaces
                     || languageChanged
                     || displayLimitChanged
                     || (configChanged && nextState.config.notesFilter !== previousState.config.notesFilter)
@@ -373,7 +372,6 @@ window.Calculator = Calculator;
             }))
             unsubscribeUiEvents.push(EventBus.subscribe("notesLoadFailed", error => reportSyncError(error, "notes load")))
             unsubscribeUiEvents.push(EventBus.subscribe("notesSyncError", error => reportSyncError(error, "owned notes sync")))
-            unsubscribeUiEvents.push(EventBus.subscribe("sharedSyncError", error => reportSyncError(error, "shared notes sync")))
             unsubscribeUiEvents.push(EventBus.subscribe("foldersSyncError", error => reportSyncError(error, "folders sync")))
         }
 
