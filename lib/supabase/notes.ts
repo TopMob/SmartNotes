@@ -185,7 +185,7 @@ async function getProfileByEmail(email: string) {
     .eq("email", normalizedEmail)
     .maybeSingle()
 
-  if (error) throw error
+  if (error) throw new Error("COLLABORATOR_NOT_FOUND")
   return data ? mapProfileRow(data as ProfileRow) : null
 }
 
@@ -754,7 +754,7 @@ export async function getSupabaseProfile(userId: string) {
     .eq("id", userId)
     .maybeSingle()
 
-  if (error) throw error
+  if (error) throw new Error("COLLABORATOR_NOT_FOUND")
   return mapProfileRow(data)
 }
 

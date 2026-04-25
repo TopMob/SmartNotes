@@ -5,8 +5,14 @@ export const runtime = "nodejs"
 
 function mapFolderShareError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "FOLDER_ID_REQUIRED" || message === "FOLDER_NOT_FOUND" || message === "BAD_REQUEST" || message === "COLLABORATOR_NOT_FOUND") {
-    return new ApiRouteError(message === "FOLDER_NOT_FOUND" ? 404 : 400, message)
+  if (message === "FOLDER_ID_REQUIRED" || message === "BAD_REQUEST") {
+    return new ApiRouteError(400, message)
+  }
+  if (message === "FOLDER_NOT_FOUND") {
+    return new ApiRouteError(404, message)
+  }
+  if (message === "COLLABORATOR_NOT_FOUND") {
+    return new ApiRouteError(404, message)
   }
 
   return error

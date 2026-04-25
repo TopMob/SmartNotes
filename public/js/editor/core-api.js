@@ -143,8 +143,11 @@ export const EditorAPI = (() => {
 
     const updateShareButtonState = () => {
         const shareButton = elements.shareButton || document.querySelector('[data-action="share-note"]')
+        const shareLinkButton = document.querySelector('[data-action="share-note-link"]')
         if (!shareButton) return
-        shareButton.classList.toggle("hidden", !canManageSharing())
+        const canManage = canManageSharing()
+        shareButton.classList.toggle("hidden", !canManage)
+        shareLinkButton?.classList.toggle("hidden", !canManage)
         renderCollaborators()
     }
 
@@ -224,11 +227,6 @@ export const EditorAPI = (() => {
                         await loadCollaborators()
                         return
                     }
-                    if (normalizedRole === "link") {
-                        const copied = await UI.copyToClipboard(window.buildShareInviteLink({ itemType: "note", itemId: note.id }))
-                        UI.showToast(UI.getText(copied ? "share_link_copied" : "copy_failed", copied ? "Ссылка скопирована" : "Не удалось скопировать"))
-                        return
-                    }
 
                     const role = normalizedRole === "editor" ? "editor" : "viewer"
                     await window.NoteActionService.shareNote(note.id, normalizedTarget, role)
@@ -246,7 +244,7 @@ export const EditorAPI = (() => {
                     options: [
                         { value: "viewer", label: UI.getText("share_role_commentator", "Комментатор") },
                         { value: "editor", label: UI.getText("share_role_editor", "Редактор") },
-                        { value: "link", label: UI.getText("share_copy_link", "Скопировать ссылку") }
+                        { value: "remove", label: UI.getText("share_role_remove", "Убрать доступ") }
                     ],
                     ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
                 }
@@ -788,11 +786,15 @@ export const EditorAPI = (() => {
         if (boundElements.shareButton) {
             boundElements.shareButton.addEventListener("click", (event) => {
                 event.preventDefault()
-                if (event.altKey || event.metaKey || event.ctrlKey) {
-                    copyShareLink()
-                    return
-                }
                 openSharePrompt()
+            }, { signal })
+        }
+
+        const shareLinkButton = document.querySelector('[data-action="share-note-link"]')
+        if (shareLinkButton) {
+            shareLinkButton.addEventListener("click", (event) => {
+                event.preventDefault()
+                copyShareLink()
             }, { signal })
         }
 

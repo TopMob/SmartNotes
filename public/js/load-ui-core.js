@@ -772,6 +772,10 @@ Object.assign(UI, {
                 this.shareFolder(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
                 break
+            case "share-active-folder-link":
+                await this.copyFolderShareLink(StateStore.read().activeFolderId)
+                this.toggleActiveFolderMenu(false)
+                break
             case "accept-invite":
                 this.respondToInvite(el.dataset.itemType || "note", decodeURIComponent(el.dataset.itemId || ""), true)
                 break
@@ -1935,10 +1939,6 @@ Object.assign(UI, {
                     this.showToast(this.getText("share_folder_revoked", "Доступ к папке отозван"))
                     return
                 }
-                if (normalizedRole === "link") {
-                    await this.copyFolderShareLink(id)
-                    return
-                }
 
                 const role = normalizedRole === "editor" ? "editor" : "viewer"
                 await window.NoteActionService.shareFolder(id, normalizedTarget, role)
@@ -1953,7 +1953,6 @@ Object.assign(UI, {
                 options: [
                     { value: "viewer", label: this.getText("share_role_commentator", "Комментатор") },
                     { value: "editor", label: this.getText("share_role_editor", "Редактор") },
-                    { value: "link", label: this.getText("share_copy_link", "Скопировать ссылку") },
                     { value: "remove", label: this.getText("share_role_remove", "Убрать доступ") }
                 ],
                 ariaLabel: this.getText("share_folder_role_label", "Роль доступа к папке")

@@ -240,8 +240,6 @@ const NoteActionService = {
             body: JSON.stringify({
                 noteId: String(noteId || ""),
                 target: normalizedTarget,
-                userId: normalizedTarget,
-                user_id: normalizedTarget,
                 role: role === "editor" ? "editor" : "viewer"
             })
         })
@@ -262,9 +260,7 @@ const NoteActionService = {
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 noteId: String(noteId || ""),
-                target: normalizedTarget,
-                userId: normalizedTarget,
-                user_id: normalizedTarget
+                target: normalizedTarget
             })
         })
         if (!response.ok) {
@@ -285,8 +281,6 @@ const NoteActionService = {
             body: JSON.stringify({
                 folderId: String(folderId || ""),
                 target: normalizedTarget,
-                userId: normalizedTarget,
-                user_id: normalizedTarget,
                 role: role === "editor" ? "editor" : "viewer"
             })
         })
@@ -307,9 +301,7 @@ const NoteActionService = {
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 folderId: String(folderId || ""),
-                target: normalizedTarget,
-                userId: normalizedTarget,
-                user_id: normalizedTarget
+                target: normalizedTarget
             })
         })
         if (!response.ok) {

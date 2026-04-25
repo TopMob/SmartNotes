@@ -21,8 +21,14 @@ export async function GET(request: Request) {
 
 function mapShareError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "NOTE_ID_REQUIRED" || message === "NOTE_NOT_FOUND" || message === "BAD_REQUEST" || message === "COLLABORATOR_NOT_FOUND") {
-    return new ApiRouteError(message === "NOTE_NOT_FOUND" ? 404 : 400, message)
+  if (message === "NOTE_ID_REQUIRED" || message === "BAD_REQUEST") {
+    return new ApiRouteError(400, message)
+  }
+  if (message === "NOTE_NOT_FOUND") {
+    return new ApiRouteError(404, message)
+  }
+  if (message === "COLLABORATOR_NOT_FOUND") {
+    return new ApiRouteError(404, message)
   }
 
   return error
