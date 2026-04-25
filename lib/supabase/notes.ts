@@ -1318,11 +1318,30 @@ export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, 
     invited_by_user_id: String(userId || "").trim()
   }
 
-  const { data, error } = await supabase
+  const existingPermission = await supabase
     .from("note_permissions")
-    .upsert(payload)
-    .select("note_id, user_id, role, status, invited_by_user_id")
-    .single()
+    .select("note_id")
+    .eq("note_id", payload.note_id)
+    .eq("user_id", payload.user_id)
+    .maybeSingle()
+
+  if (existingPermission.error) throw existingPermission.error
+
+  const permissionWrite = existingPermission.data
+    ? await supabase
+      .from("note_permissions")
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq("note_id", payload.note_id)
+      .eq("user_id", payload.user_id)
+      .select("note_id, user_id, role, status, invited_by_user_id")
+      .single()
+    : await supabase
+      .from("note_permissions")
+      .insert(payload)
+      .select("note_id, user_id, role, status, invited_by_user_id")
+      .single()
+
+  const { data, error } = permissionWrite
 
   if (error) throw error
   return (await presentNotePermissions([data as NotePermissionRow]))[0] || null
@@ -1404,17 +1423,38 @@ export async function upsertSupabaseFolderPermission({ folderId, userId, userEma
   ])
 
   const supabase = getSupabaseAdminClient()
-  const { data, error } = await supabase
+  const payload = {
+    folder_id: String(folderId || "").trim(),
+    user_id: String(collaborator.id || "").trim(),
+    role: normalizedRole,
+    status: "pending",
+    invited_by_user_id: String(userId || "").trim()
+  }
+
+  const existingPermission = await supabase
     .from("folder_permissions")
-    .upsert({
-      folder_id: String(folderId || "").trim(),
-      user_id: String(collaborator.id || "").trim(),
-      role: normalizedRole,
-      status: "pending",
-      invited_by_user_id: String(userId || "").trim()
-    })
-    .select("folder_id, user_id, role, status, invited_by_user_id")
-    .single()
+    .select("folder_id")
+    .eq("folder_id", payload.folder_id)
+    .eq("user_id", payload.user_id)
+    .maybeSingle()
+
+  if (existingPermission.error) throw existingPermission.error
+
+  const permissionWrite = existingPermission.data
+    ? await supabase
+      .from("folder_permissions")
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq("folder_id", payload.folder_id)
+      .eq("user_id", payload.user_id)
+      .select("folder_id, user_id, role, status, invited_by_user_id")
+      .single()
+    : await supabase
+      .from("folder_permissions")
+      .insert(payload)
+      .select("folder_id, user_id, role, status, invited_by_user_id")
+      .single()
+
+  const { data, error } = permissionWrite
 
   if (error) throw error
   return (await presentFolderPermissions([data as FolderPermissionRow]))[0] || null
