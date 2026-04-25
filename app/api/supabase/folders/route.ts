@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const folders = await listAccessibleSupabaseFolders(user.id, user.email)
     return ok({ folders })
   } catch (error) {
+    console.error("[FOLDERS_FAILED]", error)
     return handleRouteError(mapFolderError(error), "FOLDERS_FAILED")
   }
 }
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     })
     return ok({ folder }, { status: 201 })
   } catch (error) {
+    console.error("[FOLDER_CREATE_FAILED]", error)
     return handleRouteError(mapFolderError(error), "FOLDER_CREATE_FAILED")
   }
 }
@@ -52,6 +54,7 @@ export async function PUT(request: Request) {
 
     return ok({ folder })
   } catch (error) {
+    console.error("[FOLDER_UPDATE_FAILED]", error)
     return handleRouteError(mapFolderError(error), "FOLDER_UPDATE_FAILED")
   }
 }
@@ -65,6 +68,7 @@ export async function DELETE(request: Request) {
 
     return ok({ folder: result })
   } catch (error) {
+    console.error("[FOLDER_DELETE_FAILED]", error)
     return handleRouteError(mapFolderError(error), "FOLDER_DELETE_FAILED")
   }
 }

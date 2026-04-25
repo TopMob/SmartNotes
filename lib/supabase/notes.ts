@@ -457,6 +457,10 @@ function normalizeRecordId(value: unknown) {
   return normalized || undefined
 }
 
+function isUuid(value: unknown) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim())
+}
+
 function assertFolderName(name: unknown) {
   if (!normalizeFolderName(name)) {
     throw new Error("FOLDER_NAME_REQUIRED")
@@ -468,7 +472,7 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
   const metadata = currentMetadata && typeof currentMetadata === "object" ? currentMetadata : {}
 
   return {
-    id: normalizeRecordId(note?.id),
+    id: isUuid(note?.id) ? String(note?.id) : undefined,
     user_id: userId,
     folder_id: note?.folderId || null,
     title: String(note?.title || "").slice(0, 200),
@@ -979,12 +983,13 @@ export async function upsertSupabaseFolder({ userId, folderId = null, name, desc
   assertFolderName(name)
   const supabase = getSupabaseAdminClient()
   let currentMetadata: JsonObject = {}
+  const normalizedFolderId = isUuid(folderId) ? String(folderId) : null
 
-  if (folderId) {
+  if (normalizedFolderId) {
     const { data: existingFolder, error: existingFolderError } = await supabase
       .from("folders")
       .select("metadata")
-      .eq("id", folderId)
+      .eq("id", normalizedFolderId)
       .eq("user_id", userId)
       .maybeSingle()
 
@@ -993,7 +998,7 @@ export async function upsertSupabaseFolder({ userId, folderId = null, name, desc
   }
 
   const payload = {
-    id: folderId || undefined,
+    id: normalizedFolderId || undefined,
     user_id: userId,
     name: normalizeFolderName(name),
     description: String(description || "").trim(),

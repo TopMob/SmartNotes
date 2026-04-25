@@ -24,6 +24,7 @@ export async function GET(request: Request) {
     const notes = await listSupabaseNotes(user.id, user.email, { limit, offset, startAfterId })
     return ok({ notes })
   } catch (error) {
+    console.error("[NOTES_FAILED]", error)
     return handleRouteError(mapNoteError(error), "NOTES_FAILED")
   }
 }
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
     const note = await upsertSupabaseNote({ userId: user.id, userEmail: user.email, note: payload?.note || payload })
     return ok({ note }, { status: 201 })
   } catch (error) {
+    console.error("[NOTE_CREATE_FAILED]", error)
     return handleRouteError(mapNoteError(error), "NOTE_CREATE_FAILED")
   }
 }
@@ -66,6 +68,7 @@ export async function PUT(request: Request) {
 
     return ok({ note })
   } catch (error) {
+    console.error("[NOTE_UPDATE_FAILED]", error)
     return handleRouteError(mapNoteError(error), "NOTE_UPDATE_FAILED")
   }
 }
@@ -112,6 +115,7 @@ export async function PATCH(request: Request) {
 
     throw new ApiRouteError(400, "BAD_REQUEST")
   } catch (error) {
+    console.error("[NOTE_ACTION_FAILED]", error)
     return handleRouteError(mapNoteError(error), "NOTE_ACTION_FAILED")
   }
 }
@@ -125,6 +129,7 @@ export async function DELETE(request: Request) {
 
     return ok({ note: result })
   } catch (error) {
+    console.error("[NOTE_DELETE_FAILED]", error)
     return handleRouteError(mapNoteError(error), "NOTE_DELETE_FAILED")
   }
 }
