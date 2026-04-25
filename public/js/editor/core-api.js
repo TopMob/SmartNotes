@@ -144,10 +144,9 @@ export const EditorAPI = (() => {
     const updateShareButtonState = () => {
         const shareButton = elements.shareButton || document.querySelector('[data-action="share-note"]')
         const shareLinkButton = document.querySelector('[data-action="share-note-link"]')
-        if (!shareButton) return
         const canManage = canManageSharing()
-        shareButton.classList.toggle("hidden", !canManage)
-        shareLinkButton?.classList.toggle("hidden", !canManage)
+        if (shareButton) shareButton.classList.toggle("hidden", !canManage)
+        shareLinkButton?.classList.add("hidden")
         renderCollaborators()
     }
 
@@ -203,11 +202,7 @@ export const EditorAPI = (() => {
 
     const openSharePrompt = () => {
         const note = StateStore.read().currentNote
-        if (!note?.id) {
-            UI.showToast(UI.getText("save_note_before_sharing", "Сначала сохраните заметку"))
-            return
-        }
-        if (!canManageSharing(note)) {
+        if (!note?.id || !canManageSharing(note)) {
             UI.showToast(UI.getText("share_owner_only", "Делиться заметкой может только владелец"))
             return
         }
@@ -215,23 +210,13 @@ export const EditorAPI = (() => {
         UI.showPrompt(
             UI.getText("share_note_title", "Поделиться заметкой"),
             UI.getText("share_target_placeholder", "Email, user id или ссылка"),
-            async (target, roleValue) => {
-                const normalizedTarget = String(target || "").trim()
-                const normalizedRole = String(roleValue || "").trim().toLowerCase()
+            async (promptTarget, roleValue) => {
+                const normalizedTarget = String(promptTarget || "").trim()
                 if (!normalizedTarget) return
-
                 try {
-                    if (normalizedRole === "remove") {
-                        await window.NoteActionService.revokeAccess(note.id, normalizedTarget)
-                        UI.showToast(UI.getText("share_note_revoked", "Доступ отозван"))
-                        await loadCollaborators()
-                        return
-                    }
-
-                    const role = normalizedRole === "editor" ? "editor" : "viewer"
-                    await window.NoteActionService.shareNote(note.id, normalizedTarget, role)
+                    await window.NoteActionService.shareNote(note.id, normalizedTarget, roleValue === "editor" ? "editor" : "viewer")
                     UI.showToast(UI.getText("share_note_saved", "Доступ обновлен"))
-                    await loadCollaborators()
+                    await loadCollaborators({ silent: false })
                 } catch (error) {
                     UI.showToast(`${UI.getText("share_note_failed", "Не удалось обновить доступ")} (${String(error?.message || error || "unknown")})`)
                 }
@@ -243,8 +228,7 @@ export const EditorAPI = (() => {
                     type: "select",
                     options: [
                         { value: "viewer", label: UI.getText("share_role_commentator", "Комментатор") },
-                        { value: "editor", label: UI.getText("share_role_editor", "Редактор") },
-                        { value: "remove", label: UI.getText("share_role_remove", "Убрать доступ") }
+                        { value: "editor", label: UI.getText("share_role_editor", "Редактор") }
                     ],
                     ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
                 }
@@ -253,10 +237,7 @@ export const EditorAPI = (() => {
     }
 
     const copyShareLink = async () => {
-        const note = StateStore.read().currentNote
-        if (!note?.id) return
-        const copied = await UI.copyToClipboard(window.buildShareInviteLink({ itemType: "note", itemId: note.id }))
-        UI.showToast(UI.getText(copied ? "share_link_copied" : "copy_failed", copied ? "Ссылка скопирована" : "Не удалось скопировать"))
+        UI.showToast(UI.getText("share_note_failed", "Шаринг временно отключен"))
     }
 
     const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
@@ -530,13 +511,6 @@ export const EditorAPI = (() => {
                 const suggested = SmartSearch.suggestFolderId(note, StateStore.read().folders)
                 if (suggested) note.folderId = suggested
             }
-        }
-
-        if (!noteHasEditableContent(note)) {
-            if (!isAutoSave && !isExitSave && !options.silent) {
-                UI.showToast(UI.getText("note_empty_forbidden", "Добавьте содержимое заметки"))
-            }
-            return
         }
 
         const noteAlreadyPersisted = isNotePresentInState(note.id)

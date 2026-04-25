@@ -1,4 +1,4 @@
-import { deleteSupabaseNote, listSupabaseNotes, patchSupabaseNote, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
+import { deleteSupabaseNote, listSupabaseNoteAccess, listSupabaseNotes, patchSupabaseNote, revokeSupabaseNoteAccess, shareSupabaseNote, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 import { getAnalyzeDatabase } from "@/lib/supabase/analyze"
 import { processUserNotes } from "@/app/api/analyze/core/processor"
@@ -7,7 +7,7 @@ export const runtime = "nodejs"
 
 function mapNoteError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "NOTE_ID_REQUIRED" || message === "NOTE_NOT_FOUND" || message === "BAD_REQUEST") {
+  if (["NOTE_ID_REQUIRED", "NOTE_NOT_FOUND", "BAD_REQUEST", "COLLABORATOR_NOT_FOUND", "CANNOT_SHARE_WITH_SELF"].includes(message)) {
     return new ApiRouteError(400, message)
   }
 
@@ -18,6 +18,16 @@ export async function GET(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
     const url = new URL(request.url)
+    const action = String(url.searchParams.get("action") || "").trim()
+    const noteId = String(url.searchParams.get("id") || "").trim()
+    if (action === "list-access") {
+      if (!noteId) {
+        throw new ApiRouteError(400, "NOTE_ID_REQUIRED")
+      }
+      const access = await listSupabaseNoteAccess(noteId, user.id)
+      return ok({ access })
+    }
+
     const limit = Number(url.searchParams.get("limit") || 500)
     const offset = Number(url.searchParams.get("offset") || 0)
     const startAfterId = String(url.searchParams.get("startAfterId") || "").trim() || undefined
@@ -111,6 +121,25 @@ export async function PATCH(request: Request) {
       })
 
       return ok({ note, processed })
+    }
+
+    if (action === "share") {
+      const access = await shareSupabaseNote({
+        noteId: normalizedNoteId,
+        ownerUserId: user.id,
+        target: String(payload?.target || ""),
+        role: String(payload?.role || "viewer")
+      })
+      return ok({ access })
+    }
+
+    if (action === "revoke-access") {
+      const result = await revokeSupabaseNoteAccess({
+        noteId: normalizedNoteId,
+        ownerUserId: user.id,
+        target: String(payload?.target || "")
+      })
+      return ok({ access: result })
     }
 
     throw new ApiRouteError(400, "BAD_REQUEST")

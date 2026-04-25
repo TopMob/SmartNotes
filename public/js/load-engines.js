@@ -17,9 +17,6 @@ const buildAuthorizedHeaders = (user) => {
 }
 
 const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
-const getNoteShareEndpoint = () => createApiEndpoint("supabase/notes/share")
-const getFolderShareEndpoint = () => createApiEndpoint("supabase/folders/share")
-const getInvitesEndpoint = () => createApiEndpoint("supabase/invites")
 const NOTE_ANALYZE_DEBOUNCE_MS = 12000
 
 const createNeutralTimestamp = () => new Date().toISOString()
@@ -105,79 +102,24 @@ const resolveNoteActionErrorCode = async (response) => {
     }
 }
 
-const buildShareInviteLink = ({ itemType, itemId, targetUserId }) => {
-    const url = new URL(window.location.href)
-    url.searchParams.set("inviteType", itemType === "folder" ? "folder" : "note")
-    url.searchParams.set("inviteId", String(itemId || ""))
-    if (targetUserId) {
-        url.searchParams.set("userId", String(targetUserId || ""))
-    }
-    return url.toString()
-}
-
-const normalizeShareTarget = (target) => {
-    const normalizedTarget = String(target || "").trim()
-    if (!normalizedTarget) return ""
-    try {
-        const parsed = new URL(normalizedTarget)
-        return String(
-            parsed.searchParams.get("userId")
-            || parsed.searchParams.get("uid")
-            || parsed.searchParams.get("id")
-            || parsed.searchParams.get("email")
-            || normalizedTarget
-        ).trim()
-    } catch {
-        return normalizedTarget
-    }
-}
-
-const normalizeInviteItemType = value => String(value || "") === "folder" ? "folder" : "note"
-
-const normalizeInviteRecord = (invite) => {
-    const safe = invite && typeof invite === "object" ? invite : {}
-    const itemType = normalizeInviteItemType(safe.itemType)
-    const rawStatus = String(safe.status || "pending").trim().toLowerCase()
-    return {
-        itemType,
-        itemId: String(safe.itemId || "").trim(),
-        itemTitle: String(safe.itemTitle || "").trim(),
-        role: String(safe.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer",
-        status: ["pending", "accepted", "rejected"].includes(rawStatus) ? rawStatus : "pending",
-        invitedByUserId: String(safe.invitedByUserId || "").trim(),
-        invitedByDisplayName: String(safe.invitedByDisplayName || "").trim()
-    }
-}
-
 const NoteActionService = {
     async listAccess(noteId) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
-        const response = await fetch(`${getNoteShareEndpoint()}?noteId=${encodeURIComponent(String(noteId || ""))}`, {
+        const response = await fetch(`${getNotesEndpoint()}?action=list-access&id=${encodeURIComponent(String(noteId || ""))}`, {
             method: "GET",
             headers: buildAuthorizedHeaders(user)
         })
         if (!response.ok) {
             const errorCode = await resolveNoteActionErrorCode(response)
-            throw new Error(errorCode || `NOTE_SHARE_LIST_HTTP_${response.status}`)
+            throw new Error(errorCode || `NOTE_ACCESS_LIST_HTTP_${response.status}`)
         }
         const payload = await response.json()
-        return Array.isArray(payload?.permissions) ? payload.permissions : []
+        return Array.isArray(payload?.access) ? payload.access : []
     },
 
     async listFolderAccess(folderId) {
-        const user = StateStore.read().user
-        if (!user) throw new Error("UNAUTHORIZED")
-        const response = await fetch(`${getFolderShareEndpoint()}?folderId=${encodeURIComponent(String(folderId || ""))}`, {
-            method: "GET",
-            headers: buildAuthorizedHeaders(user)
-        })
-        if (!response.ok) {
-            const errorCode = await resolveNoteActionErrorCode(response)
-            throw new Error(errorCode || `FOLDER_SHARE_LIST_HTTP_${response.status}`)
-        }
-        const payload = await response.json()
-        return Array.isArray(payload?.permissions) ? payload.permissions : []
+        return []
     },
 
     async patch(noteId, updates) {
@@ -229,14 +171,14 @@ const NoteActionService = {
     async shareNote(noteId, target, role) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
-        const normalizedTarget = normalizeShareTarget(target)
-        const response = await fetch(getNoteShareEndpoint(), {
-            method: "POST",
+        const response = await fetch(getNotesEndpoint(), {
+            method: "PATCH",
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
-                noteId: String(noteId || ""),
-                target: normalizedTarget,
-                role: role === "editor" ? "editor" : "viewer"
+                id: String(noteId || ""),
+                action: "share",
+                target: String(target || ""),
+                role: String(role || "viewer")
             })
         })
         if (!response.ok) {
@@ -244,143 +186,50 @@ const NoteActionService = {
             throw new Error(errorCode || `NOTE_SHARE_HTTP_${response.status}`)
         }
         const payload = await response.json()
-        return payload?.permission ? normalizeInviteRecord(payload.permission) : null
+        return Array.isArray(payload?.access) ? payload.access : []
     },
 
     async revokeAccess(noteId, target) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
-        const normalizedTarget = normalizeShareTarget(target)
-        const response = await fetch(getNoteShareEndpoint(), {
-            method: "DELETE",
+        const response = await fetch(getNotesEndpoint(), {
+            method: "PATCH",
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
-                noteId: String(noteId || ""),
-                target: normalizedTarget
+                id: String(noteId || ""),
+                action: "revoke-access",
+                target: String(target || "")
             })
         })
         if (!response.ok) {
             const errorCode = await resolveNoteActionErrorCode(response)
             throw new Error(errorCode || `NOTE_REVOKE_HTTP_${response.status}`)
         }
-        const payload = await response.json()
-        return payload?.permission || null
+        return response.json()
     },
 
     async shareFolder(folderId, target, role) {
-        const user = StateStore.read().user
-        if (!user) throw new Error("UNAUTHORIZED")
-        const normalizedTarget = normalizeShareTarget(target)
-        const response = await fetch(getFolderShareEndpoint(), {
-            method: "POST",
-            headers: buildAuthorizedHeaders(user),
-            body: JSON.stringify({
-                folderId: String(folderId || ""),
-                target: normalizedTarget,
-                role: role === "editor" ? "editor" : "viewer"
-            })
-        })
-        if (!response.ok) {
-            const errorCode = await resolveNoteActionErrorCode(response)
-            throw new Error(errorCode || `FOLDER_SHARE_HTTP_${response.status}`)
-        }
-        const payload = await response.json()
-        return payload?.permission ? normalizeInviteRecord(payload.permission) : null
+        throw new Error("SHARING_DISABLED")
     },
 
     async revokeFolderAccess(folderId, target) {
-        const user = StateStore.read().user
-        if (!user) throw new Error("UNAUTHORIZED")
-        const normalizedTarget = normalizeShareTarget(target)
-        const response = await fetch(getFolderShareEndpoint(), {
-            method: "DELETE",
-            headers: buildAuthorizedHeaders(user),
-            body: JSON.stringify({
-                folderId: String(folderId || ""),
-                target: normalizedTarget
-            })
-        })
-        if (!response.ok) {
-            const errorCode = await resolveNoteActionErrorCode(response)
-            throw new Error(errorCode || `FOLDER_REVOKE_HTTP_${response.status}`)
-        }
-        const payload = await response.json()
-        return payload?.permission || null
+        throw new Error("SHARING_DISABLED")
     },
 
     async listPendingInvites() {
-        const user = StateStore.read().user
-        if (!user) throw new Error("UNAUTHORIZED")
-        const response = await fetch(getInvitesEndpoint(), {
-            method: "GET",
-            headers: buildAuthorizedHeaders(user)
-        })
-        if (!response.ok) {
-            const errorCode = await resolveNoteActionErrorCode(response)
-            throw new Error(errorCode || `INVITES_LIST_HTTP_${response.status}`)
-        }
-        const payload = await response.json()
-        return Array.isArray(payload?.invites) ? payload.invites.map(normalizeInviteRecord).filter(invite => invite.itemId && invite.status === "pending") : []
+        return []
     },
 
     async respondToInvite(itemType, itemId, accept) {
-        const user = StateStore.read().user
-        if (!user) throw new Error("UNAUTHORIZED")
-        const normalizedItemType = normalizeInviteItemType(itemType)
-        const normalizedItemId = String(itemId || "")
-        const response = await fetch(getInvitesEndpoint(), {
-            method: "POST",
-            headers: buildAuthorizedHeaders(user),
-            body: JSON.stringify({
-                itemType: normalizedItemType,
-                itemId: normalizedItemId,
-                accept: accept !== false
-            })
-        })
-        if (!response.ok) {
-            const errorCode = await resolveNoteActionErrorCode(response)
-            throw new Error(errorCode || `INVITE_RESPOND_HTTP_${response.status}`)
-        }
-        const payload = await response.json()
-        return payload?.invite ? normalizeInviteRecord(payload.invite) : null
+        throw new Error("INVITES_DISABLED")
     },
 
     async consumeInviteLink({ itemType, itemId, targetUserId = "" } = {}) {
-        const normalizedItemId = String(itemId || "").trim()
-        if (!normalizedItemId) throw new Error("BAD_REQUEST")
-        const normalizedItemType = normalizeInviteItemType(itemType)
-        const currentUserId = String(StateStore.read().user?.uid || "")
-        const hintedUserId = String(targetUserId || "").trim()
-        if (hintedUserId && currentUserId && hintedUserId !== currentUserId) {
-            throw new Error("INVITE_USER_MISMATCH")
-        }
-
-        try {
-            return await this.respondToInvite(normalizedItemType, normalizedItemId, true)
-        } catch (error) {
-            const message = String(error?.message || error || "")
-            if (message !== "INVITE_NOT_FOUND") throw error
-            const listMethod = normalizedItemType === "folder" ? this.listFolderAccess : this.listAccess
-            const permissions = await listMethod.call(this, normalizedItemId)
-            const currentPermission = (Array.isArray(permissions) ? permissions : []).find(permission => {
-                const permissionUserId = String(permission?.userId || "").trim()
-                return permissionUserId && permissionUserId === currentUserId
-            }) || null
-            if (!currentPermission) throw error
-            return normalizeInviteRecord({
-                itemType: normalizedItemType,
-                itemId: normalizedItemId,
-                role: currentPermission.role,
-                status: currentPermission.status,
-                invitedByUserId: currentPermission.invitedByUserId,
-                invitedByDisplayName: currentPermission.invitedByDisplayName
-            })
-        }
+        throw new Error("INVITES_DISABLED")
     }
 }
 
 window.NoteActionService = NoteActionService
-window.buildShareInviteLink = buildShareInviteLink
 
 window.NoteAnalysisService = {
     schedule(noteId) {
