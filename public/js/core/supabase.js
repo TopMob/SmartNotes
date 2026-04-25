@@ -141,7 +141,12 @@ async function verifyStoredSession() {
         return refreshStoredSession()
     }
 
-    const verifyResult = await officialClient.auth.getUser(session.access_token)
+    let verifyResult = null
+    try {
+        verifyResult = await officialClient.auth.getUser(session.access_token)
+    } catch {
+        return session
+    }
 
     if (!verifyResult.error && verifyResult.data?.user) {
         const nextSession = setCurrentSession({

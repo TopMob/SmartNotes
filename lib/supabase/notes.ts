@@ -196,19 +196,26 @@ async function getAuthUserByEmail(email: string) {
   if (!normalizedEmail) return null
 
   const supabase = getSupabaseAdminClient()
-  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 })
-  if (error) throw new Error("COLLABORATOR_NOT_FOUND")
-  const users = Array.isArray(data?.users) ? data.users : []
-  const matchedUser = users.find(user => normalizeEmail(user?.email || "") === normalizedEmail) || null
-  if (!matchedUser?.id) return null
-
-  return {
-    id: String(matchedUser.id || ""),
-    email: normalizeEmail(matchedUser.email || ""),
-    displayName: String(matchedUser.user_metadata?.display_name || matchedUser.user_metadata?.full_name || "").trim(),
-    photoURL: String(matchedUser.user_metadata?.avatar_url || "").trim(),
-    uid: String(matchedUser.id || "")
+  let page = 1
+  while (page <= 10) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 })
+    if (error) throw new Error("COLLABORATOR_NOT_FOUND")
+    const users = Array.isArray(data?.users) ? data.users : []
+    const matchedUser = users.find(user => normalizeEmail(user?.email || "") === normalizedEmail) || null
+    if (matchedUser?.id) {
+      return {
+        id: String(matchedUser.id || ""),
+        email: normalizeEmail(matchedUser.email || ""),
+        displayName: String(matchedUser.user_metadata?.display_name || matchedUser.user_metadata?.full_name || "").trim(),
+        photoURL: String(matchedUser.user_metadata?.avatar_url || "").trim(),
+        uid: String(matchedUser.id || "")
+      }
+    }
+    if (users.length < 200) break
+    page += 1
   }
+
+  return null
 }
 
 async function resolveProfileByEmail(email: string) {
@@ -220,13 +227,7 @@ async function resolveProfileByEmail(email: string) {
 
   const authUser = await getAuthUserByEmail(normalizedEmail)
   if (!authUser?.id) return null
-
-  return ensureSupabaseProfile({
-    userId: authUser.id,
-    email: authUser.email,
-    displayName: authUser.displayName,
-    avatarUrl: authUser.photoURL
-  })
+  return authUser
 }
 
 async function listProfilesByIds(userIds: string[]) {
