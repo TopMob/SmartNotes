@@ -42,13 +42,6 @@ const UI = {
             activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
             activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
             activeFolderHideButton: document.getElementById("active-folder-hide-button"),
-            activeWorkspaceMenu: document.getElementById("active-workspace-menu"),
-            activeWorkspaceMenuToggle: document.getElementById("active-workspace-menu-toggle"),
-            activeWorkspaceMenuWrapper: document.getElementById("active-workspace-menu-wrapper"),
-            workspaceCopyLinkButton: document.getElementById("workspace-copy-link-button"),
-            workspaceAddUserButton: document.getElementById("workspace-add-user-button"),
-            workspaceRenameButton: document.getElementById("workspace-rename-button"),
-            workspaceEditDescriptionButton: document.getElementById("workspace-edit-description-button"),
             adminToolsNavButton: document.getElementById("admin-tools-nav-button")
         }
         this.bindEvents()
@@ -81,7 +74,6 @@ const UI = {
         const normalizedFeatureKey = String(featureKey || "").trim()
         const fallbackByFeature = {
             about: "Раздел о приложении временно отключён",
-            workspaces: "Совместные папки временно отключены",
             googleDrive: "Google Drive временно отключён",
             feedback: "Обратная связь временно отключена"
         }
@@ -213,9 +205,6 @@ Object.assign(UI, {
             }
             if (this.els.activeFolderMenu?.classList.contains("active") && !targetElement.closest("#active-folder-menu-wrapper")) {
                 this.toggleActiveFolderMenu(false)
-            }
-            if (this.els.activeWorkspaceMenu?.classList.contains("active") && !targetElement.closest("#active-workspace-menu-wrapper")) {
-                this.toggleActiveWorkspaceMenu(false)
             }
 
             const overlayElement = targetElement.closest(".modal-overlay")
@@ -1424,9 +1413,7 @@ Object.assign(UI, {
             access: {
                 ownerUid: String(ownerUid || ""),
                 roles: String(ownerUid || "") ? { [String(ownerUid || "")]: "owner" } : {},
-                noteId: "",
-                shareId: "",
-                ownerCollection: ""
+                noteId: ""
             },
             analyzed: false,
             aiProcessed: false,
@@ -2028,25 +2015,6 @@ Object.assign(UI, {
         const nextOrderMap = new Map(reordered.map((folder, index) => [folder.id, index + 1]))
         StateStore.update("folders", StateStore.read().folders.map(folder => nextOrderMap.has(folder.id) ? { ...folder, folderOrder: nextOrderMap.get(folder.id) } : folder))
         this.renderFolders()
-    },
-
-    toggleActiveWorkspaceMenu(force) {
-        const menu = this.els.activeWorkspaceMenu
-        if (!menu) return
-        menu.classList.toggle("active", typeof force === "boolean" ? force : !menu.classList.contains("active"))
-    },
-
-
-    async openWorkspaceMembersModal() {
-        this.showFeatureDisabledToast("workspaces")
-    },
-
-        renameActiveWorkspace() {
-        this.showFeatureDisabledToast("workspaces")
-    },
-
-    editActiveWorkspaceDescription() {
-        this.showFeatureDisabledToast("workspaces")
     },
 
     toggleActiveFolderMenu(force) {

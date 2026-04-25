@@ -39,7 +39,7 @@ function createEnvironment() {
   globalThis.StateStore = {
     resetSession() {},
     read() {
-      return { activeSharedWorkspaceId: null }
+      return {}
     }
   }
   globalThis.SessionService = {

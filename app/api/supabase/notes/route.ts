@@ -49,7 +49,7 @@ export async function PUT(request: Request) {
       throw new ApiRouteError(400, "NOTE_ID_REQUIRED")
     }
 
-    const shouldPatch = payload?.partial === true || !Object.keys(bodyNote || {}).some(key => ["content", "title", "tags", "hiddenTags", "pageTitles", "pageDrawings", "pageDrawingsRevision", "workspaceId"].includes(key))
+    const shouldPatch = payload?.partial === true || !Object.keys(bodyNote || {}).some(key => ["content", "title", "tags", "hiddenTags", "pageTitles", "pageDrawings", "pageDrawingsRevision"].includes(key))
     const note = shouldPatch
       ? await patchSupabaseNote({
         userId: user.id,

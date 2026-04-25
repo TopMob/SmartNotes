@@ -44,7 +44,6 @@ type NoteInput = {
   pageDrawings?: unknown[] | null
   pageDrawingsRevision?: string | null
   lock?: JsonObject | null
-  workspaceId?: string | null
   lockHidden?: boolean | null
   aiStatus?: string | null
   analyzed?: boolean | null
@@ -229,10 +228,6 @@ function buildNotePatchPayload(existingRow: NoteRow, updates: Record<string, unk
     metadata.pageDrawingsRevision = typeof updates.pageDrawingsRevision === "string" ? updates.pageDrawingsRevision : ""
   }
 
-  if (hasOwn(updates, "workspaceId")) {
-    metadata.workspaceId = normalizeOptionalString(updates.workspaceId)
-  }
-
   if (hasOwn(updates, "lock")) {
     const currentLock = normalizeOptionalObject(metadata.lock)
     const nextLock = sanitizeLockValue(updates.lock, currentLock)
@@ -302,7 +297,6 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
       lockHidden: note?.lock && typeof note.lock === "object"
         ? Boolean((note.lock as JsonObject).hidden)
         : Boolean(metadata.lockHidden),
-      workspaceId: note?.workspaceId || null,
       trashedAt: note?.trashedAt || null,
       analyzed: note?.analyzed === true,
       aiStatus: normalizeOptionalString(note?.aiStatus) || (note?.aiProcessed === true ? "done" : "pending"),
@@ -386,7 +380,6 @@ function mapNoteRow(note: NoteRow) {
     pageDrawingsRevision: typeof metadata.pageDrawingsRevision === "string" ? metadata.pageDrawingsRevision : "",
     lock: normalizeOptionalObject(metadata.lock),
     lockHidden: Boolean(metadata.lockHidden),
-    workspaceId: normalizeOptionalString(metadata.workspaceId),
     createdAt: note.created_at || null,
     updatedAt: note.updated_at || null,
     ownerUid: note.user_id,

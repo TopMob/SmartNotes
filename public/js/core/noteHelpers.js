@@ -13,16 +13,14 @@ export const buildNotePayload = ({ note, user, access } = {}) => {
     const ownerUid = access?.ownerUid || user?.uid || note?.ownerUid || ""
     const roleMap = access?.roles && typeof access.roles === "object" ? access.roles : {}
     const targetIdentifier = access?.noteId || note?.id || Utils.generateId()
-    const workspaceId = access?.workspaceId || note?.workspaceId || null
     const normalizedNote = NoteIO.normalizeNote({ ...note, id: targetIdentifier, ownerUid })
     return {
         ...normalizedNote,
         ownerUid,
         access: {
             ownerUid,
-            workspaceId,
             noteId: targetIdentifier,
-            roles: workspaceId ? roleMap : {
+            roles: {
                 ...roleMap,
                 [ownerUid]: "owner"
             }
