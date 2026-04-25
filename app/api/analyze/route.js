@@ -71,6 +71,28 @@ export async function POST(request) {
       }
     }
 
+    if (processedCount <= 0) {
+      return new Response(
+        JSON.stringify({
+          error: "Analyze produced no updates",
+          details: "Provider returned no writable note updates",
+          processed: processedCount,
+          processedUsers,
+          provider: ANALYZE_PROVIDER,
+          uid: targetUid || null,
+          reindexAll,
+          promptVersion: PROMPT_VERSION
+        }),
+        {
+          status: 422,
+          headers: {
+            "Content-Type": "application/json",
+            ...CORS_HEADERS
+          }
+        }
+      )
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

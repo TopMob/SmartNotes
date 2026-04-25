@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { buildNoteInput, isNoteReadyForAnalysis, buildAnalysisUserContext, selectFolderCandidatesForNote } from '../app/api/analyze/core/contract.js'
 import { buildAnalysisPrompt } from '../app/api/analyze/providers/prompt.js'
 import { createAnalysisTaskInput } from '../app/api/analyze/providers/schema.js'
+import { normalizeAnalyzedItem, safeParseJsonArray } from '../app/api/analyze/providers/utils.js'
 
 test('buildNoteInput creates normalized AI contract note payload', () => {
     const document = {
@@ -92,6 +93,31 @@ test('selectFolderCandidatesForNote prioritizes matching folders over generic on
         analyzed: false
     }, 2)
 
-    assert.equal(candidates.length, 2)
-    assert.equal(candidates[0].id, 'work')
+  assert.equal(candidates.length, 2)
+  assert.equal(candidates[0].id, 'work')
+})
+
+test('safeParseJsonArray accepts wrapped provider arrays', () => {
+  const parsed = safeParseJsonArray('{"items":[{"id":"note-1"}]}')
+  assert.deepEqual(parsed, [{ id: 'note-1' }])
+})
+
+test('normalizeAnalyzedItem accepts snake_case provider fields', () => {
+  const item = normalizeAnalyzedItem({
+    note_id: 'note-1',
+    folder_id: 'folder-1',
+    user_tags: ['проект'],
+    hidden_tags: ['релиз'],
+    resurfacing_class: 'idea',
+    relevance: 72
+  })
+
+  assert.deepEqual(item, {
+    id: 'note-1',
+    folderId: 'folder-1',
+    userTags: ['проект'],
+    hiddenTags: ['релиз'],
+    relevance: 72,
+    resurfacingClass: 'idea'
+  })
 })

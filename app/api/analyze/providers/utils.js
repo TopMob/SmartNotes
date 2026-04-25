@@ -42,9 +42,22 @@ export function cleanModelText(value) {
 export function safeParseJsonArray(rawText) {
   const cleaned = cleanModelText(rawText)
 
+  const normalizeParsedArray = (parsed) => {
+    if (Array.isArray(parsed)) return parsed
+    if (!parsed || typeof parsed !== "object") return null
+
+    const candidates = [parsed.items, parsed.results, parsed.notes, parsed.data, parsed.output]
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate
+    }
+
+    return null
+  }
+
   try {
     const parsed = JSON.parse(cleaned)
-    if (Array.isArray(parsed)) return parsed
+    const normalizedArray = normalizeParsedArray(parsed)
+    if (Array.isArray(normalizedArray)) return normalizedArray
   } catch {}
 
   const arrayMatch = cleaned.match(/\[[\s\S]*\]/)
@@ -64,24 +77,35 @@ export function normalizeAnalyzedItem(value) {
   }
 
   const item = value
-  const userTags = Array.isArray(item.userTags)
-    ? item.userTags
-    : Array.isArray(item.tags)
-      ? item.tags
-      : []
-  const hiddenTags = Array.isArray(item.hiddenTags)
-    ? item.hiddenTags
-    : Array.isArray(item.keywords)
-      ? item.keywords
-      : []
+  const toArray = (...values) => {
+    for (const candidate of values) {
+      if (Array.isArray(candidate)) return candidate
+      if (typeof candidate === "string" && candidate.trim()) return [candidate.trim()]
+    }
+    return []
+  }
 
   return {
-    id: typeof item.id === "string" ? item.id : "",
-    folderId: typeof item.folderId === "string" ? item.folderId : null,
-    userTags,
-    hiddenTags,
+    id: typeof item.id === "string"
+      ? item.id
+      : typeof item.noteId === "string"
+        ? item.noteId
+        : typeof item.note_id === "string"
+          ? item.note_id
+          : "",
+    folderId: typeof item.folderId === "string"
+      ? item.folderId
+      : typeof item.folder_id === "string"
+        ? item.folder_id
+        : null,
+    userTags: toArray(item.userTags, item.user_tags, item.tags),
+    hiddenTags: toArray(item.hiddenTags, item.hidden_tags, item.keywords, item.semanticTags, item.semantic_tags),
     relevance: item.relevance,
-    resurfacingClass: typeof item.resurfacingClass === "string" ? item.resurfacingClass : ""
+    resurfacingClass: typeof item.resurfacingClass === "string"
+      ? item.resurfacingClass
+      : typeof item.resurfacing_class === "string"
+        ? item.resurfacing_class
+        : "reference"
   }
 }
 
