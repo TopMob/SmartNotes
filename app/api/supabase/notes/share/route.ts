@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
 function mapShareError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "NOTE_ID_REQUIRED" || message === "NOTE_NOT_FOUND" || message === "BAD_REQUEST") {
+  if (message === "NOTE_ID_REQUIRED" || message === "NOTE_NOT_FOUND" || message === "BAD_REQUEST" || message === "COLLABORATOR_NOT_FOUND") {
     return new ApiRouteError(message === "NOTE_NOT_FOUND" ? 404 : 400, message)
   }
 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       noteId: String(payload?.noteId || payload?.note_id || ""),
       userId: user.id,
       userEmail: user.email,
-      collaboratorEmail: String(payload?.email || payload?.user_email || ""),
+      collaboratorTarget: String(payload?.target || payload?.email || payload?.user_email || payload?.userId || payload?.user_id || ""),
       role: payload?.role === "editor" ? "editor" : "viewer"
     })
 
@@ -53,7 +53,7 @@ export async function DELETE(request: Request) {
     const permission = await deleteSupabaseNotePermission({
       noteId: String(payload?.noteId || payload?.note_id || ""),
       userId: user.id,
-      collaboratorEmail: String(payload?.email || payload?.user_email || "")
+      collaboratorTarget: String(payload?.target || payload?.email || payload?.user_email || payload?.userId || payload?.user_id || "")
     })
 
     return ok({ permission })

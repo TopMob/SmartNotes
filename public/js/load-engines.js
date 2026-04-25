@@ -166,7 +166,7 @@ const NoteActionService = {
         return payload?.note || null
     },
 
-    async shareNote(noteId, email, role) {
+    async shareNote(noteId, target, role) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
         const response = await fetch(getNoteShareEndpoint(), {
@@ -174,7 +174,7 @@ const NoteActionService = {
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 noteId: String(noteId || ""),
-                email: String(email || "").trim(),
+                target: String(target || "").trim(),
                 role: role === "editor" ? "editor" : "viewer"
             })
         })
@@ -186,7 +186,7 @@ const NoteActionService = {
         return payload?.permission || null
     },
 
-    async revokeAccess(noteId, email) {
+    async revokeAccess(noteId, target) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
         const response = await fetch(getNoteShareEndpoint(), {
@@ -194,7 +194,7 @@ const NoteActionService = {
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 noteId: String(noteId || ""),
-                email: String(email || "").trim()
+                target: String(target || "").trim()
             })
         })
         if (!response.ok) {
@@ -205,7 +205,7 @@ const NoteActionService = {
         return payload?.permission || null
     },
 
-    async shareFolder(folderId, email, role) {
+    async shareFolder(folderId, target, role) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
         const response = await fetch(getFolderShareEndpoint(), {
@@ -213,7 +213,7 @@ const NoteActionService = {
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 folderId: String(folderId || ""),
-                email: String(email || "").trim(),
+                target: String(target || "").trim(),
                 role: role === "editor" ? "editor" : "viewer"
             })
         })
@@ -225,7 +225,7 @@ const NoteActionService = {
         return payload?.permission || null
     },
 
-    async revokeFolderAccess(folderId, email) {
+    async revokeFolderAccess(folderId, target) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
         const response = await fetch(getFolderShareEndpoint(), {
@@ -233,7 +233,7 @@ const NoteActionService = {
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 folderId: String(folderId || ""),
-                email: String(email || "").trim()
+                target: String(target || "").trim()
             })
         })
         if (!response.ok) {

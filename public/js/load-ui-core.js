@@ -1791,20 +1791,20 @@ Object.assign(UI, {
         const currentUserUid = String(StateStore.read().user?.uid || "")
         if (!folder || !currentUserUid || String(folder.ownerUid || "") !== currentUserUid) return
 
-        this.showPrompt(this.getText("share_folder_title", "Поделиться папкой"), this.getText("share_folder_email_placeholder", "email@example.com"), async (email, roleValue) => {
-            const normalizedEmail = String(email || "").trim().toLowerCase()
+        this.showPrompt(this.getText("share_folder_title", "Поделиться папкой"), this.getText("share_target_placeholder", "Email, user id или ссылка"), async (target, roleValue) => {
+            const normalizedTarget = String(target || "").trim()
             const normalizedRole = String(roleValue || "").trim().toLowerCase()
-            if (!normalizedEmail) return
+            if (!normalizedTarget) return
 
             try {
                 if (normalizedRole === "remove") {
-                    await window.NoteActionService.revokeFolderAccess(id, normalizedEmail)
+                    await window.NoteActionService.revokeFolderAccess(id, normalizedTarget)
                     this.showToast(this.getText("share_folder_revoked", "Доступ к папке отозван"))
                     return
                 }
 
                 const role = normalizedRole === "editor" ? "editor" : "viewer"
-                await window.NoteActionService.shareFolder(id, normalizedEmail, role)
+                await window.NoteActionService.shareFolder(id, normalizedTarget, role)
                 this.showToast(this.getText("share_folder_saved", "Доступ к папке обновлен"))
             } catch (error) {
                 this.showToast(`${this.getText("share_folder_failed", "Не удалось обновить доступ к папке")} (${String(error?.message || error || "unknown")})`)
@@ -1812,7 +1812,12 @@ Object.assign(UI, {
         }, "", {
             secondaryField: {
                 value: "viewer",
-                placeholder: this.getText("share_folder_role_placeholder", "viewer | editor | remove"),
+                type: "select",
+                options: [
+                    { value: "viewer", label: this.getText("share_role_commentator", "Комментатор") },
+                    { value: "editor", label: this.getText("share_role_editor", "Редактор") },
+                    { value: "remove", label: this.getText("share_role_remove", "Убрать доступ") }
+                ],
                 ariaLabel: this.getText("share_folder_role_label", "Роль доступа к папке")
             }
         })

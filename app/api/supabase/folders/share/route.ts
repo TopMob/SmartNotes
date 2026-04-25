@@ -5,7 +5,7 @@ export const runtime = "nodejs"
 
 function mapFolderShareError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "FOLDER_ID_REQUIRED" || message === "FOLDER_NOT_FOUND" || message === "BAD_REQUEST") {
+  if (message === "FOLDER_ID_REQUIRED" || message === "FOLDER_NOT_FOUND" || message === "BAD_REQUEST" || message === "COLLABORATOR_NOT_FOUND") {
     return new ApiRouteError(message === "FOLDER_NOT_FOUND" ? 404 : 400, message)
   }
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       folderId: String(payload?.folderId || payload?.folder_id || ""),
       userId: user.id,
       userEmail: user.email,
-      collaboratorEmail: String(payload?.email || payload?.user_email || ""),
+      collaboratorTarget: String(payload?.target || payload?.email || payload?.user_email || payload?.userId || payload?.user_id || ""),
       role: payload?.role === "editor" ? "editor" : "viewer"
     })
 
@@ -37,7 +37,7 @@ export async function DELETE(request: Request) {
     const permission = await deleteSupabaseFolderPermission({
       folderId: String(payload?.folderId || payload?.folder_id || ""),
       userId: user.id,
-      collaboratorEmail: String(payload?.email || payload?.user_email || "")
+      collaboratorTarget: String(payload?.target || payload?.email || payload?.user_email || payload?.userId || payload?.user_id || "")
     })
 
     return ok({ permission })

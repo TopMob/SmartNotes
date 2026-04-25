@@ -86,8 +86,64 @@ type SharePermissionInput = {
   noteId: string
   userId: string
   userEmail: string
-  collaboratorEmail: string
+  collaboratorTarget: string
   role: "viewer" | "editor"
+}
+
+function extractCollaboratorTargetValue(value: unknown) {
+  const normalizedValue = String(value || "").trim()
+  if (!normalizedValue) return ""
+  const normalizedEmail = normalizeEmail(normalizedValue)
+  if (normalizedEmail.includes("@")) return normalizedEmail
+
+  try {
+    const url = new URL(normalizedValue)
+    const emailTarget = normalizeEmail(
+      url.searchParams.get("email")
+      || url.searchParams.get("user_email")
+      || ""
+    )
+    if (emailTarget) return emailTarget
+
+    const idTarget = String(
+      url.searchParams.get("userId")
+      || url.searchParams.get("user_id")
+      || url.searchParams.get("uid")
+      || url.searchParams.get("id")
+      || ""
+    ).trim()
+    if (idTarget) return idTarget
+
+    const pathSegments = url.pathname.split("/").map(segment => segment.trim()).filter(Boolean)
+    return String(pathSegments[pathSegments.length - 1] || "").trim()
+  } catch {
+    return normalizedValue
+  }
+}
+
+async function resolveCollaboratorEmail(collaboratorTarget: unknown) {
+  const normalizedTarget = extractCollaboratorTargetValue(collaboratorTarget)
+  if (!normalizedTarget) {
+    throw new Error("BAD_REQUEST")
+  }
+  if (normalizedTarget.includes("@")) {
+    return normalizeEmail(normalizedTarget)
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", normalizedTarget)
+    .maybeSingle()
+
+  if (error) throw error
+  const normalizedEmail = normalizeEmail(data?.email)
+  if (!normalizedEmail) {
+    throw new Error("COLLABORATOR_NOT_FOUND")
+  }
+
+  return normalizedEmail
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -954,9 +1010,9 @@ export async function deleteSupabaseNote(userId: string, userEmail: string, note
   return { id: normalizedNoteId }
 }
 
-export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, collaboratorEmail, role }: SharePermissionInput) {
+export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, collaboratorTarget, role }: SharePermissionInput) {
   const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
-  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
   const normalizedUserEmail = normalizeEmail(userEmail)
 
   if (!normalizedRole || !normalizedCollaboratorEmail) {
@@ -986,8 +1042,8 @@ export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, 
   return data as NotePermissionRow
 }
 
-export async function deleteSupabaseNotePermission({ noteId, userId, collaboratorEmail }: { noteId: string, userId: string, collaboratorEmail: string }) {
-  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+export async function deleteSupabaseNotePermission({ noteId, userId, collaboratorTarget }: { noteId: string, userId: string, collaboratorTarget: string }) {
+  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
   if (!normalizedCollaboratorEmail) {
     throw new Error("BAD_REQUEST")
   }
@@ -1043,9 +1099,9 @@ async function requireOwnedFolder(folderId: string, userId: string) {
   return data
 }
 
-export async function upsertSupabaseFolderPermission({ folderId, userId, userEmail, collaboratorEmail, role }: { folderId: string, userId: string, userEmail: string, collaboratorEmail: string, role: "viewer" | "editor" }) {
+export async function upsertSupabaseFolderPermission({ folderId, userId, userEmail, collaboratorTarget, role }: { folderId: string, userId: string, userEmail: string, collaboratorTarget: string, role: "viewer" | "editor" }) {
   const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
-  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
   const normalizedUserEmail = normalizeEmail(userEmail)
 
   if (!normalizedRole || !normalizedCollaboratorEmail) {
@@ -1073,8 +1129,8 @@ export async function upsertSupabaseFolderPermission({ folderId, userId, userEma
   return data as FolderPermissionRow
 }
 
-export async function deleteSupabaseFolderPermission({ folderId, userId, collaboratorEmail }: { folderId: string, userId: string, collaboratorEmail: string }) {
-  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+export async function deleteSupabaseFolderPermission({ folderId, userId, collaboratorTarget }: { folderId: string, userId: string, collaboratorTarget: string }) {
+  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
   if (!normalizedCollaboratorEmail) {
     throw new Error("BAD_REQUEST")
   }

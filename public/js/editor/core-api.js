@@ -119,17 +119,17 @@ export const EditorAPI = (() => {
 
         UI.showPrompt(
             UI.getText("share_note_manage_title", "Управление доступом"),
-            UI.getText("share_note_email_placeholder", "email@example.com"),
-            async (promptEmail, roleValue) => {
-                const normalizedEmail = String(promptEmail || email || "").trim().toLowerCase()
+            UI.getText("share_target_placeholder", "Email, user id или ссылка"),
+            async (promptTarget, roleValue) => {
+                const normalizedTarget = String(promptTarget || email || "").trim()
                 const normalizedRole = String(roleValue || "").trim().toLowerCase()
-                if (!normalizedEmail) return
+                if (!normalizedTarget) return
 
                 try {
                     if (normalizedRole === "remove") {
                         UI.confirm("confirm_default", async () => {
                             try {
-                                await window.NoteActionService.revokeAccess(note.id, normalizedEmail)
+                                await window.NoteActionService.revokeAccess(note.id, normalizedTarget)
                                 UI.showToast(UI.getText("share_note_revoked", "Доступ отозван"))
                                 await loadCollaborators()
                             } catch (error) {
@@ -140,7 +140,7 @@ export const EditorAPI = (() => {
                     }
 
                     const role = normalizedRole === "editor" ? "editor" : "viewer"
-                    await window.NoteActionService.shareNote(note.id, normalizedEmail, role)
+                    await window.NoteActionService.shareNote(note.id, normalizedTarget, role)
                     UI.showToast(UI.getText("share_note_saved", "Доступ обновлен"))
                     await loadCollaborators()
                 } catch (error) {
@@ -151,7 +151,12 @@ export const EditorAPI = (() => {
             {
                 secondaryField: {
                     value: currentRole || "viewer",
-                    placeholder: UI.getText("share_note_role_placeholder", "viewer | editor | remove"),
+                    type: "select",
+                    options: [
+                        { value: "viewer", label: UI.getText("share_role_commentator", "Комментатор") },
+                        { value: "editor", label: UI.getText("share_role_editor", "Редактор") },
+                        { value: "remove", label: UI.getText("share_role_remove", "Убрать доступ") }
+                    ],
                     ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
                 }
             }
@@ -171,22 +176,22 @@ export const EditorAPI = (() => {
 
         UI.showPrompt(
             UI.getText("share_note_title", "Поделиться заметкой"),
-            UI.getText("share_note_email_placeholder", "email@example.com"),
-            async (email, roleValue) => {
-                const normalizedEmail = String(email || "").trim().toLowerCase()
+            UI.getText("share_target_placeholder", "Email, user id или ссылка"),
+            async (target, roleValue) => {
+                const normalizedTarget = String(target || "").trim()
                 const normalizedRole = String(roleValue || "").trim().toLowerCase()
-                if (!normalizedEmail) return
+                if (!normalizedTarget) return
 
                 try {
                     if (normalizedRole === "remove") {
-                        await window.NoteActionService.revokeAccess(note.id, normalizedEmail)
+                        await window.NoteActionService.revokeAccess(note.id, normalizedTarget)
                         UI.showToast(UI.getText("share_note_revoked", "Доступ отозван"))
                         await loadCollaborators()
                         return
                     }
 
                     const role = normalizedRole === "editor" ? "editor" : "viewer"
-                    await window.NoteActionService.shareNote(note.id, normalizedEmail, role)
+                    await window.NoteActionService.shareNote(note.id, normalizedTarget, role)
                     UI.showToast(UI.getText("share_note_saved", "Доступ обновлен"))
                     await loadCollaborators()
                 } catch (error) {
@@ -197,7 +202,11 @@ export const EditorAPI = (() => {
             {
                 secondaryField: {
                     value: "viewer",
-                    placeholder: UI.getText("share_note_role_placeholder", "viewer | editor | remove"),
+                    type: "select",
+                    options: [
+                        { value: "viewer", label: UI.getText("share_role_commentator", "Комментатор") },
+                        { value: "editor", label: UI.getText("share_role_editor", "Редактор") }
+                    ],
                     ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
                 }
             }
