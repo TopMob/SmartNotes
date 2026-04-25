@@ -46,6 +46,23 @@ export function safeParseJsonArray(rawText) {
     if (Array.isArray(parsed)) return parsed
     if (!parsed || typeof parsed !== "object") return null
 
+    const looksLikeAnalyzedItem = (
+      typeof parsed.id === "string"
+      || typeof parsed.noteId === "string"
+      || typeof parsed.note_id === "string"
+    ) && (
+      Array.isArray(parsed.userTags)
+      || Array.isArray(parsed.user_tags)
+      || Array.isArray(parsed.tags)
+      || Array.isArray(parsed.hiddenTags)
+      || Array.isArray(parsed.hidden_tags)
+      || Array.isArray(parsed.keywords)
+    )
+
+    if (looksLikeAnalyzedItem) {
+      return [parsed]
+    }
+
     const candidates = [parsed.items, parsed.results, parsed.notes, parsed.data, parsed.output]
     for (const candidate of candidates) {
       if (Array.isArray(candidate)) return candidate
@@ -59,6 +76,15 @@ export function safeParseJsonArray(rawText) {
     const normalizedArray = normalizeParsedArray(parsed)
     if (Array.isArray(normalizedArray)) return normalizedArray
   } catch {}
+
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (objectMatch) {
+    try {
+      const parsed = JSON.parse(objectMatch[0])
+      const normalizedArray = normalizeParsedArray(parsed)
+      if (Array.isArray(normalizedArray)) return normalizedArray
+    } catch {}
+  }
 
   const arrayMatch = cleaned.match(/\[[\s\S]*\]/)
   if (!arrayMatch) return null

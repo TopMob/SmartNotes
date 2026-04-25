@@ -70,11 +70,12 @@ test('buildAnalysisPrompt uses structured English prompt contract', () => {
         }]
     })
 
-    assert.match(prompt, /You are a strict note analysis engine for SmartNotes\./)
-    assert.match(prompt, /## Output Schema/)
-    assert.match(prompt, /resurfacingClass/)
-    assert.match(prompt, /Folder candidates:/)
-    assert.match(prompt, /Notes:/)
+  assert.match(prompt, /You are a strict note analysis engine for SmartNotes\./)
+  assert.match(prompt, /Return a JSON array even when there is only one note\./)
+  assert.match(prompt, /## Output Schema/)
+  assert.match(prompt, /resurfacingClass/)
+  assert.match(prompt, /Folder candidates:/)
+  assert.match(prompt, /Notes:/)
 })
 
 test('selectFolderCandidatesForNote prioritizes matching folders over generic ones', () => {
@@ -100,6 +101,17 @@ test('selectFolderCandidatesForNote prioritizes matching folders over generic on
 test('safeParseJsonArray accepts wrapped provider arrays', () => {
   const parsed = safeParseJsonArray('{"items":[{"id":"note-1"}]}')
   assert.deepEqual(parsed, [{ id: 'note-1' }])
+})
+
+test('safeParseJsonArray accepts a single analyzed object', () => {
+  const parsed = safeParseJsonArray('{"id":"note-1","userTags":["project"],"hiddenTags":["release"],"relevance":50,"resurfacingClass":"reference"}')
+  assert.deepEqual(parsed, [{
+    id: 'note-1',
+    userTags: ['project'],
+    hiddenTags: ['release'],
+    relevance: 50,
+    resurfacingClass: 'reference'
+  }])
 })
 
 test('normalizeAnalyzedItem accepts snake_case provider fields', () => {
