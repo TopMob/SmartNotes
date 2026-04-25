@@ -1287,56 +1287,94 @@ export async function deleteSupabaseNote(userId: string, userEmail: string, note
 }
 
 export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, collaboratorTarget, role }: SharePermissionInput) {
+  const normalizedNoteId = normalizeUuid(noteId)
+  const normalizedOwnerId = String(userId || "").trim()
+  const normalizedOwnerEmail = normalizeEmail(userEmail)
   const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
+
+  if (!normalizedNoteId || !normalizedOwnerId || !normalizedRole) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  await requireOwnedNote(normalizedNoteId, normalizedOwnerId)
+
   const collaborator = await resolveCollaborator(collaboratorTarget)
+  const normalizedCollaboratorId = String(collaborator.id || "").trim()
+  if (!normalizedCollaboratorId) {
+    throw new Error("COLLABORATOR_NOT_FOUND")
+  }
 
-  if (!normalizedRole || !collaborator.id) {
+  if (normalizedCollaboratorId === normalizedOwnerId) {
     throw new Error("BAD_REQUEST")
   }
 
-  if (String(collaborator.id || "") === String(userId || "")) {
-    throw new Error("BAD_REQUEST")
-  }
-
-  await requireOwnedNote(noteId, userId)
   await Promise.all([
-    ensureSupabaseProfile({ userId, email: userEmail }),
+    ensureSupabaseProfile({ userId: normalizedOwnerId, email: normalizedOwnerEmail }),
     ensureCollaboratorProfileRecord(collaborator)
   ])
 
   const supabase = getSupabaseAdminClient()
-  const payload = {
-    note_id: String(noteId || "").trim(),
-    user_id: String(collaborator.id || "").trim(),
+  const payload: NotePermissionRow & { updated_at?: string } = {
+    note_id: normalizedNoteId,
+    user_id: normalizedCollaboratorId,
     role: normalizedRole,
     status: "pending",
-    invited_by_user_id: String(userId || "").trim()
+    invited_by_user_id: normalizedOwnerId
   }
 
-  const existingPermission = await supabase
+  const existingPermissionResult = await supabase
     .from("note_permissions")
-    .select("note_id")
-    .eq("note_id", payload.note_id)
-    .eq("user_id", payload.user_id)
+    .select("note_id, user_id, role, status, invited_by_user_id")
+    .eq("note_id", normalizedNoteId)
+    .eq("user_id", normalizedCollaboratorId)
     .maybeSingle()
 
-  if (existingPermission.error) throw existingPermission.error
+  if (existingPermissionResult.error) throw existingPermissionResult.error
 
-  const permissionWrite = existingPermission.data
-    ? await supabase
+  if (existingPermissionResult.data) {
+    const { data, error } = await supabase
       .from("note_permissions")
-      .update({ ...payload, updated_at: new Date().toISOString() })
-      .eq("note_id", payload.note_id)
-      .eq("user_id", payload.user_id)
+      .update({
+        role: normalizedRole,
+        status: "pending",
+        invited_by_user_id: normalizedOwnerId,
+        updated_at: new Date().toISOString()
+      })
+      .eq("note_id", normalizedNoteId)
+      .eq("user_id", normalizedCollaboratorId)
       .select("note_id, user_id, role, status, invited_by_user_id")
       .single()
-    : await supabase
-      .from("note_permissions")
-      .insert(payload)
-      .select("note_id, user_id, role, status, invited_by_user_id")
-      .single()
 
-  const { data, error } = permissionWrite
+    if (error) throw error
+    return (await presentNotePermissions([data as NotePermissionRow]))[0] || null
+  }
+
+  const insertResult = await supabase
+    .from("note_permissions")
+    .insert(payload)
+    .select("note_id, user_id, role, status, invited_by_user_id")
+    .single()
+
+  if (!insertResult.error) {
+    return (await presentNotePermissions([insertResult.data as NotePermissionRow]))[0] || null
+  }
+
+  if (String(insertResult.error.code || "") !== "23505") {
+    throw insertResult.error
+  }
+
+  const { data, error } = await supabase
+    .from("note_permissions")
+    .update({
+      role: normalizedRole,
+      status: "pending",
+      invited_by_user_id: normalizedOwnerId,
+      updated_at: new Date().toISOString()
+    })
+    .eq("note_id", normalizedNoteId)
+    .eq("user_id", normalizedCollaboratorId)
+    .select("note_id, user_id, role, status, invited_by_user_id")
+    .single()
 
   if (error) throw error
   return (await presentNotePermissions([data as NotePermissionRow]))[0] || null
