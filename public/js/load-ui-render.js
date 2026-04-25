@@ -340,10 +340,17 @@ Object.assign(UI, {
         const nameElement = document.createElement("span")
         window.DomSecurity.setText(nameElement, window.DomSecurity.sanitizeInputValue(folder?.name))
 
+        if (String(folder?.accessRole || "owner") !== "owner") {
+            const roleBadge = document.createElement("span")
+            roleBadge.className = "nav-access-badge"
+            window.DomSecurity.setText(roleBadge, this.getAccessRoleLabel(folder.accessRole || "viewer"))
+            folderButton.append(iconElement, nameElement, roleBadge)
+        } else {
+            folderButton.append(iconElement, nameElement)
+        }
+
         const folderDescription = window.DomSecurity.sanitizeInputValue(folder?.description)
         if (folderDescription) folderButton.title = folderDescription
-
-        folderButton.append(iconElement, nameElement)
 
         return folderButton
     },

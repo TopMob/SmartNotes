@@ -199,6 +199,10 @@
                     <div class="nav-title" data-lang="folders">ПАПКИ</div>
                     <div id="folder-list-root" class="folder-list-root"></div>
                 </div>
+                <div class="nav-group" id="pending-invites-group">
+                    <div class="nav-title" data-lang="pending_invites_title">ПРИГЛАШЕНИЯ</div>
+                    <div id="pending-invites-root" class="pending-invites-root"></div>
+                </div>
                 <div class="nav-group">
                     <div class="nav-title" data-lang="smart_features">УМНЫЕ ФУНКЦИИ</div>
                     <button type="button" class="nav-item" data-action="switch-view" data-view="locked">
@@ -385,8 +389,9 @@
                      <button type="button" class="btn-icon" data-action="editor-redo" aria-label="Повторить" data-lang-aria="redo">
                          <i class="material-icons-round" aria-hidden="true">redo</i>
                      </button>
-                     <button type="button" class="btn-secondary editor-share-button hidden" data-action="share-note">Share</button>
-                     <div class="editor-collaborators hidden" data-role="editor-collaborators" aria-label="Collaborators"></div>
+                      <button type="button" class="btn-secondary editor-share-button hidden" data-action="share-note">Share</button>
+                      <div class="editor-access-badge hidden" data-role="editor-access-badge"></div>
+                      <div class="editor-collaborators hidden" data-role="editor-collaborators" aria-label="Collaborators"></div>
                      <div class="divider-vertical" aria-hidden="true"></div>
                      <button type="button" class="btn-icon" data-action="editor-note-actions" aria-label="Действия с заметкой" data-lang-aria="folder_actions">
                          <i class="material-icons-round" aria-hidden="true">more_vert</i>

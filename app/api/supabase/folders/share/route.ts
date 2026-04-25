@@ -1,5 +1,5 @@
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
-import { deleteSupabaseFolderPermission, upsertSupabaseFolderPermission } from "@/lib/supabase/notes"
+import { deleteSupabaseFolderPermission, listSupabaseFolderPermissions, upsertSupabaseFolderPermission } from "@/lib/supabase/notes"
 
 export const runtime = "nodejs"
 
@@ -10,6 +10,22 @@ function mapFolderShareError(error: unknown) {
   }
 
   return error
+}
+
+export async function GET(request: Request) {
+  try {
+    const user = await requireSupabaseUser(request)
+    const url = new URL(request.url)
+    const folderId = String(url.searchParams.get("folderId") || url.searchParams.get("folder_id") || "")
+    const permissions = await listSupabaseFolderPermissions({
+      folderId,
+      userId: user.id
+    })
+
+    return ok({ permissions })
+  } catch (error) {
+    return handleRouteError(mapFolderShareError(error), "FOLDER_SHARE_LIST_FAILED")
+  }
 }
 
 export async function POST(request: Request) {

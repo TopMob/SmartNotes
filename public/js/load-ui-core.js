@@ -38,6 +38,7 @@ const UI = {
             dateFilterSelect: document.getElementById("notes-date-filter-select"),
             filterFolders: document.getElementById("notes-folder-filters"),
             filterSort: document.getElementById("notes-sort-select"),
+            pendingInvitesRoot: document.getElementById("pending-invites-root"),
             activeFolderMenu: document.getElementById("active-folder-menu"),
             activeFolderMenuToggle: document.getElementById("active-folder-menu-toggle"),
             activeFolderMenuWrapper: document.getElementById("active-folder-menu-wrapper"),
@@ -54,6 +55,7 @@ const UI = {
         window.addEventListener("resize", () => this.updateSidebarLayout(), { signal: this.resizeListenersController.signal })
         this.applyAppearanceSettings()
         this.applyFeatureAvailability()
+        this.renderPendingInvites()
         this.renderFilterMenu()
         this.updatePrimaryActionLabel()
         this.applyInputAutocompletePolicy()
@@ -87,6 +89,57 @@ const UI = {
             if ("disabled" in element) element.disabled = !aboutMenuEnabled
             element.setAttribute("aria-hidden", aboutMenuEnabled ? "false" : "true")
         })
+    },
+
+    getAccessRoleLabel(role = "viewer") {
+        return String(role || "") === "editor"
+            ? this.getText("access_editor", "Редактор")
+            : this.getText("access_viewer", "Комментатор")
+    },
+
+    async renderPendingInvites() {
+        const root = this.els.pendingInvitesRoot
+        if (!root || !StateStore.read().user) return
+        try {
+            const invites = await window.NoteActionService.listPendingInvites()
+            if (!invites.length) {
+                root.innerHTML = `<div class="pending-invite-empty">${this.getText("pending_invites_empty", "Нет новых приглашений")}</div>`
+                return
+            }
+            root.innerHTML = invites.map(invite => `
+                <div class="pending-invite-card">
+                    <div class="pending-invite-title">${Utils.escapeHtml(String(invite.itemTitle || ""))}</div>
+                    <div class="pending-invite-meta">${Utils.escapeHtml(String(invite.invitedByDisplayName || ""))} ${Utils.escapeHtml(this.getText(invite.itemType === "folder" ? "invite_folder_text" : "invite_note_text", invite.itemType === "folder" ? "приглашает вас к папке" : "приглашает вас к заметке"))}</div>
+                    <div class="pending-invite-role">${Utils.escapeHtml(this.getAccessRoleLabel(invite.role || "viewer"))}</div>
+                    <div class="pending-invite-actions">
+                        <button type="button" class="btn-primary" data-action="accept-invite" data-item-type="${invite.itemType}" data-item-id="${encodeURIComponent(String(invite.itemId || ""))}">${this.getText("invite_accept", "Принять")}</button>
+                        <button type="button" class="btn-secondary" data-action="reject-invite" data-item-type="${invite.itemType}" data-item-id="${encodeURIComponent(String(invite.itemId || ""))}">${this.getText("invite_reject", "Отклонить")}</button>
+                    </div>
+                </div>
+            `).join("")
+        } catch {
+            root.innerHTML = `<div class="pending-invite-empty">${this.getText("pending_invites_empty", "Нет новых приглашений")}</div>`
+        }
+    },
+
+    async respondToInvite(itemType, itemId, accept) {
+        try {
+            await window.NoteActionService.respondToInvite(itemType, itemId, accept)
+            this.showToast(this.getText(accept ? "invite_accepted" : "invite_rejected", accept ? "Приглашение принято" : "Приглашение отклонено"))
+            await this.renderPendingInvites()
+            if (window.SessionService && StateStore.read().user?.uid) {
+                await window.SessionService.startUserSession(StateStore.read().user, { forceResubscribe: true })
+            }
+        } catch (error) {
+            this.showToast(`${this.getText("invite_failed", "Не удалось обработать приглашение")} (${String(error?.message || error || "unknown")})`)
+        }
+    },
+
+    async copyFolderShareLink(folderId) {
+        const normalizedFolderId = String(folderId || "")
+        if (!normalizedFolderId) return
+        const copied = await this.copyToClipboard(window.buildShareInviteLink({ itemType: "folder", itemId: normalizedFolderId }))
+        this.showToast(this.getText(copied ? "share_link_copied" : "copy_failed", copied ? "Ссылка скопирована" : "Не удалось скопировать"))
     },
 
     resolveNoteById(noteId) {
@@ -659,6 +712,12 @@ Object.assign(UI, {
                 this.shareFolder(StateStore.read().activeFolderId)
                 this.toggleActiveFolderMenu(false)
                 break
+            case "accept-invite":
+                this.respondToInvite(el.dataset.itemType || "note", decodeURIComponent(el.dataset.itemId || ""), true)
+                break
+            case "reject-invite":
+                this.respondToInvite(el.dataset.itemType || "note", decodeURIComponent(el.dataset.itemId || ""), false)
+                break
             case "edit-display-name": {
                 const currentName = String(document.getElementById("user-name")?.textContent || "")
                 this.showPrompt(this.getText("display_name", "Отображаемое имя"), this.getText("display_name_placeholder", "Введите имя"), async value => {
@@ -1116,6 +1175,19 @@ window.UINoteActionsPanel = {
                     ${note.aiError ? `<div style="opacity:0.72;font-size:13px;line-height:1.45;">${Utils.escapeHtml(String(note.aiError || ""))}</div>` : ""}
                 </div>`
             : ""
+        const accessRole = String(note.accessRole || "owner")
+        const accessStatus = String(note.accessStatus || "accepted")
+        const accessLabel = accessRole === "owner"
+            ? (dict.share_access_owner || "Owner")
+            : `${accessRole === "editor" ? (dict.access_editor || "Editor") : (dict.access_viewer || "Commentator")}${accessStatus === "pending" ? ` · ${dict.access_pending || "Pending"}` : ""}`
+        const accessMarkup = `<div class="note-card" style="margin-top:12px;padding:12px 14px;display:grid;gap:6px;">
+                <div style="font-weight:700;display:flex;align-items:center;gap:8px;">
+                    <i class="material-icons-round" aria-hidden="true">shield</i>
+                    ${Utils.escapeHtml(dict.share_access_you_are || "Your access")}
+                </div>
+                <div style="opacity:0.92;">${Utils.escapeHtml(accessLabel)}</div>
+                ${note.invitedByDisplayName ? `<div style="opacity:0.72;font-size:13px;line-height:1.45;">${Utils.escapeHtml(dict.share_access_invited_by || "Invited by")}: ${Utils.escapeHtml(String(note.invitedByDisplayName || ""))}</div>` : ""}
+            </div>`
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
@@ -1161,6 +1233,7 @@ window.UINoteActionsPanel = {
                     <i class="material-icons-round" aria-hidden="true">picture_as_pdf</i>${dict.export_pdf || "Export PDF"}
                 </button>
             </div>
+            ${accessMarkup}
             ${analysisStatusMarkup}
         `
         this.applyInputAutocompletePolicy(root)
@@ -1802,6 +1875,10 @@ Object.assign(UI, {
                     this.showToast(this.getText("share_folder_revoked", "Доступ к папке отозван"))
                     return
                 }
+                if (normalizedRole === "link") {
+                    await this.copyFolderShareLink(id)
+                    return
+                }
 
                 const role = normalizedRole === "editor" ? "editor" : "viewer"
                 await window.NoteActionService.shareFolder(id, normalizedTarget, role)
@@ -1816,6 +1893,7 @@ Object.assign(UI, {
                 options: [
                     { value: "viewer", label: this.getText("share_role_commentator", "Комментатор") },
                     { value: "editor", label: this.getText("share_role_editor", "Редактор") },
+                    { value: "link", label: this.getText("share_copy_link", "Скопировать ссылку") },
                     { value: "remove", label: this.getText("share_role_remove", "Убрать доступ") }
                 ],
                 ariaLabel: this.getText("share_folder_role_label", "Роль доступа к папке")

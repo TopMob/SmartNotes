@@ -418,6 +418,65 @@ body.platform-android .top-bar {
     color: #ff6b6b;
 }
 
+.pending-invites-root {
+    display: grid;
+    gap: 10px;
+}
+
+.pending-invite-card {
+    padding: 12px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    display: grid;
+    gap: 6px;
+}
+
+.pending-invite-title {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.pending-invite-meta,
+.pending-invite-role,
+.pending-invite-empty {
+    font-size: 12px;
+    opacity: 0.78;
+}
+
+.pending-invite-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.nav-access-badge,
+.note-access-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--primary) 34%, transparent);
+    background: color-mix(in srgb, var(--surface) 82%, var(--primary) 18%);
+    color: var(--text);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.note-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.note-title-row h3 {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
 .content-scrollable {
     flex: 1;
     min-height: 0;

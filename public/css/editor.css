@@ -86,14 +86,14 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    max-width: 160px;
-    min-height: 30px;
-    padding: 0 10px 0 6px;
+    max-width: 148px;
+    min-height: 26px;
+    padding: 0 8px 0 5px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
     background: color-mix(in srgb, var(--surface) 86%, var(--text) 14%);
     color: var(--text-secondary);
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
@@ -105,8 +105,8 @@
 }
 
 .editor-collaborator-avatar {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
@@ -117,6 +117,19 @@
     font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
+}
+
+.editor-access-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+    background: color-mix(in srgb, var(--surface) 82%, var(--primary) 18%);
+    color: var(--text);
+    font-size: 0.72rem;
+    white-space: nowrap;
 }
 
 .editor-collaborator-email {

@@ -221,6 +221,12 @@ select.input-area optgroup {
     resize: vertical;
 }
 
+select.prompt-secondary-input {
+    min-height: 42px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
 .row-center {
     display: flex;
     justify-content: center;

@@ -72,14 +72,18 @@ type NoteRow = {
 
 type NotePermissionRow = {
   note_id: string
-  user_email: string
+  user_id: string
   role: "viewer" | "editor"
+  status: "pending" | "accepted" | "rejected"
+  invited_by_user_id: string
 }
 
 type FolderPermissionRow = {
   folder_id: string
-  user_email: string
+  user_id: string
   role: "viewer" | "editor"
+  status: "pending" | "accepted" | "rejected"
+  invited_by_user_id: string
 }
 
 type SharePermissionInput = {
@@ -88,6 +92,30 @@ type SharePermissionInput = {
   userEmail: string
   collaboratorTarget: string
   role: "viewer" | "editor"
+}
+
+type ResolvedCollaborator = {
+  id: string
+  email: string
+  displayName: string
+  photoURL: string
+}
+
+function mapPermissionRole(value: unknown) {
+  return String(value || "").trim().toLowerCase() === "editor" ? "editor" : "viewer"
+}
+
+function mapPermissionStatus(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase()
+  return normalized === "accepted" || normalized === "rejected" ? normalized : "pending"
+}
+
+function buildDisplayName(profile: Partial<ProfileRow> | null, fallbackId: string) {
+  const displayName = String(profile?.display_name || "").trim()
+  if (displayName) return displayName
+  const email = String(profile?.email || "").trim()
+  if (email) return email.split("@")[0]
+  return fallbackId.slice(0, 8) || "User"
 }
 
 function extractCollaboratorTargetValue(value: unknown) {
@@ -144,6 +172,60 @@ async function resolveCollaboratorEmail(collaboratorTarget: unknown) {
   }
 
   return normalizedEmail
+}
+
+async function getProfileByEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) return null
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, display_name, avatar_url")
+    .eq("email", normalizedEmail)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ? mapProfileRow(data as ProfileRow) : null
+}
+
+async function listProfilesByIds(userIds: string[]) {
+  const normalizedIds = [...new Set((Array.isArray(userIds) ? userIds : []).map(value => String(value || "").trim()).filter(Boolean))]
+  if (!normalizedIds.length) return []
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, display_name, avatar_url")
+    .in("id", normalizedIds)
+
+  if (error) throw error
+  return (data || []) as ProfileRow[]
+}
+
+async function resolveCollaborator(collaboratorTarget: unknown): Promise<ResolvedCollaborator> {
+  const normalizedTarget = extractCollaboratorTargetValue(collaboratorTarget)
+  if (!normalizedTarget) throw new Error("BAD_REQUEST")
+
+  if (normalizedTarget.includes("@")) {
+    const profile = await getProfileByEmail(normalizedTarget)
+    if (!profile?.id) throw new Error("COLLABORATOR_NOT_FOUND")
+    return {
+      id: String(profile.id || ""),
+      email: String(profile.email || ""),
+      displayName: String(profile.displayName || ""),
+      photoURL: String(profile.photoURL || "")
+    }
+  }
+
+  const profile = await getSupabaseProfile(normalizedTarget)
+  if (!profile?.id) throw new Error("COLLABORATOR_NOT_FOUND")
+  return {
+    id: String(profile.id || ""),
+    email: String(profile.email || ""),
+    displayName: String(profile.displayName || ""),
+    photoURL: String(profile.photoURL || "")
+  }
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -416,6 +498,9 @@ function mapFolderRow(folder: FolderRow) {
     folderOrder: Number.isFinite(Number(folder.sort_order)) ? Number(folder.sort_order) : 0,
     isHidden: typeof metadata.isHidden === "boolean" ? metadata.isHidden : folder.is_hidden === true,
     isArchived: folder.is_archived === true,
+    accessRole: typeof metadata.accessRole === "string" ? metadata.accessRole : "owner",
+    accessStatus: typeof metadata.accessStatus === "string" ? metadata.accessStatus : "accepted",
+    invitedByDisplayName: typeof metadata.invitedByDisplayName === "string" ? metadata.invitedByDisplayName : "",
     trashedAt: Boolean(metadata.trashedAt) ? metadata.trashedAt : null,
     createdAt: folder.created_at || null,
     updatedAt: folder.updated_at || null,
@@ -438,6 +523,9 @@ function mapNoteRow(note: NoteRow) {
     isArchived: note.is_archived === true,
     isFavorite: Boolean(metadata.isFavorite),
     isPinned: Boolean(metadata.isPinned),
+    accessRole: typeof metadata.accessRole === "string" ? metadata.accessRole : "owner",
+    accessStatus: typeof metadata.accessStatus === "string" ? metadata.accessStatus : "accepted",
+    invitedByDisplayName: typeof metadata.invitedByDisplayName === "string" ? metadata.invitedByDisplayName : "",
     reminderAt: note.reminder_at || null,
     trashedAt: note.is_deleted ? (normalizeOptionalString(metadata.trashedAt) || note.updated_at || note.created_at || null) : null,
     contentType: "text",
@@ -466,29 +554,31 @@ function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase()
 }
 
-async function listPermittedNoteIds(userEmail: string) {
-  const normalizedEmail = normalizeEmail(userEmail)
-  if (!normalizedEmail) return []
+async function listPermittedNoteIds(userId: string) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) return []
 
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
     .from("note_permissions")
     .select("note_id")
-    .eq("user_email", normalizedEmail)
+    .eq("user_id", normalizedUserId)
+    .eq("status", "accepted")
 
   if (error) throw error
   return (data || []).map(row => String(row.note_id || "")).filter(Boolean)
 }
 
-async function listPermittedFolderRows(userEmail: string) {
-  const normalizedEmail = normalizeEmail(userEmail)
-  if (!normalizedEmail) return []
+async function listPermittedFolderRows(userId: string) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) return []
 
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
     .from("folder_permissions")
-    .select("folder_id, user_email, role")
-    .eq("user_email", normalizedEmail)
+    .select("folder_id, user_id, role, status, invited_by_user_id")
+    .eq("user_id", normalizedUserId)
+    .eq("status", "accepted")
 
   if (error) throw error
   return (data || []) as FolderPermissionRow[]
@@ -534,7 +624,7 @@ async function getFolderAccessRow(folderId: string, userId: string, userEmail: s
     }
   }
 
-  const permission = await getFolderPermissionRow(normalizedFolderId, userEmail)
+  const permission = await getFolderPermissionRow(normalizedFolderId, userId)
   if (!permission?.folder_id) {
     throw new Error("FOLDER_NOT_FOUND")
   }
@@ -546,17 +636,18 @@ async function getFolderAccessRow(folderId: string, userId: string, userEmail: s
   }
 }
 
-async function getFolderPermissionRow(folderId: string, userEmail: string) {
+async function getFolderPermissionRow(folderId: string, userId: string) {
   const normalizedFolderId = String(folderId || "").trim()
-  const normalizedEmail = normalizeEmail(userEmail)
-  if (!normalizedFolderId || !normalizedEmail) return null
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedFolderId || !normalizedUserId) return null
 
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
     .from("folder_permissions")
-    .select("folder_id, user_email, role")
+    .select("folder_id, user_id, role, status, invited_by_user_id")
     .eq("folder_id", normalizedFolderId)
-    .eq("user_email", normalizedEmail)
+    .eq("user_id", normalizedUserId)
+    .eq("status", "accepted")
     .maybeSingle()
 
   if (error) throw error
@@ -593,20 +684,21 @@ async function getNoteAccessRow(noteId: string, userId: string, userEmail: strin
   if (folderAccess?.folderId) {
     return {
       noteRow: noteRow as NoteRow,
-      permission: folderAccess.permission || { folder_id: folderAccess.folderId, user_email: normalizeEmail(userEmail), role: "editor" }
+      permission: folderAccess.permission || { folder_id: folderAccess.folderId, user_id: String(userId || ""), role: "editor", status: "accepted", invited_by_user_id: String(folderAccess.ownerId || "") }
     }
   }
 
-  const normalizedEmail = normalizeEmail(userEmail)
-  if (!normalizedEmail) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) {
     throw new Error("NOTE_NOT_FOUND")
   }
 
   const { data: permissionRow, error: permissionError } = await supabase
     .from("note_permissions")
-    .select("note_id, user_email, role")
+    .select("note_id, user_id, role, status, invited_by_user_id")
     .eq("note_id", normalizedNoteId)
-    .eq("user_email", normalizedEmail)
+    .eq("user_id", normalizedUserId)
+    .eq("status", "accepted")
     .maybeSingle()
 
   if (permissionError) throw permissionError
@@ -664,6 +756,50 @@ export async function getSupabaseProfile(userId: string) {
 
   if (error) throw error
   return mapProfileRow(data)
+}
+
+async function presentNotePermissions(rows: NotePermissionRow[]) {
+  const normalizedRows = Array.isArray(rows) ? rows : []
+  if (!normalizedRows.length) return []
+  const profileRows = await listProfilesByIds(normalizedRows.flatMap(row => [row.user_id, row.invited_by_user_id]))
+  const profileMap = new Map(profileRows.map(profile => [String(profile.id || ""), profile]))
+
+  return normalizedRows.map(row => {
+    const collaboratorProfile = profileMap.get(String(row.user_id || "")) || null
+    const inviterProfile = profileMap.get(String(row.invited_by_user_id || "")) || null
+    return {
+      userId: String(row.user_id || ""),
+      displayName: buildDisplayName(collaboratorProfile, String(row.user_id || "")),
+      email: String(collaboratorProfile?.email || ""),
+      photoURL: String(collaboratorProfile?.avatar_url || ""),
+      role: mapPermissionRole(row.role),
+      status: mapPermissionStatus(row.status),
+      invitedByUserId: String(row.invited_by_user_id || ""),
+      invitedByDisplayName: buildDisplayName(inviterProfile, String(row.invited_by_user_id || ""))
+    }
+  })
+}
+
+async function presentFolderPermissions(rows: FolderPermissionRow[]) {
+  const normalizedRows = Array.isArray(rows) ? rows : []
+  if (!normalizedRows.length) return []
+  const profileRows = await listProfilesByIds(normalizedRows.flatMap(row => [row.user_id, row.invited_by_user_id]))
+  const profileMap = new Map(profileRows.map(profile => [String(profile.id || ""), profile]))
+
+  return normalizedRows.map(row => {
+    const collaboratorProfile = profileMap.get(String(row.user_id || "")) || null
+    const inviterProfile = profileMap.get(String(row.invited_by_user_id || "")) || null
+    return {
+      userId: String(row.user_id || ""),
+      displayName: buildDisplayName(collaboratorProfile, String(row.user_id || "")),
+      email: String(collaboratorProfile?.email || ""),
+      photoURL: String(collaboratorProfile?.avatar_url || ""),
+      role: mapPermissionRole(row.role),
+      status: mapPermissionStatus(row.status),
+      invitedByUserId: String(row.invited_by_user_id || ""),
+      invitedByDisplayName: buildDisplayName(inviterProfile, String(row.invited_by_user_id || ""))
+    }
+  })
 }
 
 export async function ensureSupabaseProfile({ userId, email = "", displayName = "", avatarUrl = "" }: { userId: string, email?: string, displayName?: string, avatarUrl?: string }) {
@@ -773,7 +909,7 @@ export async function listSupabaseFolders(userId: string) {
 
 export async function listAccessibleSupabaseFolders(userId: string, userEmail: string) {
   const supabase = getSupabaseAdminClient()
-  const permittedFolders = await listPermittedFolderRows(userEmail)
+  const permittedFolders = await listPermittedFolderRows(userId)
   const permittedFolderIds = permittedFolders.map(row => String(row.folder_id || "")).filter(Boolean)
   const { data, error } = await supabase
     .from("folders")
@@ -785,7 +921,16 @@ export async function listAccessibleSupabaseFolders(userId: string, userEmail: s
     .order("created_at", { ascending: true })
 
   if (error) throw error
-  return (data || []).map(mapFolderRow)
+  return (data || []).map(folder => {
+    const mappedFolder = mapFolderRow(folder as FolderRow)
+    const permissionRow = permittedFolders.find(row => String(row.folder_id || "") === String(mappedFolder.id || "")) || null
+    if (!permissionRow) return mappedFolder
+    return {
+      ...mappedFolder,
+      accessRole: mapPermissionRole(permissionRow.role),
+      accessStatus: mapPermissionStatus(permissionRow.status)
+    }
+  })
 }
 
 export async function upsertSupabaseFolder({ userId, folderId = null, name, description = "", isHidden = false, isArchived = false }: { userId: string, folderId?: string | null, name: unknown, description?: string, isHidden?: boolean, isArchived?: boolean }) {
@@ -883,9 +1028,9 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
   const supabase = getSupabaseAdminClient()
   const from = Math.max(0, Number(offset) || 0)
   const to = from + Math.max(1, Number(limit) || 500) - 1
-  const permittedNoteIds = await listPermittedNoteIds(userEmail)
+  const permittedNoteIds = await listPermittedNoteIds(userId)
   const ownedFolderIds = await listOwnedFolderIds(userId)
-  const permittedFolderRows = await listPermittedFolderRows(userEmail)
+  const permittedFolderRows = await listPermittedFolderRows(userId)
   const permittedFolderIds = [...new Set([
     ...ownedFolderIds,
     ...permittedFolderRows.map(row => String(row.folder_id || "")).filter(Boolean)
@@ -920,7 +1065,27 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
     .range(from, to)
 
   if (error) throw error
-  return (data || []).map(mapNoteRow)
+  const notePermissionRows = permittedNoteIds.length
+    ? await supabase
+      .from("note_permissions")
+      .select("note_id, user_id, role, status, invited_by_user_id")
+      .eq("user_id", userId)
+      .eq("status", "accepted")
+    : { data: [], error: null }
+
+  if (notePermissionRows.error) throw notePermissionRows.error
+  const notePermissionMap = new Map((notePermissionRows.data || []).map(row => [String(row.note_id || ""), row]))
+
+  return (data || []).map(note => {
+    const mappedNote = mapNoteRow(note as NoteRow)
+    const permissionRow = notePermissionMap.get(String(mappedNote.id || "")) || null
+    if (!permissionRow) return mappedNote
+    return {
+      ...mappedNote,
+      accessRole: mapPermissionRole(permissionRow.role),
+      accessStatus: mapPermissionStatus(permissionRow.status)
+    }
+  })
 }
 
 export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: string, userEmail: string, note: NoteInput }) {
@@ -1012,14 +1177,13 @@ export async function deleteSupabaseNote(userId: string, userEmail: string, note
 
 export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, collaboratorTarget, role }: SharePermissionInput) {
   const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
-  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
-  const normalizedUserEmail = normalizeEmail(userEmail)
+  const collaborator = await resolveCollaborator(collaboratorTarget)
 
-  if (!normalizedRole || !normalizedCollaboratorEmail) {
+  if (!normalizedRole || !collaborator.id) {
     throw new Error("BAD_REQUEST")
   }
 
-  if (normalizedCollaboratorEmail === normalizedUserEmail) {
+  if (String(collaborator.id || "") === String(userId || "")) {
     throw new Error("BAD_REQUEST")
   }
 
@@ -1028,23 +1192,25 @@ export async function upsertSupabaseNotePermission({ noteId, userId, userEmail, 
   const supabase = getSupabaseAdminClient()
   const payload = {
     note_id: String(noteId || "").trim(),
-    user_email: normalizedCollaboratorEmail,
-    role: normalizedRole
+    user_id: String(collaborator.id || "").trim(),
+    role: normalizedRole,
+    status: "pending",
+    invited_by_user_id: String(userId || "").trim()
   }
 
   const { data, error } = await supabase
     .from("note_permissions")
     .upsert(payload)
-    .select("note_id, user_email, role")
+    .select("note_id, user_id, role, status, invited_by_user_id")
     .single()
 
   if (error) throw error
-  return data as NotePermissionRow
+  return (await presentNotePermissions([data as NotePermissionRow]))[0] || null
 }
 
 export async function deleteSupabaseNotePermission({ noteId, userId, collaboratorTarget }: { noteId: string, userId: string, collaboratorTarget: string }) {
-  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
-  if (!normalizedCollaboratorEmail) {
+  const collaborator = await resolveCollaborator(collaboratorTarget)
+  if (!collaborator.id) {
     throw new Error("BAD_REQUEST")
   }
 
@@ -1055,12 +1221,12 @@ export async function deleteSupabaseNotePermission({ noteId, userId, collaborato
     .from("note_permissions")
     .delete()
     .eq("note_id", String(noteId || "").trim())
-    .eq("user_email", normalizedCollaboratorEmail)
+    .eq("user_id", String(collaborator.id || "").trim())
 
   if (error) throw error
   return {
     note_id: String(noteId || "").trim(),
-    user_email: normalizedCollaboratorEmail
+    user_id: String(collaborator.id || "")
   }
 }
 
@@ -1070,12 +1236,12 @@ export async function listSupabaseNotePermissions({ noteId, userId }: { noteId: 
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
     .from("note_permissions")
-    .select("note_id, user_email, role")
+    .select("note_id, user_id, role, status, invited_by_user_id")
     .eq("note_id", String(noteId || "").trim())
-    .order("user_email", { ascending: true })
+    .order("created_at", { ascending: true })
 
   if (error) throw error
-  return (data || []) as NotePermissionRow[]
+  return presentNotePermissions((data || []) as NotePermissionRow[])
 }
 
 async function requireOwnedFolder(folderId: string, userId: string) {
@@ -1101,14 +1267,13 @@ async function requireOwnedFolder(folderId: string, userId: string) {
 
 export async function upsertSupabaseFolderPermission({ folderId, userId, userEmail, collaboratorTarget, role }: { folderId: string, userId: string, userEmail: string, collaboratorTarget: string, role: "viewer" | "editor" }) {
   const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
-  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
-  const normalizedUserEmail = normalizeEmail(userEmail)
+  const collaborator = await resolveCollaborator(collaboratorTarget)
 
-  if (!normalizedRole || !normalizedCollaboratorEmail) {
+  if (!normalizedRole || !collaborator.id) {
     throw new Error("BAD_REQUEST")
   }
 
-  if (normalizedCollaboratorEmail === normalizedUserEmail) {
+  if (String(collaborator.id || "") === String(userId || "")) {
     throw new Error("BAD_REQUEST")
   }
 
@@ -1119,19 +1284,21 @@ export async function upsertSupabaseFolderPermission({ folderId, userId, userEma
     .from("folder_permissions")
     .upsert({
       folder_id: String(folderId || "").trim(),
-      user_email: normalizedCollaboratorEmail,
-      role: normalizedRole
+      user_id: String(collaborator.id || "").trim(),
+      role: normalizedRole,
+      status: "pending",
+      invited_by_user_id: String(userId || "").trim()
     })
-    .select("folder_id, user_email, role")
+    .select("folder_id, user_id, role, status, invited_by_user_id")
     .single()
 
   if (error) throw error
-  return data as FolderPermissionRow
+  return (await presentFolderPermissions([data as FolderPermissionRow]))[0] || null
 }
 
 export async function deleteSupabaseFolderPermission({ folderId, userId, collaboratorTarget }: { folderId: string, userId: string, collaboratorTarget: string }) {
-  const normalizedCollaboratorEmail = await resolveCollaboratorEmail(collaboratorTarget)
-  if (!normalizedCollaboratorEmail) {
+  const collaborator = await resolveCollaborator(collaboratorTarget)
+  if (!collaborator.id) {
     throw new Error("BAD_REQUEST")
   }
 
@@ -1142,11 +1309,110 @@ export async function deleteSupabaseFolderPermission({ folderId, userId, collabo
     .from("folder_permissions")
     .delete()
     .eq("folder_id", String(folderId || "").trim())
-    .eq("user_email", normalizedCollaboratorEmail)
+    .eq("user_id", String(collaborator.id || "").trim())
 
   if (error) throw error
   return {
     folder_id: String(folderId || "").trim(),
-    user_email: normalizedCollaboratorEmail
+    user_id: String(collaborator.id || "")
   }
+}
+
+export async function listSupabaseFolderPermissions({ folderId, userId }: { folderId: string, userId: string }) {
+  await requireOwnedFolder(folderId, userId)
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("folder_permissions")
+    .select("folder_id, user_id, role, status, invited_by_user_id")
+    .eq("folder_id", String(folderId || "").trim())
+    .order("created_at", { ascending: true })
+
+  if (error) throw error
+  return presentFolderPermissions((data || []) as FolderPermissionRow[])
+}
+
+export async function listSupabasePendingInvites(userId: string) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) return []
+  const supabase = getSupabaseAdminClient()
+
+  const [{ data: noteRows, error: noteError }, { data: folderRows, error: folderError }] = await Promise.all([
+    supabase
+      .from("note_permissions")
+      .select("note_id, user_id, role, status, invited_by_user_id")
+      .eq("user_id", normalizedUserId)
+      .eq("status", "pending"),
+    supabase
+      .from("folder_permissions")
+      .select("folder_id, user_id, role, status, invited_by_user_id")
+      .eq("user_id", normalizedUserId)
+      .eq("status", "pending")
+  ])
+
+  if (noteError) throw noteError
+  if (folderError) throw folderError
+
+  const noteIds = (noteRows || []).map(row => String(row.note_id || "")).filter(Boolean)
+  const folderIds = (folderRows || []).map(row => String(row.folder_id || "")).filter(Boolean)
+  const inviterIds = [...new Set([
+    ...(noteRows || []).map(row => String(row.invited_by_user_id || "")).filter(Boolean),
+    ...(folderRows || []).map(row => String(row.invited_by_user_id || "")).filter(Boolean)
+  ])]
+
+  const [noteRowsResult, folderRowsResult, inviterProfiles] = await Promise.all([
+    noteIds.length ? supabase.from("notes").select("id, title").in("id", noteIds) : Promise.resolve({ data: [], error: null }),
+    folderIds.length ? supabase.from("folders").select("id, name").in("id", folderIds) : Promise.resolve({ data: [], error: null }),
+    listProfilesByIds(inviterIds)
+  ])
+
+  if (noteRowsResult.error) throw noteRowsResult.error
+  if (folderRowsResult.error) throw folderRowsResult.error
+
+  const noteTitleMap = new Map((noteRowsResult.data || []).map(row => [String(row.id || ""), String(row.title || "")]))
+  const folderTitleMap = new Map((folderRowsResult.data || []).map(row => [String(row.id || ""), String(row.name || "")]))
+  const inviterMap = new Map(inviterProfiles.map(profile => [String(profile.id || ""), profile]))
+
+  return [
+    ...(noteRows || []).map(row => ({
+      itemType: "note",
+      itemId: String(row.note_id || ""),
+      itemTitle: noteTitleMap.get(String(row.note_id || "")) || "Без названия",
+      role: mapPermissionRole(row.role),
+      status: "pending",
+      invitedByUserId: String(row.invited_by_user_id || ""),
+      invitedByDisplayName: buildDisplayName(inviterMap.get(String(row.invited_by_user_id || "")) || null, String(row.invited_by_user_id || ""))
+    })),
+    ...(folderRows || []).map(row => ({
+      itemType: "folder",
+      itemId: String(row.folder_id || ""),
+      itemTitle: folderTitleMap.get(String(row.folder_id || "")) || "Папка",
+      role: mapPermissionRole(row.role),
+      status: "pending",
+      invitedByUserId: String(row.invited_by_user_id || ""),
+      invitedByDisplayName: buildDisplayName(inviterMap.get(String(row.invited_by_user_id || "")) || null, String(row.invited_by_user_id || ""))
+    }))
+  ]
+}
+
+export async function respondToSupabaseInvite({ userId, itemType, itemId, accept }: { userId: string, itemType: "note" | "folder", itemId: string, accept: boolean }) {
+  const normalizedUserId = String(userId || "").trim()
+  const normalizedItemId = String(itemId || "").trim()
+  if (!normalizedUserId || !normalizedItemId) throw new Error("BAD_REQUEST")
+
+  const supabase = getSupabaseAdminClient()
+  const tableName = itemType === "folder" ? "folder_permissions" : "note_permissions"
+  const idField = itemType === "folder" ? "folder_id" : "note_id"
+  const { data, error } = await supabase
+    .from(tableName)
+    .update({ status: accept ? "accepted" : "rejected", updated_at: new Date().toISOString() })
+    .eq(idField, normalizedItemId)
+    .eq("user_id", normalizedUserId)
+    .eq("status", "pending")
+    .select("*")
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error("INVITE_NOT_FOUND")
+  return data
 }

@@ -610,6 +610,8 @@ const SessionService = (() => {
     return { startUserSession, stopUserSession }
 })()
 
+window.SessionService = SessionService
+
 const NotesQueryService = (() => {
     function normalizeVisibleNotes(list, orderKey = "order") {
         if (!Array.isArray(list)) return []

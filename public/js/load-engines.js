@@ -19,6 +19,7 @@ const buildAuthorizedHeaders = (user) => {
 const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
 const getNoteShareEndpoint = () => createApiEndpoint("supabase/notes/share")
 const getFolderShareEndpoint = () => createApiEndpoint("supabase/folders/share")
+const getInvitesEndpoint = () => createApiEndpoint("supabase/invites")
 const NOTE_ANALYZE_DEBOUNCE_MS = 12000
 
 const createNeutralTimestamp = () => new Date().toISOString()
@@ -104,6 +105,14 @@ const resolveNoteActionErrorCode = async (response) => {
     }
 }
 
+const buildShareInviteLink = ({ itemType, itemId, targetUserId }) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set("inviteType", itemType === "folder" ? "folder" : "note")
+    url.searchParams.set("inviteId", String(itemId || ""))
+    if (targetUserId) url.searchParams.set("userId", String(targetUserId || ""))
+    return url.toString()
+}
+
 const NoteActionService = {
     async listAccess(noteId) {
         const user = StateStore.read().user
@@ -115,6 +124,21 @@ const NoteActionService = {
         if (!response.ok) {
             const errorCode = await resolveNoteActionErrorCode(response)
             throw new Error(errorCode || `NOTE_SHARE_LIST_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return Array.isArray(payload?.permissions) ? payload.permissions : []
+    },
+
+    async listFolderAccess(folderId) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(`${getFolderShareEndpoint()}?folderId=${encodeURIComponent(String(folderId || ""))}`, {
+            method: "GET",
+            headers: buildAuthorizedHeaders(user)
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `FOLDER_SHARE_LIST_HTTP_${response.status}`)
         }
         const payload = await response.json()
         return Array.isArray(payload?.permissions) ? payload.permissions : []
@@ -242,10 +266,46 @@ const NoteActionService = {
         }
         const payload = await response.json()
         return payload?.permission || null
+    },
+
+    async listPendingInvites() {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getInvitesEndpoint(), {
+            method: "GET",
+            headers: buildAuthorizedHeaders(user)
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `INVITES_LIST_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return Array.isArray(payload?.invites) ? payload.invites : []
+    },
+
+    async respondToInvite(itemType, itemId, accept) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getInvitesEndpoint(), {
+            method: "POST",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({
+                itemType: itemType === "folder" ? "folder" : "note",
+                itemId: String(itemId || ""),
+                accept: accept !== false
+            })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `INVITE_RESPOND_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.invite || null
     }
 }
 
 window.NoteActionService = NoteActionService
+window.buildShareInviteLink = buildShareInviteLink
 
 window.NoteAnalysisService = {
     schedule(noteId) {
@@ -867,6 +927,12 @@ const NotesListEngine = (() => {
 
         const titleText = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || NoteText.buildAutoTitle(note))
         const h3 = el("h3", [], titleText)
+        const titleRow = el("div", ["note-title-row"])
+        titleRow.appendChild(h3)
+        if (String(note.accessRole || "owner") !== "owner") {
+            const accessBadge = el("span", ["note-access-badge"], UI.getAccessRoleLabel(note.accessRole || "viewer"))
+            titleRow.appendChild(accessBadge)
+        }
 
         const contentText = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : NoteText.buildPreviewText(note)
         const p = el("p", [], contentText)
@@ -899,7 +965,7 @@ const NotesListEngine = (() => {
         }
 
         if (actions) card.append(actions)
-        card.append(h3, p, meta, lockContainer)
+        card.append(titleRow, p, meta, lockContainer)
         card.classList.toggle("favorite", !!note.isFavorite)
 
         const favBtn = actions ? actions.children[1] : null
@@ -907,7 +973,7 @@ const NotesListEngine = (() => {
 
         cardCache.set(note.id, {
             el: card,
-            refs: { h3, p, dateSpan, tagsSpan, lockContainer, favBtn, favIcon },
+            refs: { h3, titleRow, p, dateSpan, tagsSpan, lockContainer, favBtn, favIcon },
             data: { ...note }
         })
 
@@ -924,6 +990,18 @@ const NotesListEngine = (() => {
 
         if (note.title !== data.title || note.content !== data.content || isLockedView) {
             refs.h3.textContent = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || NoteText.buildAutoTitle(note))
+        }
+
+        if (note.accessRole !== data.accessRole) {
+            const existingBadge = refs.titleRow?.querySelector?.(".note-access-badge") || null
+            if (String(note.accessRole || "owner") === "owner") {
+                existingBadge?.remove?.()
+            } else if (existingBadge) {
+                existingBadge.textContent = UI.getAccessRoleLabel(note.accessRole || "viewer")
+            } else {
+                const accessBadge = el("span", ["note-access-badge"], UI.getAccessRoleLabel(note.accessRole || "viewer"))
+                refs.titleRow?.appendChild(accessBadge)
+            }
         }
 
         if (note.content !== data.content || isLockedView) {

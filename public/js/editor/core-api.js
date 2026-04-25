@@ -22,6 +22,7 @@ export const EditorAPI = (() => {
         pageAdd: document.querySelector('[data-action="editor-add-page"]'),
         pagesList: document.getElementById("editor-pages-list"),
         shareButton: document.querySelector('[data-action="share-note"]'),
+        accessBadge: document.querySelector('[data-role="editor-access-badge"]'),
         collaborators: document.querySelector('[data-role="editor-collaborators"]'),
         tagsInput: document.getElementById("note-tags-input"),
         tagsContainer: document.getElementById("note-tags-container"),
@@ -54,11 +55,35 @@ export const EditorAPI = (() => {
     const normalizeCollaboratorList = (items) => Array.isArray(items)
         ? items
             .map(item => ({
-                email: String(item?.user_email || item?.email || "").trim().toLowerCase(),
-                role: String(item?.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer"
+                userId: String(item?.userId || item?.user_id || "").trim(),
+                displayName: String(item?.displayName || item?.display_name || item?.email || item?.userId || "").trim(),
+                role: String(item?.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer",
+                status: String(item?.status || "accepted").trim().toLowerCase(),
+                invitedByDisplayName: String(item?.invitedByDisplayName || "").trim()
             }))
-            .filter(item => item.email)
+            .filter(item => item.userId || item.displayName)
         : []
+
+    const getAccessRoleLabel = (role) => role === "editor"
+        ? UI.getText("access_editor", "Редактор")
+        : UI.getText("access_viewer", "Комментатор")
+
+    const renderAccessBadge = () => {
+        const badge = elements.accessBadge || document.querySelector('[data-role="editor-access-badge"]')
+        const note = StateStore.read().currentNote
+        if (!badge || !note) return
+        const role = String(note.accessRole || "owner")
+        const status = String(note.accessStatus || "accepted")
+        if (role === "owner") {
+            badge.textContent = UI.getText("share_access_owner", "Владелец")
+            badge.classList.remove("hidden")
+            return
+        }
+        const roleLabel = getAccessRoleLabel(role)
+        const statusLabel = status === "pending" ? ` · ${UI.getText("access_pending", "Ожидает")}` : ""
+        badge.textContent = `${UI.getText("share_access_you_are", "Ваш доступ")}: ${roleLabel}${statusLabel}`
+        badge.classList.remove("hidden")
+    }
 
     const renderCollaborators = () => {
         const collaboratorsRoot = elements.collaborators || document.querySelector('[data-role="editor-collaborators"]')
@@ -66,19 +91,21 @@ export const EditorAPI = (() => {
         const canManage = canManageSharing()
         const collaborators = normalizeCollaboratorList(state.noteCollaborators)
         collaboratorsRoot.classList.toggle("hidden", !canManage || collaborators.length === 0)
+        renderAccessBadge()
         if (!canManage || collaborators.length === 0) {
             collaboratorsRoot.innerHTML = ""
             return
         }
 
         collaboratorsRoot.innerHTML = collaborators.map((item) => {
-            const initial = Utils.escapeHtml(item.email.charAt(0) || "?")
-            const email = Utils.escapeHtml(item.email)
-            const role = Utils.escapeHtml(item.role)
-            return `<button type="button" class="editor-collaborator-chip" data-action="manage-collaborator" data-email="${encodeURIComponent(item.email)}" data-role="${role}" title="${email} (${role})">
+            const initial = Utils.escapeHtml(item.displayName.charAt(0) || "?")
+            const title = Utils.escapeHtml(item.displayName)
+            const roleLabel = Utils.escapeHtml(getAccessRoleLabel(item.role))
+            const statusLabel = item.status === "pending" ? Utils.escapeHtml(UI.getText("share_invite_pending", "Ожидает подтверждения")) : ""
+            return `<button type="button" class="editor-collaborator-chip" data-action="manage-collaborator" data-user-id="${encodeURIComponent(item.userId)}" data-role="${item.role}" title="${title}">
                 <span class="editor-collaborator-avatar" aria-hidden="true">${initial}</span>
-                <span class="editor-collaborator-email">${email}</span>
-                <span class="editor-collaborator-role">${role}</span>
+                <span class="editor-collaborator-email">${title}</span>
+                <span class="editor-collaborator-role">${roleLabel}${statusLabel ? ` · ${statusLabel}` : ""}</span>
             </button>`
         }).join("")
     }
@@ -113,15 +140,15 @@ export const EditorAPI = (() => {
         renderCollaborators()
     }
 
-    const manageCollaborator = (email, currentRole) => {
+    const manageCollaborator = (userId, currentRole) => {
         const note = StateStore.read().currentNote
-        if (!note?.id || !email) return
+        if (!note?.id || !userId) return
 
         UI.showPrompt(
             UI.getText("share_note_manage_title", "Управление доступом"),
             UI.getText("share_target_placeholder", "Email, user id или ссылка"),
             async (promptTarget, roleValue) => {
-                const normalizedTarget = String(promptTarget || email || "").trim()
+                const normalizedTarget = String(promptTarget || userId || "").trim()
                 const normalizedRole = String(roleValue || "").trim().toLowerCase()
                 if (!normalizedTarget) return
 
@@ -147,7 +174,7 @@ export const EditorAPI = (() => {
                     UI.showToast(`${UI.getText("share_note_failed", "Не удалось обновить доступ")} (${String(error?.message || error || "unknown")})`)
                 }
             },
-            email,
+            userId,
             {
                 secondaryField: {
                     value: currentRole || "viewer",
@@ -189,6 +216,11 @@ export const EditorAPI = (() => {
                         await loadCollaborators()
                         return
                     }
+                    if (normalizedRole === "link") {
+                        const copied = await UI.copyToClipboard(window.buildShareInviteLink({ itemType: "note", itemId: note.id }))
+                        UI.showToast(UI.getText(copied ? "share_link_copied" : "copy_failed", copied ? "Ссылка скопирована" : "Не удалось скопировать"))
+                        return
+                    }
 
                     const role = normalizedRole === "editor" ? "editor" : "viewer"
                     await window.NoteActionService.shareNote(note.id, normalizedTarget, role)
@@ -205,12 +237,20 @@ export const EditorAPI = (() => {
                     type: "select",
                     options: [
                         { value: "viewer", label: UI.getText("share_role_commentator", "Комментатор") },
-                        { value: "editor", label: UI.getText("share_role_editor", "Редактор") }
+                        { value: "editor", label: UI.getText("share_role_editor", "Редактор") },
+                        { value: "link", label: UI.getText("share_copy_link", "Скопировать ссылку") }
                     ],
                     ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
                 }
             }
         )
+    }
+
+    const copyShareLink = async () => {
+        const note = StateStore.read().currentNote
+        if (!note?.id) return
+        const copied = await UI.copyToClipboard(window.buildShareInviteLink({ itemType: "note", itemId: note.id }))
+        UI.showToast(UI.getText(copied ? "share_link_copied" : "copy_failed", copied ? "Ссылка скопирована" : "Не удалось скопировать"))
     }
 
     const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
@@ -740,6 +780,10 @@ export const EditorAPI = (() => {
         if (boundElements.shareButton) {
             boundElements.shareButton.addEventListener("click", (event) => {
                 event.preventDefault()
+                if (event.altKey || event.metaKey || event.ctrlKey) {
+                    copyShareLink()
+                    return
+                }
                 openSharePrompt()
             }, { signal })
         }
@@ -750,7 +794,7 @@ export const EditorAPI = (() => {
                 const chip = targetElement?.closest('[data-action="manage-collaborator"]')
                 if (!chip) return
                 event.preventDefault()
-                manageCollaborator(decodeURIComponent(chip.dataset.email || ""), chip.dataset.role || "viewer")
+                manageCollaborator(decodeURIComponent(chip.dataset.userId || ""), chip.dataset.role || "viewer")
             }, { signal })
         }
 
