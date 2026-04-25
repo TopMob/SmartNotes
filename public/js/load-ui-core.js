@@ -3354,6 +3354,7 @@ Object.assign(UI, {
         const input = document.getElementById("prompt-input")
         const secondaryField = document.getElementById("prompt-secondary-field")
         const secondaryInput = document.getElementById("prompt-secondary-input")
+        const secondarySelect = document.getElementById("prompt-secondary-select")
         const ok = document.getElementById("prompt-ok")
         const cancel = document.getElementById("prompt-cancel")
         const titleEl = document.getElementById("prompt-title")
@@ -3375,23 +3376,43 @@ Object.assign(UI, {
         input.setAttribute("autocapitalize", "off")
         input.setAttribute("spellcheck", "false")
 
-        if (secondaryField && secondaryInput && secondaryOptions) {
+        const isSecondarySelect = secondaryOptions?.type === "select"
+
+        if (secondaryField && secondaryInput && secondarySelect && secondaryOptions) {
             secondaryField.classList.remove("hidden")
-            secondaryInput.value = String(secondaryOptions.value || "")
-            secondaryInput.placeholder = String(secondaryOptions.placeholder || "")
-            secondaryInput.setAttribute("aria-label", String(secondaryOptions.ariaLabel || secondaryInput.getAttribute("aria-label") || ""))
-            secondaryInput.maxLength = secondaryMaxLength > 0 ? secondaryMaxLength : 524288
-            secondaryInput.readOnly = true
-            secondaryInput.setAttribute("autocomplete", "new-password")
-            secondaryInput.setAttribute("autocorrect", "off")
-            secondaryInput.setAttribute("autocapitalize", "off")
-            secondaryInput.setAttribute("spellcheck", "false")
-        } else if (secondaryField && secondaryInput) {
+            secondaryInput.classList.toggle("hidden", isSecondarySelect)
+            secondarySelect.classList.toggle("hidden", !isSecondarySelect)
+            if (isSecondarySelect) {
+                const items = Array.isArray(secondaryOptions.options) ? secondaryOptions.options : []
+                secondarySelect.innerHTML = ""
+                items.forEach(item => {
+                    const option = document.createElement("option")
+                    option.value = String(item?.value || "")
+                    option.textContent = String(item?.label || item?.value || "")
+                    secondarySelect.appendChild(option)
+                })
+                secondarySelect.value = String(secondaryOptions.value || items[0]?.value || "")
+                secondarySelect.setAttribute("aria-label", String(secondaryOptions.ariaLabel || secondarySelect.getAttribute("aria-label") || ""))
+            } else {
+                secondaryInput.value = String(secondaryOptions.value || "")
+                secondaryInput.placeholder = String(secondaryOptions.placeholder || "")
+                secondaryInput.setAttribute("aria-label", String(secondaryOptions.ariaLabel || secondaryInput.getAttribute("aria-label") || ""))
+                secondaryInput.maxLength = secondaryMaxLength > 0 ? secondaryMaxLength : 524288
+                secondaryInput.readOnly = true
+                secondaryInput.setAttribute("autocomplete", "new-password")
+                secondaryInput.setAttribute("autocorrect", "off")
+                secondaryInput.setAttribute("autocapitalize", "off")
+                secondaryInput.setAttribute("spellcheck", "false")
+            }
+        } else if (secondaryField && secondaryInput && secondarySelect) {
             secondaryField.classList.add("hidden")
             secondaryInput.value = ""
             secondaryInput.placeholder = ""
             secondaryInput.removeAttribute("maxLength")
             secondaryInput.readOnly = false
+            secondaryInput.classList.remove("hidden")
+            secondarySelect.classList.add("hidden")
+            secondarySelect.innerHTML = ""
         }
 
         let primaryCounter = modal.querySelector('[data-counter="primary"]')
@@ -3430,6 +3451,10 @@ Object.assign(UI, {
                 secondaryInput.onkeydown = null
                 secondaryInput.oninput = null
             }
+            if (secondarySelect) {
+                secondarySelect.onkeydown = null
+                secondarySelect.oninput = null
+            }
         }
 
         const okClone = ok.cloneNode(true)
@@ -3440,7 +3465,7 @@ Object.assign(UI, {
 
         const updatePromptState = () => {
             const primaryLength = String(input.value || "").trim().length
-            const secondaryLength = secondaryInput ? String(secondaryInput.value || "").trim().length : 0
+            const secondaryLength = secondaryInput && !isSecondarySelect ? String(secondaryInput.value || "").trim().length : 0
             const isPrimaryExceeded = shouldShowCounter && primaryLength > maxLength
             const isSecondaryExceeded = showSecondaryCounter && secondaryLength > secondaryMaxLength
             const isSecondarySoftExceeded = showSecondaryCounter && secondarySoftLimit > 0 && secondaryLength > secondarySoftLimit
@@ -3460,7 +3485,9 @@ Object.assign(UI, {
 
         okClone.onclick = () => {
             const primaryValue = String(input.value || "").trim()
-            const secondaryValue = secondaryInput ? String(secondaryInput.value || "").trim() : ""
+            const secondaryValue = isSecondarySelect
+                ? String(secondarySelect?.value || "").trim()
+                : (secondaryInput ? String(secondaryInput.value || "").trim() : "")
             finish(primaryValue, secondaryValue)
         }
         cancelClone.onclick = () => modal.classList.remove("active")
@@ -3470,13 +3497,21 @@ Object.assign(UI, {
             event.preventDefault()
             okClone.click()
         }
-        if (secondaryInput && secondaryOptions) {
+        if (secondaryInput && secondaryOptions && !isSecondarySelect) {
             secondaryInput.oninput = updatePromptState
             secondaryInput.onkeydown = event => {
                 if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
                     event.preventDefault()
                     okClone.click()
                 }
+            }
+        }
+        if (secondarySelect && secondaryOptions && isSecondarySelect) {
+            secondarySelect.oninput = updatePromptState
+            secondarySelect.onkeydown = event => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                okClone.click()
             }
         }
         updatePromptState()
@@ -3487,7 +3522,7 @@ Object.assign(UI, {
             input.readOnly = false
             input.focus()
             input.select()
-            if (secondaryInput) secondaryInput.readOnly = false
+            if (secondaryInput && !isSecondarySelect) secondaryInput.readOnly = false
         }, 80)
     },
     showPasswordPrompt(title, placeholder) {
