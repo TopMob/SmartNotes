@@ -323,8 +323,6 @@ Object.assign(UI, {
     createFolderNavigationButton(folder, isActive) {
         const safeFolderId = window.DomSecurity.sanitizeIdentifier(folder?.id)
         if (!safeFolderId) return null
-        const currentUserUid = String(StateStore.read().user?.uid || "")
-        const isOwner = currentUserUid && String(folder?.ownerUid || "") === currentUserUid
         const folderButton = document.createElement("button")
         folderButton.type = "button"
         folderButton.className = "nav-item"
@@ -341,32 +339,11 @@ Object.assign(UI, {
 
         const nameElement = document.createElement("span")
         window.DomSecurity.setText(nameElement, window.DomSecurity.sanitizeInputValue(folder?.name))
-        nameElement.className = "nav-item-label"
-
-        const contentElement = document.createElement("span")
-        contentElement.className = "nav-item-content"
-        contentElement.append(iconElement, nameElement)
 
         const folderDescription = window.DomSecurity.sanitizeInputValue(folder?.description)
         if (folderDescription) folderButton.title = folderDescription
 
-        folderButton.append(contentElement)
-
-        if (isOwner) {
-            const shareButton = document.createElement("button")
-            shareButton.type = "button"
-            shareButton.className = "nav-item-share"
-            shareButton.dataset.action = "share-folder"
-            shareButton.dataset.folderId = safeFolderId
-            shareButton.setAttribute("aria-label", this.getText("share_folder", "Поделиться папкой"))
-
-            const shareIcon = document.createElement("i")
-            shareIcon.className = "material-icons-round"
-            shareIcon.setAttribute("aria-hidden", "true")
-            window.DomSecurity.setText(shareIcon, "person_add")
-            shareButton.append(shareIcon)
-            folderButton.append(shareButton)
-        }
+        folderButton.append(iconElement, nameElement)
 
         return folderButton
     },

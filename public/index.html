@@ -240,6 +240,10 @@
                                 <i class="material-icons-round" aria-hidden="true">more_vert</i>
                             </button>
                             <div id="active-folder-menu" class="dropdown-menu active-folder-menu" role="menu" aria-label="Действия с папкой" data-lang-aria="folder_actions">
+                                <button type="button" id="active-folder-share-button" class="dropdown-item" data-action="share-active-folder">
+                                    <i class="material-icons-round" aria-hidden="true">person_add</i>
+                                    <span data-lang="share_folder">Поделиться папкой</span>
+                                </button>
                                 <button type="button" class="dropdown-item" data-action="rename-active-folder">
                                     <i class="material-icons-round" aria-hidden="true">edit</i>
                                     <span data-lang="rename_folder">Переименовать папку</span>
@@ -641,6 +645,7 @@
                 <div class="modal-actions-grid">
                     <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="about-modal" data-lang="about">О нас</button>
                     <button type="button" class="btn-secondary" data-action="open-feedback-modal" data-modal="rate-modal" data-lang="rate">Оценить</button>
+                    <button type="button" class="btn-secondary" disabled data-lang="coming_future">В будущем</button>
                 </div>
             </div>
         </div>

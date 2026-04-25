@@ -627,7 +627,7 @@ Object.assign(UI, {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder", "clear-trash", "share-folder"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder", "clear-trash", "share-active-folder"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -655,8 +655,9 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
-            case "share-folder":
-                this.shareFolder(el.dataset.folderId)
+            case "share-active-folder":
+                this.shareFolder(StateStore.read().activeFolderId)
+                this.toggleActiveFolderMenu(false)
                 break
             case "edit-display-name": {
                 const currentName = String(document.getElementById("user-name")?.textContent || "")
@@ -2360,6 +2361,7 @@ Object.assign(UI, {
         const wrapper = this.els.activeFolderMenuWrapper
         const hideLabel = this.els.activeFolderHideButton?.querySelector("span")
         const hideIcon = this.els.activeFolderHideButton?.querySelector("i")
+        const shareButton = document.getElementById("active-folder-share-button")
         if (!wrapper) return
         const { view, activeFolderId, folders } = StateStore.read()
         const isVisible = view === "folder" && !!activeFolderId
@@ -2370,6 +2372,8 @@ Object.assign(UI, {
         }
         const folder = folders.find(item => item.id === activeFolderId)
         if (!folder) return
+        const isOwner = String(folder.ownerUid || "") === String(StateStore.read().user?.uid || "")
+        if (shareButton) shareButton.classList.toggle("hidden", !isOwner)
         if (hideLabel) hideLabel.textContent = folder.isHidden ? this.getText("show_folder", "Show folder") : this.getText("hide_folder", "Hide folder")
         if (hideIcon) hideIcon.textContent = folder.isHidden ? "visibility" : "visibility_off"
     }
