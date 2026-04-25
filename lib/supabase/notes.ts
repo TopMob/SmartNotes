@@ -70,6 +70,12 @@ type NoteRow = {
   user_id: string
 }
 
+type NotePermissionRow = {
+  note_id: string
+  user_email: string
+  role: "viewer" | "editor"
+}
+
 function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map(item => String(item || "")).filter(Boolean)
@@ -386,6 +392,79 @@ function mapNoteRow(note: NoteRow) {
   }
 }
 
+function normalizeEmail(value: unknown) {
+  return String(value || "").trim().toLowerCase()
+}
+
+async function listPermittedNoteIds(userEmail: string) {
+  const normalizedEmail = normalizeEmail(userEmail)
+  if (!normalizedEmail) return []
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("note_permissions")
+    .select("note_id")
+    .eq("user_email", normalizedEmail)
+
+  if (error) throw error
+  return (data || []).map(row => String(row.note_id || "")).filter(Boolean)
+}
+
+async function getNoteAccessRow(noteId: string, userId: string, userEmail: string) {
+  const normalizedNoteId = String(noteId || "").trim()
+  if (!normalizedNoteId) {
+    throw new Error("NOTE_ID_REQUIRED")
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data: noteRow, error: noteError } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("id", normalizedNoteId)
+    .maybeSingle()
+
+  if (noteError) throw noteError
+  if (!noteRow?.id) throw new Error("NOTE_NOT_FOUND")
+  if (noteRow.user_id === userId) {
+    return { noteRow: noteRow as NoteRow, permission: null }
+  }
+
+  const normalizedEmail = normalizeEmail(userEmail)
+  if (!normalizedEmail) {
+    throw new Error("NOTE_NOT_FOUND")
+  }
+
+  const { data: permissionRow, error: permissionError } = await supabase
+    .from("note_permissions")
+    .select("note_id, user_email, role")
+    .eq("note_id", normalizedNoteId)
+    .eq("user_email", normalizedEmail)
+    .maybeSingle()
+
+  if (permissionError) throw permissionError
+  if (!permissionRow?.note_id) {
+    throw new Error("NOTE_NOT_FOUND")
+  }
+
+  return {
+    noteRow: noteRow as NoteRow,
+    permission: permissionRow as NotePermissionRow
+  }
+}
+
+async function requireEditorNoteAccess(noteId: string, userId: string, userEmail: string) {
+  const access = await getNoteAccessRow(noteId, userId, userEmail)
+  if (access.noteRow.user_id === userId) {
+    return access.noteRow
+  }
+
+  if (access.permission?.role !== "editor") {
+    throw new Error("NOTE_NOT_FOUND")
+  }
+
+  return access.noteRow
+}
+
 export async function getSupabaseProfile(userId: string) {
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
@@ -594,28 +673,30 @@ export async function deleteSupabaseFolder(userId: string, folderId: string) {
   return { id: normalizedFolderId }
 }
 
-export async function listSupabaseNotes(userId: string, { limit = 500, offset = 0, startAfterId }: { limit?: number, offset?: number, startAfterId?: string } = {}) {
+export async function listSupabaseNotes(userId: string, userEmail: string, { limit = 500, offset = 0, startAfterId }: { limit?: number, offset?: number, startAfterId?: string } = {}) {
   const supabase = getSupabaseAdminClient()
   const from = Math.max(0, Number(offset) || 0)
   const to = from + Math.max(1, Number(limit) || 500) - 1
+  const permittedNoteIds = await listPermittedNoteIds(userEmail)
   let query = supabase
     .from("notes")
     .select("*")
-    .eq("user_id", userId)
+    .or([
+      `user_id.eq.${userId}`,
+      ...(permittedNoteIds.length ? [`id.in.(${permittedNoteIds.join(",")})`] : [])
+    ].join(","))
 
   const normalizedStartAfterId = String(startAfterId || "").trim()
   if (normalizedStartAfterId) {
-    const { data: cursorRow, error: cursorError } = await supabase
-      .from("notes")
-      .select("id, updated_at")
-      .eq("id", normalizedStartAfterId)
-      .eq("user_id", userId)
-      .maybeSingle()
+    const cursorAccess = await getNoteAccessRow(normalizedStartAfterId, userId, userEmail).catch(error => {
+      if (String(error instanceof Error ? error.message : error || "") === "NOTE_NOT_FOUND") {
+        return null
+      }
+      throw error
+    })
 
-    if (cursorError) throw cursorError
-
-    if (cursorRow?.id) {
-      const cursorUpdatedAt = cursorRow.updated_at || "1970-01-01T00:00:00.000Z"
+    if (cursorAccess?.noteRow?.id) {
+      const cursorUpdatedAt = cursorAccess.noteRow.updated_at || "1970-01-01T00:00:00.000Z"
       query = query.or(`updated_at.lt.${cursorUpdatedAt},and(updated_at.eq.${cursorUpdatedAt},id.lt.${normalizedStartAfterId})`)
     }
   }
@@ -643,41 +724,21 @@ export async function upsertSupabaseNote({ userId, note }: { userId: string, not
   return mapNoteRow(data)
 }
 
-export async function updateSupabaseNote({ userId, noteId, note }: { userId: string, noteId?: string | null, note: NoteInput }) {
+export async function updateSupabaseNote({ userId, userEmail, noteId, note }: { userId: string, userEmail: string, noteId?: string | null, note: NoteInput }) {
   const normalizedNoteId = String(noteId || note?.id || "").trim()
   if (!normalizedNoteId) {
     throw new Error("NOTE_ID_REQUIRED")
   }
 
   const supabase = getSupabaseAdminClient()
-  const { data: existing, error: existingError } = await supabase
-    .from("notes")
-    .select("id, metadata")
-    .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (existingError) throw existingError
-  if (!existing?.id) {
-    throw new Error("NOTE_NOT_FOUND")
-  }
-
-  const { data: currentNoteRow, error: currentNoteRowError } = await supabase
-    .from("notes")
-    .select("*")
-    .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (currentNoteRowError) throw currentNoteRowError
+  const currentNoteRow = await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
 
   const currentNote = currentNoteRow ? mapNoteRow(currentNoteRow as NoteRow) : null
-  const payload = buildNotePayload(userId, { ...(currentNote || {}), ...(note || {}), id: normalizedNoteId }, existing.metadata || {})
+  const payload = buildNotePayload(currentNoteRow.user_id, { ...(currentNote || {}), ...(note || {}), id: normalizedNoteId }, currentNoteRow.metadata || {})
   const { data, error } = await supabase
     .from("notes")
     .update(payload)
     .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
     .select("*")
     .single()
 
@@ -685,22 +746,14 @@ export async function updateSupabaseNote({ userId, noteId, note }: { userId: str
   return mapNoteRow(data)
 }
 
-export async function patchSupabaseNote({ userId, noteId, updates }: { userId: string, noteId: string, updates: Record<string, unknown> }) {
+export async function patchSupabaseNote({ userId, userEmail, noteId, updates }: { userId: string, userEmail: string, noteId: string, updates: Record<string, unknown> }) {
   const normalizedNoteId = String(noteId || "").trim()
   if (!normalizedNoteId) {
     throw new Error("NOTE_ID_REQUIRED")
   }
 
   const supabase = getSupabaseAdminClient()
-  const { data: existingRow, error: existingRowError } = await supabase
-    .from("notes")
-    .select("*")
-    .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (existingRowError) throw existingRowError
-  if (!existingRow?.id) throw new Error("NOTE_NOT_FOUND")
+  const existingRow = await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
 
   const payload = buildNotePatchPayload(existingRow as NoteRow, {
     ...updates,
@@ -711,7 +764,6 @@ export async function patchSupabaseNote({ userId, noteId, updates }: { userId: s
     .from("notes")
     .update(payload)
     .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
     .select("*")
     .single()
 
@@ -719,18 +771,19 @@ export async function patchSupabaseNote({ userId, noteId, updates }: { userId: s
   return mapNoteRow(data)
 }
 
-export async function deleteSupabaseNote(userId: string, noteId: string) {
+export async function deleteSupabaseNote(userId: string, userEmail: string, noteId: string) {
   const normalizedNoteId = String(noteId || "").trim()
   if (!normalizedNoteId) {
     throw new Error("NOTE_ID_REQUIRED")
   }
+
+  await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
 
   const supabase = getSupabaseAdminClient()
   const { error } = await supabase
     .from("notes")
     .delete()
     .eq("id", normalizedNoteId)
-    .eq("user_id", userId)
 
   if (error) throw error
   return { id: normalizedNoteId }

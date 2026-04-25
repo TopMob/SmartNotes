@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const limit = Number(url.searchParams.get("limit") || 500)
     const offset = Number(url.searchParams.get("offset") || 0)
     const startAfterId = String(url.searchParams.get("startAfterId") || "").trim() || undefined
-    const notes = await listSupabaseNotes(user.id, { limit, offset, startAfterId })
+    const notes = await listSupabaseNotes(user.id, user.email, { limit, offset, startAfterId })
     return ok({ notes })
   } catch (error) {
     return handleRouteError(mapNoteError(error), "NOTES_FAILED")
@@ -53,11 +53,13 @@ export async function PUT(request: Request) {
     const note = shouldPatch
       ? await patchSupabaseNote({
         userId: user.id,
+        userEmail: user.email,
         noteId: normalizedNoteId,
         updates: bodyNote
       })
       : await updateSupabaseNote({
         userId: user.id,
+        userEmail: user.email,
         noteId: normalizedNoteId,
         note: bodyNote
       })
@@ -81,6 +83,7 @@ export async function PATCH(request: Request) {
     if (action === "trigger-analysis") {
       await patchSupabaseNote({
         userId: user.id,
+        userEmail: user.email,
         noteId: normalizedNoteId,
         updates: {
           aiStatus: "pending",
@@ -99,6 +102,7 @@ export async function PATCH(request: Request) {
 
       const note = await patchSupabaseNote({
         userId: user.id,
+        userEmail: user.email,
         noteId: normalizedNoteId,
         updates: {}
       })
@@ -117,7 +121,7 @@ export async function DELETE(request: Request) {
     const user = await requireSupabaseUser(request)
     const url = new URL(request.url)
     const noteId = url.searchParams.get("id") || ""
-    const result = await deleteSupabaseNote(user.id, noteId)
+    const result = await deleteSupabaseNote(user.id, user.email, noteId)
 
     return ok({ note: result })
   } catch (error) {

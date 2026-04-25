@@ -101,38 +101,21 @@ function notifyAuthStateChange(eventName, session) {
     })
 }
 
-async function callAuthEndpoint(payload) {
-    const response = await fetch("/api/supabase/auth", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload || {})
-    })
-
-    const result = await response.json().catch(() => ({}))
-    return { ok: response.ok, status: response.status, data: result }
-}
-
-function shouldRefreshSession(status, payload) {
-    if (status === 401) return true
-    const message = String(payload?.error || payload?.message || payload?.code || "").toLowerCase()
-    return message.includes("jwt") || message.includes("token")
-}
-
 async function refreshStoredSession() {
     const session = getCurrentSession()
     if (!session?.refresh_token) return session
 
-    const refreshResult = await callAuthEndpoint({
-        path: "token?grant_type=refresh_token",
-        body: {
-            refresh_token: session.refresh_token
-        }
+    const officialClient = await getOfficialClient()
+    if (!officialClient?.auth?.refreshSession) {
+        return session
+    }
+
+    const refreshResult = await officialClient.auth.refreshSession({
+        refresh_token: session.refresh_token
     })
 
-    if (!refreshResult.ok) {
-        if (refreshResult.status === 401) {
+    if (refreshResult.error || !refreshResult.data?.session) {
+        if (Number(refreshResult.error?.status || 0) === 401) {
             setCurrentSession(null)
             notifyAuthStateChange("SIGNED_OUT", null)
             return null
@@ -140,7 +123,7 @@ async function refreshStoredSession() {
         return session
     }
 
-    const nextSession = setCurrentSession(refreshResult.data)
+    const nextSession = setCurrentSession(refreshResult.data.session)
     notifyAuthStateChange("TOKEN_REFRESHED", nextSession)
     return nextSession
 }
@@ -149,25 +132,28 @@ async function verifyStoredSession() {
     const session = getCurrentSession()
     if (!session?.access_token) return null
 
+    const officialClient = await getOfficialClient()
+    if (!officialClient?.auth?.getUser) {
+        return session
+    }
+
     if (isSessionExpired(session)) {
         return refreshStoredSession()
     }
 
-    const verifyResult = await callAuthEndpoint({
-        path: "user",
-        accessToken: session.access_token
-    })
+    const verifyResult = await officialClient.auth.getUser(session.access_token)
 
-    if (verifyResult.ok) {
+    if (!verifyResult.error && verifyResult.data?.user) {
         const nextSession = setCurrentSession({
             ...session,
-            user: verifyResult.data?.user || session.user || null
+            user: verifyResult.data.user || session.user || null
         })
         notifyAuthStateChange("USER_VERIFIED", nextSession)
         return nextSession
     }
 
-    if (shouldRefreshSession(verifyResult.status, verifyResult.data)) {
+    const message = String(verifyResult.error?.message || verifyResult.error?.code || "").toLowerCase()
+    if (Number(verifyResult.error?.status || 0) === 401 || message.includes("jwt") || message.includes("token")) {
         return refreshStoredSession()
     }
 
