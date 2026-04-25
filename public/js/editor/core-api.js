@@ -433,13 +433,15 @@ export const EditorAPI = (() => {
         return notes.some(noteItem => String(noteItem?.id || "") === normalizedNoteId)
     }
 
-    const upsertSavedNoteIntoState = (savedNote) => {
+    const upsertSavedNoteIntoState = (savedNote, previousNoteId = "") => {
         const noteIdentifier = String(savedNote?.id || "")
         if (!noteIdentifier) return
+        const normalizedPreviousNoteId = String(previousNoteId || "")
         const stateNotes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
         let updated = false
         const nextNotes = stateNotes.map((stateNote) => {
-            if (String(stateNote?.id || "") !== noteIdentifier) return stateNote
+            const stateNoteId = String(stateNote?.id || "")
+            if (stateNoteId !== noteIdentifier && (!normalizedPreviousNoteId || stateNoteId !== normalizedPreviousNoteId)) return stateNote
             updated = true
             return NoteIO.normalizeNote({
                 ...stateNote,
@@ -569,11 +571,14 @@ export const EditorAPI = (() => {
         try {
             const savedResult = await ref.set(payload, { merge: true })
             const persistedNote = savedResult?.note || savedResult?.data?.note || note
-            upsertSavedNoteIntoState(persistedNote)
+            upsertSavedNoteIntoState(persistedNote, note.id)
             window.NoteAnalysisService?.schedule?.(persistedNote?.id || note.id)
             if (persistedNote?.id && persistedNote.id !== note.id) {
                 note = { ...note, id: persistedNote.id }
                 StateStore.update("currentNote", note)
+                if (String(UI.currentNoteActionId || "") === String(payload.id || "")) {
+                    UI.currentNoteActionId = persistedNote.id
+                }
             }
             StateStore.update("editorDirty", false)
             state.autoSaveSnapshot = captureSnapshot()

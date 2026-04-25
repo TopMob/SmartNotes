@@ -358,7 +358,7 @@ function buildNotePatchPayload(existingRow: NoteRow, updates: Record<string, unk
   }
 
   if (hasOwn(updates, "folderId")) {
-    payload.folder_id = updates.folderId ? String(updates.folderId) : null
+    payload.folder_id = updates.folderId ? normalizeUuid(updates.folderId) : null
   }
 
   if (hasOwn(updates, "isArchived")) {
