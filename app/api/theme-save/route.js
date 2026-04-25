@@ -1,4 +1,5 @@
 import { readJsonObject } from "@/lib/http/jsonBody"
+import { requireRequestAuth } from "@/lib/auth"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -55,6 +56,7 @@ function sanitizeCustomPresets(customPresets) {
 
 export async function POST(request) {
   try {
+    const authenticatedUid = await requireRequestAuth(request)
     const payload = await readJsonObject(request)
     const uid = payload.uid
     const settings = payload.settings
@@ -64,12 +66,16 @@ export async function POST(request) {
       return Response.json({ error: "Invalid uid" }, { status: 400 })
     }
 
+    const normalizedUid = uid.trim()
+    if (normalizedUid !== authenticatedUid) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
       return Response.json({ error: "Invalid settings" }, { status: 400 })
     }
 
     const supabase = getSupabaseAdminClient()
-    const normalizedUid = uid.trim()
     const sanitizedSettings = sanitizeSettings(settings)
     const sanitizedCustomPresets = sanitizeCustomPresets(customPresets)
     const { data: existingProfile, error: existingProfileError } = await supabase
@@ -105,6 +111,9 @@ export async function POST(request) {
 
     return Response.json({ success: true }, { status: 200 })
   } catch (error) {
+    if (String(error?.message || "") === "UNAUTHORIZED") {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
     console.error("Theme save error", error)
     return Response.json({ error: "Internal error" }, { status: 500 })
   }

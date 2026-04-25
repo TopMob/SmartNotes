@@ -11,7 +11,7 @@ import { parseOAuthState } from "@/lib/drive/state"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || "https://smartnotess.vercel.app/"
+const DEFAULT_FRONTEND_URL = "http://127.0.0.1:3000/"
 
 function getFrontendBaseUrl() {
   const envUrl = process.env.FRONTEND_URL

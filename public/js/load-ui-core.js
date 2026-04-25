@@ -13,6 +13,10 @@ const UI = {
     toastDeduplication: { lastMessage: "", lastShownAt: 0 },
     loadingLocks: new Set(),
 
+    resolveEventElementTarget(target) {
+        return target instanceof Element ? target : null
+    },
+
     init() {
         this.els = {
             sidebar: document.getElementById("sidebar"),
@@ -190,29 +194,31 @@ Object.assign(UI, {
         const listenersSignal = this.eventListenersController.signal
 
         document.addEventListener("click", (event) => {
-            const actionElement = event.target.closest("[data-action]")
+            const targetElement = this.resolveEventElementTarget(event.target)
+            if (!targetElement) return
+            const actionElement = targetElement.closest("[data-action]")
             if (actionElement) {
                 this.handleAction(actionElement, event)
             }
 
             const isDesktop = window.matchMedia("(min-width: 1024px)").matches
-            if (!isDesktop && this.els.sidebar?.classList.contains("active") && this.els.sidebar && !this.els.sidebar.contains(event.target) && !event.target.closest("#menu-toggle")) {
+            if (!isDesktop && this.els.sidebar?.classList.contains("active") && this.els.sidebar && !this.els.sidebar.contains(targetElement) && !targetElement.closest("#menu-toggle")) {
                 this.toggleSidebar(false)
             }
-            if (this.els.userMenu?.classList.contains("active") && !event.target.closest(".user-avatar-wrapper")) {
+            if (this.els.userMenu?.classList.contains("active") && !targetElement.closest(".user-avatar-wrapper")) {
                 this.toggleUserMenu(false)
             }
-            if (this.els.filterMenu?.classList.contains("active") && !event.target.closest("#notes-filter-menu") && !event.target.closest("#notes-filter-toggle")) {
+            if (this.els.filterMenu?.classList.contains("active") && !targetElement.closest("#notes-filter-menu") && !targetElement.closest("#notes-filter-toggle")) {
                 this.toggleFilterMenu(false)
             }
-            if (this.els.activeFolderMenu?.classList.contains("active") && !event.target.closest("#active-folder-menu-wrapper")) {
+            if (this.els.activeFolderMenu?.classList.contains("active") && !targetElement.closest("#active-folder-menu-wrapper")) {
                 this.toggleActiveFolderMenu(false)
             }
-            if (this.els.activeWorkspaceMenu?.classList.contains("active") && !event.target.closest("#active-workspace-menu-wrapper")) {
+            if (this.els.activeWorkspaceMenu?.classList.contains("active") && !targetElement.closest("#active-workspace-menu-wrapper")) {
                 this.toggleActiveWorkspaceMenu(false)
             }
 
-            const overlayElement = event.target.closest(".modal-overlay")
+            const overlayElement = targetElement.closest(".modal-overlay")
             if (overlayElement && event.target === overlayElement && !overlayElement.dataset.modalStatic) {
                 if (overlayElement.id === "settings-modal") {
                     this.requestCloseSettingsModal()
@@ -226,19 +232,22 @@ Object.assign(UI, {
 
         if (this.els.folderList) {
             this.els.folderList.addEventListener("dragstart", event => {
-                const folderElement = event.target.closest("[data-folder-draggable='true']")
+                const targetElement = this.resolveEventElementTarget(event.target)
+                const folderElement = targetElement?.closest("[data-folder-draggable='true']")
                 if (!folderElement) return
                 this.draggedFolderId = folderElement.dataset.folderId
             }, { signal: listenersSignal })
             this.els.folderList.addEventListener("dragover", event => {
                 if (!this.draggedFolderId) return
-                const targetElement = event.target.closest("[data-folder-draggable='true']")
+                const elementTarget = this.resolveEventElementTarget(event.target)
+                const targetElement = elementTarget?.closest("[data-folder-draggable='true']")
                 if (!targetElement || targetElement.dataset.folderId === this.draggedFolderId) return
                 event.preventDefault()
             }, { signal: listenersSignal })
             this.els.folderList.addEventListener("drop", event => {
                 if (!this.draggedFolderId) return
-                const targetElement = event.target.closest("[data-folder-draggable='true']")
+                const elementTarget = this.resolveEventElementTarget(event.target)
+                const targetElement = elementTarget?.closest("[data-folder-draggable='true']")
                 if (!targetElement) return
                 event.preventDefault()
                 this.reorderFolders(this.draggedFolderId, targetElement.dataset.folderId)

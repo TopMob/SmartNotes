@@ -8,6 +8,7 @@ import { normalizePageDrawings, buildPageDrawingsRevision } from "./core-autosav
 export const EditorAPI = (() => {
     const state = createEditorState()
     const elements = state.elements
+    const resolveEventElementTarget = (target) => target instanceof Element ? target : null
 
     const getEditorDomElements = () => ({
         wrapper: document.getElementById("note-editor"),
@@ -504,7 +505,8 @@ export const EditorAPI = (() => {
         const pagesListElement = boundElements.pagesList
         if (pagesListElement) {
             pagesListElement.addEventListener("click", (event) => {
-                const actionElement = event.target.closest("[data-action]")
+                const targetElement = resolveEventElementTarget(event.target)
+                const actionElement = targetElement?.closest("[data-action]")
                 if (!actionElement) return
                 const pageIndex = Number(actionElement.dataset.pageIndex)
                 const action = actionElement.dataset.action
@@ -518,7 +520,8 @@ export const EditorAPI = (() => {
                 }
             }, { signal })
             pagesListElement.addEventListener("input", (event) => {
-                const inputElement = event.target.closest(".editor-page-title-input")
+                const targetElement = resolveEventElementTarget(event.target)
+                const inputElement = targetElement?.closest(".editor-page-title-input")
                 if (!inputElement) return
                 const pageIndex = Number(inputElement.dataset.pageIndex)
                 const normalizedValue = String(inputElement.value || "").slice(0, 15)
@@ -536,7 +539,9 @@ export const EditorAPI = (() => {
             inputHandlers.attachDelegatedHandlers(boundElements.content, signal)
 
             boundElements.content.addEventListener("click", (event) => {
-                const link = event.target.closest("a")
+                const targetElement = resolveEventElementTarget(event.target)
+                if (!targetElement) return
+                const link = targetElement.closest("a")
                 if (link && boundElements.content.contains(link)) {
                     const noteId = link.dataset.noteId
                     if (noteId) {
@@ -551,7 +556,7 @@ export const EditorAPI = (() => {
                         return
                     }
                 }
-                const wrapper = event.target.closest(".media-wrapper")
+                const wrapper = targetElement.closest(".media-wrapper")
                 if (wrapper) {
                     if (state.drawingState?.active) {
                         event.preventDefault()
@@ -581,8 +586,10 @@ export const EditorAPI = (() => {
         document.addEventListener("click", (event) => {
             const alignMenuElement = document.getElementById("editor-align-menu")
             if (!alignMenuElement || !alignMenuElement.classList.contains("active")) return
-            if (event.target.closest("#editor-align-menu")) return
-            if (state.alignMenuTarget && event.target.closest(".tool-btn") === state.alignMenuTarget) return
+            const targetElement = resolveEventElementTarget(event.target)
+            if (!targetElement) return
+            if (targetElement.closest("#editor-align-menu")) return
+            if (state.alignMenuTarget && targetElement.closest(".tool-btn") === state.alignMenuTarget) return
             mediaHandlers.closeAlignMenu()
         }, { signal })
 
@@ -602,9 +609,10 @@ export const EditorAPI = (() => {
 
         if (boundElements.tagsContainer) {
             boundElements.tagsContainer.addEventListener("click", (event) => {
-                const remove = event.target.closest("[data-action='remove-tag']")
+                const targetElement = resolveEventElementTarget(event.target)
+                const remove = targetElement?.closest("[data-action='remove-tag']")
                 if (remove) inputHandlers.removeTag(decodeURIComponent(remove.dataset.tag || ""))
-                const add = event.target.closest("[data-action='add-tag']")
+                const add = targetElement?.closest("[data-action='add-tag']")
                 if (add) inputHandlers.addTag(decodeURIComponent(add.dataset.tag || ""))
             }, { signal })
         }

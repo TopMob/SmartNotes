@@ -3,6 +3,7 @@ import { createMediaHtml, resolveMediaDropPlacement, insertMediaAtPlacement, get
 
 export const createMediaHandlers = (context) => {
     const { elements, state, getPages, queueSnapshot, insertHtmlAtSelection, alignText, restoreSelection } = context
+    const resolveEventElementTarget = (target) => target instanceof Element ? target : null
 
     const optimizeImageDataUrl = (dataUrl, options = {}) => new Promise((resolve) => {
         const source = String(dataUrl || "")
@@ -66,10 +67,11 @@ export const createMediaHandlers = (context) => {
             event.preventDefault()
             return
         }
-        const handle = event.target.closest(".media-resize-handle")
+        const targetElement = resolveEventElementTarget(event.target)
+        const handle = targetElement?.closest(".media-resize-handle")
         if (!handle) return
 
-        const wrapper = event.target.closest(".media-wrapper")
+        const wrapper = targetElement?.closest(".media-wrapper")
         const img = wrapper?.querySelector("img")
         if (!wrapper || !img) return
 
@@ -124,8 +126,9 @@ export const createMediaHandlers = (context) => {
             return
         }
         if (typeof event.button === "number" && event.button > 0) return
-        if (event.target.closest(".media-resize-handle")) return
-        const wrapper = event.target.closest(".media-draggable-item")
+        const targetElement = resolveEventElementTarget(event.target)
+        if (targetElement?.closest(".media-resize-handle")) return
+        const wrapper = targetElement?.closest(".media-draggable-item")
         if (!wrapper || !elements.content.contains(wrapper)) return
         state.dragState = {
             wrapper,
@@ -207,7 +210,8 @@ export const createMediaHandlers = (context) => {
     }
 
     const handleNativeDragStart = (event) => {
-        if (!event.target.closest(".media-draggable-item")) return
+        const targetElement = resolveEventElementTarget(event.target)
+        if (!targetElement?.closest(".media-draggable-item")) return
         event.preventDefault()
     }
 
