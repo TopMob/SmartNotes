@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
     const payload = await readJsonBody(request)
-    const note = await upsertSupabaseNote({ userId: user.id, note: payload?.note || payload })
+    const note = await upsertSupabaseNote({ userId: user.id, userEmail: user.email, note: payload?.note || payload })
     return ok({ note }, { status: 201 })
   } catch (error) {
     return handleRouteError(mapNoteError(error), "NOTE_CREATE_FAILED")

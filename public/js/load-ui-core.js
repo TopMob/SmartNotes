@@ -627,7 +627,7 @@ Object.assign(UI, {
         const action = el.dataset.action
         if (!action) return
 
-        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder", "clear-trash"])
+        const stopFor = new Set(["note-pin", "note-favorite", "note-menu", "rename-active-folder", "toggle-active-folder-menu", "toggle-active-folder-hidden", "delete-active-folder", "clear-trash", "share-folder"])
         if (stopFor.has(action)) e.stopPropagation()
 
         switch (action) {
@@ -655,6 +655,9 @@ Object.assign(UI, {
                 this.toggleSidebar(false)
               }
               break
+            case "share-folder":
+                this.shareFolder(el.dataset.folderId)
+                break
             case "edit-display-name": {
                 const currentName = String(document.getElementById("user-name")?.textContent || "")
                 this.showPrompt(this.getText("display_name", "Отображаемое имя"), this.getText("display_name_placeholder", "Введите имя"), async value => {
@@ -1776,6 +1779,40 @@ Object.assign(UI, {
                 showCounter: true,
                 softLimit: window.Validators.FOLDER_DESCRIPTION_SOFT_LIMIT,
                 maxLength: window.Validators.FOLDER_DESCRIPTION_HARD_LIMIT
+            }
+        })
+    },
+
+    shareFolder(folderId) {
+        const id = String(folderId || "")
+        if (!id) return
+        const folder = StateStore.read().folders.find(item => item.id === id)
+        const currentUserUid = String(StateStore.read().user?.uid || "")
+        if (!folder || !currentUserUid || String(folder.ownerUid || "") !== currentUserUid) return
+
+        this.showPrompt(this.getText("share_folder_title", "Поделиться папкой"), this.getText("share_folder_email_placeholder", "email@example.com"), async (email, roleValue) => {
+            const normalizedEmail = String(email || "").trim().toLowerCase()
+            const normalizedRole = String(roleValue || "").trim().toLowerCase()
+            if (!normalizedEmail) return
+
+            try {
+                if (normalizedRole === "remove") {
+                    await window.NoteActionService.revokeFolderAccess(id, normalizedEmail)
+                    this.showToast(this.getText("share_folder_revoked", "Доступ к папке отозван"))
+                    return
+                }
+
+                const role = normalizedRole === "editor" ? "editor" : "viewer"
+                await window.NoteActionService.shareFolder(id, normalizedEmail, role)
+                this.showToast(this.getText("share_folder_saved", "Доступ к папке обновлен"))
+            } catch (error) {
+                this.showToast(`${this.getText("share_folder_failed", "Не удалось обновить доступ к папке")} (${String(error?.message || error || "unknown")})`)
+            }
+        }, "", {
+            secondaryField: {
+                value: "viewer",
+                placeholder: this.getText("share_folder_role_placeholder", "viewer | editor | remove"),
+                ariaLabel: this.getText("share_folder_role_label", "Роль доступа к папке")
             }
         })
     },

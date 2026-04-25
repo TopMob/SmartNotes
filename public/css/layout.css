@@ -107,11 +107,50 @@ body.platform-android .sidebar-glass {
     cursor: pointer;
     padding: 0 12px;
     text-align: left;
+    justify-content: space-between;
+}
+
+.nav-item-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.nav-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .nav-item i {
     font-size: 22px;
     opacity: 0.9;
+}
+
+.nav-item-share {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.nav-item-share:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(var(--primary-rgb), 0.22);
+    color: var(--text);
+}
+
+.nav-item-share i {
+    font-size: 17px;
 }
 
 .nav-item:hover {

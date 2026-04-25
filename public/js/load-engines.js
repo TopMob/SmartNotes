@@ -18,6 +18,7 @@ const buildAuthorizedHeaders = (user) => {
 
 const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
 const getNoteShareEndpoint = () => createApiEndpoint("supabase/notes/share")
+const getFolderShareEndpoint = () => createApiEndpoint("supabase/folders/share")
 const NOTE_ANALYZE_DEBOUNCE_MS = 12000
 
 const createNeutralTimestamp = () => new Date().toISOString()
@@ -199,6 +200,45 @@ const NoteActionService = {
         if (!response.ok) {
             const errorCode = await resolveNoteActionErrorCode(response)
             throw new Error(errorCode || `NOTE_REVOKE_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.permission || null
+    },
+
+    async shareFolder(folderId, email, role) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getFolderShareEndpoint(), {
+            method: "POST",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({
+                folderId: String(folderId || ""),
+                email: String(email || "").trim(),
+                role: role === "editor" ? "editor" : "viewer"
+            })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `FOLDER_SHARE_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.permission || null
+    },
+
+    async revokeFolderAccess(folderId, email) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getFolderShareEndpoint(), {
+            method: "DELETE",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({
+                folderId: String(folderId || ""),
+                email: String(email || "").trim()
+            })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `FOLDER_REVOKE_HTTP_${response.status}`)
         }
         const payload = await response.json()
         return payload?.permission || null

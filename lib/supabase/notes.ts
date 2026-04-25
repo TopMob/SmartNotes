@@ -76,6 +76,12 @@ type NotePermissionRow = {
   role: "viewer" | "editor"
 }
 
+type FolderPermissionRow = {
+  folder_id: string
+  user_email: string
+  role: "viewer" | "editor"
+}
+
 type SharePermissionInput = {
   noteId: string
   userId: string
@@ -418,6 +424,89 @@ async function listPermittedNoteIds(userEmail: string) {
   return (data || []).map(row => String(row.note_id || "")).filter(Boolean)
 }
 
+async function listPermittedFolderRows(userEmail: string) {
+  const normalizedEmail = normalizeEmail(userEmail)
+  if (!normalizedEmail) return []
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("folder_permissions")
+    .select("folder_id, user_email, role")
+    .eq("user_email", normalizedEmail)
+
+  if (error) throw error
+  return (data || []) as FolderPermissionRow[]
+}
+
+async function listOwnedFolderIds(userId: string) {
+  const normalizedUserId = String(userId || "").trim()
+  if (!normalizedUserId) return []
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("folders")
+    .select("id")
+    .eq("user_id", normalizedUserId)
+
+  if (error) throw error
+  return (data || []).map(row => String(row.id || "")).filter(Boolean)
+}
+
+async function getFolderAccessRow(folderId: string, userId: string, userEmail: string) {
+  const normalizedFolderId = String(folderId || "").trim()
+  if (!normalizedFolderId) {
+    throw new Error("FOLDER_ID_REQUIRED")
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data: folderRow, error: folderError } = await supabase
+    .from("folders")
+    .select("id, user_id")
+    .eq("id", normalizedFolderId)
+    .maybeSingle()
+
+  if (folderError) throw folderError
+  if (!folderRow?.id) {
+    throw new Error("FOLDER_NOT_FOUND")
+  }
+
+  if (folderRow.user_id === userId) {
+    return {
+      folderId: normalizedFolderId,
+      ownerId: String(folderRow.user_id || ""),
+      permission: null
+    }
+  }
+
+  const permission = await getFolderPermissionRow(normalizedFolderId, userEmail)
+  if (!permission?.folder_id) {
+    throw new Error("FOLDER_NOT_FOUND")
+  }
+
+  return {
+    folderId: normalizedFolderId,
+    ownerId: String(folderRow.user_id || ""),
+    permission
+  }
+}
+
+async function getFolderPermissionRow(folderId: string, userEmail: string) {
+  const normalizedFolderId = String(folderId || "").trim()
+  const normalizedEmail = normalizeEmail(userEmail)
+  if (!normalizedFolderId || !normalizedEmail) return null
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("folder_permissions")
+    .select("folder_id, user_email, role")
+    .eq("folder_id", normalizedFolderId)
+    .eq("user_email", normalizedEmail)
+    .maybeSingle()
+
+  if (error) throw error
+  return data as FolderPermissionRow | null
+}
+
 async function getNoteAccessRow(noteId: string, userId: string, userEmail: string) {
   const normalizedNoteId = String(noteId || "").trim()
   if (!normalizedNoteId) {
@@ -435,6 +524,21 @@ async function getNoteAccessRow(noteId: string, userId: string, userEmail: strin
   if (!noteRow?.id) throw new Error("NOTE_NOT_FOUND")
   if (noteRow.user_id === userId) {
     return { noteRow: noteRow as NoteRow, permission: null }
+  }
+
+  const folderAccess = noteRow.folder_id
+    ? await getFolderAccessRow(String(noteRow.folder_id || ""), userId, userEmail).catch(error => {
+      if (String(error instanceof Error ? error.message : error || "") === "FOLDER_NOT_FOUND") {
+        return null
+      }
+      throw error
+    })
+    : null
+  if (folderAccess?.folderId) {
+    return {
+      noteRow: noteRow as NoteRow,
+      permission: folderAccess.permission || { folder_id: folderAccess.folderId, user_email: normalizeEmail(userEmail), role: "editor" }
+    }
   }
 
   const normalizedEmail = normalizeEmail(userEmail)
@@ -611,6 +715,23 @@ export async function listSupabaseFolders(userId: string) {
   return (data || []).map(mapFolderRow)
 }
 
+export async function listAccessibleSupabaseFolders(userId: string, userEmail: string) {
+  const supabase = getSupabaseAdminClient()
+  const permittedFolders = await listPermittedFolderRows(userEmail)
+  const permittedFolderIds = permittedFolders.map(row => String(row.folder_id || "")).filter(Boolean)
+  const { data, error } = await supabase
+    .from("folders")
+    .select("id, name, description, sort_order, is_hidden, is_archived, metadata, created_at, updated_at, user_id")
+    .or([
+      `user_id.eq.${userId}`,
+      ...(permittedFolderIds.length ? [`id.in.(${permittedFolderIds.join(",")})`] : [])
+    ].join(","))
+    .order("created_at", { ascending: true })
+
+  if (error) throw error
+  return (data || []).map(mapFolderRow)
+}
+
 export async function upsertSupabaseFolder({ userId, folderId = null, name, description = "", isHidden = false, isArchived = false }: { userId: string, folderId?: string | null, name: unknown, description?: string, isHidden?: boolean, isArchived?: boolean }) {
   assertFolderName(name)
   const supabase = getSupabaseAdminClient()
@@ -707,12 +828,19 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
   const from = Math.max(0, Number(offset) || 0)
   const to = from + Math.max(1, Number(limit) || 500) - 1
   const permittedNoteIds = await listPermittedNoteIds(userEmail)
+  const ownedFolderIds = await listOwnedFolderIds(userId)
+  const permittedFolderRows = await listPermittedFolderRows(userEmail)
+  const permittedFolderIds = [...new Set([
+    ...ownedFolderIds,
+    ...permittedFolderRows.map(row => String(row.folder_id || "")).filter(Boolean)
+  ])]
   let query = supabase
     .from("notes")
     .select("*")
     .or([
       `user_id.eq.${userId}`,
-      ...(permittedNoteIds.length ? [`id.in.(${permittedNoteIds.join(",")})`] : [])
+      ...(permittedNoteIds.length ? [`id.in.(${permittedNoteIds.join(",")})`] : []),
+      ...(permittedFolderIds.length ? [`folder_id.in.(${permittedFolderIds.join(",")})`] : [])
     ].join(","))
 
   const normalizedStartAfterId = String(startAfterId || "").trim()
@@ -739,9 +867,17 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
   return (data || []).map(mapNoteRow)
 }
 
-export async function upsertSupabaseNote({ userId, note }: { userId: string, note: NoteInput }) {
+export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: string, userEmail: string, note: NoteInput }) {
   const supabase = getSupabaseAdminClient()
   const payload = buildNotePayload(userId, note)
+
+  if (payload.folder_id) {
+    const folderAccess = await getFolderAccessRow(String(payload.folder_id || ""), userId, userEmail)
+
+    if (!folderAccess?.folderId || (folderAccess.permission && folderAccess.permission.role !== "editor")) {
+      throw new Error("FOLDER_NOT_FOUND")
+    }
+  }
 
   const { data, error } = await supabase
     .from("notes")
@@ -884,4 +1020,77 @@ export async function listSupabaseNotePermissions({ noteId, userId }: { noteId: 
 
   if (error) throw error
   return (data || []) as NotePermissionRow[]
+}
+
+async function requireOwnedFolder(folderId: string, userId: string) {
+  const normalizedFolderId = String(folderId || "").trim()
+  if (!normalizedFolderId) {
+    throw new Error("FOLDER_ID_REQUIRED")
+  }
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("folders")
+    .select("id, user_id")
+    .eq("id", normalizedFolderId)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data?.id || data.user_id !== userId) {
+    throw new Error("FOLDER_NOT_FOUND")
+  }
+
+  return data
+}
+
+export async function upsertSupabaseFolderPermission({ folderId, userId, userEmail, collaboratorEmail, role }: { folderId: string, userId: string, userEmail: string, collaboratorEmail: string, role: "viewer" | "editor" }) {
+  const normalizedRole = role === "editor" ? "editor" : role === "viewer" ? "viewer" : ""
+  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+  const normalizedUserEmail = normalizeEmail(userEmail)
+
+  if (!normalizedRole || !normalizedCollaboratorEmail) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  if (normalizedCollaboratorEmail === normalizedUserEmail) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  await requireOwnedFolder(folderId, userId)
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("folder_permissions")
+    .upsert({
+      folder_id: String(folderId || "").trim(),
+      user_email: normalizedCollaboratorEmail,
+      role: normalizedRole
+    })
+    .select("folder_id, user_email, role")
+    .single()
+
+  if (error) throw error
+  return data as FolderPermissionRow
+}
+
+export async function deleteSupabaseFolderPermission({ folderId, userId, collaboratorEmail }: { folderId: string, userId: string, collaboratorEmail: string }) {
+  const normalizedCollaboratorEmail = normalizeEmail(collaboratorEmail)
+  if (!normalizedCollaboratorEmail) {
+    throw new Error("BAD_REQUEST")
+  }
+
+  await requireOwnedFolder(folderId, userId)
+
+  const supabase = getSupabaseAdminClient()
+  const { error } = await supabase
+    .from("folder_permissions")
+    .delete()
+    .eq("folder_id", String(folderId || "").trim())
+    .eq("user_email", normalizedCollaboratorEmail)
+
+  if (error) throw error
+  return {
+    folder_id: String(folderId || "").trim(),
+    user_email: normalizedCollaboratorEmail
+  }
 }

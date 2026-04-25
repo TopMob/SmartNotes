@@ -1,4 +1,4 @@
-import { deleteSupabaseFolder, listSupabaseFolders, updateSupabaseFolder, upsertSupabaseFolder } from "@/lib/supabase/notes"
+import { deleteSupabaseFolder, listAccessibleSupabaseFolders, updateSupabaseFolder, upsertSupabaseFolder } from "@/lib/supabase/notes"
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
@@ -15,7 +15,7 @@ function mapFolderError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
-    const folders = await listSupabaseFolders(user.id)
+    const folders = await listAccessibleSupabaseFolders(user.id, user.email)
     return ok({ folders })
   } catch (error) {
     return handleRouteError(mapFolderError(error), "FOLDERS_FAILED")
