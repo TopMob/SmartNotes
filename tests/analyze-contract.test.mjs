@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { buildNoteInput, isNoteReadyForAnalysis, buildAnalysisUserContext, selectFolderCandidatesForNote } from '../app/api/analyze/core/contract.js'
+import { toAiFolderId } from '../app/api/analyze/core/notes.js'
 import { buildAnalysisPrompt } from '../app/api/analyze/providers/prompt.js'
 import { createAnalysisTaskInput } from '../app/api/analyze/providers/schema.js'
 import { normalizeAnalyzedItem, safeParseJsonArray } from '../app/api/analyze/providers/utils.js'
@@ -132,4 +133,10 @@ test('normalizeAnalyzedItem accepts snake_case provider fields', () => {
     relevance: 72,
     resurfacingClass: 'idea'
   })
+})
+
+test('toAiFolderId returns null for empty folder id', () => {
+  assert.equal(toAiFolderId(''), null)
+  assert.equal(toAiFolderId(null), null)
+  assert.equal(toAiFolderId('folder-1'), 'folder-1')
 })

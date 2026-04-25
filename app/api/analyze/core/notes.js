@@ -19,7 +19,7 @@ export function resolveFolderId(sourceNote, analyzedItem, folderSet) {
 }
 
 export function toAiFolderId(folderId) {
-  return typeof folderId === "string" ? folderId : ""
+  return typeof folderId === "string" && folderId ? folderId : null
 }
 
 export function isValidAnalyzedItem(analyzedItem) {
