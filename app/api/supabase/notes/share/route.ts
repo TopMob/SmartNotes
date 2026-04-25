@@ -34,6 +34,27 @@ function mapShareError(error: unknown) {
   return error
 }
 
+function serializeShareError(error: unknown) {
+  if (error instanceof Error) {
+    const structuredError = error as Error & { code?: string, details?: string, hint?: string, status?: number }
+    return {
+      name: structuredError.name,
+      message: structuredError.message,
+      code: structuredError.code || null,
+      details: structuredError.details || null,
+      hint: structuredError.hint || null,
+      status: structuredError.status || null,
+      stack: structuredError.stack || null
+    }
+  }
+
+  if (error && typeof error === "object") {
+    return { ...(error as Record<string, unknown>) }
+  }
+
+  return { value: error }
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
@@ -48,7 +69,7 @@ export async function POST(request: Request) {
 
     return ok({ permission }, { status: 201 })
   } catch (error) {
-    console.error("[NOTE_SHARE_FAILED]", error)
+    console.error("[NOTE_SHARE_FAILED]", serializeShareError(error))
     return handleRouteError(mapShareError(error), "NOTE_SHARE_FAILED")
   }
 }

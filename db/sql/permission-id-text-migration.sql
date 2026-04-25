@@ -3,8 +3,20 @@ begin;
 alter table public.note_permissions
     drop constraint if exists note_permissions_note_id_fkey;
 
+alter table public.note_permissions
+    drop constraint if exists note_permissions_user_id_fkey;
+
+alter table public.note_permissions
+    drop constraint if exists note_permissions_invited_by_user_id_fkey;
+
 alter table public.folder_permissions
     drop constraint if exists folder_permissions_folder_id_fkey;
+
+alter table public.folder_permissions
+    drop constraint if exists folder_permissions_user_id_fkey;
+
+alter table public.folder_permissions
+    drop constraint if exists folder_permissions_invited_by_user_id_fkey;
 
 alter table public.note_permissions
     alter column note_id type text using note_id::text;
