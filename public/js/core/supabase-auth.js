@@ -35,6 +35,7 @@ function readProfileValue(user, ...keys) {
 
 function normalizeUser(user, session, updateProfile) {
     if (!user) return null
+    const accessToken = String(session?.access_token || "")
     return {
         uid: String(user.id || ""),
         id: String(user.id || ""),
@@ -42,7 +43,11 @@ function normalizeUser(user, session, updateProfile) {
         displayName: String(readProfileValue(user, "display_name", "displayName", "full_name")),
         photoURL: String(readProfileValue(user, "avatar_url", "photoURL", "picture")),
         providerData: [],
-        accessToken: String(session?.access_token || ""),
+        accessToken,
+        async getIdToken() {
+            if (accessToken) return accessToken
+            throw createAuthError("auth/token-missing", "Missing access token")
+        },
         updateProfile
     }
 }

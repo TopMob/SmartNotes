@@ -346,17 +346,10 @@ function updateSearchQuery(query) {
 
 function switchView(view, folderId = null, sharedWorkspaceId = null) {
     const currentState = StateStore.read()
-    const nextView = String(view || "notes")
-    const workspacesEnabled = window.AppFeatures?.workspaces === true
-    if (nextView === "shared_workspace" && !workspacesEnabled) {
-        const fallbackView = currentState.view === "shared_workspace" ? "notes" : currentState.view
-        if (currentState.view !== fallbackView) {
-            StateStore.set(previousState => ({ ...previousState, view: fallbackView, activeFolderId: previousState.view === "folder" ? previousState.activeFolderId : null, activeSharedWorkspaceId: null }))
-        }
-        return
-    }
+    const requestedView = String(view || "notes")
+    const nextView = requestedView === "shared_workspace" ? "notes" : requestedView
     const nextFolderId = nextView === "folder" ? folderId : null
-    const nextWorkspaceId = nextView === "shared_workspace" ? sharedWorkspaceId : null
+    const nextWorkspaceId = null
     if (currentState.view === nextView && currentState.activeFolderId === nextFolderId && currentState.activeSharedWorkspaceId === nextWorkspaceId) return
     if (nextView === "admin_tools" && !(UI.hasSmartNotesFolderAccess && UI.hasSmartNotesFolderAccess())) return
     StateStore.set(previousState => ({ ...previousState, view: nextView, activeFolderId: nextFolderId, activeSharedWorkspaceId: nextWorkspaceId }))

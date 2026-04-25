@@ -664,8 +664,11 @@ Object.assign(UI, {
                 break
             }
             case "switch-view":
-              if (el.dataset.view === "shared_workspace" && !this.isFeatureEnabled("workspaces")) {
-                this.showFeatureDisabledToast("workspaces")
+              if (el.dataset.view === "shared_workspace") {
+                switchView("notes")
+                if (!window.matchMedia("(min-width: 1024px)").matches) {
+                  this.toggleSidebar(false)
+                }
                 break
               }
               switchView(el.dataset.view)
@@ -690,7 +693,7 @@ Object.assign(UI, {
                 break
             }
             case "copy-user-uid": {
-                const uid = WorkspaceAccessService?.getCurrentUserUid?.() || ""
+                const uid = String(StateStore.read().user?.uid || "")
                 if (!uid) {
                     this.showToast(this.getText("share_manage_denied", "Permission denied"))
                     break
@@ -700,86 +703,25 @@ Object.assign(UI, {
                 break
             }
             case "join-shared-workspace-link": {
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                this.showPrompt(this.getText("join_shared_workspace", "Присоединиться по ссылке"), this.getText("join_shared_workspace_placeholder", "Вставьте ссылку или токен"), async value => {
-                    const user = StateStore.read().user
-                    if (!user?.uid) return
-                    const result = await WorkspaceAccessService?.acceptWorkspaceShareToken?.(value, user)
-                    this.showToast(result ? this.getText("join_shared_workspace_success", "Совместная папка добавлена") : this.getText("join_shared_workspace_failed", "Не удалось добавить совместную папку"))
-                })
+                this.showFeatureDisabledToast("workspaces")
                 break
             }
             case "toggle-active-workspace-menu":
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                this.toggleActiveWorkspaceMenu()
-                break
             case "view-workspace-members":
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                this.openWorkspaceMembersModal()
-                this.toggleActiveWorkspaceMenu(false)
-                break
             case "rename-workspace":
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                this.renameActiveWorkspace()
-                this.toggleActiveWorkspaceMenu(false)
-                break
             case "edit-workspace-description":
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                this.editActiveWorkspaceDescription()
-                this.toggleActiveWorkspaceMenu(false)
-                break
             case "open-shared-workspace":
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                switchView("shared_workspace", null, el.dataset.workspaceId)
+                switchView("notes")
                 if (!window.matchMedia("(min-width: 1024px)").matches) {
                     this.toggleSidebar(false)
                 }
                 break
             case "copy-shared-workspace-link": {
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
-                const link = await WorkspaceAccessService?.createInviteLink?.(workspaceId, "editor")
-                if (!link) {
-                    this.showToast(this.getText("share_manage_denied", "Permission denied"))
-                    break
-                }
-                const copied = await CollaborationService.copyToClipboard(link)
-                this.showToast(copied ? this.getText("share_link_copied", "Share link copied") : link)
+                this.showFeatureDisabledToast("workspaces")
                 break
             }
             case "add-shared-workspace-user": {
-                if (!this.isFeatureEnabled("workspaces")) {
-                    this.showFeatureDisabledToast("workspaces")
-                    break
-                }
-                const workspaceId = String(el.dataset.workspaceId || StateStore.read().activeSharedWorkspaceId || "")
-                this.showPrompt(this.getText("shared_user_uid_prompt", "UID пользователя"), this.getText("shared_user_uid_placeholder", "Введите UID"), async value => {
-                    const targetUid = String(value || "").trim()
-                    if (!targetUid) return
-                    const ok = await WorkspaceAccessService?.addMemberByUid?.(workspaceId, targetUid, "editor")
-                    this.showToast(ok ? this.getText("shared_user_added", "Пользователь добавлен") : this.getText("share_manage_denied", "Permission denied"))
-                })
+                this.showFeatureDisabledToast("workspaces")
                 break
             }
             case "folder-unhide":
@@ -1936,10 +1878,10 @@ Object.assign(UI, {
 
     canShowPrimaryAction(view = StateStore.read().view) {
         const normalizedView = String(view || "notes")
-        if (normalizedView === "shared_workspace" && !this.isFeatureEnabled("workspaces")) {
+        if (normalizedView === "shared_workspace") {
             return false
         }
-        return new Set(["notes", "folder", "folders", "shared_workspace"]).has(normalizedView)
+        return new Set(["notes", "folder", "folders"]).has(normalizedView)
     },
 
     primaryAction() {
@@ -1949,55 +1891,13 @@ Object.assign(UI, {
             this.createFolder()
             return
         }
-        if (currentView === "shared_workspace") {
-            if (!this.isFeatureEnabled("workspaces")) {
-                this.showFeatureDisabledToast("workspaces")
-                return
-            }
-            const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
-            if (!workspace || !WorkspaceAccessService?.canEditWorkspace?.(workspace)) {
-                this.showToast(this.getText("share_manage_denied", "Permission denied"))
-                return
-            }
-        }
+        if (currentView === "shared_workspace") return
         window.SmartNotesEditor?.open()
     },
 
 
     createSharedWorkspace() {
-        if (!this.isFeatureEnabled("workspaces")) {
-            this.showFeatureDisabledToast("workspaces")
-            return
-        }
-        this.showPrompt(this.getText("shared_workspace_create", "Новая совместная папка"), this.getText("shared_workspace_placeholder", "Название папки"), async (name, description) => {
-            const normalizedName = String(name || "").trim()
-            const normalizedDescription = String(description || "").trim()
-            if (!normalizedName) {
-                this.showToast(this.getText("folder_empty", "Введите название папки"))
-                return
-            }
-            if (normalizedName.length > 50 || normalizedDescription.length > 300) {
-                this.showToast(this.getText("shared_workspace_limits_error", "Проверьте длину названия и описания"))
-                return
-            }
-            const workspace = await WorkspaceAccessService?.createWorkspace?.(normalizedName, normalizedDescription)
-            if (!workspace) {
-                this.showToast(this.getText("save_failed", "Save failed"))
-                return
-            }
-            this.showToast(this.getText("shared_workspace_created", "Совместная папка создана"))
-        }, "", {
-            maxLength: 50,
-            showCounter: true,
-            secondaryField: {
-                value: "",
-                placeholder: this.getText("shared_workspace_description_placeholder", "Описание папки"),
-                ariaLabel: this.getText("shared_workspace_description", "Описание"),
-                showCounter: true,
-                softLimit: 300,
-                maxLength: 300
-            }
-        })
+        this.showFeatureDisabledToast("workspaces")
     },
 
     updateFolderLimitControls() {
@@ -2121,9 +2021,8 @@ Object.assign(UI, {
             const folder = folders.find(f => f.id === activeFolderId)
             if (folder) title = folder.name
         }
-        if (view === "shared_workspace" && activeSharedWorkspaceId) {
-            const workspace = (sharedWorkspaces || []).find(item => item.id === activeSharedWorkspaceId)
-            if (workspace) title = workspace.name
+        if (view === "shared_workspace") {
+            title = titles.notes || "SmartNotes"
         }
         const el = document.getElementById("current-view-title")
         if (el) el.textContent = title
@@ -2259,133 +2158,15 @@ Object.assign(UI, {
 
 
     async openWorkspaceMembersModal() {
-        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
-        if (!workspace) return
-        const root = document.getElementById("workspace-members-content")
-        const saveButton = document.getElementById("workspace-members-save-button")
-        if (!root) return
-        if (saveButton) {
-            saveButton.onclick = null
-            saveButton.disabled = true
-        }
-        const currentUserUid = String(StateStore.read().user?.uid || "")
-        const canManage = WorkspaceAccessService?.canManageWorkspace?.(workspace)
-        const members = (WorkspaceAccessService?.getWorkspaceMembers?.(workspace.id) || [])
-            .filter(member => member.uid && member.uid !== currentUserUid)
-        if (!members.length) {
-            const empty = document.createElement("div")
-            empty.className = "folder-meta"
-            window.DomSecurity.setText(empty, this.getText("shared_members_no_other", "Кроме вас участников нет"))
-            root.replaceChildren(empty)
-            if (saveButton) saveButton.classList.add("hidden")
-            this.openModal("workspace-members-modal")
-            return
-        }
-        if (saveButton) saveButton.classList.remove("hidden")
-        const pendingRoles = new Map()
-        const pendingRemove = new Set()
-        const updateSaveButtonState = () => {
-            if (!saveButton) return
-            saveButton.disabled = !(pendingRoles.size || pendingRemove.size)
-        }
-        const fragment = document.createDocumentFragment()
-        members.forEach(member => {
-            const row = document.createElement("div")
-            row.className = "shared-member-row"
-
-            const nameLabel = document.createElement("div")
-            nameLabel.className = "shared-member-name"
-            window.DomSecurity.setText(nameLabel, member.displayName || member.uid)
-
-            const roleGroup = document.createElement("div")
-            roleGroup.className = "shared-member-field"
-            const roleLabel = document.createElement("div")
-            roleLabel.className = "shared-member-field-label"
-            window.DomSecurity.setText(roleLabel, this.getText("workspace_access_level", "Права"))
-            const roleSelect = document.createElement("select")
-            roleSelect.className = "input-area"
-            const options = [
-                { value: "viewer", label: this.getText("role_viewer", "Читатель") },
-                { value: "editor", label: this.getText("role_editor", "Редактор") },
-                { value: "owner", label: this.getText("role_owner", "Полный доступ") }
-            ]
-            options.forEach(optionData => {
-                const option = document.createElement("option")
-                option.value = optionData.value
-                option.textContent = optionData.label
-                roleSelect.append(option)
-            })
-            roleSelect.value = member.role
-            roleSelect.disabled = !canManage
-            roleSelect.onchange = () => {
-                if (roleSelect.value === member.role) {
-                    pendingRoles.delete(member.uid)
-                } else {
-                    pendingRoles.set(member.uid, roleSelect.value)
-                }
-                updateSaveButtonState()
-            }
-            roleGroup.append(roleLabel, roleSelect)
-
-            const removeButton = document.createElement("button")
-            removeButton.type = "button"
-            removeButton.className = "btn-danger"
-            window.DomSecurity.setText(removeButton, this.getText("remove_member", "Удалить"))
-            removeButton.disabled = !canManage
-            removeButton.onclick = () => {
-                pendingRemove.add(member.uid)
-                pendingRoles.delete(member.uid)
-                row.classList.add("hidden")
-                updateSaveButtonState()
-            }
-
-            row.append(nameLabel, roleGroup, removeButton)
-            fragment.append(row)
-        })
-        root.replaceChildren(fragment)
-        if (saveButton) {
-            saveButton.onclick = async () => {
-                const operations = []
-                pendingRoles.forEach((role, memberUid) => {
-                    operations.push(WorkspaceAccessService.updateMemberRole(workspace.id, memberUid, role))
-                })
-                pendingRemove.forEach(memberUid => {
-                    operations.push(WorkspaceAccessService.removeMember(workspace.id, memberUid))
-                })
-                if (!operations.length) return
-                saveButton.disabled = true
-                const result = await Promise.all(operations)
-                const ok = result.every(Boolean)
-                this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Не удалось сохранить"))
-                if (ok) {
-                    this.closeModal("workspace-members-modal")
-                }
-            }
-            updateSaveButtonState()
-        }
-        this.openModal("workspace-members-modal")
+        this.showFeatureDisabledToast("workspaces")
     },
 
         renameActiveWorkspace() {
-        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
-        if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
-        this.showPrompt(this.getText("rename_workspace", "Переименовать папку"), this.getText("shared_workspace_placeholder", "Название папки"), async name => {
-            const normalizedName = String(name || "").trim()
-            if (!normalizedName || normalizedName.length > 50) return
-            const ok = await WorkspaceAccessService.updateWorkspace(workspace.id, { name: normalizedName })
-            this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
-        }, String(workspace.name || ""), { maxLength: 50, showCounter: true })
+        this.showFeatureDisabledToast("workspaces")
     },
 
     editActiveWorkspaceDescription() {
-        const workspace = WorkspaceAccessService?.getWorkspaceById?.(StateStore.read().activeSharedWorkspaceId)
-        if (!workspace || !WorkspaceAccessService?.canManageWorkspace?.(workspace)) return
-        this.showPrompt(this.getText("edit_workspace_description", "Изменить описание"), this.getText("shared_workspace_description_placeholder", "Описание папки"), async value => {
-            const normalized = String(value || "").trim()
-            if (normalized.length > 300) return
-            const ok = await WorkspaceAccessService.updateWorkspace(workspace.id, { description: normalized })
-            this.showToast(ok ? this.getText("saved", "Сохранено") : this.getText("save_failed", "Save failed"))
-        }, String(workspace.description || ""), { maxLength: 300, showCounter: true })
+        this.showFeatureDisabledToast("workspaces")
     },
 
     toggleActiveFolderMenu(force) {
@@ -2773,19 +2554,8 @@ Object.assign(UI, {
     updateActiveWorkspaceMenu() {
         const wrapper = this.els.activeWorkspaceMenuWrapper
         if (!wrapper) return
-        const state = StateStore.read()
-        const isVisible = this.isFeatureEnabled("workspaces") && state.view === "shared_workspace" && !!state.activeSharedWorkspaceId
-        wrapper.classList.toggle("hidden", !isVisible)
-        if (!isVisible) {
-            this.toggleActiveWorkspaceMenu(false)
-            return
-        }
-        const workspace = WorkspaceAccessService?.getWorkspaceById?.(state.activeSharedWorkspaceId)
-        const canManage = !!workspace && WorkspaceAccessService?.canManageWorkspace?.(workspace)
-        if (this.els.workspaceCopyLinkButton) this.els.workspaceCopyLinkButton.classList.toggle("hidden", !canManage)
-        if (this.els.workspaceAddUserButton) this.els.workspaceAddUserButton.classList.toggle("hidden", !canManage)
-        if (this.els.workspaceRenameButton) this.els.workspaceRenameButton.classList.toggle("hidden", !canManage)
-        if (this.els.workspaceEditDescriptionButton) this.els.workspaceEditDescriptionButton.classList.toggle("hidden", !canManage)
+        wrapper.classList.add("hidden")
+        this.toggleActiveWorkspaceMenu(false)
     },
 
     updateActiveFolderMenu() {

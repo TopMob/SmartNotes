@@ -258,33 +258,6 @@
                                 </button>
                             </div>
                         </div>
-                        <div id="active-workspace-menu-wrapper" class="active-folder-menu-wrapper hidden">
-                            <button type="button" id="active-workspace-menu-toggle" class="btn-icon" data-action="toggle-active-workspace-menu" aria-label="Действия с совместной папкой" data-lang-aria="workspace_actions">
-                                <i class="material-icons-round" aria-hidden="true">more_vert</i>
-                            </button>
-                            <div id="active-workspace-menu" class="dropdown-menu active-folder-menu" role="menu" aria-label="Действия с совместной папкой" data-lang-aria="workspace_actions">
-                                <button type="button" class="dropdown-item" data-action="view-workspace-members">
-                                    <i class="material-icons-round" aria-hidden="true">groups</i>
-                                    <span data-lang="shared_members">Участники</span>
-                                </button>
-                                <button type="button" id="workspace-copy-link-button" class="dropdown-item" data-action="copy-shared-workspace-link">
-                                    <i class="material-icons-round" aria-hidden="true">link</i>
-                                    <span data-lang="shared_copy_link">Скопировать ссылку</span>
-                                </button>
-                                <button type="button" id="workspace-add-user-button" class="dropdown-item" data-action="add-shared-workspace-user">
-                                    <i class="material-icons-round" aria-hidden="true">person_add</i>
-                                    <span data-lang="shared_add_user">Добавить пользователя</span>
-                                </button>
-                                <button type="button" id="workspace-rename-button" class="dropdown-item" data-action="rename-workspace">
-                                    <i class="material-icons-round" aria-hidden="true">edit</i>
-                                    <span data-lang="rename_workspace">Переименовать папку</span>
-                                </button>
-                                <button type="button" id="workspace-edit-description-button" class="dropdown-item" data-action="edit-workspace-description">
-                                    <i class="material-icons-round" aria-hidden="true">description</i>
-                                    <span data-lang="edit_workspace_description">Изменить описание</span>
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="search-container" role="search">
@@ -732,15 +705,5 @@
     <input type="file" id="img-upload" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="avatar-upload-input" accept="image/*" style="display:none" aria-hidden="true">
     <input type="file" id="note-import" accept=".json,application/json" style="display:none" aria-hidden="true">
-    <div id="workspace-members-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Участники совместной папки" data-lang-aria="shared_members">
-        <div class="modal-card" style="max-width:640px;">
-            <h3 data-lang="shared_members">Участники</h3>
-            <div id="workspace-members-content" class="scrollable" style="max-height:50vh;"></div>
-            <div class="row-left" style="margin-top:12px; justify-content:flex-end;">
-                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="workspace-members-modal" data-lang="close">Закрыть</button>
-                <button type="button" id="workspace-members-save-button" class="btn-primary" data-lang="save">Сохранить</button>
-            </div>
-        </div>
-    </div>
 </body>
 </html>

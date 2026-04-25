@@ -46,7 +46,7 @@ window.Validators = {
 window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
 window.AppFeatures = Object.assign({
     workspaces: false,
-    googleDrive: false,
+    googleDrive: true,
     about: true,
     feedback: true
 }, window.AppFeatures || {})

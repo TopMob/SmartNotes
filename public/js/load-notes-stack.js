@@ -738,449 +738,73 @@ const OwnedNotesService = (() => {
 })()
 
 const WorkspaceAccessService = (() => {
-    const isWorkspacesEnabled = () => window.AppFeatures?.workspaces === true
-    const pendingTokenKey = "pending-workspace-share-token"
-    const WORKSPACES_ENDPOINT = "/api/supabase/workspaces"
-    const MEMBERS_ENDPOINT = "/api/supabase/workspace-members"
-    const INVITES_ENDPOINT = "/api/supabase/workspace-invites"
-
-    function normalizeRole(role) {
-        if (role === "owner") return "owner"
-        if (role === "admin" || role === "editor") return "editor"
+    function getWorkspaceRole() {
         return "viewer"
     }
 
-    function toBackendRole(role) {
-        if (role === "owner") return "owner"
-        if (role === "editor" || role === "admin") return "admin"
-        return "member"
+    function canManageWorkspace() {
+        return false
     }
 
-    function buildHeaders(user) {
-        const accessToken = String(user?.accessToken || "")
-        return {
-            "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-        }
+    function canEditWorkspace() {
+        return false
     }
 
-    async function request(user, method, endpoint, body) {
-        const response = await fetch(endpoint, {
-            method,
-            headers: buildHeaders(user),
-            ...(body === undefined ? {} : { body: JSON.stringify(body) })
-        })
-        if (!response.ok) return null
-        return response.json()
+    function getWorkspaceById() {
+        return null
     }
 
-    function getDefaultDisplayName(user) {
-        return String(user?.displayName || (user?.email ? user.email.split("@")[0] : user?.uid) || user?.uid || "")
-    }
-
-    function buildWorkspaceShareUrl(token) {
-        const url = new URL(window.location.href)
-        url.searchParams.set("workspaceShare", token)
-        return url.toString()
-    }
-
-    function getWorkspaceShareTokenFromUrl() {
-        const url = new URL(window.location.href)
-        return String(url.searchParams.get("workspaceShare") || "").trim()
-    }
-
-    function normalizeShareToken(value) {
-        const raw = String(value || "").trim()
-        if (!raw) return ""
-        if (/^[A-Za-z0-9_-]{12,}$/.test(raw)) return raw
-        try {
-            const url = new URL(raw)
-            return String(url.searchParams.get("workspaceShare") || "").trim()
-        } catch {
-            return ""
-        }
-    }
-
-    function getWorkspaceRole(workspace) {
-        const userUid = StateStore.read().user?.uid || ""
-        if (!workspace || !userUid) return "viewer"
-        if (workspace.ownerUid === userUid) return "owner"
-        if (workspace.role) return normalizeRole(workspace.role)
-        return normalizeRole(workspace.members?.[userUid])
-    }
-
-    function canManageWorkspace(workspace) {
-        return getWorkspaceRole(workspace) === "owner"
-    }
-
-    function canEditWorkspace(workspace) {
-        const role = getWorkspaceRole(workspace)
-        return role === "owner" || role === "editor"
-    }
-
-    async function createWorkspace(name, description = "") {
-        if (!isWorkspacesEnabled()) return null
-        const user = StateStore.read().user
-        if (!user?.uid) return null
-        const normalizedName = String(name || "").trim()
-        const normalizedDescription = String(description || "").trim()
-        if (!normalizedName || normalizedName.length > 50 || normalizedDescription.length > 300) return null
-        const result = await request(user, "POST", WORKSPACES_ENDPOINT, {
-            name: normalizedName,
-            description: normalizedDescription
-        })
-        const workspace = result?.workspace
-        if (!workspace?.id) return null
-        return {
-            id: String(workspace.id),
-            name: String(workspace.name || normalizedName),
-            ownerUid: String(workspace.owner_user_id || user.uid),
-            members: { [user.uid]: "owner" },
-            memberNames: { [user.uid]: getDefaultDisplayName(user) },
-            description: workspace.description == null ? normalizedDescription : String(workspace.description),
-            createdAt: workspace.created_at || null,
-            updatedAt: workspace.updated_at || null,
-            role: "owner"
-        }
-    }
-
-    async function addMemberByUid(workspaceId, targetUid, role = "editor") {
-        if (!isWorkspacesEnabled()) return false
-        const user = StateStore.read().user
-        if (!user?.uid) return false
-        const normalizedWorkspaceId = String(workspaceId || "").trim()
-        const normalizedTargetUid = String(targetUid || "").trim()
-        if (!normalizedWorkspaceId || !normalizedTargetUid) return false
-        const workspace = getWorkspaceById(normalizedWorkspaceId)
-        if (!workspace) return false
-        if (String(workspace.ownerUid || "") !== user.uid) return false
-        const result = await request(user, "POST", MEMBERS_ENDPOINT, {
-            workspaceId: normalizedWorkspaceId,
-            userId: normalizedTargetUid,
-            role: toBackendRole(role)
-        })
-        return !!result?.membership
-    }
-
-    async function createInviteLink(workspaceId, role = "editor") {
-        if (!isWorkspacesEnabled()) return ""
-        const user = StateStore.read().user
-        if (!user?.uid) return ""
-        const normalizedWorkspaceId = String(workspaceId || "").trim()
-        if (!normalizedWorkspaceId) return ""
-        const workspace = getWorkspaceById(normalizedWorkspaceId)
-        if (!workspace) return ""
-        if (String(workspace.ownerUid || "") !== user.uid) return ""
-        const result = await request(user, "POST", INVITES_ENDPOINT, {
-            workspaceId: normalizedWorkspaceId,
-            role: toBackendRole(role)
-        })
-        const token = String(result?.token || "")
-        if (!token) return ""
-        return buildWorkspaceShareUrl(token)
-    }
-
-    function captureWorkspaceShareToken() {
-        if (!isWorkspacesEnabled()) return ""
-        const token = getWorkspaceShareTokenFromUrl()
-        if (!token) return ""
-        SafeStorage.session.set(pendingTokenKey, token)
-        const url = new URL(window.location.href)
-        url.searchParams.delete("workspaceShare")
-        window.history.replaceState({}, document.title, url.toString())
-        return token
-    }
-
-    async function acceptWorkspaceShareToken(value, user) {
-        if (!isWorkspacesEnabled()) return null
-        if (!user?.uid) return null
-        const normalizedToken = normalizeShareToken(value)
-        if (!normalizedToken) return null
-        const result = await request(user, "PATCH", INVITES_ENDPOINT, { token: normalizedToken })
-        const workspaceId = String(result?.membership?.workspace_id || result?.invite?.workspace_id || "")
-        if (!workspaceId) return null
-        const role = normalizeRole(result?.membership?.role || result?.invite?.role)
-        return { workspaceId, role }
-    }
-
-    async function acceptPendingWorkspaceShare(user) {
-        if (!isWorkspacesEnabled()) return null
-        const token = SafeStorage.session.get(pendingTokenKey)
-        if (!token) return null
-        SafeStorage.session.remove(pendingTokenKey)
-        return acceptWorkspaceShareToken(token, user)
-    }
-
-    async function acceptWorkspaceShareFromUrl(user) {
-        if (!isWorkspacesEnabled()) return null
-        const token = getWorkspaceShareTokenFromUrl()
-        if (!token) return null
-        captureWorkspaceShareToken()
-        return acceptPendingWorkspaceShare(user)
-    }
-
-    function getWorkspaceById(workspaceId) {
-        const normalizedWorkspaceId = String(workspaceId || "")
-        if (!normalizedWorkspaceId) return null
-        const workspaces = Array.isArray(StateStore.read().sharedWorkspaces) ? StateStore.read().sharedWorkspaces : []
-        return workspaces.find(workspace => workspace.id === normalizedWorkspaceId) || null
-    }
-
-
-    async function updateWorkspace(workspaceId, updates = {}) {
-        if (!isWorkspacesEnabled()) return false
-        const user = StateStore.read().user
-        const normalizedWorkspaceId = String(workspaceId || "").trim()
-        if (!user?.uid || !normalizedWorkspaceId) return false
-        const workspace = getWorkspaceById(normalizedWorkspaceId)
-        if (!workspace || !canManageWorkspace(workspace)) return false
-        const nextName = updates.name === undefined ? workspace.name : String(updates.name || "").trim()
-        const nextDescription = updates.description === undefined ? String(workspace.description || "") : String(updates.description || "").trim()
-        if (!nextName || nextName.length > 50 || nextDescription.length > 300) return false
-        const result = await request(user, "PATCH", WORKSPACES_ENDPOINT, {
-            workspaceId: normalizedWorkspaceId,
-            name: nextName,
-            description: nextDescription
-        })
-        return !!result?.workspace
-    }
-
-    function getWorkspaceMembers(workspaceId) {
-        if (!isWorkspacesEnabled()) return []
-        const workspace = getWorkspaceById(workspaceId)
-        if (!workspace) return []
-        const members = workspace.members && typeof workspace.members === "object" ? workspace.members : {}
-        const memberNames = workspace.memberNames && typeof workspace.memberNames === "object" ? workspace.memberNames : {}
-        return Object.entries(members).map(([uid, role]) => ({
-            uid: String(uid || ""),
-            displayName: String(memberNames[uid] || uid || ""),
-            role: role === "owner" || role === "editor" || role === "viewer" ? role : "viewer"
-        }))
-    }
-
-
-    async function updateMemberRole(workspaceId, memberUid, role) {
-        if (!isWorkspacesEnabled()) return false
-        const user = StateStore.read().user
-        const normalizedWorkspaceId = String(workspaceId || "").trim()
-        const normalizedMemberUid = String(memberUid || "").trim()
-        const normalizedRole = normalizeRole(role)
-        if (!user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
-        const workspace = getWorkspaceById(normalizedWorkspaceId)
-        if (!workspace || !canManageWorkspace(workspace)) return false
-        const result = await request(user, "PATCH", MEMBERS_ENDPOINT, {
-            workspaceId: normalizedWorkspaceId,
-            userId: normalizedMemberUid,
-            role: toBackendRole(normalizedRole)
-        })
-        return !!result?.membership
-    }
-
-    async function removeMember(workspaceId, memberUid) {
-        if (!isWorkspacesEnabled()) return false
-        const user = StateStore.read().user
-        const normalizedWorkspaceId = String(workspaceId || "").trim()
-        const normalizedMemberUid = String(memberUid || "").trim()
-        if (!user?.uid || !normalizedWorkspaceId || !normalizedMemberUid) return false
-        const workspace = getWorkspaceById(normalizedWorkspaceId)
-        if (!workspace || !canManageWorkspace(workspace)) return false
-        if (normalizedMemberUid === workspace.ownerUid) return false
-        const result = await request(user, "DELETE", MEMBERS_ENDPOINT, {
-            workspaceId: normalizedWorkspaceId,
-            userId: normalizedMemberUid
-        })
-        return result?.removed === true
-    }
-
-    async function updateMemberDisplayName(workspaceId, memberUid, displayName) {
-        if (!isWorkspacesEnabled()) return false
-        const normalizedWorkspaceId = String(workspaceId || "").trim()
-        const normalizedMemberUid = String(memberUid || "").trim()
-        const normalizedDisplayName = String(displayName || "").trim()
-        if (!normalizedWorkspaceId || !normalizedMemberUid || !normalizedDisplayName || normalizedDisplayName.length > 50) return false
-        const workspace = getWorkspaceById(normalizedWorkspaceId)
-        if (!workspace) return false
-        const nextMemberNames = { ...(workspace.memberNames || {}), [normalizedMemberUid]: normalizedDisplayName }
-        StateStore.update("sharedWorkspaces", (StateStore.read().sharedWorkspaces || []).map(item => {
-            if (item.id !== normalizedWorkspaceId) return item
-            return { ...item, memberNames: nextMemberNames }
-        }))
-        return true
+    function getWorkspaceMembers() {
+        return []
     }
 
     function getCurrentUserUid() {
         return String(StateStore.read().user?.uid || "")
     }
 
+    async function returnNull() {
+        return null
+    }
+
+    async function returnFalse() {
+        return false
+    }
+
+    function returnEmptyString() {
+        return ""
+    }
+
     return {
         getWorkspaceRole,
         canManageWorkspace,
         canEditWorkspace,
-        createWorkspace,
-        addMemberByUid,
-        createInviteLink,
-        captureWorkspaceShareToken,
-        normalizeShareToken,
-        acceptWorkspaceShareToken,
-        acceptPendingWorkspaceShare,
-        acceptWorkspaceShareFromUrl,
+        createWorkspace: returnNull,
+        addMemberByUid: returnFalse,
+        createInviteLink: returnEmptyString,
+        captureWorkspaceShareToken: returnEmptyString,
+        normalizeShareToken: returnEmptyString,
+        acceptWorkspaceShareToken: returnNull,
+        acceptPendingWorkspaceShare: returnNull,
+        acceptWorkspaceShareFromUrl: returnNull,
         getWorkspaceById,
         getWorkspaceMembers,
-        updateMemberDisplayName,
-        updateMemberRole,
-        removeMember,
-        updateWorkspace,
+        updateMemberDisplayName: returnFalse,
+        updateMemberRole: returnFalse,
+        removeMember: returnFalse,
+        updateWorkspace: returnFalse,
         getCurrentUserUid
     }
 })()
 
 const WorkspacesService = (() => {
-    const state = {
-        user: null,
-        unsubscribeEntries: null,
-        workspaceNotesUnsubscribers: new Map(),
-        workspaceEntries: new Map(),
-        workspaces: new Map(),
-        workspaceNotes: new Map()
-    }
-
-    function cleanupWorkspace(workspaceId) {
-        const unsubscribeWorkspaceNotes = state.workspaceNotesUnsubscribers.get(workspaceId)
-        if (unsubscribeWorkspaceNotes) unsubscribeWorkspaceNotes()
-        state.workspaceNotesUnsubscribers.delete(workspaceId)
-        state.workspaceEntries.delete(workspaceId)
-        state.workspaces.delete(workspaceId)
-        state.workspaceNotes.delete(workspaceId)
-    }
-
-    function publishWorkspaces() {
-        const userUid = state.user?.uid || ""
-        const items = [...state.workspaces.values()].map(workspace => {
-            const entry = state.workspaceEntries.get(workspace.id) || {}
-            const role = workspace.ownerUid === userUid ? "owner" : WorkspacesRepository.normalizeRole(entry.role || workspace.role || workspace.members?.[userUid] || "viewer")
-            return { ...workspace, role }
-        }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), StateStore.read().config.lang || "ru"))
-        StateStore.update("sharedWorkspaces", items)
-    }
-
-    function publishWorkspaceNotes() {
-        const flattened = [...state.workspaceNotes.values()].flatMap(notes => notes)
-        EventBus.publish("workspaceNotesUpdated", flattened)
-    }
-
-    function bindWorkspace(workspaceId, entry) {
-        const upsertWorkspaceState = workspace => {
-            const data = workspace && typeof workspace === "object" ? workspace : {}
-            const members = data.members && typeof data.members === "object" ? data.members : {}
-            const memberNames = data.memberNames && typeof data.memberNames === "object" ? data.memberNames : {}
-            state.workspaces.set(workspaceId, {
-                id: workspaceId,
-                name: String(data.name || entry.workspaceName || "Совместная папка"),
-                ownerUid: String(data.ownerUid || entry.ownerUid || ""),
-                description: String(data.description || ""),
-                role: WorkspacesRepository.normalizeRole(data.role || entry.role || "viewer"),
-                members,
-                memberNames,
-                createdAt: data.createdAt || null,
-                updatedAt: data.updatedAt || null
-            })
-            publishWorkspaces()
-        }
-        WorkspacesRepository.getWorkspace(state.user, workspaceId).then(snapshot => {
-            if (!snapshot?.exists) {
-                cleanupWorkspace(workspaceId)
-                publishWorkspaces()
-                publishWorkspaceNotes()
-                return
-            }
-            upsertWorkspaceState(snapshot.data())
-        }).catch(error => EventBus.publish("sharedSyncError", error))
-        const unsubscribeWorkspace = WorkspacesRepository.subscribeWorkspace(state.user, workspaceId, snapshot => {
-            if (!snapshot.exists) {
-                cleanupWorkspace(workspaceId)
-                publishWorkspaces()
-                publishWorkspaceNotes()
-                return
-            }
-            upsertWorkspaceState(snapshot.data())
-        }, error => EventBus.publish("sharedSyncError", error))
-
-        const unsubscribeWorkspaceNotes = WorkspacesRepository.subscribeWorkspaceNotes(workspaceId, snapshot => {
-            const workspace = state.workspaces.get(workspaceId) || { id: workspaceId, ownerUid: entry.ownerUid || "", members: {}, memberNames: {}, role: entry.role || "viewer" }
-            const notes = snapshot.docs.map(documentEntry => {
-                const data = documentEntry.data() || {}
-                const normalized = NoteIO.normalizeNote({ id: documentEntry.id, ...data })
-                const ownerUid = String(workspace.ownerUid || normalized.ownerUid || "")
-                return {
-                    ...normalized,
-                    id: `workspace_${workspaceId}_${documentEntry.id}`,
-                    workspaceId,
-                    access: {
-                        ownerUid,
-                        noteId: documentEntry.id,
-                        workspaceId,
-                        roles: workspace.members || {}
-                    }
-                }
-            })
-            state.workspaceNotes.set(workspaceId, notes)
-            publishWorkspaceNotes()
-        }, error => EventBus.publish("sharedSyncError", error))
-        state.workspaceNotesUnsubscribers.set(workspaceId, () => {
-            if (typeof unsubscribeWorkspace === "function") unsubscribeWorkspace()
-            if (typeof unsubscribeWorkspaceNotes === "function") unsubscribeWorkspaceNotes()
-        })
-    }
-
-    function subscribe(user) {
-        if (window.AppFeatures?.workspaces !== true) {
-            state.user = user
-            StateStore.update("sharedWorkspaces", [])
-            publishWorkspaceNotes()
-            return
-        }
-        state.user = user
-        if (state.unsubscribeEntries) state.unsubscribeEntries()
-        state.unsubscribeEntries = WorkspacesRepository.subscribeUserWorkspaces(user, snapshot => {
-            const nextEntries = new Map()
-            snapshot.forEach(documentEntry => {
-                const data = documentEntry.data() || {}
-                const workspaceId = String(documentEntry.id || data.workspaceId || "")
-                if (!workspaceId) return
-                nextEntries.set(workspaceId, {
-                    workspaceId,
-                    ownerUid: String(data.ownerUid || ""),
-                    role: String(data.role || "viewer"),
-                    workspaceName: String(data.workspaceName || "")
-                })
-            })
-
-            const removedIds = []
-            state.workspaceEntries.forEach((_entry, workspaceId) => {
-                if (!nextEntries.has(workspaceId)) removedIds.push(workspaceId)
-            })
-            removedIds.forEach(cleanupWorkspace)
-
-            nextEntries.forEach((entry, workspaceId) => {
-                state.workspaceEntries.set(workspaceId, entry)
-                bindWorkspace(workspaceId, entry)
-            })
-
-            publishWorkspaces()
-            publishWorkspaceNotes()
-        }, error => EventBus.publish("sharedSyncError", error))
+    function subscribe() {
+        StateStore.update("sharedWorkspaces", [])
+        EventBus.publish("workspaceNotesUpdated", [])
     }
 
     function clear() {
-        if (state.unsubscribeEntries) state.unsubscribeEntries()
-        state.unsubscribeEntries = null
-        state.workspaceNotesUnsubscribers.forEach(unsubscribe => unsubscribe())
-        state.workspaceNotesUnsubscribers.clear()
-        state.workspaceEntries.clear()
-        state.workspaces.clear()
-        state.workspaceNotes.clear()
-        state.user = null
         StateStore.update("sharedWorkspaces", [])
+        EventBus.publish("workspaceNotesUpdated", [])
     }
 
     return { subscribe, clear }
@@ -1216,7 +840,7 @@ const SessionService = (() => {
         state.foldersUnsubscribe = null
         SettingsSyncService.clear()
         OwnedNotesService.clear()
-        if (window.AppFeatures?.workspaces === true) WorkspacesService.clear()
+        WorkspacesService.clear()
         RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
@@ -1233,9 +857,6 @@ const SessionService = (() => {
             try {
                 StateActions.setUser(user)
                 await DataPath.ensureUserDocument(user)
-                if (window.AppFeatures?.workspaces === true && typeof WorkspaceAccessService !== "undefined") {
-                    WorkspaceAccessService.captureWorkspaceShareToken()
-                }
                 await SettingsSyncService.initialize(user)
                 OwnedNotesService.subscribe(user)
                 const cachedNotes = NotesStorage.readCachedNotes(user.uid)
@@ -1247,11 +868,7 @@ const SessionService = (() => {
                     const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
                     StateStore.update("folders", folders)
                 }, error => EventBus.publish("foldersSyncError", error))
-                if (window.AppFeatures?.workspaces === true) WorkspacesService.subscribe(user)
-                if (window.AppFeatures?.workspaces === true && typeof WorkspaceAccessService !== "undefined") {
-                    await WorkspaceAccessService.acceptWorkspaceShareFromUrl(user)
-                    await WorkspaceAccessService.acceptPendingWorkspaceShare(user)
-                }
+                WorkspacesService.subscribe(user)
                 RemindersService.start()
                 return true
             } catch (error) {
@@ -1391,10 +1008,9 @@ const NotesQueryService = (() => {
         if (view === "favorites") filteredNotes = filteredNotes.filter(note => note.isFavorite && !note.isArchived)
         else if (view === "archive") filteredNotes = filteredNotes.filter(note => note.isArchived)
         else if (view === "folder") filteredNotes = filteredNotes.filter(note => note.folderId === activeFolderId)
-        else if (view === "shared_workspace") filteredNotes = filteredNotes.filter(note => note.workspaceId && note.workspaceId === stateSnapshot.activeSharedWorkspaceId)
         else if (view !== "locked" && view !== "reminders" && view !== "trash") filteredNotes = filteredNotes.filter(note => !note.isArchived)
 
-        if (view !== "folder" && view !== "shared_workspace") {
+        if (view !== "folder") {
             filteredNotes = filteredNotes.filter(note => !note.folderId || !hiddenFolderIdentifiers.has(note.folderId))
         }
 
@@ -1402,7 +1018,7 @@ const NotesQueryService = (() => {
         const selectedFolders = Array.isArray(configuredFilter.folders) ? configuredFilter.folders : []
         const selectedTags = Array.isArray(configuredFilter.tags) ? configuredFilter.tags : []
         const updatedWindowDays = Number(configuredFilter.updatedWindowDays || 0)
-        const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash" && view !== "shared_workspace"
+        const canUseFolderFilters = view !== "folder" && view !== "folders" && view !== "archive" && view !== "trash"
 
         if (canUseFolderFilters && selectedFolders.length) {
             filteredNotes = filteredNotes.filter(note => {
@@ -1466,7 +1082,7 @@ const NotesQueryService = (() => {
         const useRelevanceSorting = String(query || "").trim().length > 0
         const sortMode = useRelevanceSorting ? "relevance" : configuredSortMode
         const sortedNotes = sortMode === "manual"
-            ? normalizeVisibleNotes(searchResult.notes, stateSnapshot.view === "folder" ? "folderOrder" : (stateSnapshot.view === "shared_workspace" ? "workspaceOrder" : "order"))
+            ? normalizeVisibleNotes(searchResult.notes, stateSnapshot.view === "folder" ? "folderOrder" : "order")
             : sortVisibleNotes(searchResult.notes, sortMode, sortMode === "relevance" ? searchResult.scores : null, stateSnapshot.config?.lang || "ru")
         return {
             view: stateSnapshot.view,
@@ -1491,9 +1107,7 @@ const NotesPresenter = (() => {
             ? { icon: "lock", text: getText(stateSnapshot, "lock_center_empty", "No protected notes") }
             : queryResult.view === "reminders"
                 ? { icon: "schedule", text: getText(stateSnapshot, "reminder_empty", "No reminders") }
-                : queryResult.view === "shared_workspace"
-                    ? { icon: "groups", text: getText(stateSnapshot, "shared_workspace_empty", "В этой папке пока нет заметок") }
-                    : { icon: "note_add", text: getText(stateSnapshot, "empty", "Nothing here yet") }
+                : { icon: "note_add", text: getText(stateSnapshot, "empty", "Nothing here yet") }
         return { view: queryResult.view, notes: queryResult.notes, visibleNotes, emptyState, loadMoreState: PaginationService.getLoadMoreState() }
     }
     return { createViewModel }

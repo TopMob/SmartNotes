@@ -322,10 +322,6 @@ export function createAuthManager({ auth }) {
                 })
             }
             this.applySignedInUI({ ...updatedUser, displayName: normalizedName })
-            const workspaceId = StateStore.read().activeSharedWorkspaceId
-            if (workspaceId && typeof WorkspaceAccessService !== "undefined") {
-                WorkspaceAccessService.updateMemberDisplayName(workspaceId, updatedUser.uid, normalizedName).catch(() => {})
-            }
             return true
         },
 

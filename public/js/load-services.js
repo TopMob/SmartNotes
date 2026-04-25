@@ -669,10 +669,6 @@ const CollaborationService = {
         if (!currentUserUid) return "viewer"
         if (this.isLegacyOwnerNote(note, currentUserUid, access)) return "owner"
         if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
-        if (access?.workspaceId && typeof WorkspaceAccessService !== "undefined") {
-            const workspace = WorkspaceAccessService.getWorkspaceById(access.workspaceId)
-            if (workspace) return WorkspaceAccessService.getWorkspaceRole(workspace)
-        }
         const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
         if (role === "owner" || role === "editor" || role === "viewer") return role
         return "viewer"
@@ -724,24 +720,7 @@ const CollaborationService = {
     },
     getNoteReference(note, user) {
         if (!user || !note) return null
-        if (window.AppFeatures?.workspaces !== true) {
-            return DataPath.getUserNotesCollection(user).doc(note.id)
-        }
-        const access = this.getAccess(note)
-        const workspaceId = access?.workspaceId || note.workspaceId
-        const noteId = this.getWorkspaceNoteId(note, access)
-        if (workspaceId && window.AppFeatures?.workspaces === true) {
-            if (typeof DataPath?.getWorkspaceNotesCollection === "function") {
-                return DataPath.getWorkspaceNotesCollection(workspaceId).doc(noteId)
-            }
-            if (typeof DataPath?.getWorkspaceNoteDocument === "function") {
-                return DataPath.getWorkspaceNoteDocument(workspaceId, noteId)
-            }
-            if (typeof DataPath?.getWorkspaceNoteReference === "function") {
-                return DataPath.getWorkspaceNoteReference(workspaceId, noteId)
-            }
-        }
-        return DataPath.getUserNotesCollection(user).doc(noteId)
+        return DataPath.getUserNotesCollection(user).doc(note.id)
     },
     async copyToClipboard(text) {
         const value = String(text || "")
