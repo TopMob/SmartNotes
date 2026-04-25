@@ -10,7 +10,6 @@ export function createAuthManager({ auth }) {
         localAuthManager: null,
         persistenceReady: false,
         authStateResolved: false,
-        driveInteractiveAllowed: false,
         googleRedirectFallbackReady: false,
         googleRedirectFallbackTimer: null
     }
@@ -237,7 +236,6 @@ export function createAuthManager({ auth }) {
                 return
             }
 
-            state.driveInteractiveAllowed = true
             await this._ensureLocalPersistence()
             if (state.googleRedirectFallbackReady && typeof auth.signInWithRedirect === "function") {
                 try {
@@ -283,14 +281,12 @@ export function createAuthManager({ auth }) {
             return state.localAuthManager
         },
         async loginWithEmail() {
-            state.driveInteractiveAllowed = false
             await this._ensureLocalPersistence()
             await this._ensureLocalAuthManager().loginWithEmail()
         },
         async logout() {
             if (!auth) return
             this._setLoginBusy(false)
-            state.driveInteractiveAllowed = false
             try {
                 await auth.signOut()
             } catch {
@@ -461,24 +457,12 @@ export function createAuthManager({ auth }) {
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) {
-                    state.driveInteractiveAllowed = false
                     return
                 }
                 await this._startSessionWhenReady(normalizedUser)
-                if (window.ExternalMediaService?.handleSignedInUser) {
-                    try {
-                        await window.ExternalMediaService.handleSignedInUser(normalizedUser, { interactiveAllowed: state.driveInteractiveAllowed })
-                    } catch (error) {
-                        if (typeof UI !== "undefined" && typeof UI.resolveExternalMediaMessage === "function") {
-                            UI.showToast(UI.resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                        }
-                    }
-                }
-                state.driveInteractiveAllowed = false
                 return
             }
 
-            window.ExternalMediaService?.handleSignedOutUser?.()
             this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()

@@ -9,22 +9,13 @@ export const normalizeDateValue = (value) => {
     return Number.isFinite(parsedTimestamp) ? parsedTimestamp : 0
 }
 
-export const buildNotePayload = ({ note, user, access } = {}) => {
-    const ownerUid = access?.ownerUid || user?.uid || note?.ownerUid || ""
-    const roleMap = access?.roles && typeof access.roles === "object" ? access.roles : {}
-    const targetIdentifier = access?.noteId || note?.id || Utils.generateId()
+export const buildNotePayload = ({ note, user } = {}) => {
+    const ownerUid = user?.uid || note?.ownerUid || ""
+    const targetIdentifier = note?.id || Utils.generateId()
     const normalizedNote = NoteIO.normalizeNote({ ...note, id: targetIdentifier, ownerUid })
     return {
         ...normalizedNote,
-        ownerUid,
-        access: {
-            ownerUid,
-            noteId: targetIdentifier,
-            roles: {
-                ...roleMap,
-                [ownerUid]: "owner"
-            }
-        }
+        ownerUid
     }
 }
 

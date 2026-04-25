@@ -15,7 +15,6 @@ const imageSources = [
   "blob:",
   "https://*.googleusercontent.com",
   "http://googleusercontent.com",
-  "https://drive.google.com",
   "https://ui-avatars.com",
   "https://www.gstatic.com"
 ]

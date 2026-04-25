@@ -277,8 +277,8 @@ const NotesSortingStrategy = (() => {
 })()
 
 const NotesAggregationService = (() => {
-    function aggregate(ownedNotes, workspaceNotes, activeUid) {
-        const mergedNotes = NotesStorage.applyStoredFavorites([...(ownedNotes || []), ...(workspaceNotes || [])])
+    function aggregate(ownedNotes, activeUid) {
+        const mergedNotes = NotesStorage.applyStoredFavorites([...(ownedNotes || [])])
         if (activeUid) NotesStorage.writeCachedNotes(activeUid, mergedNotes)
         NotesStorage.syncFavoritesStorage(mergedNotes)
         return mergedNotes
@@ -451,26 +451,6 @@ const SettingsSyncService = (() => {
             draftUserSettings: cloneSettings(cloned)
         }))
     }
-    async function externalizeAppearanceMedia(settings) {
-        const source = settings && typeof settings === "object" ? settings : null
-        if (!source?.customTheme) return source
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const status = mediaService?.getStatus?.() || null
-        if (!status?.linked || typeof mediaService?.uploadDataUrl !== "function") return source
-        const nextSettings = JSON.parse(JSON.stringify(source))
-        const entries = [
-            { imageField: "mainBackgroundImage", urlField: "mainBackgroundUrl", fileNameBase: "main_background" },
-            { imageField: "sidebarBackgroundImage", urlField: "sidebarBackgroundUrl", fileNameBase: "sidebar_background" }
-        ]
-        for (const entry of entries) {
-            const imageValue = String(nextSettings.customTheme?.[entry.imageField] || "")
-            if (!imageValue.startsWith("data:image/")) continue
-            const publicUrl = await mediaService.uploadDataUrl(imageValue, { fileNameBase: entry.fileNameBase })
-            nextSettings.customTheme[entry.urlField] = publicUrl
-            nextSettings.customTheme[entry.imageField] = ""
-        }
-        return nextSettings
-    }
     function applyToRuntime(userSettings, options = {}) {
         const settings = normalizeUserSettings(userSettings)
         const mergedCustomPresets = ThemeManager.mergeCloudPresetsWithLocalPresets(ThemeManager.getCustomPresets(), settings.customPresets)
@@ -483,8 +463,7 @@ const SettingsSyncService = (() => {
     async function saveUserSettings(settingsToSave) {
         const user = StateStore.read().user
         if (!user) return null
-        const externalizedSettings = await externalizeAppearanceMedia(settingsToSave)
-        const normalized = normalizeUserSettings(externalizedSettings)
+        const normalized = normalizeUserSettings(settingsToSave)
         const resolved = state.reference ? { reference: state.reference } : await SettingsRepository.resolveReference(user)
         if (!resolved.reference) return null
         await SettingsRepository.write(resolved.reference, normalized)
@@ -566,79 +545,8 @@ const OwnedNotesService = (() => {
     return { subscribe, clear, loadMore, getNotes }
 })()
 
-const WorkspaceAccessService = (() => {
-    function getWorkspaceRole() {
-        return "viewer"
-    }
-
-    function canManageWorkspace() {
-        return false
-    }
-
-    function canEditWorkspace() {
-        return false
-    }
-
-    function getWorkspaceById() {
-        return null
-    }
-
-    function getWorkspaceMembers() {
-        return []
-    }
-
-    function getCurrentUserUid() {
-        return String(StateStore.read().user?.uid || "")
-    }
-
-    async function returnNull() {
-        return null
-    }
-
-    async function returnFalse() {
-        return false
-    }
-
-    function returnEmptyString() {
-        return ""
-    }
-
-    return {
-        getWorkspaceRole,
-        canManageWorkspace,
-        canEditWorkspace,
-        createWorkspace: returnNull,
-        addMemberByUid: returnFalse,
-        createInviteLink: returnEmptyString,
-        captureWorkspaceShareToken: returnEmptyString,
-        normalizeShareToken: returnEmptyString,
-        acceptWorkspaceShareToken: returnNull,
-        acceptPendingWorkspaceShare: returnNull,
-        acceptWorkspaceShareFromUrl: returnNull,
-        getWorkspaceById,
-        getWorkspaceMembers,
-        updateMemberDisplayName: returnFalse,
-        updateMemberRole: returnFalse,
-        removeMember: returnFalse,
-        updateWorkspace: returnFalse,
-        getCurrentUserUid
-    }
-})()
-
-const WorkspacesService = (() => {
-    function subscribe() {
-        EventBus.publish("workspaceNotesUpdated", [])
-    }
-
-    function clear() {
-        EventBus.publish("workspaceNotesUpdated", [])
-    }
-
-    return { subscribe, clear }
-})()
-
 const SessionService = (() => {
-    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], workspaceNotes: [] }
+    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [] }
     function sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
             const firstCreatedAt = firstFolder?.createdAt instanceof Date ? firstFolder.createdAt.getTime() : Date.parse(firstFolder?.createdAt || "") || 0
@@ -648,16 +556,12 @@ const SessionService = (() => {
         })
     }
     function publishNotes() {
-        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.workspaceNotes, state.activeUid)
+        const aggregatedNotes = NotesAggregationService.aggregate(state.ownedNotes, state.activeUid)
         StateStore.update("notes", aggregatedNotes)
     }
     function bindAggregation() {
         EventBus.subscribe("ownedNotesUpdated", ownedNotes => {
             state.ownedNotes = Array.isArray(ownedNotes) ? ownedNotes : []
-            publishNotes()
-        })
-        EventBus.subscribe("workspaceNotesUpdated", workspaceNotes => {
-            state.workspaceNotes = Array.isArray(workspaceNotes) ? workspaceNotes : []
             publishNotes()
         })
     }
@@ -667,11 +571,9 @@ const SessionService = (() => {
         state.foldersUnsubscribe = null
         SettingsSyncService.clear()
         OwnedNotesService.clear()
-        WorkspacesService.clear()
         RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
-        state.workspaceNotes = []
         StateStore.resetSession()
     }
     async function startUserSession(user, options = {}) {
@@ -695,7 +597,6 @@ const SessionService = (() => {
                     const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
                     StateStore.update("folders", folders)
                 }, error => EventBus.publish("foldersSyncError", error))
-                WorkspacesService.subscribe(user)
                 RemindersService.start()
                 return true
             } catch (error) {
@@ -714,7 +615,6 @@ const NotesQueryService = (() => {
         if (!Array.isArray(list)) return []
         const normalizedNotes = list.map(note => {
             const normalizedNote = NoteIO.normalizeNote(note)
-            if (note && note.access) normalizedNote.access = note.access
             return normalizedNote
         })
         normalizedNotes.sort((firstNote, secondNote) => {
@@ -821,12 +721,7 @@ const NotesQueryService = (() => {
             filteredNotes = filteredNotes.filter(note => !isHiddenLocked(note))
         }
 
-        if (view === "notes") {
-            filteredNotes = filteredNotes.filter(note => {
-                if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) return false
-                return true
-            })
-        }
+        if (view === "notes") filteredNotes = filteredNotes.filter(note => !!note)
         if (view === "reminders") filteredNotes = filteredNotes.filter(note => isReminderNote(note) && !note.isArchived && !note.trashedAt)
         if (view === "trash") filteredNotes = filteredNotes.filter(note => !!note.trashedAt)
         else filteredNotes = filteredNotes.filter(note => !note.trashedAt)

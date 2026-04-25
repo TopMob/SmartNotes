@@ -382,11 +382,7 @@ function mapNoteRow(note: NoteRow) {
     lockHidden: Boolean(metadata.lockHidden),
     createdAt: note.created_at || null,
     updatedAt: note.updated_at || null,
-    ownerUid: note.user_id,
-    access: {
-      ownerUid: note.user_id,
-      roles: { [note.user_id]: "owner" }
-    }
+    ownerUid: note.user_id
   }
 }
 
@@ -706,12 +702,9 @@ export async function patchSupabaseNote({ userId, noteId, updates }: { userId: s
   if (existingRowError) throw existingRowError
   if (!existingRow?.id) throw new Error("NOTE_NOT_FOUND")
 
-  const currentNote = mapNoteRow(existingRow as NoteRow)
   const payload = buildNotePatchPayload(existingRow as NoteRow, {
     ...updates,
-    id: normalizedNoteId,
-    ownerUid: currentNote.ownerUid,
-    access: currentNote.access
+    id: normalizedNoteId
   })
 
   const { data, error } = await supabase

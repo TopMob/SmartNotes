@@ -7,14 +7,6 @@ const RUSSIAN_TAG_SYNONYM_MAP = new Map([
     ["идея", ["idea", "concept", "thought", "brainstorm", "insight"]]
 ])
 
-const normalizeDriveDeliveryHtml = (html) => {
-    const source = String(html || "")
-    if (!source) return ""
-    return source
-        .replace(/https:\/\/drive\.google\.com\/uc\?id=([^&"'\s>]+)&export=download/gi, "https://drive.google.com/thumbnail?id=$1&sz=w2048")
-        .replace(/https:\/\/drive\.google\.com\/file\/d\/([^/"'\s>]+)\/view\?usp=sharing/gi, "https://drive.google.com/thumbnail?id=$1&sz=w2048")
-}
-
 const normalizeAiTagToRussian = (value) => {
     const normalizedValue = String(value || "").trim().toLowerCase()
     if (!normalizedValue) return ""
@@ -179,43 +171,12 @@ const NoteIO = {
         const normalizedUpdatedAt = this.normalizeDateInput(safe.updatedAt) || normalizedCreatedAt
         const createdAtMillis = this.toTimestampMillis(normalizedCreatedAt)
         const fallbackOrder = Number.isFinite(createdAtMillis) ? createdAtMillis : 0
-        const ownerUid = safe.ownerUid
-            ? String(safe.ownerUid)
-            : (safe.ownerId ? String(safe.ownerId) : (StateStore.read().user?.uid || null))
-        const rolesSource = safe.access && typeof safe.access === "object" && safe.access.roles && typeof safe.access.roles === "object"
-            ? safe.access.roles
-            : null
-        const allowSource = safe.access && typeof safe.access === "object" && Array.isArray(safe.access.allow)
-            ? safe.access.allow
-            : []
-        const roles = {}
-        if (rolesSource) {
-            Object.entries(rolesSource).forEach(([uid, role]) => {
-                const normalizedUid = String(uid || "").trim()
-                if (!normalizedUid) return
-                const normalizedRole = role === "owner" || role === "editor" || role === "viewer"
-                    ? role
-                    : "viewer"
-                roles[normalizedUid] = normalizedRole
-            })
-        }
-        allowSource.forEach(uid => {
-            const normalizedUid = String(uid || "").trim()
-            if (!normalizedUid) return
-            if (!roles[normalizedUid]) roles[normalizedUid] = "viewer"
-        })
-        if (ownerUid) roles[ownerUid] = "owner"
-        const noteAccessIdentifier = safe.access?.noteId ? String(safe.access.noteId) : ""
-        const access = {
-            ownerUid,
-            roles,
-            noteId: noteAccessIdentifier
-        }
+        const ownerUid = safe.ownerUid ? String(safe.ownerUid) : (StateStore.read().user?.uid || null)
 
         return {
             id: safe.id ? String(safe.id) : Utils.generateId(),
             title: safe.title ? String(safe.title).trim() : "",
-            content: safe.content ? Utils.sanitizeHtml(normalizeDriveDeliveryHtml(String(safe.content))) : "",
+            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
             pageDrawings,
             pageTitles,
             pageDrawingsRevision: typeof safe.pageDrawingsRevision === "string" && safe.pageDrawingsRevision
@@ -227,7 +188,6 @@ const NoteIO = {
             isArchived: !!safe.isArchived,
             isFavorite: !!safe.isFavorite,
             isPinned: !!safe.isPinned,
-            access,
             lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
             reminderAt: safe.reminderAt || safe.futureAt || null,
             trashedAt: safe.trashedAt || null,
@@ -641,89 +601,6 @@ const LockService = {
     }
 }
 
-const CollaborationService = {
-    getAccess(note) {
-        const access = note && typeof note === "object" ? note.access : null
-        return access && typeof access === "object" ? access : null
-    },
-    getRole(note) {
-        const access = this.getAccess(note)
-        const currentUserUid = StateStore.read().user?.uid || ""
-        if (!currentUserUid) return "viewer"
-        if (this.isLegacyOwnerNote(note, currentUserUid, access)) return "owner"
-        if (access?.ownerUid && access.ownerUid === currentUserUid) return "owner"
-        const role = access?.roles && typeof access.roles === "object" ? access.roles[currentUserUid] : ""
-        if (role === "owner" || role === "editor" || role === "viewer") return role
-        return "viewer"
-    },
-    isLegacyOwnerNote(note, currentUserUid, access = null) {
-        if (!note || typeof note !== "object") return false
-        const ownerCandidates = [
-            note.ownerUid,
-            note.ownerId,
-            access?.ownerUid,
-            note?.access?.ownerUid
-        ]
-            .map(value => String(value || "").trim())
-            .filter(Boolean)
-        if (ownerCandidates.length) return ownerCandidates.includes(currentUserUid)
-        const roles = access?.roles && typeof access.roles === "object"
-            ? access.roles
-            : (note?.access?.roles && typeof note.access.roles === "object" ? note.access.roles : {})
-        const hasAnyRole = Object.keys(roles).length > 0
-        const accessNoteId = String((access?.noteId || note?.access?.noteId || "")).trim()
-        if (hasAnyRole) {
-            if (roles[currentUserUid] === "owner") return true
-            const roleKeys = Object.keys(roles)
-            if (!accessNoteId && roleKeys.length === 1 && roleKeys[0] === currentUserUid) return true
-            return false
-        }
-        return true
-    },
-    canEdit(note) {
-        const role = this.getRole(note)
-        return role === "owner" || role === "editor"
-    },
-    canManage(note) {
-        return this.getRole(note) === "owner"
-    },
-    isSharedNote(note) {
-        const access = this.getAccess(note)
-        const userUid = StateStore.read().user?.uid
-        return !!(access && access.ownerUid && access.ownerUid !== userUid)
-    },
-    normalizePermission(value) {
-        return value === "editor" || value === "edit" ? "editor" : "viewer"
-    },
-    getNoteReference(note, user) {
-        if (!user || !note) return null
-        return DataPath.getUserNotesCollection(user).doc(note.id)
-    },
-    async copyToClipboard(text) {
-        const value = String(text || "")
-        if (!value) return false
-        if (navigator.clipboard?.writeText) {
-            try {
-                await navigator.clipboard.writeText(value)
-                return true
-            } catch {
-                return false
-            }
-        }
-        const textarea = document.createElement("textarea")
-        textarea.value = value
-        textarea.setAttribute("readonly", "true")
-        textarea.style.position = "fixed"
-        textarea.style.opacity = "0"
-        document.body.appendChild(textarea)
-        textarea.select()
-        const ok = document.execCommand("copy")
-        document.body.removeChild(textarea)
-        return ok
-    }
-}
-
-window.CollaborationService = CollaborationService;
 window.SaveStateService = SaveStateService;
 
 const EXPORTABLE_NOTE_FIELDS = [
@@ -754,8 +631,7 @@ const EXPORTABLE_NOTE_FIELDS = [
     "order",
     "createdAt",
     "updatedAt",
-    "ownerUid",
-    "access"
+    "ownerUid"
 ]
 
 const EXPORTABLE_FOLDER_FIELDS = [

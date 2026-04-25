@@ -183,12 +183,6 @@ export const EditorAPI = (() => {
 
     const getRefs = () => window.InfraEngine?.getRefs?.() || window.DataPath
 
-    const resolveExternalMediaMessage = (error, options = {}) => {
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
-        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
-    }
-
     const AI_ANALYSIS_VERSION = 1
 
     const hasAiRelevantChanges = (previousNote, nextNote) => {
@@ -287,10 +281,6 @@ export const EditorAPI = (() => {
 
         const currentNote = StateStore.read().currentNote
         if (!currentNote) return
-        if (!canEditNote(currentNote)) {
-            UI.showToast(UI.getText("share_readonly", "Read-only access"))
-            return
-        }
         const snapshot = captureSnapshot()
         let note = {
             ...currentNote,
@@ -343,39 +333,6 @@ export const EditorAPI = (() => {
             return
         }
 
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const hasInlineMedia = /data:(image|audio)\//i.test(String(note.content || ""))
-        if (hasInlineMedia) {
-            if (!mediaService) {
-                UI.showToast(resolveExternalMediaMessage(new Error("external-storage-unlinked"), { attachmentOnly: true }))
-                return
-            }
-            try {
-                const mediaResult = await mediaService.externalizeNoteMedia(note, {
-                    fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note", "note") || "note"
-                })
-                note = NoteIO.normalizeNote({
-                    ...note,
-                    ...mediaResult.note,
-                    pageTitles: note.pageTitles
-                })
-                if (mediaResult.changed) {
-                    StateStore.update("currentNote", note)
-                    renderState()
-                }
-                if (/data:(image|audio)\//i.test(String(note.content || ""))) {
-                    throw new Error("external-inline-media-blocked")
-                }
-            } catch (error) {
-                const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
-                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    return
-                }
-                throw error
-            }
-        }
-
         if (hasAiRelevantChanges(currentNote, note)) {
             note.aiProcessed = false
             note.analyzed = false
@@ -385,14 +342,8 @@ export const EditorAPI = (() => {
         }
 
         StateStore.update("currentNote", note)
-        const access = typeof CollaborationService === "undefined"
-            ? null
-            : CollaborationService.getAccess(note)
-        const payload = window.NoteHelpers.buildNotePayload({ note, user, access })
-
-        const ref = typeof CollaborationService === "undefined"
-            ? getRefs().getUserNotesCollection(user).doc(payload.id)
-            : CollaborationService.getNoteReference(note, user)
+        const payload = window.NoteHelpers.buildNotePayload({ note, user })
+        const ref = getRefs().getUserNotesCollection(user).doc(payload.id)
 
         if (!ref) return
 
@@ -645,11 +596,7 @@ export const EditorAPI = (() => {
                         document.getElementById(mediaId)?.remove()
                         queueSnapshot()
                     }
-                    if (String(errorCode).includes("external-") || String(errorCode).startsWith("drive-")) {
-                        UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    } else {
-                        UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
-                    }
+                    UI.showToast(`${UI.getText("save_failed", "Не удалось сохранить")} (${errorCode})`)
                 } finally {
                     URL.revokeObjectURL(previewUrl)
                 }
@@ -658,31 +605,8 @@ export const EditorAPI = (() => {
 
     }
 
-    const canEditNote = (note) => {
-        if (typeof CollaborationService === "undefined") return true
-        return CollaborationService.canEdit(note)
-    }
-
-    const canManageNote = (note) => {
-        if (typeof CollaborationService === "undefined") return true
-        return CollaborationService.canManage(note)
-    }
-
-    const syncAccessState = (note) => {
-        const editable = canEditNote(note)
-        const titleElement = document.getElementById("note-title")
-        const toolbarElement = document.getElementById("editor-toolbar")
-        if (titleElement) titleElement.readOnly = !editable
-        if (toolbarElement) {
-            toolbarElement.querySelectorAll("button").forEach(btn => {
-                btn.disabled = !editable
-                btn.setAttribute("aria-disabled", editable ? "false" : "true")
-            })
-        }
-    }
-
     const updateEditableState = () => {
-        const editable = !state.drawingState?.active && canEditNote(StateStore.read().currentNote)
+        const editable = !state.drawingState?.active
         const contentElement = document.getElementById("note-content-editable")
         getPages().forEach(page => {
             page.contentEditable = editable ? "true" : "false"
@@ -1059,13 +983,6 @@ export const EditorAPI = (() => {
         if (document.getElementById("note-editor")?.classList.contains("active")) {
             await close({ persistChanges: true, silent: true })
         }
-        if (typeof CollaborationService !== "undefined" && CollaborationService.isSharedNote(note)) {
-            const access = CollaborationService.getAccess(note)
-            if (!access?.ownerUid || !access?.noteId) {
-                UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
-                return
-            }
-        }
         if (note.lock && note.lock.hash) {
             const password = await UI.showPasswordPrompt(UI.getText("lock_title", "Lock"), UI.getText("lock_password", "Password"))
             if (password == null) return
@@ -1152,7 +1069,6 @@ export const EditorAPI = (() => {
             mediaHandlers.makeMediaDraggable()
             mediaHandlers.syncMediaSizes()
             syncDrawingForActivePage()
-            syncAccessState(note)
             layoutHandlers.syncToolbarToggleState()
             layoutHandlers.syncBottomOffset()
             if (state.observer) {
@@ -1223,15 +1139,9 @@ export const EditorAPI = (() => {
     const deleteCurrent = () => {
         const note = StateStore.read().currentNote
         if (!note) return
-        if (!canManageNote(note)) {
-            UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
-            return
-        }
         UI.confirm("delete", async () => {
             if (!db || !StateStore.read().user) return
-            const ref = typeof CollaborationService === "undefined"
-                ? getRefs().getUserNotesCollection(StateStore.read().user).doc(note.id)
-                : CollaborationService.getNoteReference(note, StateStore.read().user)
+            const ref = getRefs().getUserNotesCollection(StateStore.read().user).doc(note.id)
             if (!ref) return
             await ref.delete()
             UI.showToast(UI.getText("note_deleted", "Deleted"))

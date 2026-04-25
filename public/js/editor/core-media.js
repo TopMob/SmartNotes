@@ -41,23 +41,13 @@ export const createMediaHandlers = (context) => {
     })
 
     const uploadImageFile = async (file) => {
-        if (!navigator.onLine) {
-            throw new Error("drive-offline")
-        }
         const reader = new FileReader()
         const imageDataUrl = await new Promise((resolve, reject) => {
             reader.onload = () => resolve(String(reader.result || ""))
             reader.onerror = () => reject(new Error("file-read-failed"))
             reader.readAsDataURL(file)
         })
-        const optimizedImageDataUrl = await optimizeImageDataUrl(imageDataUrl)
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        if (!mediaService) {
-            throw new Error("external-storage-unlinked")
-        }
-        return mediaService.uploadDataUrl(optimizedImageDataUrl, {
-            fileNameBase: file?.name || "note_image"
-        })
+        return optimizeImageDataUrl(imageDataUrl)
     }
 
     const fileToDataUrl = async (file) => uploadImageFile(file)

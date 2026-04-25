@@ -463,14 +463,10 @@ async function clearTrashPermanently() {
 }
 
 const ensureManageAccess = (note) => {
-    if (!note) return false
-    if (typeof CollaborationService === "undefined" || CollaborationService.canManage(note)) return true
-    UI.showToast(UI.getText("share_manage_denied", "Permission denied"))
-    return false
+    return !!note
 }
 
 const getNoteReference = (note, user) => {
-    if (typeof CollaborationService !== "undefined") return CollaborationService.getNoteReference(note, user)
     return getRefs().getUserNotesCollection(user).doc(note.id)
 }
 
@@ -760,13 +756,12 @@ const NotesListEngine = (() => {
     const createCard = (note) => {
         const isLockedView = StateStore.read().view === "locked"
         const isLockedNote = getIsHiddenLocked()(note)
-        const canManage = typeof CollaborationService !== "undefined" ? CollaborationService.canManage(note) : true
         const card = el("div", ["note-card"])
-        card.draggable = !(isLockedView && isLockedNote) && canManage
+        card.draggable = !(isLockedView && isLockedNote)
         card.dataset.noteId = encodeURIComponent(note.id)
 
         let actions = null
-        if (!(isLockedView && isLockedNote) && canManage) {
+        if (!(isLockedView && isLockedNote)) {
             actions = el("div", ["card-actions"])
             actions.appendChild(createBtn("note-pin", "push_pin", UI.getText("pin_note", "Pin"), note.id))
             const favBtn = createBtn("note-favorite", note.isFavorite ? "star" : "star_border", UI.getText("favorite_note", "Favorite"), note.id)

@@ -6,7 +6,6 @@ import { bootstrapCore } from "./core/bootstrap.js"
 import { APP_MESSAGES, getAppMessage } from "./core/messages.js"
 import { validateFolderName, validateFolderDescription, canAddFolder, canAddCustomTheme, canAssignToFolder, FOLDER_DESCRIPTION_SOFT_LIMIT, FOLDER_DESCRIPTION_HARD_LIMIT } from "./core/validators.js"
 import { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload } from "./core/noteHelpers.js"
-import { GoogleDriveMediaService } from "./core/googleDriveMedia.js"
 import { initSupabase } from "./core/supabase.js"
 
 const core = window.__smartnotesCore || (() => {
@@ -45,12 +44,9 @@ window.Validators = {
 }
 window.NoteHelpers = { normalizeDateValue, buildNotePayload, buildNoteUpdatePayload }
 window.AppFeatures = Object.assign({
-    googleDrive: false,
     about: true,
     feedback: true
 }, window.AppFeatures || {})
-window.GoogleDriveMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
-window.ExternalMediaService = window.AppFeatures.googleDrive ? GoogleDriveMediaService : null
 
 
 function initializeSplashScreen() {

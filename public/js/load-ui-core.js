@@ -74,7 +74,6 @@ const UI = {
         const normalizedFeatureKey = String(featureKey || "").trim()
         const fallbackByFeature = {
             about: "Раздел о приложении временно отключён",
-            googleDrive: "Google Drive временно отключён",
             feedback: "Обратная связь временно отключена"
         }
         const fallbackMessage = fallbackByFeature[normalizedFeatureKey] || "Функция временно отключена"
@@ -83,18 +82,10 @@ const UI = {
 
     applyFeatureAvailability() {
         const aboutMenuEnabled = this.isFeatureEnabled("about") || this.isFeatureEnabled("feedback")
-        const driveEnabled = this.isFeatureEnabled("googleDrive")
-
         document.querySelectorAll('[data-modal="feedback-menu-modal"]').forEach(element => {
             element.classList.toggle("hidden", !aboutMenuEnabled)
             if ("disabled" in element) element.disabled = !aboutMenuEnabled
             element.setAttribute("aria-hidden", aboutMenuEnabled ? "false" : "true")
-        })
-
-        document.querySelectorAll('[data-action="settings-backup-all-notes"], [data-action="settings-backup-folder"]').forEach(element => {
-            element.classList.toggle("hidden", !driveEnabled)
-            if ("disabled" in element) element.disabled = !driveEnabled
-            element.setAttribute("aria-hidden", driveEnabled ? "false" : "true")
         })
     },
 
@@ -677,10 +668,10 @@ Object.assign(UI, {
             case "copy-user-uid": {
                 const uid = String(StateStore.read().user?.uid || "")
                 if (!uid) {
-                    this.showToast(this.getText("share_manage_denied", "Permission denied"))
+                    this.showToast(this.getText("copy_failed", "Copy failed"))
                     break
                 }
-                const copied = await CollaborationService.copyToClipboard(uid)
+                const copied = await this.copyToClipboard(uid)
                 this.showToast(copied ? this.getText("uid_copied", "UID скопирован") : uid)
                 break
             }
@@ -987,8 +978,6 @@ Object.assign(UI, {
 });
 
 (() => {
-    const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at"
-
     const buildExportFileName = (note, extension) => {
         const baseName = NoteIO.fileNameFor(note).replace(/\.json$/i, "")
         return `${baseName}.${extension}`
@@ -1082,7 +1071,6 @@ Object.assign(UI, {
     }
 
     window.UINoteActionsExport = {
-        DRIVE_LAST_MANUAL_BACKUP_AT_KEY,
         buildExportFileName,
         buildNoteTextExport,
         buildPrintableNoteHtml,
@@ -1306,8 +1294,6 @@ window.UINoteActionsPanel = {
 }
 })();
 
-const DRIVE_LAST_MANUAL_BACKUP_AT_KEY = "drive-last-manual-backup-at";
-
 ;(() => {
 const noteActionsPanel = window.UINoteActionsPanel
 if (noteActionsPanel && typeof noteActionsPanel === "object") Object.assign(UI, noteActionsPanel);
@@ -1343,10 +1329,27 @@ Object.assign(UI, {
         input.click()
     },
 
-    resolveExternalMediaMessage(error, options = {}) {
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" } : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
-        return this.getText(descriptor.messageKey, descriptor.fallbackMessage)
+    async copyToClipboard(text) {
+        const value = String(text || "")
+        if (!value) return false
+        if (navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(value)
+                return true
+            } catch {
+                return false
+            }
+        }
+        const textarea = document.createElement("textarea")
+        textarea.value = value
+        textarea.setAttribute("readonly", "true")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        document.body.appendChild(textarea)
+        textarea.select()
+        const ok = document.execCommand("copy")
+        document.body.removeChild(textarea)
+        return ok
     },
 
     normalizeImportedDate(inputValue, fallbackValue = Date.now()) {
@@ -1395,7 +1398,6 @@ Object.assign(UI, {
             ownerUid: String(ownerUid || ""),
             folderId: null,
             trashedAt: null,
-            access: null,
             hiddenTags: []
         })
         const importedAt = Date.now()
@@ -1410,11 +1412,6 @@ Object.assign(UI, {
             createdAt,
             updatedAt,
             ownerUid: String(ownerUid || ""),
-            access: {
-                ownerUid: String(ownerUid || ""),
-                roles: String(ownerUid || "") ? { [String(ownerUid || "")]: "owner" } : {},
-                noteId: ""
-            },
             analyzed: false,
             aiProcessed: false,
             aiFolder: "",
@@ -1433,13 +1430,6 @@ Object.assign(UI, {
 
     async saveImportedNotes(user, importedNotes) {
         const notes = Array.isArray(importedNotes) ? importedNotes : []
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const hasInlineMedia = mediaService
-            ? notes.some(note => mediaService.getInlineMediaSummary?.(note)?.hasInlineMedia)
-            : notes.some(note => /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))))
-        if (hasInlineMedia) {
-            throw new Error(mediaService ? "external-inline-media-blocked" : "external-storage-unlinked")
-        }
         const chunkSize = 450
         for (let index = 0; index < notes.length; index += chunkSize) {
             const batch = db.batch()
@@ -1517,10 +1507,6 @@ Object.assign(UI, {
             } catch (error) {
                 console.error("Import failed", error)
                 const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.includes("drive-")) {
-                    this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    return
-                }
                 this.showToast(this.getText("import_failed", "Import failed"))
             } finally {
                 this.stopLoading(loadingLock)
@@ -1557,23 +1543,7 @@ Object.assign(UI, {
 
     async prepareExportNotes(notes) {
         const exportableNotes = Array.isArray(notes) ? notes : []
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        if (!mediaService) {
-            if (exportableNotes.some(note => /data:(image|audio)\//i.test(String(note?.content || "")) || (Array.isArray(note?.pageDrawings) && note.pageDrawings.some(item => /data:(image|audio)\//i.test(String(item || "")))))) {
-                throw new Error("external-storage-unlinked")
-            }
-            return exportableNotes
-        }
-        return Promise.all(exportableNotes.map(async note => {
-            const prepared = await mediaService.externalizeNoteMedia(note, {
-                fileNameBase: window.NoteExportService?.sanitizeExportFileName?.(note?.title || note?.id || "note_export", "note_export") || "note_export"
-            })
-            const normalizedNote = NoteIO.normalizeNote(prepared.note)
-            if (mediaService.getInlineMediaSummary?.(normalizedNote)?.hasInlineMedia) {
-                throw new Error("drive-upload-failed:export-inline-media")
-            }
-            return normalizedNote
-        }))
+        return exportableNotes.map(note => NoteIO.normalizeNote(note))
     },
 
     async exportNotesBundle(notes, options = {}) {
@@ -1604,47 +1574,6 @@ Object.assign(UI, {
         }
     },
 
-    async backupNotesBundleToDrive(notes, options = {}) {
-        const loadingLock = this.startLoading(this.getText("loading_backup", "Создание резервной копии..."))
-        try {
-            const exportableNotes = Array.isArray(notes) ? notes : []
-            if (!exportableNotes.length) {
-                const emptyKey = options.emptyMessageKey || "export_empty"
-                const fallbackMessage = options.emptyFallback || "No notes available for export"
-                this.showToast(this.getText(emptyKey, fallbackMessage))
-                return null
-            }
-            const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-            if (!mediaService?.uploadFile) {
-                this.showToast(this.getText("backup_connected_drive_required", "Connect external storage to create a backup"))
-                return null
-            }
-            const preparedNotes = await this.prepareExportNotes(exportableNotes)
-            const payload = window.NoteExportService.buildExportPayload({
-                notes: preparedNotes,
-                folders: this.getExportFoldersForNotes(preparedNotes, options),
-                scope: options.scope || "all",
-                folder: options.folder || null
-            })
-            const fileName = window.NoteExportService.buildExportFileName({
-                scope: options.scope || "all",
-                folderName: options.folder?.name || ""
-            })
-            const blob = window.NoteExportService.createExportBlob(payload)
-            const publicUrl = await mediaService.uploadFile(blob, {
-                fileName,
-                mimeType: "application/json",
-                targetFolder: "backups"
-            })
-            const completedAt = new Date().toISOString()
-            SafeStorage.local.set(DRIVE_LAST_MANUAL_BACKUP_AT_KEY, completedAt)
-            this.showToast(this.getText("backup_success", "Backup saved to external storage"))
-            return { fileName, publicUrl, completedAt }
-        } finally {
-            this.stopLoading(loadingLock)
-        }
-    },
-
     async exportAllNotes() {
         try {
             return await this.exportNotesBundle(this.getExportableNotes(), {
@@ -1654,7 +1583,7 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
-            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            this.showToast(this.getText("export_failed", "Export failed"))
             return null
         }
     },
@@ -1668,7 +1597,7 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
-            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            this.showToast(this.getText("export_failed", "Export failed"))
             return null
         }
     },
@@ -1676,19 +1605,6 @@ Object.assign(UI, {
     getExportableFoldersList() {
         const folders = Array.isArray(StateStore.read().folders) ? StateStore.read().folders : []
         return folders.filter(folder => !folder?.trashedAt)
-    },
-
-    getLastDriveBackupAt() {
-        const rawValue = SafeStorage.local.get(DRIVE_LAST_MANUAL_BACKUP_AT_KEY)
-        if (!rawValue) return null
-        const date = new Date(rawValue)
-        return Number.isFinite(date.getTime()) ? date : null
-    },
-
-    getLastDriveBackupLabel() {
-        const date = this.getLastDriveBackupAt()
-        if (!date) return this.getText("backup_last_manual_none", "Пока не выполнялось")
-        return date.toLocaleString(StateStore.read().config.lang === "en" ? "en-US" : "ru-RU")
     },
 
     resolveFolderByName(folderName) {
@@ -1732,7 +1648,7 @@ Object.assign(UI, {
             })
         } catch (error) {
             console.error("Export failed", error)
-            this.showToast(this.resolveExternalMediaMessage(error, { attachmentOnly: true }))
+            this.showToast(this.getText("export_failed", "Export failed"))
             return null
         }
     },
@@ -2771,9 +2687,6 @@ Object.assign(UI, {
 
         if (page === "export_import") {
             title.textContent = dict.settings_export_import || "Export / Import"
-            const lastBackupLabel = typeof this.getLastDriveBackupLabel === "function"
-                ? this.getLastDriveBackupLabel()
-                : ""
             root.innerHTML = `
                 <div class="settings-group">
                     <div class="settings-section">
@@ -2786,18 +2699,6 @@ Object.assign(UI, {
                                 ${dict.settings_export_folder || dict.export_folder || "Export folder"}
                             </button>
                         </div>
-                    </div>
-                    <div class="settings-section">
-                        <div class="settings-section-title">${dict.backup_section_title || "Backup"}</div>
-                        <div class="settings-actions-grid">
-                            <button type="button" class="btn-secondary" data-action="settings-backup-all-notes">
-                                ${dict.settings_backup_all_notes || dict.backup_all_notes_drive || "Back up all notes"}
-                            </button>
-                            <button type="button" class="btn-secondary" data-action="settings-backup-folder">
-                                ${dict.settings_backup_folder || dict.backup_folder_select || "Back up folder"}
-                            </button>
-                        </div>
-                        <div class="folder-meta">${lastBackupLabel}</div>
                     </div>
                     <div class="settings-section">
                         <div class="settings-section-title">${dict.import_section_title || "Import"}</div>

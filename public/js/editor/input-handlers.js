@@ -912,14 +912,6 @@ export const createClipboardHandlers = (context) => {
     const removableWrapperTags = new Set(["div", "section", "article", "main"])
     const structuralTags = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "a", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "code", "pre", "hr", "table", "tbody", "thead", "tr", "td", "th"])
 
-    const resolveExternalMediaMessage = (error, options = {}) => {
-        const mediaService = window.ExternalMediaService || window.GoogleDriveMediaService
-        const descriptor = mediaService?.resolveUserFacingError?.(error, options) || (options.attachmentOnly
-            ? { messageKey: "external_attachment_unavailable", fallbackMessage: "Disk is not connected, attachment unavailable" }
-            : { messageKey: "external_storage_unlinked", fallbackMessage: "External storage is not connected" })
-        return UI.getText(descriptor.messageKey, descriptor.fallbackMessage)
-    }
-
     const stripOfficeNamespaces = (value) => String(value || "")
         .replace(/<\/?(?:o|v|w|m):[^>]*>/gi, "")
         .replace(/\s+xmlns(?::\w+)?="[^"]*"/gi, "")
@@ -1060,11 +1052,6 @@ export const createClipboardHandlers = (context) => {
                 const url = await fileToDataUrl(file)
                 insertMedia(url, "image")
             } catch (error) {
-                const errorCode = String(error?.message || error?.code || "")
-                if (errorCode.includes("external-") || errorCode.startsWith("drive-")) {
-                    UI.showToast(resolveExternalMediaMessage(error, { attachmentOnly: true }))
-                    return
-                }
                 throw error
             }
             return
