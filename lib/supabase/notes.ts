@@ -871,3 +871,17 @@ export async function deleteSupabaseNotePermission({ noteId, userId, collaborato
     user_email: normalizedCollaboratorEmail
   }
 }
+
+export async function listSupabaseNotePermissions({ noteId, userId }: { noteId: string, userId: string }) {
+  await requireOwnedNote(noteId, userId)
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase
+    .from("note_permissions")
+    .select("note_id, user_email, role")
+    .eq("note_id", String(noteId || "").trim())
+    .order("user_email", { ascending: true })
+
+  if (error) throw error
+  return (data || []) as NotePermissionRow[]
+}

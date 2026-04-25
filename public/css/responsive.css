@@ -111,6 +111,16 @@
         font-size: 0.78rem;
     }
 
+    .editor-collaborators {
+        max-width: 180px;
+        gap: 4px;
+    }
+
+    .editor-collaborator-chip {
+        max-width: 124px;
+        padding: 0 8px 0 5px;
+    }
+
     .editor-scroll-area {
         --editor-bottom-offset: calc(80px + var(--safe-bottom));
         padding: 16px;

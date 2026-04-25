@@ -1,7 +1,23 @@
 import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
-import { deleteSupabaseNotePermission, upsertSupabaseNotePermission } from "@/lib/supabase/notes"
+import { deleteSupabaseNotePermission, listSupabaseNotePermissions, upsertSupabaseNotePermission } from "@/lib/supabase/notes"
 
 export const runtime = "nodejs"
+
+export async function GET(request: Request) {
+  try {
+    const user = await requireSupabaseUser(request)
+    const url = new URL(request.url)
+    const noteId = String(url.searchParams.get("noteId") || url.searchParams.get("note_id") || "")
+    const permissions = await listSupabaseNotePermissions({
+      noteId,
+      userId: user.id
+    })
+
+    return ok({ permissions })
+  } catch (error) {
+    return handleRouteError(mapShareError(error), "NOTE_SHARE_LIST_FAILED")
+  }
+}
 
 function mapShareError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "")

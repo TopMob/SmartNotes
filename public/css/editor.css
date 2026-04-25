@@ -67,6 +67,68 @@
     border-color: color-mix(in srgb, var(--primary) 40%, transparent);
 }
 
+.editor-collaborators {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 260px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.editor-collaborators::-webkit-scrollbar {
+    display: none;
+}
+
+.editor-collaborator-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 160px;
+    min-height: 30px;
+    padding: 0 10px 0 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    background: color-mix(in srgb, var(--surface) 86%, var(--text) 14%);
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.editor-collaborator-chip:hover {
+    border-color: color-mix(in srgb, var(--primary) 44%, transparent);
+    color: var(--text);
+}
+
+.editor-collaborator-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    background: color-mix(in srgb, var(--primary) 28%, var(--surface) 72%);
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.editor-collaborator-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.editor-collaborator-role {
+    opacity: 0.72;
+    text-transform: lowercase;
+}
+
 .divider-vertical {
     width: 1px;
     height: 22px;

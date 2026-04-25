@@ -104,6 +104,21 @@ const resolveNoteActionErrorCode = async (response) => {
 }
 
 const NoteActionService = {
+    async listAccess(noteId) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(`${getNoteShareEndpoint()}?noteId=${encodeURIComponent(String(noteId || ""))}`, {
+            method: "GET",
+            headers: buildAuthorizedHeaders(user)
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `NOTE_SHARE_LIST_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return Array.isArray(payload?.permissions) ? payload.permissions : []
+    },
+
     async patch(noteId, updates) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")

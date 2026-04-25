@@ -22,6 +22,7 @@ export const EditorAPI = (() => {
         pageAdd: document.querySelector('[data-action="editor-add-page"]'),
         pagesList: document.getElementById("editor-pages-list"),
         shareButton: document.querySelector('[data-action="share-note"]'),
+        collaborators: document.querySelector('[data-role="editor-collaborators"]'),
         tagsInput: document.getElementById("note-tags-input"),
         tagsContainer: document.getElementById("note-tags-container"),
         ctxMenu: document.getElementById("media-context-menu"),
@@ -50,10 +51,111 @@ export const EditorAPI = (() => {
         return String(note.ownerUid || "") === String(currentUser.uid || "")
     }
 
+    const normalizeCollaboratorList = (items) => Array.isArray(items)
+        ? items
+            .map(item => ({
+                email: String(item?.user_email || item?.email || "").trim().toLowerCase(),
+                role: String(item?.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer"
+            }))
+            .filter(item => item.email)
+        : []
+
+    const renderCollaborators = () => {
+        const collaboratorsRoot = elements.collaborators || document.querySelector('[data-role="editor-collaborators"]')
+        if (!collaboratorsRoot) return
+        const canManage = canManageSharing()
+        const collaborators = normalizeCollaboratorList(state.noteCollaborators)
+        collaboratorsRoot.classList.toggle("hidden", !canManage || collaborators.length === 0)
+        if (!canManage || collaborators.length === 0) {
+            collaboratorsRoot.innerHTML = ""
+            return
+        }
+
+        collaboratorsRoot.innerHTML = collaborators.map((item) => {
+            const initial = Utils.escapeHtml(item.email.charAt(0) || "?")
+            const email = Utils.escapeHtml(item.email)
+            const role = Utils.escapeHtml(item.role)
+            return `<button type="button" class="editor-collaborator-chip" data-action="manage-collaborator" data-email="${encodeURIComponent(item.email)}" data-role="${role}" title="${email} (${role})">
+                <span class="editor-collaborator-avatar" aria-hidden="true">${initial}</span>
+                <span class="editor-collaborator-email">${email}</span>
+                <span class="editor-collaborator-role">${role}</span>
+            </button>`
+        }).join("")
+    }
+
+    const loadCollaborators = async ({ silent = true } = {}) => {
+        const note = StateStore.read().currentNote
+        if (!note?.id || !canManageSharing(note)) {
+            state.noteCollaborators = []
+            renderCollaborators()
+            return []
+        }
+
+        try {
+            const collaborators = await window.NoteActionService.listAccess(note.id)
+            state.noteCollaborators = normalizeCollaboratorList(collaborators)
+            renderCollaborators()
+            return state.noteCollaborators
+        } catch (error) {
+            state.noteCollaborators = []
+            renderCollaborators()
+            if (!silent) {
+                UI.showToast(`${UI.getText("share_note_list_failed", "Не удалось загрузить доступы")} (${String(error?.message || error || "unknown")})`)
+            }
+            return []
+        }
+    }
+
     const updateShareButtonState = () => {
         const shareButton = elements.shareButton || document.querySelector('[data-action="share-note"]')
         if (!shareButton) return
         shareButton.classList.toggle("hidden", !canManageSharing())
+        renderCollaborators()
+    }
+
+    const manageCollaborator = (email, currentRole) => {
+        const note = StateStore.read().currentNote
+        if (!note?.id || !email) return
+
+        UI.showPrompt(
+            UI.getText("share_note_manage_title", "Управление доступом"),
+            UI.getText("share_note_email_placeholder", "email@example.com"),
+            async (promptEmail, roleValue) => {
+                const normalizedEmail = String(promptEmail || email || "").trim().toLowerCase()
+                const normalizedRole = String(roleValue || "").trim().toLowerCase()
+                if (!normalizedEmail) return
+
+                try {
+                    if (normalizedRole === "remove") {
+                        UI.confirm("confirm_default", async () => {
+                            try {
+                                await window.NoteActionService.revokeAccess(note.id, normalizedEmail)
+                                UI.showToast(UI.getText("share_note_revoked", "Доступ отозван"))
+                                await loadCollaborators()
+                            } catch (error) {
+                                UI.showToast(`${UI.getText("share_note_failed", "Не удалось обновить доступ")} (${String(error?.message || error || "unknown")})`)
+                            }
+                        })
+                        return
+                    }
+
+                    const role = normalizedRole === "editor" ? "editor" : "viewer"
+                    await window.NoteActionService.shareNote(note.id, normalizedEmail, role)
+                    UI.showToast(UI.getText("share_note_saved", "Доступ обновлен"))
+                    await loadCollaborators()
+                } catch (error) {
+                    UI.showToast(`${UI.getText("share_note_failed", "Не удалось обновить доступ")} (${String(error?.message || error || "unknown")})`)
+                }
+            },
+            email,
+            {
+                secondaryField: {
+                    value: currentRole || "viewer",
+                    placeholder: UI.getText("share_note_role_placeholder", "viewer | editor | remove"),
+                    ariaLabel: UI.getText("share_note_role_label", "Роль доступа")
+                }
+            }
+        )
     }
 
     const openSharePrompt = () => {
@@ -79,12 +181,14 @@ export const EditorAPI = (() => {
                     if (normalizedRole === "remove") {
                         await window.NoteActionService.revokeAccess(note.id, normalizedEmail)
                         UI.showToast(UI.getText("share_note_revoked", "Доступ отозван"))
+                        await loadCollaborators()
                         return
                     }
 
                     const role = normalizedRole === "editor" ? "editor" : "viewer"
                     await window.NoteActionService.shareNote(note.id, normalizedEmail, role)
                     UI.showToast(UI.getText("share_note_saved", "Доступ обновлен"))
+                    await loadCollaborators()
                 } catch (error) {
                     UI.showToast(`${UI.getText("share_note_failed", "Не удалось обновить доступ")} (${String(error?.message || error || "unknown")})`)
                 }
@@ -631,6 +735,16 @@ export const EditorAPI = (() => {
             }, { signal })
         }
 
+        if (boundElements.collaborators) {
+            boundElements.collaborators.addEventListener("click", (event) => {
+                const targetElement = resolveEventElementTarget(event.target)
+                const chip = targetElement?.closest('[data-action="manage-collaborator"]')
+                if (!chip) return
+                event.preventDefault()
+                manageCollaborator(decodeURIComponent(chip.dataset.email || ""), chip.dataset.role || "viewer")
+            }, { signal })
+        }
+
         const imageUploadInputElement = document.getElementById("img-upload")
         if (imageUploadInputElement) {
             imageUploadInputElement.addEventListener("change", async event => {
@@ -1026,6 +1140,7 @@ export const EditorAPI = (() => {
         layoutHandlers.activate()
         renderState()
         updateShareButtonState()
+        void loadCollaborators()
         focusActivePage()
 
         const openedNoteSnapshot = captureSnapshot()
@@ -1083,6 +1198,7 @@ export const EditorAPI = (() => {
         StateStore.update("isEditing", false)
         StateStore.update("isTyping", false)
         StateStore.update("editorDirty", false)
+        state.noteCollaborators = []
         mediaHandlers.deselectMedia()
         mediaHandlers.cleanupPointerInteractions()
         state.pageIndex = 0
