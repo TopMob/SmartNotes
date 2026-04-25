@@ -55,8 +55,8 @@ export const EditorAPI = (() => {
     const normalizeCollaboratorList = (items) => Array.isArray(items)
         ? items
             .map(item => ({
-                userId: String(item?.userId || item?.user_id || "").trim(),
-                displayName: String(item?.displayName || item?.display_name || item?.email || item?.userId || item?.user_id || "").trim(),
+                userId: String(item?.userId || "").trim(),
+                displayName: String(item?.displayName || item?.email || item?.userId || "").trim(),
                 role: String(item?.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer",
                 status: ["pending", "accepted", "rejected"].includes(String(item?.status || "accepted").trim().toLowerCase())
                     ? String(item?.status || "accepted").trim().toLowerCase()

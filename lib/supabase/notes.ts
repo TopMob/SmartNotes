@@ -126,16 +126,11 @@ function extractCollaboratorTargetValue(value: unknown) {
 
   try {
     const url = new URL(normalizedValue)
-    const emailTarget = normalizeEmail(
-      url.searchParams.get("email")
-      || url.searchParams.get("user_email")
-      || ""
-    )
+    const emailTarget = normalizeEmail(url.searchParams.get("email") || "")
     if (emailTarget) return emailTarget
 
     const idTarget = String(
       url.searchParams.get("userId")
-      || url.searchParams.get("user_id")
       || url.searchParams.get("uid")
       || url.searchParams.get("id")
       || ""
@@ -713,7 +708,7 @@ async function listOwnedFolderIds(userId: string) {
   return (data || []).map(row => normalizeUuid(row.id)).filter(Boolean) as string[]
 }
 
-async function getFolderAccessRow(folderId: string, userId: string, userEmail: string) {
+async function getFolderAccessRow(folderId: string, userId: string) {
   const normalizedFolderId = normalizeUuid(folderId)
   if (!normalizedFolderId) {
     throw new Error("FOLDER_NOT_FOUND")
@@ -769,7 +764,7 @@ async function getFolderPermissionRow(folderId: string, userId: string) {
   return data as FolderPermissionRow | null
 }
 
-async function getNoteAccessRow(noteId: string, userId: string, userEmail: string) {
+async function getNoteAccessRow(noteId: string, userId: string) {
   const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
     throw new Error("NOTE_NOT_FOUND")
@@ -789,7 +784,7 @@ async function getNoteAccessRow(noteId: string, userId: string, userEmail: strin
   }
 
   const folderAccess = noteRow.folder_id
-    ? await getFolderAccessRow(String(noteRow.folder_id || ""), userId, userEmail).catch(error => {
+    ? await getFolderAccessRow(String(noteRow.folder_id || ""), userId).catch(error => {
       if (String(error instanceof Error ? error.message : error || "") === "FOLDER_NOT_FOUND") {
         return null
       }
@@ -828,7 +823,7 @@ async function getNoteAccessRow(noteId: string, userId: string, userEmail: strin
 }
 
 async function requireEditorNoteAccess(noteId: string, userId: string, userEmail: string) {
-  const access = await getNoteAccessRow(noteId, userId, userEmail)
+  const access = await getNoteAccessRow(noteId, userId)
   if (access.noteRow.user_id === userId) {
     return access.noteRow
   }
@@ -1162,7 +1157,7 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
 
   const normalizedStartAfterId = normalizeUuid(startAfterId)
   if (normalizedStartAfterId) {
-    const cursorAccess = await getNoteAccessRow(normalizedStartAfterId, userId, userEmail).catch(error => {
+    const cursorAccess = await getNoteAccessRow(normalizedStartAfterId, userId).catch(error => {
       if (String(error instanceof Error ? error.message : error || "") === "NOTE_NOT_FOUND") {
         return null
       }
@@ -1209,7 +1204,7 @@ export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: 
   const payload = buildNotePayload(userId, note)
 
   if (payload.folder_id) {
-    const folderAccess = await getFolderAccessRow(String(payload.folder_id || ""), userId, userEmail)
+    const folderAccess = await getFolderAccessRow(String(payload.folder_id || ""), userId)
 
     if (!folderAccess?.folderId || (folderAccess.permission && folderAccess.permission.role !== "editor")) {
       throw new Error("FOLDER_NOT_FOUND")

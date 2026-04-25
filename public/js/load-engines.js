@@ -110,9 +110,7 @@ const buildShareInviteLink = ({ itemType, itemId, targetUserId }) => {
     url.searchParams.set("inviteType", itemType === "folder" ? "folder" : "note")
     url.searchParams.set("inviteId", String(itemId || ""))
     if (targetUserId) {
-        const normalizedTargetUserId = String(targetUserId || "")
-        url.searchParams.set("userId", normalizedTargetUserId)
-        url.searchParams.set("user_id", normalizedTargetUserId)
+        url.searchParams.set("userId", String(targetUserId || ""))
     }
     return url.toString()
 }
@@ -124,11 +122,9 @@ const normalizeShareTarget = (target) => {
         const parsed = new URL(normalizedTarget)
         return String(
             parsed.searchParams.get("userId")
-            || parsed.searchParams.get("user_id")
             || parsed.searchParams.get("uid")
             || parsed.searchParams.get("id")
             || parsed.searchParams.get("email")
-            || parsed.searchParams.get("user_email")
             || normalizedTarget
         ).trim()
     } catch {
@@ -140,16 +136,16 @@ const normalizeInviteItemType = value => String(value || "") === "folder" ? "fol
 
 const normalizeInviteRecord = (invite) => {
     const safe = invite && typeof invite === "object" ? invite : {}
-    const itemType = normalizeInviteItemType(safe.itemType || safe.item_type)
+    const itemType = normalizeInviteItemType(safe.itemType)
     const rawStatus = String(safe.status || "pending").trim().toLowerCase()
     return {
         itemType,
-        itemId: String(safe.itemId || safe.item_id || safe.note_id || safe.folder_id || "").trim(),
-        itemTitle: String(safe.itemTitle || safe.item_title || "").trim(),
+        itemId: String(safe.itemId || "").trim(),
+        itemTitle: String(safe.itemTitle || "").trim(),
         role: String(safe.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer",
         status: ["pending", "accepted", "rejected"].includes(rawStatus) ? rawStatus : "pending",
-        invitedByUserId: String(safe.invitedByUserId || safe.invited_by_user_id || "").trim(),
-        invitedByDisplayName: String(safe.invitedByDisplayName || safe.invited_by_display_name || "").trim()
+        invitedByUserId: String(safe.invitedByUserId || "").trim(),
+        invitedByDisplayName: String(safe.invitedByDisplayName || "").trim()
     }
 }
 
@@ -330,14 +326,14 @@ const NoteActionService = {
     async respondToInvite(itemType, itemId, accept) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
+        const normalizedItemType = normalizeInviteItemType(itemType)
+        const normalizedItemId = String(itemId || "")
         const response = await fetch(getInvitesEndpoint(), {
             method: "POST",
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
-                itemType: normalizeInviteItemType(itemType),
-                item_type: normalizeInviteItemType(itemType),
-                itemId: String(itemId || ""),
-                item_id: String(itemId || ""),
+                itemType: normalizedItemType,
+                itemId: normalizedItemId,
                 accept: accept !== false
             })
         })
@@ -367,7 +363,7 @@ const NoteActionService = {
             const listMethod = normalizedItemType === "folder" ? this.listFolderAccess : this.listAccess
             const permissions = await listMethod.call(this, normalizedItemId)
             const currentPermission = (Array.isArray(permissions) ? permissions : []).find(permission => {
-                const permissionUserId = String(permission?.userId || permission?.user_id || "").trim()
+                const permissionUserId = String(permission?.userId || "").trim()
                 return permissionUserId && permissionUserId === currentUserId
             }) || null
             if (!currentPermission) throw error

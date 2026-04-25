@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
     const url = new URL(request.url)
-    const noteId = String(url.searchParams.get("noteId") || url.searchParams.get("note_id") || "")
+    const noteId = String(url.searchParams.get("noteId") || "")
     const permissions = await listSupabaseNotePermissions({
       noteId,
       userId: user.id
@@ -34,42 +34,20 @@ function mapShareError(error: unknown) {
   return error
 }
 
-function serializeShareError(error: unknown) {
-  if (error instanceof Error) {
-    const structuredError = error as Error & { code?: string, details?: string, hint?: string, status?: number }
-    return {
-      name: structuredError.name,
-      message: structuredError.message,
-      code: structuredError.code || null,
-      details: structuredError.details || null,
-      hint: structuredError.hint || null,
-      status: structuredError.status || null,
-      stack: structuredError.stack || null
-    }
-  }
-
-  if (error && typeof error === "object") {
-    return { ...(error as Record<string, unknown>) }
-  }
-
-  return { value: error }
-}
-
 export async function POST(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
     const payload = await readJsonBody(request)
     const permission = await upsertSupabaseNotePermission({
-      noteId: String(payload?.noteId || payload?.note_id || ""),
+      noteId: String(payload?.noteId || ""),
       userId: user.id,
       userEmail: user.email,
-      collaboratorTarget: String(payload?.target || payload?.email || payload?.user_email || payload?.userId || payload?.user_id || ""),
+      collaboratorTarget: String(payload?.target || payload?.email || payload?.userId || ""),
       role: payload?.role === "editor" ? "editor" : "viewer"
     })
 
     return ok({ permission }, { status: 201 })
   } catch (error) {
-    console.error("[NOTE_SHARE_FAILED]", serializeShareError(error))
     return handleRouteError(mapShareError(error), "NOTE_SHARE_FAILED")
   }
 }
@@ -79,9 +57,9 @@ export async function DELETE(request: Request) {
     const user = await requireSupabaseUser(request)
     const payload = await readJsonBody(request)
     const permission = await deleteSupabaseNotePermission({
-      noteId: String(payload?.noteId || payload?.note_id || ""),
+      noteId: String(payload?.noteId || ""),
       userId: user.id,
-      collaboratorTarget: String(payload?.target || payload?.email || payload?.user_email || payload?.userId || payload?.user_id || "")
+      collaboratorTarget: String(payload?.target || payload?.email || payload?.userId || "")
     })
 
     return ok({ permission })

@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     const payload = await readJsonBody(request)
     const invite = await respondToSupabaseInvite({
       userId: user.id,
-      itemType: String(payload?.itemType || payload?.item_type || "") === "folder" ? "folder" : "note",
-      itemId: String(payload?.itemId || payload?.item_id || ""),
+      itemType: String(payload?.itemType || "") === "folder" ? "folder" : "note",
+      itemId: String(payload?.itemId || ""),
       accept: payload?.accept !== false
     })
     return ok({ invite })
