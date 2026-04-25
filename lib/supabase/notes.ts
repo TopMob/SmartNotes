@@ -155,7 +155,9 @@ async function resolveCollaboratorEmail(collaboratorTarget: unknown) {
     throw new Error("BAD_REQUEST")
   }
   if (normalizedTarget.includes("@")) {
-    return normalizeEmail(normalizedTarget)
+    const profile = await resolveProfileByEmail(normalizedTarget)
+    if (!profile?.email) throw new Error("COLLABORATOR_NOT_FOUND")
+    return normalizeEmail(profile.email)
   }
 
   const supabase = getSupabaseAdminClient()
@@ -189,6 +191,44 @@ async function getProfileByEmail(email: string) {
   return data ? mapProfileRow(data as ProfileRow) : null
 }
 
+async function getAuthUserByEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) return null
+
+  const supabase = getSupabaseAdminClient()
+  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 })
+  if (error) throw new Error("COLLABORATOR_NOT_FOUND")
+  const users = Array.isArray(data?.users) ? data.users : []
+  const matchedUser = users.find(user => normalizeEmail(user?.email || "") === normalizedEmail) || null
+  if (!matchedUser?.id) return null
+
+  return {
+    id: String(matchedUser.id || ""),
+    email: normalizeEmail(matchedUser.email || ""),
+    displayName: String(matchedUser.user_metadata?.display_name || matchedUser.user_metadata?.full_name || "").trim(),
+    photoURL: String(matchedUser.user_metadata?.avatar_url || "").trim(),
+    uid: String(matchedUser.id || "")
+  }
+}
+
+async function resolveProfileByEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) return null
+
+  const profile = await getProfileByEmail(normalizedEmail)
+  if (profile?.id) return profile
+
+  const authUser = await getAuthUserByEmail(normalizedEmail)
+  if (!authUser?.id) return null
+
+  return ensureSupabaseProfile({
+    userId: authUser.id,
+    email: authUser.email,
+    displayName: authUser.displayName,
+    avatarUrl: authUser.photoURL
+  })
+}
+
 async function listProfilesByIds(userIds: string[]) {
   const normalizedIds = [...new Set((Array.isArray(userIds) ? userIds : []).map(value => String(value || "").trim()).filter(Boolean))]
   if (!normalizedIds.length) return []
@@ -208,7 +248,7 @@ async function resolveCollaborator(collaboratorTarget: unknown): Promise<Resolve
   if (!normalizedTarget) throw new Error("BAD_REQUEST")
 
   if (normalizedTarget.includes("@")) {
-    const profile = await getProfileByEmail(normalizedTarget)
+    const profile = await resolveProfileByEmail(normalizedTarget)
     if (!profile?.id) throw new Error("COLLABORATOR_NOT_FOUND")
     return {
       id: String(profile.id || ""),
