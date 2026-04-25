@@ -331,7 +331,7 @@ export const ThemeManager = {
         try {
             const settingsService = typeof SettingsSyncService !== "undefined" ? SettingsSyncService : null
             if (!settingsService?.normalizeUserSettings || !user?.uid) return null
-            const accessToken = String(user?.accessToken || "")
+            const accessToken = String(user?.accessToken || window.__smartnotesGetSupabaseAccessToken?.() || "")
             if (!accessToken) return this.getSavedSettings()
             const response = await fetch("/api/supabase/settings", {
                 method: "GET",

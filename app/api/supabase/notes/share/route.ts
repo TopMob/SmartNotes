@@ -48,6 +48,7 @@ export async function POST(request: Request) {
 
     return ok({ permission }, { status: 201 })
   } catch (error) {
+    console.error("[NOTE_SHARE_FAILED]", error)
     return handleRouteError(mapShareError(error), "NOTE_SHARE_FAILED")
   }
 }

@@ -617,7 +617,7 @@ Object.assign(UI, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {})
+                    ...((user?.accessToken || window.__smartnotesGetSupabaseAccessToken?.()) ? { Authorization: `Bearer ${String(user?.accessToken || window.__smartnotesGetSupabaseAccessToken?.() || "")}` } : {})
                 },
                 body: JSON.stringify(payload)
             })

@@ -452,8 +452,9 @@ function normalizeFolderName(name: unknown) {
   return String(name || "").trim()
 }
 
-function isUuid(value: unknown) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim())
+function normalizeRecordId(value: unknown) {
+  const normalized = String(value || "").trim()
+  return normalized || undefined
 }
 
 function assertFolderName(name: unknown) {
@@ -467,7 +468,7 @@ function buildNotePayload(userId: string, note: NoteInput = {}, currentMetadata:
   const metadata = currentMetadata && typeof currentMetadata === "object" ? currentMetadata : {}
 
   return {
-    id: isUuid(note?.id) ? String(note?.id) : undefined,
+    id: normalizeRecordId(note?.id),
     user_id: userId,
     folder_id: note?.folderId || null,
     title: String(note?.title || "").slice(0, 200),

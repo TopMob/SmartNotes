@@ -307,7 +307,7 @@ export function createAuthManager({ auth }) {
             if (typeof user.updateProfile === "function") {
                 updatedUser = await user.updateProfile({ displayName: normalizedName }) || user
             }
-            const accessToken = String(updatedUser?.accessToken || auth?.currentUser?.accessToken || "")
+            const accessToken = String(updatedUser?.accessToken || auth?.currentUser?.accessToken || window.__smartnotesGetSupabaseAccessToken?.() || "")
             if (accessToken) {
                 await fetch("/api/supabase/session", {
                     method: "POST",
@@ -351,7 +351,7 @@ export function createAuthManager({ auth }) {
             if (typeof user.updateProfile === "function") {
                 updatedUser = await user.updateProfile({ photoURL: avatarDataUrl }) || user
             }
-            const accessToken = String(updatedUser?.accessToken || auth?.currentUser?.accessToken || "")
+            const accessToken = String(updatedUser?.accessToken || auth?.currentUser?.accessToken || window.__smartnotesGetSupabaseAccessToken?.() || "")
             if (accessToken) {
                 await fetch("/api/supabase/session", {
                     method: "POST",

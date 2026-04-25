@@ -29,7 +29,7 @@ const FoldersRepository = (() => {
 
 const SettingsRepository = (() => {
     function buildHeaders(user) {
-        const accessToken = String(user?.accessToken || "")
+        const accessToken = String(user?.accessToken || window.__smartnotesGetSupabaseAccessToken?.() || "")
         return {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})

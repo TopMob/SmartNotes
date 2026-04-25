@@ -9,7 +9,7 @@ const getRefs = () => window.InfraEngine?.getRefs?.() || window.DataPath
 const createApiEndpoint = (path) => window.SmartNotesBackendConfig?.createApiEndpoint?.(path) || `/api/${String(path || "").replace(/^\/+/, "")}`
 
 const buildAuthorizedHeaders = (user) => {
-    const accessToken = String(user?.accessToken || "")
+    const accessToken = String(user?.accessToken || window.__smartnotesGetSupabaseAccessToken?.() || "")
     return {
         "Content-Type": "application/json",
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})

@@ -3,6 +3,7 @@ let officialClientLoadPromise = null
 let officialClientSingletonPromise = null
 let sessionRefreshPromise = null
 const authStateSubscribers = new Set()
+let lastAuthStateEvent = null
 
 const AUTH_CALLBACK_PATH = "/auth/callback"
 const OFFICIAL_STORAGE_KEY = "sb-smartnotes-auth-token"
@@ -80,6 +81,10 @@ function getCurrentSession() {
         || null
 }
 
+function getCurrentAccessToken() {
+    return String(getCurrentSession()?.access_token || "")
+}
+
 function setCurrentSession(session) {
     writeStoredSession(session)
     return session || null
@@ -92,6 +97,10 @@ function isSessionExpired(session) {
 }
 
 function notifyAuthStateChange(eventName, session) {
+    lastAuthStateEvent = {
+        eventName,
+        session: session || null
+    }
     authStateSubscribers.forEach((callback) => {
         try {
             callback(eventName, session || null)
@@ -101,13 +110,58 @@ function notifyAuthStateChange(eventName, session) {
     })
 }
 
+async function callAuthFallback(path, body = {}) {
+    if (typeof fetch !== "function") {
+        throw new Error("supabase-auth-fallback-unavailable")
+    }
+
+    const response = await fetch("/api/supabase/auth", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ path, ...(body && typeof body === "object" ? body : {}), body })
+    })
+
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+        return {
+            data: null,
+            error: normalizeAuthError({
+                message: String(payload?.error || payload?.message || `supabase-auth-http-${response.status}`),
+                code: String(payload?.code || payload?.error || "auth/unknown"),
+                status: response.status
+            })
+        }
+    }
+
+    return {
+        data: payload,
+        error: null
+    }
+}
+
 async function refreshStoredSession() {
     const session = getCurrentSession()
     if (!session?.refresh_token) return session
 
     const officialClient = await getOfficialClient()
     if (!officialClient?.auth?.refreshSession) {
-        return session
+        const refreshResult = await callAuthFallback("token?grant_type=refresh_token", {
+            refresh_token: session.refresh_token
+        }).catch(() => ({ data: null, error: null }))
+        if (refreshResult.error || !refreshResult.data?.access_token) {
+            if (Number(refreshResult.error?.status || 0) === 401) {
+                setCurrentSession(null)
+                notifyAuthStateChange("SIGNED_OUT", null)
+                return null
+            }
+            return session
+        }
+
+        const nextSession = setCurrentSession(refreshResult.data)
+        notifyAuthStateChange("TOKEN_REFRESHED", nextSession)
+        return nextSession
     }
 
     const refreshResult = await officialClient.auth.refreshSession({
@@ -133,19 +187,24 @@ async function verifyStoredSession() {
     if (!session?.access_token) return null
 
     const officialClient = await getOfficialClient()
-    if (!officialClient?.auth?.getUser) {
-        return session
-    }
-
     if (isSessionExpired(session)) {
         return refreshStoredSession()
     }
 
     let verifyResult = null
-    try {
-        verifyResult = await officialClient.auth.getUser(session.access_token)
-    } catch {
-        return session
+    if (!officialClient?.auth?.getUser) {
+        verifyResult = await callAuthFallback("user", {
+            accessToken: session.access_token
+        }).catch(() => null)
+        if (!verifyResult) {
+            return session
+        }
+    } else {
+        try {
+            verifyResult = await officialClient.auth.getUser(session.access_token)
+        } catch {
+            return session
+        }
     }
 
     if (!verifyResult.error && verifyResult.data?.user) {
@@ -475,6 +534,12 @@ function createClientFacade() {
             onAuthStateChange(callback) {
                 if (typeof callback === "function") {
                     authStateSubscribers.add(callback)
+                    if (lastAuthStateEvent) {
+                        Promise.resolve().then(() => {
+                            if (!authStateSubscribers.has(callback)) return
+                            callback(lastAuthStateEvent.eventName, lastAuthStateEvent.session)
+                        }).catch(() => {})
+                    }
                 }
                 return {
                     data: {
@@ -502,10 +567,12 @@ const supabaseClientTestUtils = {
         officialClientLoadPromise = null
         officialClientSingletonPromise = null
         sessionRefreshPromise = null
+        lastAuthStateEvent = null
         authStateSubscribers.clear()
     }
 }
 
 if (typeof window !== "undefined") {
     window.__smartnotesSupabaseTestUtils = supabaseClientTestUtils
+    window.__smartnotesGetSupabaseAccessToken = getCurrentAccessToken
 }
