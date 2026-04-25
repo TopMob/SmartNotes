@@ -17,8 +17,10 @@ const buildAuthorizedHeaders = (user) => {
 }
 
 const getNotesEndpoint = () => createApiEndpoint("supabase/notes")
+const NOTE_ANALYZE_DEBOUNCE_MS = 12000
 
 const createNeutralTimestamp = () => new Date().toISOString()
+const noteAnalysisTimers = new Map()
 
 const readNotesState = () => Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
 
@@ -129,10 +131,62 @@ const NoteActionService = {
             throw new Error(errorCode || `NOTE_DELETE_HTTP_${response.status}`)
         }
         return response.json()
+    },
+
+    async triggerAnalysis(noteId) {
+        const user = StateStore.read().user
+        if (!user) throw new Error("UNAUTHORIZED")
+        const response = await fetch(getNotesEndpoint(), {
+            method: "PATCH",
+            headers: buildAuthorizedHeaders(user),
+            body: JSON.stringify({ id: String(noteId || ""), action: "trigger-analysis" })
+        })
+        if (!response.ok) {
+            const errorCode = await resolveNoteActionErrorCode(response)
+            throw new Error(errorCode || `NOTE_ANALYZE_HTTP_${response.status}`)
+        }
+        const payload = await response.json()
+        return payload?.note || null
     }
 }
 
 window.NoteActionService = NoteActionService
+
+window.NoteAnalysisService = {
+    schedule(noteId) {
+        const normalizedNoteId = String(noteId || "")
+        if (!normalizedNoteId) return false
+        const currentTimer = noteAnalysisTimers.get(normalizedNoteId)
+        if (currentTimer) clearTimeout(currentTimer)
+        updateNoteInState(normalizedNoteId, note => ({ ...note, aiStatus: "pending", analyzed: false, aiProcessed: false, aiError: "" }))
+        const timerId = setTimeout(async () => {
+            noteAnalysisTimers.delete(normalizedNoteId)
+            updateNoteInState(normalizedNoteId, note => ({ ...note, aiStatus: "analyzing", aiError: "" }))
+            try {
+                const savedNote = await NoteActionService.triggerAnalysis(normalizedNoteId)
+                if (savedNote) replaceNoteInState(normalizedNoteId, savedNote)
+                if (String(UI.currentNoteActionId || "") === normalizedNoteId) {
+                    UI.renderNoteActions?.(normalizedNoteId)
+                }
+            } catch (error) {
+                updateNoteInState(normalizedNoteId, note => ({ ...note, aiStatus: "error", aiError: String(error?.message || error || "analysis_failed") }))
+                if (String(UI.currentNoteActionId || "") === normalizedNoteId) {
+                    UI.renderNoteActions?.(normalizedNoteId)
+                }
+            }
+        }, NOTE_ANALYZE_DEBOUNCE_MS)
+        noteAnalysisTimers.set(normalizedNoteId, timerId)
+        return true
+    },
+    cancel(noteId) {
+        const normalizedNoteId = String(noteId || "")
+        const currentTimer = noteAnalysisTimers.get(normalizedNoteId)
+        if (!currentTimer) return false
+        clearTimeout(currentTimer)
+        noteAnalysisTimers.delete(normalizedNoteId)
+        return true
+    }
+}
 
 const shrinkNoteForCache = (note) => {
     const normalizedNote = NoteIO.normalizeNote(note || {})
@@ -731,8 +785,6 @@ const NotesListEngine = (() => {
 
         const titleText = (isLockedView && isLockedNote) ? UI.getText("lock_center_masked_title", "Protected note") : (note.title || NoteText.buildAutoTitle(note))
         const h3 = el("h3", [], titleText)
-        const analysisStatus = UI.getNoteAnalysisStatusDescriptor?.(note)
-        const analysisBadge = analysisStatus ? el("span", ["lock-badge", `analysis-status-${analysisStatus.tone}`], analysisStatus.label) : null
 
         const contentText = (isLockedView && isLockedNote) ? UI.getText("lock_hidden", "Note hidden") : NoteText.buildPreviewText(note)
         const p = el("p", [], contentText)
@@ -755,10 +807,6 @@ const NotesListEngine = (() => {
 
         const lockContainer = el("div")
         lockContainer.style.marginTop = "8px"
-        if (analysisBadge) {
-            analysisBadge.style.marginRight = "8px"
-            lockContainer.appendChild(analysisBadge)
-        }
         if (note.lock && note.lock.hidden) {
             const badge = el("span", ["lock-badge"])
             const i = createIcon("lock")
@@ -819,16 +867,8 @@ const NotesListEngine = (() => {
 
         const lockHash = note.lock?.hash || ""
         const prevHash = data.lock?.hash || ""
-        const analysisStatus = UI.getNoteAnalysisStatusDescriptor?.(note)
-        const prevAnalysisStatus = UI.getNoteAnalysisStatusDescriptor?.(data)
-        const analysisChanged = analysisStatus?.label !== prevAnalysisStatus?.label || analysisStatus?.tone !== prevAnalysisStatus?.tone
-        if (lockHash !== prevHash || analysisChanged) {
+        if (lockHash !== prevHash) {
             refs.lockContainer.replaceChildren()
-            if (analysisStatus) {
-                const badge = el("span", ["lock-badge", `analysis-status-${analysisStatus.tone}`], analysisStatus.label)
-                badge.style.marginRight = "8px"
-                refs.lockContainer.appendChild(badge)
-            }
             if (note.lock && note.lock.hidden) {
                 const badge = el("span", ["lock-badge"])
                 const i = createIcon("lock")

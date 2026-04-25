@@ -1228,6 +1228,17 @@ window.UINoteActionsPanel = {
                     ${dict.reminder_clear || "Clear"}
                 </button>`
             : ""
+        const analysisStatus = this.getNoteAnalysisStatusDescriptor(note)
+        const analysisStatusMarkup = analysisStatus
+            ? `<div class="note-card" style="margin-top:12px;padding:12px 14px;display:grid;gap:6px;">
+                    <div style="font-weight:700;display:flex;align-items:center;gap:8px;">
+                        <i class="material-icons-round" aria-hidden="true">psychology</i>
+                        ${Utils.escapeHtml(dict.note_ai_status_title || "Статус анализа")}
+                    </div>
+                    <div style="opacity:0.92;">${Utils.escapeHtml(analysisStatus.label)}</div>
+                    ${note.aiError ? `<div style="opacity:0.72;font-size:13px;line-height:1.45;">${Utils.escapeHtml(String(note.aiError || ""))}</div>` : ""}
+                </div>`
+            : ""
         root.innerHTML = `
             <div class="modal-actions-grid">
                 <button type="button" class="btn-secondary" data-action="note-archive" data-note-id="${encodeURIComponent(note.id)}">
@@ -1273,6 +1284,7 @@ window.UINoteActionsPanel = {
                     <i class="material-icons-round" aria-hidden="true">picture_as_pdf</i>${dict.export_pdf || "Export PDF"}
                 </button>
             </div>
+            ${analysisStatusMarkup}
         `
         this.applyInputAutocompletePolicy(root)
     },
@@ -2683,8 +2695,9 @@ Object.assign(UI, {
                 relevance: null,
                 folderId: null
             })
+            window.NoteAnalysisService?.schedule?.(normalizedNoteId)
             this.showToast(this.getText("analysis_marked_for_reanalysis", "Заметка отмечена для повторного анализа"))
-            this.closeModal("note-actions-modal")
+            this.renderNoteActions(normalizedNoteId)
         } catch {
             this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
         }
