@@ -105,7 +105,7 @@ test('stored session survives reload by forcing refresh when user endpoint rejec
   }
 
   const module = await import(`../public/js/core/supabase.js?test=${Date.now()}`)
-  module.__supabaseClientTestUtils.reset()
+  window.__smartnotesSupabaseTestUtils.reset()
 
   const client = module.initSupabase()
   const initialResult = await client.auth.getSession()
@@ -135,7 +135,7 @@ test('stored session survives reload by forcing refresh when user endpoint rejec
   assert.equal(persisted.refresh_token, 'refresh-next')
   assert.ok(fetchCalls.some(call => call.body?.path === 'token?grant_type=refresh_token'))
 
-  module.__supabaseClientTestUtils.reset()
+  window.__smartnotesSupabaseTestUtils.reset()
   delete globalThis.window
   delete globalThis.document
   delete globalThis.fetch
@@ -195,7 +195,7 @@ test('stored session is preserved on reload when profile verification temporaril
   }
 
   const module = await import(`../public/js/core/supabase.js?test-preserve=${Date.now()}`)
-  module.__supabaseClientTestUtils.reset()
+  window.__smartnotesSupabaseTestUtils.reset()
 
   const client = module.initSupabase()
   const initialResult = await client.auth.getSession()
@@ -209,7 +209,7 @@ test('stored session is preserved on reload when profile verification temporaril
   assert.equal(persisted.access_token, storedSession.access_token)
   assert.equal(persisted.refresh_token, 'refresh-stable')
 
-  module.__supabaseClientTestUtils.reset()
+  window.__smartnotesSupabaseTestUtils.reset()
   delete globalThis.window
   delete globalThis.document
   delete globalThis.fetch
@@ -270,7 +270,7 @@ test('expired stored session is preserved during temporary refresh outage until 
   }
 
   const module = await import(`../public/js/core/supabase.js?test-expired=${Date.now()}`)
-  module.__supabaseClientTestUtils.reset()
+  window.__smartnotesSupabaseTestUtils.reset()
 
   const client = module.initSupabase()
   const result = await client.auth.getSession()
@@ -280,7 +280,7 @@ test('expired stored session is preserved during temporary refresh outage until 
   assert.equal(session.refresh_token, 'refresh-survives')
   assert.equal(JSON.parse(storage.get('smartnotes.supabase.session')).refresh_token, 'refresh-survives')
 
-  module.__supabaseClientTestUtils.reset()
+  window.__smartnotesSupabaseTestUtils.reset()
   delete globalThis.window
   delete globalThis.document
   delete globalThis.fetch
