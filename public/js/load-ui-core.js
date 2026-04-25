@@ -2421,10 +2421,14 @@ Object.assign(UI, {
             headers: requestHeaders,
             body: requestBody === null ? null : JSON.stringify(requestBody)
         })
-        if (!response.ok) {
-            throw new Error(`Analysis request failed with status ${response.status}`)
-        }
         const responseData = await response.json().catch(() => ({}))
+        if (!response.ok) {
+            const error = new Error(String(responseData?.details || responseData?.error || `Analysis request failed with status ${response.status}`))
+            error.status = response.status
+            error.code = String(responseData?.error || "analysis_request_failed")
+            error.details = responseData
+            throw error
+        }
         return responseData
     },
 
@@ -2712,16 +2716,17 @@ Object.assign(UI, {
                 processedUsers: responseData?.processedUsers
             })
             this.showToast(summary ? `${successMessage} ${summary}` : successMessage)
-        } catch {
+        } catch (error) {
+            const errorMessage = String(error?.message || this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
             this.updateAdminAnalysisStatus({
                 status: "error",
-                message: this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"),
+                message: errorMessage,
                 processed: null,
                 provider: "",
                 uid: targetUid,
                 processedUsers: null
             })
-            this.showToast(this.getText("analysis_failed", "Не удалось выполнить ИИ-анализ"))
+            this.showToast(errorMessage)
         } finally {
             if (triggerButton) {
                 triggerButton.disabled = false
