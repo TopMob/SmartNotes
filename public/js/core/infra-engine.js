@@ -196,10 +196,15 @@ const createCollectionApi = ({ user, endpoint, filters = [], startAfterDocument 
         const documentId = String(id || "")
         return {
             async set(data) {
+                const existingSnapshot = documentId ? await this.get() : null
+                const method = existingSnapshot?.exists && (endpoint === "supabase/notes" || endpoint === "supabase/folders") ? "PUT" : "POST"
+                const payload = method === "PUT"
+                    ? { ...(existingSnapshot?.data?.() || {}), ...(data || {}), id: documentId }
+                    : { ...(data || {}), id: documentId }
                 const response = await fetch(createApiEndpoint(endpoint), {
-                    method: "POST",
+                    method,
                     headers: buildAuthorizedHeaders(user),
-                    body: JSON.stringify({ ...(data || {}), id: documentId })
+                    body: JSON.stringify(payload)
                 })
                 if (!response.ok) throw new Error(`supabase-doc-set-http-${response.status}`)
                 return response.json()

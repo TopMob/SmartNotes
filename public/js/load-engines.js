@@ -102,6 +102,23 @@ const resolveNoteActionErrorCode = async (response) => {
     }
 }
 
+const normalizeShareTarget = (target) => {
+    const normalizedTarget = String(target || "").trim()
+    if (!normalizedTarget) return ""
+    try {
+        const parsed = new URL(normalizedTarget)
+        return String(
+            parsed.searchParams.get("userId")
+            || parsed.searchParams.get("uid")
+            || parsed.searchParams.get("id")
+            || parsed.searchParams.get("email")
+            || normalizedTarget
+        ).trim()
+    } catch {
+        return normalizedTarget
+    }
+}
+
 const NoteActionService = {
     async listAccess(noteId) {
         const user = StateStore.read().user
@@ -171,13 +188,14 @@ const NoteActionService = {
     async shareNote(noteId, target, role) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
+        const normalizedTarget = normalizeShareTarget(target)
         const response = await fetch(getNotesEndpoint(), {
             method: "PATCH",
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 id: String(noteId || ""),
                 action: "share",
-                target: String(target || ""),
+                target: normalizedTarget,
                 role: String(role || "viewer")
             })
         })
@@ -192,13 +210,14 @@ const NoteActionService = {
     async revokeAccess(noteId, target) {
         const user = StateStore.read().user
         if (!user) throw new Error("UNAUTHORIZED")
+        const normalizedTarget = normalizeShareTarget(target)
         const response = await fetch(getNotesEndpoint(), {
             method: "PATCH",
             headers: buildAuthorizedHeaders(user),
             body: JSON.stringify({
                 id: String(noteId || ""),
                 action: "revoke-access",
-                target: String(target || "")
+                target: normalizedTarget
             })
         })
         if (!response.ok) {

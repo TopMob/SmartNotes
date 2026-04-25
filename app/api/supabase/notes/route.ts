@@ -127,6 +127,9 @@ export async function PATCH(request: Request) {
       const access = await shareSupabaseNote({
         noteId: normalizedNoteId,
         ownerUserId: user.id,
+        ownerEmail: user.email,
+        ownerDisplayName: user.displayName,
+        ownerAvatarUrl: user.avatarUrl,
         target: String(payload?.target || ""),
         role: String(payload?.role || "viewer")
       })

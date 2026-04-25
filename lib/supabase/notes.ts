@@ -610,7 +610,7 @@ async function getNoteAccessRow(noteId: string, userId: string) {
     .select("*")
     .eq("note_id", normalizedNoteId)
     .eq("shared_with_user_id", userId)
-    .in("status", ["pending", "accepted"])
+    .eq("status", "accepted")
     .maybeSingle()
 
   if (shareError) throw shareError
@@ -912,7 +912,7 @@ export async function listSupabaseNotes(userId: string, userEmail: string, { lim
     .from("note_shares")
     .select("*")
     .eq("shared_with_user_id", userId)
-    .in("status", ["pending", "accepted"])
+    .eq("status", "accepted")
 
   if (shareError) throw shareError
 
@@ -989,7 +989,7 @@ export async function listSupabaseNoteAccess(noteId: string, userId: string) {
   })
 }
 
-export async function shareSupabaseNote({ noteId, ownerUserId, target, role }: { noteId: string, ownerUserId: string, target: string, role: string }) {
+export async function shareSupabaseNote({ noteId, ownerUserId, ownerEmail = "", ownerDisplayName = "", ownerAvatarUrl = "", target, role }: { noteId: string, ownerUserId: string, ownerEmail?: string, ownerDisplayName?: string, ownerAvatarUrl?: string, target: string, role: string }) {
   const ownedNote = await requireOwnedNote(noteId, ownerUserId)
   const normalizedTarget = String(target || "").trim()
   if (!normalizedTarget) {
@@ -1007,6 +1007,13 @@ export async function shareSupabaseNote({ noteId, ownerUserId, target, role }: {
   if (String(collaborator.id || "") === String(ownerUserId || "")) {
     throw new Error("CANNOT_SHARE_WITH_SELF")
   }
+
+  await ensureSupabaseProfile({
+    userId: ownerUserId,
+    email: ownerEmail,
+    displayName: ownerDisplayName,
+    avatarUrl: ownerAvatarUrl
+  })
 
   await ensureSupabaseProfile({
     userId: collaborator.id,
@@ -1059,6 +1066,35 @@ export async function revokeSupabaseNoteAccess({ noteId, ownerUserId, target }: 
 
 export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: string, userEmail: string, note: NoteInput }) {
   const supabase = getSupabaseAdminClient()
+  const normalizedNoteId = normalizeUuid(note?.id)
+
+  if (normalizedNoteId) {
+    const existingAccess = await getNoteAccessRow(normalizedNoteId, userId).catch(error => {
+      if (String(error instanceof Error ? error.message : error || "") === "NOTE_NOT_FOUND") {
+        return null
+      }
+      throw error
+    })
+
+    if (existingAccess?.noteRow?.id) {
+      if (existingAccess.noteRow.user_id !== userId && normalizeShareRole(existingAccess.shareRow?.role) !== "editor") {
+        throw new Error("NOTE_NOT_FOUND")
+      }
+
+      const currentNote = mapNoteRow(existingAccess.noteRow as NoteRow)
+      const payload = buildNotePayload(existingAccess.noteRow.user_id, { ...(currentNote || {}), ...(note || {}), id: normalizedNoteId }, existingAccess.noteRow.metadata || {})
+      const { data, error } = await supabase
+        .from("notes")
+        .update(payload)
+        .eq("id", normalizedNoteId)
+        .select("*")
+        .single()
+
+      if (error) throw error
+      return mapNoteRow(data)
+    }
+  }
+
   const payload = buildNotePayload(userId, note)
 
   if (payload.folder_id) {
@@ -1132,7 +1168,7 @@ export async function deleteSupabaseNote(userId: string, userEmail: string, note
     throw new Error("NOTE_NOT_FOUND")
   }
 
-  await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
+  await requireOwnedNote(normalizedNoteId, userId)
 
   const supabase = getSupabaseAdminClient()
   const { error } = await supabase
