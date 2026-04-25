@@ -171,7 +171,17 @@ const NoteIO = {
         const normalizedUpdatedAt = this.normalizeDateInput(safe.updatedAt) || normalizedCreatedAt
         const createdAtMillis = this.toTimestampMillis(normalizedCreatedAt)
         const fallbackOrder = Number.isFinite(createdAtMillis) ? createdAtMillis : 0
-        const ownerUid = safe.ownerUid ? String(safe.ownerUid) : (StateStore.read().user?.uid || null)
+        const ownerUid = safe.ownerUid
+            ? String(safe.ownerUid)
+            : safe.owner_uid
+                ? String(safe.owner_uid)
+                : safe.user_id
+                    ? String(safe.user_id)
+                    : (StateStore.read().user?.uid || null)
+        const rawAccessRole = String(safe.accessRole || safe.access_role || "").trim().toLowerCase()
+        const rawAccessStatus = String(safe.accessStatus || safe.access_status || "").trim().toLowerCase()
+        const invitedByDisplayName = String(safe.invitedByDisplayName || safe.invited_by_display_name || "").trim()
+        const invitedByUserId = String(safe.invitedByUserId || safe.invited_by_user_id || "").trim()
 
         return {
             id: safe.id ? String(safe.id) : Utils.generateId(),
@@ -213,7 +223,11 @@ const NoteIO = {
             order: typeof safe.order === "number" ? safe.order : fallbackOrder,
             createdAt: normalizedCreatedAt,
             updatedAt: normalizedUpdatedAt,
-            ownerUid
+            ownerUid,
+            accessRole: rawAccessRole === "editor" || rawAccessRole === "viewer" ? rawAccessRole : "owner",
+            accessStatus: ["pending", "accepted", "rejected"].includes(rawAccessStatus) ? rawAccessStatus : "accepted",
+            invitedByDisplayName,
+            invitedByUserId
         }
     },
 

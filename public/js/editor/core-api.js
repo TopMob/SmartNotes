@@ -56,9 +56,11 @@ export const EditorAPI = (() => {
         ? items
             .map(item => ({
                 userId: String(item?.userId || item?.user_id || "").trim(),
-                displayName: String(item?.displayName || item?.display_name || item?.email || item?.userId || "").trim(),
+                displayName: String(item?.displayName || item?.display_name || item?.email || item?.userId || item?.user_id || "").trim(),
                 role: String(item?.role || "viewer").trim().toLowerCase() === "editor" ? "editor" : "viewer",
-                status: String(item?.status || "accepted").trim().toLowerCase(),
+                status: ["pending", "accepted", "rejected"].includes(String(item?.status || "accepted").trim().toLowerCase())
+                    ? String(item?.status || "accepted").trim().toLowerCase()
+                    : "accepted",
                 invitedByDisplayName: String(item?.invitedByDisplayName || "").trim()
             }))
             .filter(item => item.userId || item.displayName)
@@ -99,9 +101,13 @@ export const EditorAPI = (() => {
 
         collaboratorsRoot.innerHTML = collaborators.map((item) => {
             const initial = Utils.escapeHtml(item.displayName.charAt(0) || "?")
-            const title = Utils.escapeHtml(item.displayName)
+            const title = Utils.escapeHtml(item.displayName || item.userId)
             const roleLabel = Utils.escapeHtml(getAccessRoleLabel(item.role))
-            const statusLabel = item.status === "pending" ? Utils.escapeHtml(UI.getText("share_invite_pending", "Ожидает подтверждения")) : ""
+            const statusLabel = item.status === "pending"
+                ? Utils.escapeHtml(UI.getText("share_invite_pending", "Ожидает подтверждения"))
+                : item.status === "rejected"
+                    ? Utils.escapeHtml(UI.getText("invite_reject", "Отклонено"))
+                    : ""
             return `<button type="button" class="editor-collaborator-chip" data-action="manage-collaborator" data-user-id="${encodeURIComponent(item.userId)}" data-role="${item.role}" title="${title}">
                 <span class="editor-collaborator-avatar" aria-hidden="true">${initial}</span>
                 <span class="editor-collaborator-email">${title}</span>
@@ -132,6 +138,8 @@ export const EditorAPI = (() => {
             return []
         }
     }
+
+    const loadCurrentCollaborators = async (options = {}) => loadCollaborators(options)
 
     const updateShareButtonState = () => {
         const shareButton = elements.shareButton || document.querySelector('[data-action="share-note"]')
@@ -1388,6 +1396,7 @@ export const EditorAPI = (() => {
         init,
         open,
         openFromList,
+        loadCurrentCollaborators,
         refreshFromRemote,
         close,
         save,

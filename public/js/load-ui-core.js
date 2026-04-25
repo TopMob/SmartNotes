@@ -12,6 +12,7 @@ const UI = {
     inputPolicyObserver: null,
     toastDeduplication: { lastMessage: "", lastShownAt: 0 },
     loadingLocks: new Set(),
+    inviteLinkHandlingPromise: null,
 
     resolveEventElementTarget(target) {
         return target instanceof Element ? target : null
@@ -106,17 +107,20 @@ const UI = {
                 root.innerHTML = `<div class="pending-invite-empty">${this.getText("pending_invites_empty", "Нет новых приглашений")}</div>`
                 return
             }
-            root.innerHTML = invites.map(invite => `
+            root.innerHTML = invites.map(invite => {
+                const inviterDisplayName = String(invite.invitedByDisplayName || invite.invitedByUserId || "").trim()
+                const roleToneClass = String(invite.role || "viewer") === "editor" ? "is-editor" : "is-viewer"
+                return `
                 <div class="pending-invite-card">
                     <div class="pending-invite-title">${Utils.escapeHtml(String(invite.itemTitle || ""))}</div>
-                    <div class="pending-invite-meta">${Utils.escapeHtml(String(invite.invitedByDisplayName || ""))} ${Utils.escapeHtml(this.getText(invite.itemType === "folder" ? "invite_folder_text" : "invite_note_text", invite.itemType === "folder" ? "приглашает вас к папке" : "приглашает вас к заметке"))}</div>
-                    <div class="pending-invite-role">${Utils.escapeHtml(this.getAccessRoleLabel(invite.role || "viewer"))}</div>
+                    <div class="pending-invite-meta">${Utils.escapeHtml(inviterDisplayName)} ${Utils.escapeHtml(this.getText(invite.itemType === "folder" ? "invite_folder_text" : "invite_note_text", invite.itemType === "folder" ? "приглашает вас к папке" : "приглашает вас к заметке"))}</div>
+                    <div class="pending-invite-role ${roleToneClass}">${Utils.escapeHtml(this.getAccessRoleLabel(invite.role || "viewer"))}</div>
                     <div class="pending-invite-actions">
                         <button type="button" class="btn-primary" data-action="accept-invite" data-item-type="${invite.itemType}" data-item-id="${encodeURIComponent(String(invite.itemId || ""))}">${this.getText("invite_accept", "Принять")}</button>
                         <button type="button" class="btn-secondary" data-action="reject-invite" data-item-type="${invite.itemType}" data-item-id="${encodeURIComponent(String(invite.itemId || ""))}">${this.getText("invite_reject", "Отклонить")}</button>
                     </div>
                 </div>
-            `).join("")
+            `}).join("")
         } catch {
             root.innerHTML = `<div class="pending-invite-empty">${this.getText("pending_invites_empty", "Нет новых приглашений")}</div>`
         }
@@ -124,15 +128,71 @@ const UI = {
 
     async respondToInvite(itemType, itemId, accept) {
         try {
+            const activeEditorNoteId = String(StateStore.read().currentNote?.id || "")
             await window.NoteActionService.respondToInvite(itemType, itemId, accept)
             this.showToast(this.getText(accept ? "invite_accepted" : "invite_rejected", accept ? "Приглашение принято" : "Приглашение отклонено"))
-            await this.renderPendingInvites()
             if (window.SessionService && StateStore.read().user?.uid) {
                 await window.SessionService.startUserSession(StateStore.read().user, { forceResubscribe: true })
+            }
+            await this.renderPendingInvites()
+            if (accept) {
+                if (itemType === "folder") {
+                    switchView("folder", String(itemId || ""))
+                }
+                if (itemType !== "folder" && activeEditorNoteId && activeEditorNoteId === String(itemId || "")) {
+                    await window.SmartNotesEditor?.loadCurrentCollaborators?.()
+                }
             }
         } catch (error) {
             this.showToast(`${this.getText("invite_failed", "Не удалось обработать приглашение")} (${String(error?.message || error || "unknown")})`)
         }
+    },
+
+    async handleInviteLinkFromUrl() {
+        if (this.inviteLinkHandlingPromise) return this.inviteLinkHandlingPromise
+        this.inviteLinkHandlingPromise = (async () => {
+            const params = new URLSearchParams(window.location.search || "")
+            const itemType = String(params.get("inviteType") || params.get("invite_type") || "").trim() === "folder" ? "folder" : "note"
+            const itemId = String(params.get("inviteId") || params.get("invite_id") || "").trim()
+            const targetUserId = String(params.get("userId") || params.get("user_id") || "").trim()
+            if (!itemId) return false
+            const user = StateStore.read().user
+            if (!user?.uid) return false
+            try {
+                await window.NoteActionService.consumeInviteLink({ itemType, itemId, targetUserId })
+                if (window.SessionService) {
+                    await window.SessionService.startUserSession(user, { forceResubscribe: true })
+                }
+                await this.renderPendingInvites()
+                const nextUrl = new URL(window.location.href)
+                nextUrl.searchParams.delete("inviteType")
+                nextUrl.searchParams.delete("invite_type")
+                nextUrl.searchParams.delete("inviteId")
+                nextUrl.searchParams.delete("invite_id")
+                nextUrl.searchParams.delete("userId")
+                nextUrl.searchParams.delete("user_id")
+                window.history.replaceState({}, "", nextUrl.toString())
+                if (String(itemType || "") === "folder") {
+                    switchView("folder", itemId)
+                } else {
+                    const acceptedNote = (Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []).find(note => String(note?.id || "") === itemId) || null
+                    if (acceptedNote) {
+                        await window.SmartNotesEditor?.openFromList?.(acceptedNote)
+                    }
+                }
+                this.showToast(this.getText("invite_accepted", "Приглашение принято"))
+                return true
+            } catch (error) {
+                const message = String(error?.message || error || "")
+                if (message === "INVITE_USER_MISMATCH") {
+                    this.showToast(this.getText("invite_failed", "Не удалось обработать приглашение"))
+                    return false
+                }
+                this.showToast(`${this.getText("invite_failed", "Не удалось обработать приглашение")} (${message || "unknown"})`)
+                return false
+            }
+        })()
+        return this.inviteLinkHandlingPromise
     },
 
     async copyFolderShareLink(folderId) {

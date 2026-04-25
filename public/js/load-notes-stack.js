@@ -286,6 +286,32 @@ const NotesAggregationService = (() => {
     return { aggregate }
 })()
 
+const normalizeFolderRecord = (rawFolder) => {
+    const safe = rawFolder && typeof rawFolder === "object" ? rawFolder : {}
+    const createdAt = NoteIO.normalizeDateInput(safe.createdAt ?? safe.created_at) || Utils.serverTimestamp()
+    const updatedAt = NoteIO.normalizeDateInput(safe.updatedAt ?? safe.updated_at) || createdAt
+    const rawAccessRole = String(safe.accessRole || safe.access_role || "").trim().toLowerCase()
+    const rawAccessStatus = String(safe.accessStatus || safe.access_status || "").trim().toLowerCase()
+    return {
+        id: String(safe.id || ""),
+        name: String(safe.name || "").trim(),
+        description: String(safe.description || "").trim(),
+        folderOrder: Number.isFinite(Number(safe.folderOrder))
+            ? Number(safe.folderOrder)
+            : Number.isFinite(Number(safe.sort_order))
+                ? Number(safe.sort_order)
+                : 0,
+        isHidden: safe.isHidden === true || safe.is_hidden === true,
+        isArchived: safe.isArchived === true || safe.is_archived === true,
+        trashedAt: safe.trashedAt || null,
+        createdAt,
+        updatedAt,
+        ownerUid: String(safe.ownerUid || safe.owner_uid || safe.user_id || ""),
+        accessRole: rawAccessRole === "editor" || rawAccessRole === "viewer" ? rawAccessRole : "owner",
+        accessStatus: ["pending", "accepted", "rejected"].includes(rawAccessStatus) ? rawAccessStatus : "accepted"
+    }
+}
+
 const RemindersService = (() => {
     const reminderTimers = new Map()
     let unsubscribeState = null
@@ -594,7 +620,7 @@ const SessionService = (() => {
                 }
                 if (state.foldersUnsubscribe) state.foldersUnsubscribe()
                 state.foldersUnsubscribe = FoldersRepository.subscribeFolders(user, snapshot => {
-                    const folders = sortFolders(snapshot.docs.map(documentEntry => ({ id: documentEntry.id, ...documentEntry.data() })))
+                    const folders = sortFolders(snapshot.docs.map(documentEntry => normalizeFolderRecord({ id: documentEntry.id, ...documentEntry.data() })))
                     StateStore.update("folders", folders)
                 }, error => EventBus.publish("foldersSyncError", error))
                 RemindersService.start()
