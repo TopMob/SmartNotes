@@ -820,9 +820,6 @@ Object.assign(UI, {
                 input.click()
                 break
             }
-            case "switch-account":
-                this.confirm("account", () => Auth.switchAccount())
-                break
             case "logout":
                 this.confirm("exit", () => {
                     const settingsModalElement = document.getElementById("settings-modal")

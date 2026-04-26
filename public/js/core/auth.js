@@ -312,6 +312,7 @@ export function createAuthManager({ auth }) {
             state.logoutInFlight = true
             this._resetRedirectFallbackState()
             this._setLoginBusy(false)
+            this._clearUserLocalCache()
             await this._handleAuthState(null)
             try {
                 await auth.signOut()
@@ -323,12 +324,6 @@ export function createAuthManager({ auth }) {
                 }, 0)
             }
         },
-        async switchAccount() {
-            await this.logout()
-            this._ensureLocalAuthManager().bindUi()
-            this._ensureLocalAuthManager().loginWithEmail()
-        },
-
         async updateDisplayName(nextName = "") {
             const user = auth?.currentUser
             const normalizedName = String(nextName || "").trim()
@@ -412,6 +407,50 @@ export function createAuthManager({ auth }) {
             if (search) search.value = ""
             if (typeof window.SmartNotesEditor?.close === "function") {
                 try { window.SmartNotesEditor.close() } catch {}
+            }
+        },
+        _clearUserLocalCache() {
+            const safeStorage = window.SafeStorage || globalThis.SafeStorage || null
+            const storageInstance = window.localStorage || globalThis.localStorage || null
+
+            try {
+                window.ThemeManager?.resetLocalThemeCache?.()
+            } catch (error) {
+                console.warn("[Auth] theme cache reset failed", error)
+            }
+
+            const removableKeys = [
+                "favorite-notes",
+                "notes-filter",
+                "saved-notes-filters",
+                "notes-cache",
+                "app-preferences",
+                "pending-note-save",
+                "editor-tools"
+            ]
+
+            removableKeys.forEach(key => {
+                try {
+                    safeStorage?.local?.remove?.(key)
+                } catch (error) {
+                    console.warn(`[Auth] local cache remove failed: ${key}`, error)
+                }
+            })
+
+            try {
+                if (!storageInstance || typeof storageInstance.length !== "number" || typeof storageInstance.key !== "function") {
+                    return
+                }
+                const removableUserSettingsKeys = []
+                for (let index = 0; index < storageInstance.length; index += 1) {
+                    const key = storageInstance.key(index)
+                    if (typeof key === "string" && key.startsWith("user-settings-cache:")) {
+                        removableUserSettingsKeys.push(key)
+                    }
+                }
+                removableUserSettingsKeys.forEach(key => storageInstance.removeItem(key))
+            } catch (error) {
+                console.warn("[Auth] user settings cache reset failed", error)
             }
         },
         applySignedInUI(user) {
