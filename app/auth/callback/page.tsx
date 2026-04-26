@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { SUPABASE_BROWSER_STORAGE_KEY, getSupabaseBrowserClient } from "@/lib/supabase/client"
 
@@ -46,14 +46,6 @@ async function syncProfile(accessToken: string) {
 
 export default function AuthCallbackPage() {
   const [status, setStatus] = useState<CallbackState>("processing")
-  const [message, setMessage] = useState("Завершаем вход...")
-
-  const content = useMemo(() => ({
-    processingTitle: "Вход в SmartNotes",
-    processingText: "Завершаем вход...",
-    errorTitle: "Не удалось завершить вход",
-    errorText: "Попробуйте снова со страницы входа."
-  }), [])
 
   useEffect(() => {
     let cancelled = false
@@ -88,16 +80,15 @@ export default function AuthCallbackPage() {
       console.error("[AuthCallback] OAuth completion failed", error)
       if (cancelled) return
       setStatus("error")
-      setMessage(content.errorText)
     })
 
     return () => {
       cancelled = true
     }
-  }, [content.errorText])
+  }, [])
 
-  const title = status === "error" ? content.errorTitle : content.processingTitle
-  const description = status === "error" ? message : content.processingText
+  const title = status === "error" ? "Не удалось завершить вход" : "Вход в SmartNotes"
+  const description = status === "error" ? "Попробуйте снова со страницы входа." : "Завершаем вход..."
 
   return (
     <main style={styles.page}>
