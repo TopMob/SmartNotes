@@ -1,0 +1,950 @@
+const RUSSIAN_TAG_SYNONYM_MAP = new Map([
+    ["важное", ["important", "priority", "favorite", "starred", "urgent", "critical"]],
+    ["архив", ["archive", "archived", "history", "old"]],
+    ["код", ["code", "coding", "development", "programming", "snippet", "javascript", "typescript", "python", "java", "html", "css", "git"]],
+    ["учеба", ["study", "education", "learning", "school", "university", "lesson", "course"]],
+    ["проект", ["project", "work", "task", "job", "planning", "product"]],
+    ["идея", ["idea", "concept", "thought", "brainstorm", "insight"]]
+])
+
+const normalizeAiTagToRussian = (value) => {
+    const normalizedValue = String(value || "").trim().toLowerCase()
+    if (!normalizedValue) return ""
+    for (const [russianTag, synonyms] of RUSSIAN_TAG_SYNONYM_MAP.entries()) {
+        if (normalizedValue === russianTag) return russianTag
+        if (synonyms.includes(normalizedValue)) return russianTag
+    }
+    return normalizedValue
+}
+
+const buildPageDrawingsRevision = (pageDrawings) => {
+    const drawings = Array.isArray(pageDrawings) ? pageDrawings : []
+    let hash = 2166136261
+    hash ^= drawings.length
+    hash = Math.imul(hash, 16777619)
+    for (let index = 0; index < drawings.length; index++) {
+        const drawing = typeof drawings[index] === "string" ? drawings[index] : ""
+        let drawingHash = 2166136261
+        for (let charIndex = 0; charIndex < drawing.length; charIndex++) {
+            drawingHash ^= drawing.charCodeAt(charIndex)
+            drawingHash = Math.imul(drawingHash, 16777619)
+        }
+        hash ^= drawingHash >>> 0
+        hash = Math.imul(hash, 16777619)
+    }
+    return `pdr:${drawings.length}:${hash >>> 0}`
+}
+
+const IMPORT_NOTE_CONTAINER_KEYS = ["note", "notes", "items", "entries", "documents", "data", "payload", "result"]
+const IMPORT_FOLDER_CONTAINER_KEYS = ["folder", "folders", "collections", "groups"]
+
+const extractImportContent = (source) => {
+    const contentCandidates = [source?.content, source?.body, source?.text, source?.html, source?.description]
+    for (const candidate of contentCandidates) {
+        if (typeof candidate === "string") return candidate
+    }
+    return ""
+}
+
+const extractImportTags = (source) => {
+    const tagCandidates = [source?.tags, source?.labels, source?.keywords]
+    for (const candidate of tagCandidates) {
+        if (Array.isArray(candidate)) return candidate
+        if (typeof candidate === "string") {
+            return candidate.split(",").map(value => value.trim()).filter(Boolean)
+        }
+    }
+    return []
+}
+
+const extractImportPageTitles = (source) => {
+    if (Array.isArray(source?.pageTitles)) return source.pageTitles
+    if (!Array.isArray(source?.pages)) return []
+    return source.pages.map(page => {
+        if (!page || typeof page !== "object") return ""
+        return typeof page.title === "string" ? page.title : ""
+    })
+}
+
+const extractImportPageDrawings = (source) => {
+    if (Array.isArray(source?.pageDrawings)) return source.pageDrawings
+    if (!Array.isArray(source?.pages)) return []
+    return source.pages.map(page => {
+        if (!page || typeof page !== "object") return ""
+        const drawingCandidates = [page.drawing, page.canvas, page.image, page.pageDrawing]
+        for (const candidate of drawingCandidates) {
+            if (typeof candidate === "string") return candidate
+        }
+        return ""
+    })
+}
+
+const looksLikeImportedNote = (source) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return false
+    if (typeof source.title === "string" || typeof source.name === "string") return true
+    if (typeof extractImportContent(source) === "string" && extractImportContent(source).length > 0) return true
+    if (extractImportTags(source).length > 0) return true
+    if (extractImportPageTitles(source).length > 0) return true
+    return extractImportPageDrawings(source).length > 0
+}
+
+const normalizeImportedRawNote = (source) => {
+    const safe = source && typeof source === "object" ? source : {}
+    return {
+        ...safe,
+        title: typeof safe.title === "string" ? safe.title : (typeof safe.name === "string" ? safe.name : ""),
+        content: extractImportContent(safe),
+        tags: extractImportTags(safe),
+        pageTitles: extractImportPageTitles(safe),
+        pageDrawings: extractImportPageDrawings(safe),
+        folderId: safe.folderId ?? safe.folder_id ?? null,
+        createdAt: safe.createdAt ?? safe.created_at ?? safe.created ?? null,
+        updatedAt: safe.updatedAt ?? safe.updated_at ?? safe.updated ?? safe.modifiedAt ?? safe.modified_at ?? null
+    }
+}
+
+const looksLikeImportedFolder = (source) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return false
+    const hasName = typeof source.name === "string" && source.name.trim().length > 0
+    const hasFolderShape = Object.prototype.hasOwnProperty.call(source, "folderOrder")
+        || Object.prototype.hasOwnProperty.call(source, "isHidden")
+        || Object.prototype.hasOwnProperty.call(source, "description")
+    return hasName && hasFolderShape
+}
+
+const normalizeImportedRawFolder = (source) => {
+    const safe = source && typeof source === "object" ? source : {}
+    return {
+        ...safe,
+        id: typeof safe.id === "string" ? safe.id : "",
+        name: typeof safe.name === "string" ? safe.name : "",
+        description: typeof safe.description === "string" ? safe.description : "",
+        folderOrder: Number.isFinite(Number(safe.folderOrder)) ? Number(safe.folderOrder) : 0,
+        isHidden: safe.isHidden === true,
+        trashedAt: safe.trashedAt || null,
+        createdAt: safe.createdAt ?? safe.created_at ?? null,
+        updatedAt: safe.updatedAt ?? safe.updated_at ?? null,
+        ownerUid: typeof safe.ownerUid === "string"
+            ? safe.ownerUid
+            : (typeof safe.owner_uid === "string" ? safe.owner_uid : "")
+    }
+}
+
+const collectImportedNotes = (payload, visited = new Set()) => {
+    if (!payload || visited.has(payload)) return []
+    if (typeof payload === "object") visited.add(payload)
+    if (Array.isArray(payload)) {
+        return payload.flatMap(item => collectImportedNotes(item, visited))
+    }
+    if (looksLikeImportedNote(payload)) {
+        return [normalizeImportedRawNote(payload)]
+    }
+    if (payload && typeof payload === "object") {
+        for (const key of IMPORT_NOTE_CONTAINER_KEYS) {
+            if (!(key in payload)) continue
+            const nested = collectImportedNotes(payload[key], visited)
+            if (nested.length) return nested
+        }
+    }
+    return []
+}
+
+const collectImportedFolders = (payload, visited = new Set()) => {
+    if (!payload || visited.has(payload)) return []
+    if (typeof payload === "object") visited.add(payload)
+    if (Array.isArray(payload)) {
+        return payload.flatMap(item => collectImportedFolders(item, visited))
+    }
+    if (looksLikeImportedFolder(payload)) {
+        return [normalizeImportedRawFolder(payload)]
+    }
+    if (payload && typeof payload === "object") {
+        for (const key of IMPORT_FOLDER_CONTAINER_KEYS) {
+            if (!(key in payload)) continue
+            const nested = collectImportedFolders(payload[key], visited)
+            if (nested.length) return nested
+        }
+        for (const value of Object.values(payload)) {
+            const nested = collectImportedFolders(value, visited)
+            if (nested.length) return nested
+        }
+    }
+    return []
+}
+
+const NoteIO = {
+    toTimestampMillis(dateValue) {
+        if (dateValue === null || dateValue === undefined || dateValue === "") return 0
+        if (dateValue instanceof Date) {
+            const millis = dateValue.getTime()
+            return Number.isFinite(millis) ? millis : 0
+        }
+        if (typeof dateValue === "number") {
+            return Number.isFinite(dateValue) ? dateValue : 0
+        }
+        const millis = Date.parse(String(dateValue))
+        return Number.isFinite(millis) ? millis : 0
+    },
+
+    normalizeDateInput(dateValue) {
+        if (dateValue === null || dateValue === undefined || dateValue === "") return null
+        if (dateValue instanceof Date) {
+            return Number.isFinite(dateValue.getTime()) ? new Date(dateValue.getTime()) : null
+        }
+        if (typeof dateValue === "number") {
+            if (!Number.isFinite(dateValue)) return null
+            const date = new Date(dateValue)
+            return Number.isFinite(date.getTime()) ? date : null
+        }
+        if (typeof dateValue === "string") {
+            const parsedMillis = Date.parse(dateValue)
+            if (!Number.isFinite(parsedMillis)) return null
+            return new Date(parsedMillis)
+        }
+        return null
+    },
+
+    normalizeNote(raw) {
+        const safe = normalizeImportedRawNote(raw)
+        const tags = Array.isArray(safe.tags)
+            ? [...new Set(safe.tags.filter(value => value && typeof value === "string").map(value => value.trim()))]
+            : []
+        const hiddenTags = Array.isArray(safe.hiddenTags)
+            ? [...new Set(safe.hiddenTags.filter(value => value && typeof value === "string").map(value => value.trim()))]
+            : []
+        const rawPageDrawings = Array.isArray(safe.pageDrawings) ? safe.pageDrawings : []
+        const pageDrawings = rawPageDrawings.map(value => typeof value === "string" ? value : "")
+        if (!pageDrawings.length && typeof safe.drawing === "string" && safe.drawing) {
+            pageDrawings.push(safe.drawing)
+        }
+        const rawPageTitles = Array.isArray(safe.pageTitles) ? safe.pageTitles : []
+        const pageTitles = rawPageTitles.map(value => typeof value === "string" ? value.slice(0, 15) : "")
+        const normalizedCreatedAt = this.normalizeDateInput(safe.createdAt) || Utils.serverTimestamp()
+        const normalizedUpdatedAt = this.normalizeDateInput(safe.updatedAt) || normalizedCreatedAt
+        const createdAtMillis = this.toTimestampMillis(normalizedCreatedAt)
+        const fallbackOrder = Number.isFinite(createdAtMillis) ? createdAtMillis : 0
+        const ownerUid = safe.ownerUid
+            ? String(safe.ownerUid)
+            : safe.owner_uid
+                ? String(safe.owner_uid)
+                : safe.user_id
+                    ? String(safe.user_id)
+                    : (StateStore.read().user?.uid || null)
+        const rawAccessRole = String(safe.accessRole || safe.access_role || "").trim().toLowerCase()
+        const rawAccessStatus = String(safe.accessStatus || safe.access_status || "").trim().toLowerCase()
+        const invitedByDisplayName = String(safe.invitedByDisplayName || safe.invited_by_display_name || "").trim()
+        const invitedByUserId = String(safe.invitedByUserId || safe.invited_by_user_id || "").trim()
+
+        return {
+            id: safe.id ? String(safe.id) : Utils.generateId(),
+            title: safe.title ? String(safe.title).trim() : "",
+            content: safe.content ? Utils.sanitizeHtml(String(safe.content)) : "",
+            pageDrawings,
+            pageTitles,
+            pageDrawingsRevision: typeof safe.pageDrawingsRevision === "string" && safe.pageDrawingsRevision
+                ? safe.pageDrawingsRevision
+                : buildPageDrawingsRevision(pageDrawings),
+            tags,
+            folderId: safe.folderId ? String(safe.folderId) : null,
+            folderOrder: typeof safe.folderOrder === "number" ? safe.folderOrder : 0,
+            isArchived: !!safe.isArchived,
+            isFavorite: !!safe.isFavorite,
+            isPinned: !!safe.isPinned,
+            lock: safe.lock && typeof safe.lock === "object" ? safe.lock : null,
+            reminderAt: safe.reminderAt || safe.futureAt || null,
+            trashedAt: safe.trashedAt || null,
+            contentType: safe.contentType ? String(safe.contentType) : "text",
+            aiFolder: typeof safe.aiFolder === "string" ? safe.aiFolder : "",
+            aiStatus: typeof safe.aiStatus === "string" && safe.aiStatus ? safe.aiStatus : (safe.aiProcessed ? "done" : "idle"),
+            analyzed: safe.analyzed === true || safe.aiProcessed === true,
+            aiError: typeof safe.aiError === "string" ? safe.aiError : "",
+            hiddenTags,
+            aiTags: Array.isArray(safe.aiTags)
+                ? [...new Set(safe.aiTags
+                    .filter(value => value && typeof value === "string")
+                    .map(value => normalizeAiTagToRussian(value))
+                    .filter(Boolean))]
+                : [],
+            relevance: Number.isFinite(Number(safe.relevance)) ? Math.max(0, Math.min(100, Number(safe.relevance))) : 0,
+            aiRelevance: Number.isFinite(Number(safe.aiRelevance))
+                ? Math.max(0, Math.min(100, Number(safe.aiRelevance)))
+                : (Number.isFinite(Number(safe.relevance)) ? Math.max(0, Math.min(100, Number(safe.relevance))) : 0),
+            aiProcessed: typeof safe.aiProcessed === "boolean" ? safe.aiProcessed : false,
+            aiVersion: Number.isFinite(Number(safe.aiVersion)) ? Number(safe.aiVersion) : 0,
+            aiLastAnalyzed: safe.aiLastAnalyzed || null,
+            order: typeof safe.order === "number" ? safe.order : fallbackOrder,
+            createdAt: normalizedCreatedAt,
+            updatedAt: normalizedUpdatedAt,
+            ownerUid,
+            accessRole: rawAccessRole === "editor" || rawAccessRole === "viewer" ? rawAccessRole : "owner",
+            accessStatus: ["pending", "accepted", "rejected"].includes(rawAccessStatus) ? rawAccessStatus : "accepted",
+            invitedByDisplayName,
+            invitedByUserId
+        }
+    },
+
+    exportNote(note) {
+        const safe = this.normalizeNote(note)
+        const exportNote = {
+            title: safe.title,
+            content: safe.content,
+            tags: safe.tags,
+            pageTitles: safe.pageTitles,
+            pageDrawings: safe.pageDrawings
+        }
+        return JSON.stringify({ version: 2, note: exportNote }, null, 2)
+    },
+
+    parseImport(parsed) {
+        return collectImportedNotes(parsed).map(note => this.normalizeNote(note))
+    },
+
+    parseImportBundle(parsed) {
+        return {
+            notes: collectImportedNotes(parsed).map(note => this.normalizeNote(note)),
+            folders: collectImportedFolders(parsed)
+        }
+    },
+
+    fileNameFor(note) {
+        const t = (note?.title || "note").trim().slice(0, 48)
+        const safe = t.replace(/[^\p{L}\p{N}\-_]+/gu, " ").replace(/\s+/g, "_").trim() || "note"
+        return `${safe}.json`
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.NoteIO = NoteIO
+}
+
+
+const SaveStateService = {
+    updateUiStatus(status, message = "") {
+        const normalizedStatus = typeof status === "string" && status ? status : "idle"
+        const normalizedMessage = typeof message === "string" ? message : ""
+        StateStore.update("saveStatus", { status: normalizedStatus, message: normalizedMessage, updatedAt: Date.now() })
+        if (typeof document !== "undefined" && document.documentElement) {
+            document.documentElement.dataset.saveStatus = normalizedStatus
+        }
+    },
+
+    markSaving() {
+        this.updateUiStatus("saving", UI.getText("saving", "Saving..."))
+    },
+
+    markSaved() {
+        this.updateUiStatus("saved", UI.getText("saved", "Saved"))
+    },
+
+    handleStorageWriteResult(result, options = {}) {
+        const normalizedResult = result && typeof result === "object" ? result : { success: false, errorType: "unknown" }
+        if (normalizedResult.success) {
+            if (options.markSaved) this.markSaved()
+            return normalizedResult
+        }
+        const errorType = String(normalizedResult.errorType || "unknown")
+        let message = UI.getText("save_failed", "Save failed")
+        if (errorType === "quota_exceeded") message = UI.getText("save_failed_quota", "Storage is full. Some old cache was removed")
+        if (errorType === "storage_unavailable") message = UI.getText("save_failed_storage_unavailable", "Storage is unavailable in this browser mode")
+        if (errorType === "indexeddb_write_failed") message = UI.getText("save_failed_fallback", "Unable to save to fallback storage")
+        this.updateUiStatus("error", message)
+        if (options.showToast !== false) UI.showToast(message)
+        return normalizedResult
+    },
+
+    handleRemoteSaveError(error, options = {}) {
+        const errorCode = error?.code ? ` (${error.code})` : ""
+        const message = `${UI.getText("save_failed", "Save failed")}${errorCode}`
+        this.updateUiStatus("error", message)
+        if (options.showToast !== false) UI.showToast(message)
+    }
+}
+
+window.SmartSearch = {
+    stop: new Set([
+        "the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it",
+        "и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"
+    ]),
+    keyboardMapEnglishToRussian: new Map([
+        ["q","й"],["w","ц"],["e","у"],["r","к"],["t","е"],["y","н"],["u","г"],["i","ш"],["o","щ"],["p","з"],["[","х"],["]","ъ"],
+        ["a","ф"],["s","ы"],["d","в"],["f","а"],["g","п"],["h","р"],["j","о"],["k","л"],["l","д"],[";","ж"],["'","э"],
+        ["z","я"],["x","ч"],["c","с"],["v","м"],["b","и"],["n","т"],["m","ь"],[",","б"],[".","ю"],["`","ё"]
+    ]),
+    russianToEnglishTranslitMap: new Map([
+        ["щ","shch"],["ш","sh"],["ч","ch"],["ц","ts"],["ю","yu"],["я","ya"],["ё","yo"],["ж","zh"],["х","kh"],
+        ["а","a"],["б","b"],["в","v"],["г","g"],["д","d"],["е","e"],["з","z"],["и","i"],["й","y"],["к","k"],
+        ["л","l"],["м","m"],["н","n"],["о","o"],["п","p"],["р","r"],["с","s"],["т","t"],["у","u"],["ф","f"],
+        ["ъ",""] ,["ы","y"],["ь",""] ,["э","e"]
+    ]),
+    synonyms: [
+        ["важное", "избранное", "favorite", "star", "important", "приоритет", "priority"],
+        ["архив", "archive", "скрыто", "старое", "old", "archived"],
+        ["код", "code", "snippet", "js", "css", "html", "dev", "git", "разработка"],
+        ["учеба", "учёба", "универ", "школа", "study", "university", "lesson", "education"],
+        ["проект", "project", "dev", "разработка", "work", "job", "task"],
+        ["идея", "idea", "мысль", "concept", "plan"],
+        ["мессенджер", "чат", "chat", "messages", "сообщения", "коммуникации"],
+        ["вкладки", "табы", "tabs", "tab", "preset", "пресеты", "presets"]
+    ],
+
+    keyboardMapRussianToEnglish: null,
+    synonymIndex: null,
+
+    buildKeyboardMapRussianToEnglish() {
+        if (this.keyboardMapRussianToEnglish) return this.keyboardMapRussianToEnglish
+        const reverseMap = new Map()
+        this.keyboardMapEnglishToRussian.forEach((russianChar, englishChar) => {
+            reverseMap.set(russianChar, englishChar)
+        })
+        this.keyboardMapRussianToEnglish = reverseMap
+        return reverseMap
+    },
+
+    buildSynonymIndex() {
+        if (this.synonymIndex) return this.synonymIndex
+        const index = new Map()
+        this.synonyms.forEach(group => {
+            const normalizedGroup = group.map(value => this.normalizeToken(value)).filter(Boolean)
+            normalizedGroup.forEach(word => {
+                if (!index.has(word)) index.set(word, new Set())
+                normalizedGroup.forEach(groupWord => index.get(word).add(groupWord))
+            })
+        })
+        this.synonymIndex = index
+        return index
+    },
+
+    normalizeToken(value) {
+        return String(value || "").trim().toLowerCase().replace(/ё/g, "е")
+    },
+
+    convertKeyboardLayout(value, targetLayout) {
+        const sourceText = String(value || "")
+        if (!sourceText) return ""
+        const map = targetLayout === "russian" ? this.keyboardMapEnglishToRussian : this.buildKeyboardMapRussianToEnglish()
+        return Array.from(sourceText).map(character => {
+            const lowerChar = character.toLowerCase()
+            const convertedChar = map.get(lowerChar)
+            if (!convertedChar) return character
+            return character === lowerChar ? convertedChar : convertedChar.toUpperCase()
+        }).join("")
+    },
+
+    transliterateRussianToEnglish(value) {
+        return Array.from(String(value || "")).map(character => {
+            const lowerChar = character.toLowerCase()
+            const convertedChar = this.russianToEnglishTranslitMap.get(lowerChar)
+            if (convertedChar === undefined) return character
+            return character === lowerChar ? convertedChar : convertedChar.charAt(0).toUpperCase() + convertedChar.slice(1)
+        }).join("")
+    },
+
+    simplifyEnglishPhonetics(value) {
+        return String(value || "")
+            .replace(/shch/g, "sch")
+            .replace(/yo/g, "io")
+            .replace(/yu/g, "iu")
+            .replace(/ya/g, "ia")
+            .replace(/zh/g, "j")
+            .replace(/kh/g, "h")
+    },
+
+    stemToken(token) {
+        const normalizedToken = this.normalizeToken(token)
+        if (normalizedToken.length < 4) return normalizedToken
+        const russianSuffixes = ["иями","ями","ами","иях","его","ого","ему","ому","ыми","ими","ий","ый","ой","ая","яя","ое","ее","ов","ев","ие","ые","ую","юю","ам","ям","ах","ях","ом","ем","а","я","ы","и","у","ю","е","о"]
+        const englishSuffixes = ["ingly","edly","ment","ness","tion","ions","ing","ers","ies","ied","ed","er","es","s"]
+        const suffixes = /[а-яё]/i.test(normalizedToken) ? russianSuffixes : englishSuffixes
+        for (const suffix of suffixes) {
+            if (normalizedToken.endsWith(suffix) && normalizedToken.length - suffix.length >= 3) {
+                return normalizedToken.slice(0, normalizedToken.length - suffix.length)
+            }
+        }
+        return normalizedToken
+    },
+
+    expandTokenVariants(token) {
+        const normalizedToken = this.normalizeToken(token)
+        if (!normalizedToken) return []
+        const tokenVariants = new Set([normalizedToken])
+        const russianLayoutVariant = this.normalizeToken(this.convertKeyboardLayout(normalizedToken, "russian"))
+        const englishLayoutVariant = this.normalizeToken(this.convertKeyboardLayout(normalizedToken, "english"))
+        const transliteratedVariant = this.normalizeToken(this.transliterateRussianToEnglish(normalizedToken))
+        const simplifiedTransliteration = this.normalizeToken(this.simplifyEnglishPhonetics(transliteratedVariant))
+        const normalizedStem = this.stemToken(normalizedToken)
+        tokenVariants.add(russianLayoutVariant)
+        tokenVariants.add(englishLayoutVariant)
+        tokenVariants.add(transliteratedVariant)
+        tokenVariants.add(simplifiedTransliteration)
+        tokenVariants.add(normalizedStem)
+        tokenVariants.add(this.stemToken(russianLayoutVariant))
+        tokenVariants.add(this.stemToken(englishLayoutVariant))
+
+        const synonymIndex = this.buildSynonymIndex()
+        const lookupVariants = [normalizedToken, russianLayoutVariant, englishLayoutVariant, normalizedStem]
+        lookupVariants.forEach(lookupVariant => {
+            if (!lookupVariant) return
+            const synonymSet = synonymIndex.get(lookupVariant)
+            if (!synonymSet) return
+            synonymSet.forEach(value => tokenVariants.add(value))
+        })
+
+        return [...tokenVariants].filter(Boolean)
+    },
+
+    tokenize(text) {
+        if (!text) return []
+        const normalizedText = this.normalizeToken(text)
+        const russianLayoutText = this.normalizeToken(this.convertKeyboardLayout(normalizedText, "russian"))
+        const englishLayoutText = this.normalizeToken(this.convertKeyboardLayout(normalizedText, "english"))
+        const transliteratedText = this.normalizeToken(this.transliterateRussianToEnglish(normalizedText))
+        const variants = [normalizedText, russianLayoutText, englishLayoutText, transliteratedText]
+        const tokenSet = new Set()
+        variants.forEach(source => {
+            source
+                .split(/[\p{P}\p{S}\s]+/u)
+                .filter(word => word && !this.stop.has(word) && word.length > 1)
+                .forEach(word => {
+                    tokenSet.add(word)
+                    tokenSet.add(this.stemToken(word))
+                })
+        })
+        return [...tokenSet].filter(Boolean)
+    },
+
+    levenshtein(sourceWord, targetWord) {
+        if (sourceWord === targetWord) return 0
+        const sourceLength = sourceWord.length
+        const targetLength = targetWord.length
+        if (sourceLength === 0) return targetLength
+        if (targetLength === 0) return sourceLength
+        if (Math.abs(sourceLength - targetLength) > 3) return 4
+
+        let previousRow = new Int16Array(targetLength + 1)
+        let currentRow = new Int16Array(targetLength + 1)
+
+        for (let columnIndex = 0; columnIndex <= targetLength; columnIndex += 1) previousRow[columnIndex] = columnIndex
+
+        for (let rowIndex = 0; rowIndex < sourceLength; rowIndex += 1) {
+            currentRow[0] = rowIndex + 1
+            let minimumDistance = currentRow[0]
+            for (let columnIndex = 0; columnIndex < targetLength; columnIndex += 1) {
+                const substitutionCost = sourceWord[rowIndex] === targetWord[columnIndex] ? 0 : 1
+                currentRow[columnIndex + 1] = Math.min(
+                    currentRow[columnIndex] + 1,
+                    previousRow[columnIndex + 1] + 1,
+                    previousRow[columnIndex] + substitutionCost
+                )
+                minimumDistance = Math.min(minimumDistance, currentRow[columnIndex + 1])
+            }
+            if (minimumDistance > 3) return 4
+            const swapBuffer = previousRow
+            previousRow = currentRow
+            currentRow = swapBuffer
+        }
+        return previousRow[targetLength]
+    },
+
+    wordScore(queryWord, documentWord) {
+        if (queryWord === documentWord) return 1
+        if (documentWord.startsWith(queryWord) || queryWord.startsWith(documentWord)) return 0.9
+        if (documentWord.includes(queryWord) || queryWord.includes(documentWord)) return 0.72
+
+        if (documentWord.length < 3 || queryWord.length < 3) return 0
+        const distance = this.levenshtein(queryWord, documentWord)
+        if (distance <= 3) return 1 - (distance / Math.max(queryWord.length, documentWord.length))
+        return 0
+    },
+
+    score(query, title, content, tags, aiTags, hiddenTags) {
+        if (!query) return 0
+        const queryTokens = this.tokenize(query)
+        if (!queryTokens.length) return 0
+
+        const weightedDocumentTokens = []
+        this.tokenize(title).forEach(token => weightedDocumentTokens.push({ token, weight: 3.6 }))
+        this.tokenize(Utils.stripHtml(content)).forEach(token => weightedDocumentTokens.push({ token, weight: 0.95 }))
+        if (Array.isArray(tags)) {
+            tags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 4.2 })))
+        }
+        if (Array.isArray(hiddenTags)) {
+            hiddenTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 4.4 })))
+        }
+        if (Array.isArray(aiTags)) {
+            aiTags.forEach(tag => this.tokenize(String(tag)).forEach(token => weightedDocumentTokens.push({ token, weight: 3.6 })))
+        }
+
+        if (!weightedDocumentTokens.length) return 0
+
+        const normalizedQuery = this.normalizeToken(query)
+        const normalizedTitle = this.normalizeToken(title)
+        const normalizedVisibleTags = Array.isArray(tags) ? tags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+        const normalizedHiddenTags = Array.isArray(hiddenTags) ? hiddenTags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+        const normalizedAiTags = Array.isArray(aiTags) ? aiTags.map(tag => this.normalizeToken(tag)).join(" ") : ""
+
+        let aggregatedScore = 0
+
+        queryTokens.forEach(queryToken => {
+            let highestTokenScore = 0
+            const queryVariants = this.expandTokenVariants(queryToken)
+            queryVariants.forEach(queryVariant => {
+                weightedDocumentTokens.forEach(documentTokenData => {
+                    const candidateScore = this.wordScore(queryVariant, documentTokenData.token) * documentTokenData.weight
+                    if (candidateScore > highestTokenScore) highestTokenScore = candidateScore
+                })
+            })
+            if (normalizedTitle.includes(queryToken)) highestTokenScore += 0.5
+            if (normalizedVisibleTags.includes(queryToken)) highestTokenScore += 0.75
+            if (normalizedHiddenTags.includes(queryToken)) highestTokenScore += 0.8
+            if (normalizedAiTags.includes(queryToken)) highestTokenScore += 0.6
+            aggregatedScore += highestTokenScore
+        })
+
+        if (normalizedTitle.includes(normalizedQuery)) aggregatedScore += 0.9
+        if (normalizedVisibleTags.includes(normalizedQuery)) aggregatedScore += 1.15
+        if (normalizedHiddenTags.includes(normalizedQuery)) aggregatedScore += 1.2
+        if (normalizedAiTags.includes(normalizedQuery)) aggregatedScore += 0.95
+
+        const normalizedScore = aggregatedScore / queryTokens.length
+        return Math.max(0, Math.min(3, normalizedScore)) / 3
+    },
+
+    suggestTags(title, content) {
+        const text = (title + " " + Utils.stripHtml(content)).toLowerCase()
+        const out = new Set()
+        const synonymIndex = this.buildSynonymIndex()
+        const textTokens = this.tokenize(text)
+        textTokens.forEach(token => {
+            const synonyms = synonymIndex.get(token)
+            if (!synonyms) return
+            synonyms.forEach(synonymWord => {
+                if (/^[a-z0-9]+$/i.test(synonymWord)) return
+                out.add(synonymWord)
+            })
+        })
+        return [...out].slice(0, 6)
+    },
+
+    suggestFolderId(note, folders) {
+        if (!folders || !folders.length) return null
+        const text = (note.title + " " + Utils.stripHtml(note.content)).toLowerCase()
+
+        const scored = folders.map(folder => {
+            const folderName = (folder.name || "").toLowerCase()
+            const folderDescription = String(folder.description || "")
+            if (folderName && text.includes(folderName)) return { id: folder.id, score: 10 }
+            const scoreByName = this.score(folder.name, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
+            const scoreByDescription = folderDescription
+                ? this.score(folderDescription, note.title, note.content, note.tags, note.aiTags, note.hiddenTags)
+                : 0
+            return { id: folder.id, score: Math.max(scoreByName, scoreByDescription) }
+        })
+
+        scored.sort((a, b) => b.score - a.score)
+        return scored[0]?.score > 0.5 ? scored[0].id : null
+    }
+}
+
+window.LockService = {
+    async digest(text) {
+        if (!window.crypto || !window.crypto.subtle) return "insecure_env"
+        const enc = new TextEncoder().encode(String(text || ""))
+        const buf = await crypto.subtle.digest("SHA-256", enc)
+        return Array.from(new Uint8Array(buf))
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join("")
+    },
+
+    async setLock(note, password) {
+        const hash = await this.digest(password)
+        note.lock = { v: 1, hash, hidden: true }
+        return note
+    },
+
+    async verify(note, password) {
+        if (!note.lock?.hash) return true
+        const inputHash = await this.digest(password)
+        return this.secureCompare(inputHash, note.lock.hash)
+    },
+
+    secureCompare(a, b) {
+        if (typeof a !== "string" || typeof b !== "string") return false
+        if (a.length !== b.length) return false
+        let mismatch = 0
+        for (let i = 0; i < a.length; i++) {
+            mismatch |= (a.charCodeAt(i) ^ b.charCodeAt(i))
+        }
+        return mismatch === 0
+    }
+}
+
+window.SaveStateService = SaveStateService;
+
+const EXPORTABLE_NOTE_FIELDS = [
+    "id",
+    "title",
+    "content",
+    "tags",
+    "pageTitles",
+    "pageDrawings",
+    "pageDrawingsRevision",
+    "folderId",
+    "folderOrder",
+    "isArchived",
+    "isFavorite",
+    "isPinned",
+    "lock",
+    "reminderAt",
+    "trashedAt",
+    "contentType",
+    "aiFolder",
+    "hiddenTags",
+    "aiTags",
+    "relevance",
+    "aiRelevance",
+    "aiProcessed",
+    "aiVersion",
+    "aiLastAnalyzed",
+    "order",
+    "createdAt",
+    "updatedAt",
+    "ownerUid"
+]
+
+const EXPORTABLE_FOLDER_FIELDS = [
+    "id",
+    "name",
+    "description",
+    "folderOrder",
+    "isHidden",
+    "trashedAt",
+    "createdAt",
+    "updatedAt",
+    "ownerUid"
+]
+
+const serializeExportDate = (value) => {
+    if (value === null || value === undefined || value === "") return null
+    if (value instanceof Date) {
+        return Number.isFinite(value.getTime()) ? value.toISOString() : null
+    }
+    if (typeof value === "number") {
+        const dateValue = new Date(value)
+        return Number.isFinite(dateValue.getTime()) ? dateValue.toISOString() : null
+    }
+    if (typeof value === "string") {
+        const dateValue = new Date(value)
+        return Number.isFinite(dateValue.getTime()) ? dateValue.toISOString() : value
+    }
+    return null
+}
+
+const sanitizeExportFileName = (value, fallback = "notes_export") => {
+    const normalizedValue = String(value || "").trim().toLowerCase()
+    const safeValue = normalizedValue
+        .replace(/[^\p{L}\p{N}_-]+/gu, "_")
+        .replace(/_{2,}/g, "_")
+        .replace(/^_+|_+$/g, "")
+    return safeValue || fallback
+}
+
+const serializeNoteForExport = (note) => {
+    const normalizedNote = NoteIO.normalizeNote(note)
+    const exportedNote = {}
+    EXPORTABLE_NOTE_FIELDS.forEach(fieldName => {
+        const fieldValue = normalizedNote[fieldName]
+        if (["createdAt", "updatedAt", "reminderAt", "trashedAt", "aiLastAnalyzed"].includes(fieldName)) {
+            exportedNote[fieldName] = serializeExportDate(fieldValue)
+            return
+        }
+        if (Array.isArray(fieldValue)) {
+            exportedNote[fieldName] = fieldValue.map(item => item && typeof item === "object" ? JSON.parse(JSON.stringify(item)) : item)
+            return
+        }
+        if (fieldValue && typeof fieldValue === "object") {
+            exportedNote[fieldName] = JSON.parse(JSON.stringify(fieldValue))
+            return
+        }
+        exportedNote[fieldName] = fieldValue
+    })
+    return exportedNote
+}
+
+const serializeFolderForExport = (folder) => {
+    const safeFolder = folder && typeof folder === "object" ? folder : {}
+    const exportedFolder = {}
+    EXPORTABLE_FOLDER_FIELDS.forEach(fieldName => {
+        const fieldValue = safeFolder[fieldName]
+        if (["createdAt", "updatedAt", "trashedAt"].includes(fieldName)) {
+            exportedFolder[fieldName] = serializeExportDate(fieldValue)
+            return
+        }
+        exportedFolder[fieldName] = fieldValue
+    })
+    return exportedFolder
+};
+
+const buildExportPayload = ({ notes, folders = [], scope = "all", folder = null } = {}) => {
+    const exportedNotes = Array.isArray(notes) ? notes.map(serializeNoteForExport) : []
+    const exportedFolders = Array.isArray(folders) ? folders.map(serializeFolderForExport) : []
+    return {
+        version: 4,
+        app: "SmartNotes",
+        exportedAt: new Date().toISOString(),
+        scope,
+        folder: folder && typeof folder === "object"
+            ? {
+                id: String(folder.id || ""),
+                name: String(folder.name || ""),
+                description: String(folder.description || "")
+            }
+            : null,
+        folders: exportedFolders,
+        notes: exportedNotes
+    }
+}
+
+const buildExportFileName = ({ scope = "all", folderName = "" } = {}) => {
+    const dateStamp = new Date().toISOString().slice(0, 10)
+    if (scope === "folder") {
+        return `smartnotes_folder_${sanitizeExportFileName(folderName, "folder")}_${dateStamp}.json`
+    }
+    if (scope === "selection") {
+        return `smartnotes_selected_notes_${dateStamp}.json`
+    }
+    return `smartnotes_all_notes_${dateStamp}.json`
+}
+
+const createExportBlob = (payload) => new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" })
+
+const downloadExportPayload = (payload, options = {}) => {
+    const fileName = buildExportFileName(options)
+    const blob = createExportBlob(payload)
+    const link = document.createElement("a")
+    const objectUrl = URL.createObjectURL(blob)
+    link.href = objectUrl
+    link.download = fileName
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+    return fileName
+}
+
+window.NoteExportService = {
+    buildExportPayload,
+    buildExportFileName,
+    createExportBlob,
+    downloadExportPayload,
+    sanitizeExportFileName,
+    serializeNoteForExport,
+    serializeFolderForExport,
+    serializeExportDate
+};
+
+(() => {
+    const identifierPattern = /^[A-Za-z0-9_-]{1,128}$/
+    const allowedUrlProtocols = new Set(["http:", "https:", "mailto:", "tel:"])
+
+    function toSafeString(value) {
+        if (value == null) return ""
+        return String(value)
+    }
+
+    function isValidIdentifier(value) {
+        return identifierPattern.test(toSafeString(value))
+    }
+
+    function sanitizeIdentifier(value) {
+        const normalizedValue = toSafeString(value).trim()
+        return isValidIdentifier(normalizedValue) ? normalizedValue : null
+    }
+
+    function sanitizeInputValue(value, fallback = "") {
+        const normalizedValue = toSafeString(value)
+        return normalizedValue.replace(/[\u0000-\u001F\u007F]/g, "") || fallback
+    }
+
+    function setText(element, value) {
+        if (!element) return
+        element.textContent = toSafeString(value)
+    }
+
+    function sanitizeUrl(value) {
+        const normalizedValue = toSafeString(value).trim()
+        if (!normalizedValue) return null
+        try {
+            const parsedUrl = new URL(normalizedValue, window.location.origin)
+            if (!allowedUrlProtocols.has(parsedUrl.protocol)) return null
+            return parsedUrl.href
+        } catch {
+            return null
+        }
+    }
+
+    function setUrlAttribute(element, attributeName, value) {
+        if (!element || !attributeName) return false
+        const sanitizedUrl = sanitizeUrl(value)
+        if (!sanitizedUrl) {
+            element.removeAttribute(attributeName)
+            return false
+        }
+        element.setAttribute(attributeName, sanitizedUrl)
+        return true
+    }
+
+    function setSafeAttribute(element, attributeName, value, validator) {
+        if (!element || !attributeName) return false
+        const normalizedValue = toSafeString(value)
+        const isAllowed = typeof validator === "function" ? validator(normalizedValue) : true
+        if (!isAllowed) {
+            element.removeAttribute(attributeName)
+            return false
+        }
+        element.setAttribute(attributeName, normalizedValue)
+        return true
+    }
+
+    function sanitizeHtml(html) {
+        const container = document.createElement("template")
+        container.innerHTML = toSafeString(html)
+        const blockedTags = new Set(["script", "style", "iframe", "object", "embed", "link", "meta"])
+        const walker = document.createTreeWalker(container.content, NodeFilter.SHOW_ELEMENT)
+        const elementsToRemove = []
+        while (walker.nextNode()) {
+            const element = walker.currentNode
+            const tagName = element.tagName.toLowerCase()
+            if (blockedTags.has(tagName)) {
+                elementsToRemove.push(element)
+                continue
+            }
+            Array.from(element.attributes).forEach(attribute => {
+                const attributeName = attribute.name.toLowerCase()
+                const attributeValue = attribute.value
+                if (attributeName.startsWith("on")) {
+                    element.removeAttribute(attribute.name)
+                    return
+                }
+                if ((attributeName === "href" || attributeName === "src") && !sanitizeUrl(attributeValue)) {
+                    element.removeAttribute(attribute.name)
+                }
+            })
+        }
+        elementsToRemove.forEach(element => element.remove())
+        return container.innerHTML
+    }
+
+    function setSanitizedHtml(element, html) {
+        if (!element) return
+        element.innerHTML = sanitizeHtml(html)
+    }
+
+    window.DomSecurity = {
+        sanitizeIdentifier,
+        sanitizeInputValue,
+        setText,
+        sanitizeUrl,
+        setUrlAttribute,
+        setSafeAttribute,
+        sanitizeHtml,
+        setSanitizedHtml
+    };
+})();
