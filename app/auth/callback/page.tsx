@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-import { SUPABASE_BROWSER_STORAGE_KEY, getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
 const PROFILE_SYNC_ENDPOINT = "/api/supabase/session"
 const PROFILE_SYNC_TIMEOUT_MS = 8000
@@ -74,14 +74,6 @@ export default function AuthCallbackPage() {
       const currentUrl = new URL(window.location.href)
       const nextPath = buildRedirectUrl(currentUrl)
       const session = await waitForOAuthSession()
-
-      try {
-        window.localStorage.removeItem("smartnotes.supabase.session")
-      } catch {}
-
-      if (!window.localStorage.getItem(SUPABASE_BROWSER_STORAGE_KEY)) {
-        console.warn("[AuthCallback] Supabase storage key missing after redirect processing")
-      }
 
       await syncProfile(session.access_token).catch((error) => {
         console.warn("[AuthCallback] Profile sync skipped", error)

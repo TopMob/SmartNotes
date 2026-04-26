@@ -49,6 +49,7 @@ function loadGoogleIdentityScript(timeoutMilliseconds = 9000) {
 
         const timeoutId = setTimeout(() => {
             scriptElement.remove()
+            googleIdentityScriptPromise = null
             reject(createError("auth/google-identity-script-timeout", "Google identity script timeout"))
         }, timeoutMilliseconds)
 
@@ -58,6 +59,7 @@ function loadGoogleIdentityScript(timeoutMilliseconds = 9000) {
                 resolve(true)
                 return
             }
+            googleIdentityScriptPromise = null
             reject(createError("auth/google-identity-unavailable", "Google identity API unavailable"))
         }, { once: true })
 

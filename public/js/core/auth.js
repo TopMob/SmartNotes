@@ -4,7 +4,6 @@ export function createAuthManager({ auth }) {
     const getSessionService = () => globalThis.SessionService || window.SessionService || null
 
     const state = {
-        initialized: false,
         initPromise: null,
         loginInFlight: false,
         authReady: false,
@@ -212,9 +211,6 @@ export function createAuthManager({ auth }) {
             } catch {
                 return false
             }
-        },
-        async _preparePersistenceForMethod() {
-            return this._ensureLocalPersistence()
         },
         async _preparePersistenceForRedirectResult() {
             return this._ensureLocalPersistence()
@@ -563,7 +559,6 @@ export function createAuthManager({ auth }) {
         async init() {
             if (!auth) return
             if (state.initPromise) return state.initPromise
-            state.initialized = true
             state.initPromise = (async () => {
                 this._setLoginBusy(false)
                 this._ensureLocalAuthManager().bindUi()
