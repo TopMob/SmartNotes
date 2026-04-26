@@ -4,26 +4,40 @@ import assert from 'node:assert/strict'
 function createDomElement() {
   return {
     disabled: false,
+    style: {},
+    textContent: '',
     attributes: new Map(),
     classList: {
+      values: new Set(),
       toggle() {},
-      add() {},
-      remove() {}
+      add(value) {
+        this.values.add(value)
+      },
+      remove(value) {
+        this.values.delete(value)
+      }
     },
     setAttribute(key, value) {
       this.attributes.set(key, String(value))
     },
     removeAttribute(key) {
       this.attributes.delete(key)
+    },
+    addEventListener() {
+      return undefined
     }
   }
 }
 
 function createEnvironment() {
   const authButton = createDomElement()
+  const loginScreen = createDomElement()
+  const appScreen = createDomElement()
+  const searchInput = { value: 'query' }
   const feedbackElement = {
     textContent: '',
     classList: {
+      toggle() {},
       remove() {},
       add() {}
     }
@@ -33,8 +47,12 @@ function createEnvironment() {
     hideSplashScreen() {},
     SmartNotesAuthUi: { markReady() {} }
   }
+  globalThis.HTMLElement = class HTMLElement {}
   globalThis.StateActions = {
-    setUser() {}
+    calls: [],
+    setUser(user) {
+      this.calls.push(user)
+    }
   }
   globalThis.StateStore = {
     resetSession() {},
@@ -55,6 +73,9 @@ function createEnvironment() {
   globalThis.document = {
     getElementById(id) {
       if (id === 'email-auth-feedback') return feedbackElement
+      if (id === 'login-screen') return loginScreen
+      if (id === 'app') return appScreen
+      if (id === 'search-input') return searchInput
       return null
     },
     querySelectorAll() {
@@ -62,7 +83,10 @@ function createEnvironment() {
     }
   }
 
-  return { authButton, feedbackElement }
+  loginScreen.style = {}
+  appScreen.style = {}
+
+  return { authButton, feedbackElement, loginScreen, appScreen, searchInput }
 }
 
 test('google fallback requires a second click after cooldown', async () => {
@@ -139,6 +163,67 @@ test('google fallback requires a second click after cooldown', async () => {
   globalThis.setTimeout = originalSetTimeout
   globalThis.clearTimeout = originalClearTimeout
   delete globalThis.window
+  delete globalThis.HTMLElement
+  delete globalThis.StateActions
+  delete globalThis.StateStore
+  delete globalThis.SessionService
+  delete globalThis.UI
+  delete globalThis.document
+})
+
+test('logout updates UI immediately even without auth callback', async () => {
+  const { loginScreen, appScreen, searchInput } = createEnvironment()
+  let stopUserSessionCalls = 0
+  let authStateCallback = null
+
+  globalThis.SessionService = {
+    async startUserSession() {},
+    stopUserSession() {
+      stopUserSessionCalls += 1
+    }
+  }
+
+  const auth = {
+    currentUser: {
+      uid: 'user-1',
+      email: 'user@example.com'
+    },
+    Auth: { Persistence: { LOCAL: 'local' } },
+    async setPersistence() {
+      return true
+    },
+    async signOut() {
+      this.currentUser = null
+      return true
+    },
+    onAuthStateChanged(callback) {
+      authStateCallback = callback
+      return () => {}
+    },
+    async getRedirectResult() {
+      return null
+    },
+    preloadGoogleSignIn() {
+      return Promise.resolve(false)
+    }
+  }
+
+  const { createAuthManager } = await import(`../public/js/core/auth.js?test-auth-logout=${Date.now()}`)
+  const manager = createAuthManager({ auth })
+
+  await manager.init()
+  await authStateCallback?.(auth.currentUser)
+
+  await manager.logout()
+
+  assert.equal(appScreen.style.display, 'none')
+  assert.equal(loginScreen.style.display, 'flex')
+  assert.equal(searchInput.value, '')
+  assert.equal(stopUserSessionCalls, 1)
+  assert.equal(globalThis.StateActions.calls.at(-1), null)
+
+  delete globalThis.window
+  delete globalThis.HTMLElement
   delete globalThis.StateActions
   delete globalThis.StateStore
   delete globalThis.SessionService

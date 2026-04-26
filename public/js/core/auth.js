@@ -289,6 +289,7 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             try {
                 await auth.signOut()
+                await this._handleAuthState(null)
             } catch {
                 this._toast(this._t("logout_failed", "Sign out failed"))
             }
