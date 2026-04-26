@@ -63,7 +63,7 @@ export const createAutosaveHandlers = (context) => {
             let fallbackPageDrawings = []
             try {
                 fallbackPageDrawings = normalizePageDrawings(currentNote, getPages().length)
-            } catch (error) {
+            } catch {
                 fallbackPageDrawings = []
             }
             return {

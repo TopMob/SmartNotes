@@ -78,6 +78,13 @@ export function createAuthManager({ auth }) {
                 this._setAuthFeedback(this._t("auth_google_redirect_ready", "Google window did not open. Press the button again to continue with backup sign-in"), "info")
             }, 5000)
         },
+        _resetRedirectFallbackState() {
+            state.googleRedirectFallbackReady = false
+            if (state.googleRedirectFallbackTimer) {
+                clearTimeout(state.googleRedirectFallbackTimer)
+                state.googleRedirectFallbackTimer = null
+            }
+        },
         _setAuthInteractivity(flag) {
             const interactive = !!flag
             document.querySelectorAll(".auth-panel-switch, #email-signin-form, #email-signup-form").forEach((element) => {
@@ -286,6 +293,7 @@ export function createAuthManager({ auth }) {
         },
         async logout() {
             if (!auth) return
+            this._resetRedirectFallbackState()
             this._setLoginBusy(false)
             try {
                 await auth.signOut()
@@ -452,6 +460,7 @@ export function createAuthManager({ auth }) {
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             state.currentUser = normalizedUser
+            if (normalizedUser) this._resetRedirectFallbackState()
             state.authReady = true
             this.setAuthReady(true)
             this._resolveStartupScreen()

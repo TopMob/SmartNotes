@@ -392,7 +392,7 @@ export const ThemeManager = {
                     draftUserSettings: cloneThemePayload(savedSettings)
                 }))
             }
-        } catch (error) {
+        } catch {
             SafeStorage.local.setJson("theme-pending-sync", { settings: normalizedSettings, customPresets: this.getCustomPresets(), savedAt: Date.now() })
         }
     },

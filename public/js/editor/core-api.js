@@ -243,16 +243,16 @@ export const EditorAPI = (() => {
     const updateNotePageDrawings = (note, drawings, updateTimestamp) => {
         const normalized = Array.isArray(drawings) ? drawings.map(value => typeof value === "string" ? value : "") : []
         const current = Array.isArray(note.pageDrawings) ? note.pageDrawings : []
+        let drawingsChanged = current.length !== normalized.length
         if (current.length === normalized.length) {
-            let drawingsChanged = false
             for (let index = 0; index < current.length; index++) {
                 if (current[index] !== normalized[index]) {
                     drawingsChanged = true
                     break
                 }
             }
-            if (!drawingsChanged) return note
         }
+        if (!drawingsChanged) return note
         const nextNote = {
             ...note,
             pageDrawings: normalized,
@@ -397,16 +397,6 @@ export const EditorAPI = (() => {
         }
         return false
     }
-
-
-    const areStringArraysEqual = (firstList, secondList) => {
-        if (firstList.length !== secondList.length) return false
-        for (let index = 0; index < firstList.length; index += 1) {
-            if (firstList[index] !== secondList[index]) return false
-        }
-        return true
-    }
-
     const isNotePresentInState = (noteId) => {
         const normalizedNoteId = String(noteId || "")
         if (!normalizedNoteId) return false
@@ -433,17 +423,6 @@ export const EditorAPI = (() => {
             nextNotes.unshift(NoteIO.normalizeNote(savedNote))
         }
         StateStore.update("notes", nextNotes)
-    }
-
-    const noteHasEditableContent = (note) => {
-        const titleText = String(note?.title || "").trim()
-        const plainTextContent = Utils.stripHtml(String(note?.content || "")).trim()
-        const hasMedia = /<(img|audio|video|table|hr)\b/i.test(String(note?.content || ""))
-        const tagsCount = Array.isArray(note?.tags) ? note.tags.length : 0
-        const drawingCount = Array.isArray(note?.pageDrawings)
-            ? note.pageDrawings.filter(item => String(item || "").trim().length > 0).length
-            : 0
-        return !!titleText || !!plainTextContent || hasMedia || tagsCount > 0 || drawingCount > 0
     }
 
     const ensureEditablePageHtml = (htmlValue) => {

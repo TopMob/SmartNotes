@@ -36,6 +36,7 @@ const buildPageDrawingsRevision = (pageDrawings) => {
 }
 
 const IMPORT_NOTE_CONTAINER_KEYS = ["note", "notes", "items", "entries", "documents", "data", "payload", "result"]
+const IMPORT_FOLDER_CONTAINER_KEYS = ["folder", "folders", "collections", "groups"]
 
 const extractImportContent = (source) => {
     const contentCandidates = [source?.content, source?.body, source?.text, source?.html, source?.description]
@@ -101,6 +102,33 @@ const normalizeImportedRawNote = (source) => {
     }
 }
 
+const looksLikeImportedFolder = (source) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return false
+    const hasName = typeof source.name === "string" && source.name.trim().length > 0
+    const hasFolderShape = Object.prototype.hasOwnProperty.call(source, "folderOrder")
+        || Object.prototype.hasOwnProperty.call(source, "isHidden")
+        || Object.prototype.hasOwnProperty.call(source, "description")
+    return hasName && hasFolderShape
+}
+
+const normalizeImportedRawFolder = (source) => {
+    const safe = source && typeof source === "object" ? source : {}
+    return {
+        ...safe,
+        id: typeof safe.id === "string" ? safe.id : "",
+        name: typeof safe.name === "string" ? safe.name : "",
+        description: typeof safe.description === "string" ? safe.description : "",
+        folderOrder: Number.isFinite(Number(safe.folderOrder)) ? Number(safe.folderOrder) : 0,
+        isHidden: safe.isHidden === true,
+        trashedAt: safe.trashedAt || null,
+        createdAt: safe.createdAt ?? safe.created_at ?? null,
+        updatedAt: safe.updatedAt ?? safe.updated_at ?? null,
+        ownerUid: typeof safe.ownerUid === "string"
+            ? safe.ownerUid
+            : (typeof safe.owner_uid === "string" ? safe.owner_uid : "")
+    }
+}
+
 const collectImportedNotes = (payload, visited = new Set()) => {
     if (!payload || visited.has(payload)) return []
     if (typeof payload === "object") visited.add(payload)
@@ -114,6 +142,25 @@ const collectImportedNotes = (payload, visited = new Set()) => {
         for (const key of IMPORT_NOTE_CONTAINER_KEYS) {
             if (!(key in payload)) continue
             const nested = collectImportedNotes(payload[key], visited)
+            if (nested.length) return nested
+        }
+    }
+    return []
+}
+
+const collectImportedFolders = (payload, visited = new Set()) => {
+    if (!payload || visited.has(payload)) return []
+    if (typeof payload === "object") visited.add(payload)
+    if (Array.isArray(payload)) {
+        return payload.flatMap(item => collectImportedFolders(item, visited))
+    }
+    if (looksLikeImportedFolder(payload)) {
+        return [normalizeImportedRawFolder(payload)]
+    }
+    if (payload && typeof payload === "object") {
+        for (const key of IMPORT_FOLDER_CONTAINER_KEYS) {
+            if (!(key in payload)) continue
+            const nested = collectImportedFolders(payload[key], visited)
             if (nested.length) return nested
         }
     }
@@ -247,6 +294,13 @@ const NoteIO = {
         return collectImportedNotes(parsed).map(note => this.normalizeNote(note))
     },
 
+    parseImportBundle(parsed) {
+        return {
+            notes: collectImportedNotes(parsed).map(note => this.normalizeNote(note)),
+            folders: collectImportedFolders(parsed)
+        }
+    },
+
     fileNameFor(note) {
         const t = (note?.title || "note").trim().slice(0, 48)
         const safe = t.replace(/[^\p{L}\p{N}\-_]+/gu, " ").replace(/\s+/g, "_").trim() || "note"
@@ -297,7 +351,7 @@ const SaveStateService = {
     }
 }
 
-const SmartSearch = {
+window.SmartSearch = {
     stop: new Set([
         "the","a","an","to","of","in","on","and","or","is","are","for","with","at","by","my","this","it",
         "и","в","во","на","а","но","или","ли","что","это","как","я","мы","ты","вы","он","она","они"
@@ -582,7 +636,7 @@ const SmartSearch = {
     }
 }
 
-const LockService = {
+window.LockService = {
     async digest(text) {
         if (!window.crypto || !window.crypto.subtle) return "insecure_env"
         const enc = new TextEncoder().encode(String(text || ""))

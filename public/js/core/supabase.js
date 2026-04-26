@@ -315,33 +315,10 @@ async function loadOfficialSupabaseCreateClient() {
     return officialClientLoadPromise
 }
 
-function normalizeUser(user, session, updateProfile) {
-    if (!user) return null
-    const metadata = user.user_metadata && typeof user.user_metadata === "object"
-        ? user.user_metadata
-        : {}
-    return {
-        uid: String(user.id || ""),
-        id: String(user.id || ""),
-        email: String(user.email || ""),
-        displayName: String(metadata.display_name || metadata.displayName || metadata.full_name || ""),
-        photoURL: String(metadata.avatar_url || metadata.photoURL || metadata.picture || ""),
-        providerData: [],
-        accessToken: String(session?.access_token || ""),
-        updateProfile
-    }
-}
-
 function resolveRedirectTo(options = {}) {
     const candidate = String(options?.redirectTo || options?.emailRedirectTo || "").trim()
     if (candidate) return candidate
     return window.location.origin + AUTH_CALLBACK_PATH
-}
-
-function createPersistenceEnum() {
-    return {
-        LOCAL: "local"
-    }
 }
 
 function normalizeAuthError(error) {

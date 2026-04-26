@@ -236,7 +236,7 @@ export async function createSupabaseAuth() {
             return true
         },
         async fetchSignInMethodsForEmail() {
-            return ["password"]
+            return []
         },
         async signOut() {
             const { error } = await client.auth.signOut()

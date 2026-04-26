@@ -65,13 +65,11 @@ export async function PUT(request: Request) {
     const note = shouldPatch
       ? await patchSupabaseNote({
         userId: user.id,
-        userEmail: user.email,
         noteId: normalizedNoteId,
         updates: bodyNote
       })
       : await updateSupabaseNote({
         userId: user.id,
-        userEmail: user.email,
         noteId: normalizedNoteId,
         note: bodyNote
       })
@@ -96,7 +94,6 @@ export async function PATCH(request: Request) {
     if (action === "trigger-analysis") {
       await patchSupabaseNote({
         userId: user.id,
-        userEmail: user.email,
         noteId: normalizedNoteId,
         updates: {
           aiStatus: "pending",
@@ -115,7 +112,6 @@ export async function PATCH(request: Request) {
 
       const note = await patchSupabaseNote({
         userId: user.id,
-        userEmail: user.email,
         noteId: normalizedNoteId,
         updates: {}
       })
@@ -157,7 +153,7 @@ export async function DELETE(request: Request) {
     const user = await requireSupabaseUser(request)
     const url = new URL(request.url)
     const noteId = url.searchParams.get("id") || ""
-    const result = await deleteSupabaseNote(user.id, user.email, noteId)
+    const result = await deleteSupabaseNote(user.id, noteId)
 
     return ok({ note: result })
   } catch (error) {

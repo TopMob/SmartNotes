@@ -52,8 +52,9 @@ export function createCspNonce() {
 }
 
 export function buildCspHeader(nonce: string) {
-  const scriptDirective = `script-src ${scriptSources.join(" ")}`
-  const scriptElemDirective = `script-src-elem ${scriptSources.join(" ")}`
+  const nonceSource = `'nonce-${nonce}'`
+  const scriptDirective = `script-src ${scriptSources.join(" ")} ${nonceSource}`
+  const scriptElemDirective = `script-src-elem ${scriptSources.join(" ")} ${nonceSource}`
 
   const withNonce = cspParts
     .map((part) => {

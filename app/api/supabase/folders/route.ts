@@ -15,7 +15,7 @@ function mapFolderError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const user = await requireSupabaseUser(request)
-    const folders = await listAccessibleSupabaseFolders(user.id, user.email)
+    const folders = await listAccessibleSupabaseFolders(user.id)
     return ok({ folders })
   } catch (error) {
     console.error("[FOLDERS_FAILED]", error)

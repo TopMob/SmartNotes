@@ -230,3 +230,69 @@ test('logout updates UI immediately even without auth callback', async () => {
   delete globalThis.UI
   delete globalThis.document
 })
+
+test('logout clears pending google redirect fallback state', async () => {
+  const scheduledTimers = []
+  const originalSetTimeout = globalThis.setTimeout
+  const originalClearTimeout = globalThis.clearTimeout
+  globalThis.setTimeout = (callback, delay) => {
+    const entry = { callback, delay, cleared: false }
+    scheduledTimers.push(entry)
+    return entry
+  }
+  globalThis.clearTimeout = (timer) => {
+    if (timer) timer.cleared = true
+  }
+
+  createEnvironment()
+  const calls = { redirect: 0 }
+  const auth = {
+    currentUser: null,
+    Auth: { Persistence: { LOCAL: 'local' } },
+    async setPersistence() {
+      return true
+    },
+    async signInWithGoogleOneTap() {
+      throw { code: 'auth/google-identity-not-displayed', message: 'not displayed' }
+    },
+    async signInWithRedirect() {
+      calls.redirect += 1
+      return { user: null }
+    },
+    async signOut() {
+      return true
+    },
+    onAuthStateChanged() {
+      return () => {}
+    },
+    async getRedirectResult() {
+      return null
+    },
+    preloadGoogleSignIn() {
+      return Promise.resolve(false)
+    }
+  }
+
+  const { createAuthManager } = await import(`../public/js/core/auth.js?test-auth-logout-fallback=${Date.now()}`)
+  const manager = createAuthManager({ auth })
+
+  await manager.login()
+  assert.equal(scheduledTimers.length, 1)
+  assert.equal(scheduledTimers[0].cleared, false)
+
+  await manager.logout()
+  assert.equal(scheduledTimers[0].cleared, true)
+
+  await manager.login()
+  assert.equal(calls.redirect, 0)
+
+  globalThis.setTimeout = originalSetTimeout
+  globalThis.clearTimeout = originalClearTimeout
+  delete globalThis.window
+  delete globalThis.HTMLElement
+  delete globalThis.StateActions
+  delete globalThis.StateStore
+  delete globalThis.SessionService
+  delete globalThis.UI
+  delete globalThis.document
+})

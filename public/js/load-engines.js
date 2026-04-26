@@ -135,7 +135,7 @@ const NoteActionService = {
         return Array.isArray(payload?.access) ? payload.access : []
     },
 
-    async listFolderAccess(folderId) {
+    async listFolderAccess() {
         return []
     },
 
@@ -227,11 +227,11 @@ const NoteActionService = {
         return response.json()
     },
 
-    async shareFolder(folderId, target, role) {
+    async shareFolder() {
         throw new Error("SHARING_DISABLED")
     },
 
-    async revokeFolderAccess(folderId, target) {
+    async revokeFolderAccess() {
         throw new Error("SHARING_DISABLED")
     },
 
@@ -239,11 +239,11 @@ const NoteActionService = {
         return []
     },
 
-    async respondToInvite(itemType, itemId, accept) {
+    async respondToInvite() {
         throw new Error("INVITES_DISABLED")
     },
 
-    async consumeInviteLink({ itemType, itemId, targetUserId = "" } = {}) {
+    async consumeInviteLink() {
         throw new Error("INVITES_DISABLED")
     }
 }
@@ -457,6 +457,8 @@ function getLockedNotes() {
     return (currentState.notes || []).filter(note => !!(note && note.lock && note.lock.hidden))
 }
 
+window.getLockedNotes = getLockedNotes;
+
 
 
 async function deleteFolder(folderId) {
@@ -472,15 +474,15 @@ async function deleteFolder(folderId) {
         const batch = db.batch()
         notesSnapshot.forEach(noteDoc => {
             batch.update(noteDoc.ref, {
-                folderId: null,
                 trashedAt: movedAt,
+                trashedByFolderId: folderId,
                 updatedAt: movedAt
             })
         })
         batch.update(folderRef, { trashedAt: movedAt, isHidden: false })
         await batch.commit()
         const updatedFolders = StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: movedAt, isHidden: false } : folder)
-        const updatedNotes = StateStore.read().notes.map(item => item.folderId === folderId ? { ...item, folderId: null, trashedAt: movedAt, updatedAt: movedAt } : item)
+        const updatedNotes = StateStore.read().notes.map(item => item.folderId === folderId ? { ...item, trashedAt: movedAt, trashedByFolderId: folderId, updatedAt: movedAt } : item)
         StateStore.update("folders", updatedFolders)
         StateActions.setNotes(updatedNotes)
         if (StateStore.read().activeFolderId === folderId) switchView("notes")
@@ -770,8 +772,20 @@ async function restoreFolderById(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
     const restoredAt = createNeutralTimestamp()
-    await getRefs().getUserFoldersCollection(user).doc(folderId).update({ trashedAt: null, isArchived: false, updatedAt: restoredAt })
+    const batch = db.batch()
+    const folderRef = getRefs().getUserFoldersCollection(user).doc(folderId)
+    batch.update(folderRef, { trashedAt: null, isArchived: false, updatedAt: restoredAt })
+
+    const notesToRestore = StateStore.read().notes.filter(note => note.trashedAt && note.trashedByFolderId === folderId)
+    notesToRestore.forEach(note => {
+        const noteRef = getNoteReference(note, user)
+        if (!noteRef) return
+        batch.update(noteRef, { trashedAt: null, trashedByFolderId: null, updatedAt: restoredAt })
+    })
+
+    await batch.commit()
     StateStore.update("folders", StateStore.read().folders.map(folder => folder.id === folderId ? { ...folder, trashedAt: null, isArchived: false, updatedAt: restoredAt } : folder))
+    StateActions.setNotes(StateStore.read().notes.map(note => note.trashedByFolderId === folderId ? { ...note, trashedAt: null, trashedByFolderId: null, updatedAt: restoredAt } : note))
     UI.renderFolders?.()
     UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
     refreshCurrentList()
@@ -780,8 +794,16 @@ async function restoreFolderById(folderId) {
 async function deleteFolderPermanently(folderId) {
     const user = StateStore.read().user
     if (!db || !user || !folderId) return
-    await getRefs().getUserFoldersCollection(user).doc(folderId).delete()
+    const batch = db.batch()
+    batch.delete(getRefs().getUserFoldersCollection(user).doc(folderId))
+    const notesToDelete = StateStore.read().notes.filter(note => note.trashedByFolderId === folderId)
+    notesToDelete.forEach(note => {
+        const noteRef = getNoteReference(note, user)
+        if (noteRef) batch.delete(noteRef)
+    })
+    await batch.commit()
     StateStore.update("folders", StateStore.read().folders.filter(folder => folder.id !== folderId))
+    StateActions.setNotes(StateStore.read().notes.filter(note => note.trashedByFolderId !== folderId))
     UI.renderFolders?.()
     UI.showToast(UI.getText("folder_deleted_permanent", "Folder deleted permanently"))
     refreshCurrentList()
@@ -800,8 +822,6 @@ window.moveNoteToFolder = moveNoteToFolder;
 window.restoreFolderById = restoreFolderById;
 window.deleteFolderPermanently = deleteFolderPermanently;
 window.clearTrashPermanently = clearTrashPermanently;
-
-"use strict";
 
 const NotesListEngine = (() => {
     const cardCache = new Map()

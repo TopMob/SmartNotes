@@ -40,7 +40,7 @@ const main = async () => {
   for (const item of exportsList) {
     let references = 0
     const namePattern = new RegExp(`\\b${item.name}\\b`, 'g')
-    for (const [file, content] of contents.entries()) {
+    for (const [, content] of contents.entries()) {
       const occurrences = content.match(namePattern)?.length || 0
       references += occurrences
       if (references > 1) break

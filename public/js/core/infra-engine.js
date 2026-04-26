@@ -5,8 +5,6 @@ import { createAuthManager } from "./auth.js"
 
 const createApiEndpoint = path => window.SmartNotesBackendConfig?.createApiEndpoint?.(path) || `/api/${String(path || "").replace(/^\/+/, "")}`
 
-const createServerTimestamp = () => new Date().toISOString()
-
 const POLLING_INTERVAL_MS = 15000
 const HIDDEN_POLLING_INTERVAL_MS = 60000
 const ERROR_POLLING_INTERVAL_MS = 30000

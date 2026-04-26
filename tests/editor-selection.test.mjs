@@ -18,7 +18,6 @@ test('getCaretOffsetInBlock handles element startContainer offsets', () => {
     const handlers = createSelectionHandlers({ elements, state })
 
     const block = elements.content.querySelector('p')
-    const secondSpan = block.querySelectorAll('span')[1]
     const range = document.createRange()
     range.setStart(block, 1)
     range.collapse(true)

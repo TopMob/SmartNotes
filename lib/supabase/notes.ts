@@ -386,11 +386,6 @@ function normalizeFolderName(name: unknown) {
   return String(name || "").trim()
 }
 
-function normalizeRecordId(value: unknown) {
-  const normalized = String(value || "").trim()
-  return normalized || undefined
-}
-
 function isUuid(value: unknown) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim())
 }
@@ -624,7 +619,7 @@ async function getNoteAccessRow(noteId: string, userId: string) {
   throw new Error("NOTE_NOT_FOUND")
 }
 
-async function requireEditorNoteAccess(noteId: string, userId: string, userEmail: string) {
+async function requireEditorNoteAccess(noteId: string, userId: string) {
   const access = await getNoteAccessRow(noteId, userId)
   if (access.noteRow.user_id === userId) {
     return access.noteRow
@@ -775,7 +770,7 @@ export async function listSupabaseFolders(userId: string) {
   return (data || []).map(mapFolderRow)
 }
 
-export async function listAccessibleSupabaseFolders(userId: string, userEmail: string) {
+export async function listAccessibleSupabaseFolders(userId: string) {
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
     .from("folders")
@@ -1064,7 +1059,7 @@ export async function revokeSupabaseNoteAccess({ noteId, ownerUserId, target }: 
   return { noteId: ownedNote.id, userId: collaborator.id }
 }
 
-export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: string, userEmail: string, note: NoteInput }) {
+export async function upsertSupabaseNote({ userId, note }: { userId: string, userEmail: string, note: NoteInput }) {
   const supabase = getSupabaseAdminClient()
   const normalizedNoteId = normalizeUuid(note?.id)
 
@@ -1115,14 +1110,14 @@ export async function upsertSupabaseNote({ userId, userEmail, note }: { userId: 
   return mapNoteRow(data)
 }
 
-export async function updateSupabaseNote({ userId, userEmail, noteId, note }: { userId: string, userEmail: string, noteId?: string | null, note: NoteInput }) {
+export async function updateSupabaseNote({ userId, noteId, note }: { userId: string, noteId?: string | null, note: NoteInput }) {
   const normalizedNoteId = normalizeUuid(noteId || note?.id)
   if (!normalizedNoteId) {
     throw new Error("NOTE_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
-  const currentNoteRow = await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
+  const currentNoteRow = await requireEditorNoteAccess(normalizedNoteId, userId)
 
   const currentNote = currentNoteRow ? mapNoteRow(currentNoteRow as NoteRow) : null
   const payload = buildNotePayload(currentNoteRow.user_id, { ...(currentNote || {}), ...(note || {}), id: normalizedNoteId }, currentNoteRow.metadata || {})
@@ -1137,14 +1132,14 @@ export async function updateSupabaseNote({ userId, userEmail, noteId, note }: { 
   return mapNoteRow(data)
 }
 
-export async function patchSupabaseNote({ userId, userEmail, noteId, updates }: { userId: string, userEmail: string, noteId: string, updates: Record<string, unknown> }) {
+export async function patchSupabaseNote({ userId, noteId, updates }: { userId: string, noteId: string, updates: Record<string, unknown> }) {
   const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
     throw new Error("NOTE_NOT_FOUND")
   }
 
   const supabase = getSupabaseAdminClient()
-  const existingRow = await requireEditorNoteAccess(normalizedNoteId, userId, userEmail)
+  const existingRow = await requireEditorNoteAccess(normalizedNoteId, userId)
 
   const payload = buildNotePatchPayload(existingRow as NoteRow, {
     ...updates,
@@ -1162,7 +1157,7 @@ export async function patchSupabaseNote({ userId, userEmail, noteId, updates }: 
   return mapNoteRow(data)
 }
 
-export async function deleteSupabaseNote(userId: string, userEmail: string, noteId: string) {
+export async function deleteSupabaseNote(userId: string, noteId: string) {
   const normalizedNoteId = normalizeUuid(noteId)
   if (!normalizedNoteId) {
     throw new Error("NOTE_NOT_FOUND")
@@ -1180,24 +1175,4 @@ export async function deleteSupabaseNote(userId: string, userEmail: string, note
   return { id: normalizedNoteId }
 }
 
-async function requireOwnedFolder(folderId: string, userId: string) {
-  const normalizedFolderId = normalizeUuid(folderId)
-  if (!normalizedFolderId) {
-    throw new Error("FOLDER_NOT_FOUND")
-  }
-
-  const supabase = getSupabaseAdminClient()
-  const { data, error } = await supabase
-    .from("folders")
-    .select("id, user_id")
-    .eq("id", normalizedFolderId)
-    .maybeSingle()
-
-  if (error) throw error
-  if (!data?.id || data.user_id !== userId) {
-    throw new Error("FOLDER_NOT_FOUND")
-  }
-
-  return data
-}
 

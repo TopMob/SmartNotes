@@ -104,7 +104,7 @@ const UI = {
         root.innerHTML = `<div class="pending-invite-empty">${this.getText("pending_invites_empty", "Нет новых приглашений")}</div>`
     },
 
-    async respondToInvite(itemType, itemId, accept) {
+    async respondToInvite() {
         this.showToast(this.getText("invite_failed", "Приглашения временно отключены"))
     },
 
@@ -114,7 +114,7 @@ const UI = {
         return this.inviteLinkHandlingPromise
     },
 
-    async copyFolderShareLink(folderId) {
+    async copyFolderShareLink() {
         this.showToast(this.getText("share_folder_failed", "Шаринг папок временно отключен"))
     },
 
@@ -125,7 +125,7 @@ const UI = {
         return notes.find(note => String(note?.id || "") === targetId) || null
     },
 
-    isAuthAutocompleteAllowed(element) {
+    isAuthAutocompleteAllowed() {
         return false
     },
 
@@ -1448,12 +1448,15 @@ Object.assign(UI, {
         return uniqueTags
     },
 
-    buildImportedNote(rawNote, ownerUid) {
+    buildImportedNote(rawNote, ownerUid, folderIdMap = new Map()) {
+        const sourceNote = rawNote && typeof rawNote === "object" ? rawNote : {}
+        const importedFolderId = String(sourceNote.folderId || sourceNote.folder_id || "").trim()
+        const resolvedFolderId = importedFolderId ? (folderIdMap.get(importedFolderId) || null) : null
         const normalizedNote = NoteIO.normalizeNote({
-            ...(rawNote && typeof rawNote === "object" ? rawNote : {}),
+            ...sourceNote,
             id: Utils.generateId(),
             ownerUid: String(ownerUid || ""),
-            folderId: null,
+            folderId: resolvedFolderId,
             trashedAt: null,
             hiddenTags: []
         })
@@ -1478,7 +1481,7 @@ Object.assign(UI, {
             aiLastAnalyzed: null,
             hiddenTags: [],
             relevance: 0,
-            folderId: null,
+            folderId: resolvedFolderId,
             trashedAt: null,
             reminderAt: this.normalizeImportedDate(normalizedNote.reminderAt, null),
             order: Date.now()
@@ -1530,7 +1533,8 @@ Object.assign(UI, {
         const batch = db.batch()
         foldersToCreate.forEach(folder => {
             const reference = DataPath.getUserFoldersCollection(user).doc(folder.id)
-            const { sourceId, ...folderPayload } = folder
+            const folderPayload = { ...folder }
+            delete folderPayload.sourceId
             batch.set(reference, folderPayload, { merge: true })
         })
         await batch.commit()
@@ -1557,13 +1561,13 @@ Object.assign(UI, {
                     return
                 }
                 const current = StateStore.read()
+                const folderIdMap = await this.saveImportedFolders(current.user, importBundle.folders)
                 const importedNotes = Array.isArray(importBundle.notes) ? importBundle.notes : []
-                const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid))
+                const notesToImport = importedNotes.map(note => this.buildImportedNote(note, current.user.uid, folderIdMap))
                 await this.saveImportedNotes(current.user, notesToImport)
                 this.showToast(this.getText("import_success", "Imported"))
             } catch (error) {
                 console.error("Import failed", error)
-                const errorCode = String(error?.message || error?.code || "")
                 this.showToast(this.getText("import_failed", "Import failed"))
             } finally {
                 this.stopLoading(loadingLock)
@@ -1837,7 +1841,7 @@ Object.assign(UI, {
         })
     },
 
-    shareFolder(folderId) {
+    shareFolder() {
         this.showToast(this.getText("share_folder_failed", "Шаринг папок временно отключен"))
     },
 

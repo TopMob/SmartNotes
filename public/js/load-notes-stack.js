@@ -844,51 +844,5 @@ const NotesQueryService = (() => {
     }
 })()
 
-const NotesPresenter = (() => {
-    function getText(stateSnapshot, key, fallback) {
-        const dict = LANG[stateSnapshot.config?.lang] || LANG.ru
-        return dict[key] || fallback
-    }
-    function createViewModel(stateSnapshot) {
-        const queryResult = NotesQueryService.execute(stateSnapshot, stateSnapshot.searchQuery || "")
-        const visibleNotes = PaginationService.getVisibleNotesForRender(queryResult.notes, queryResult.view, stateSnapshot.searchQuery || "")
-        const emptyState = queryResult.view === "locked"
-            ? { icon: "lock", text: getText(stateSnapshot, "lock_center_empty", "No protected notes") }
-            : queryResult.view === "reminders"
-                ? { icon: "schedule", text: getText(stateSnapshot, "reminder_empty", "No reminders") }
-                : { icon: "note_add", text: getText(stateSnapshot, "empty", "Nothing here yet") }
-        return { view: queryResult.view, notes: queryResult.notes, visibleNotes, emptyState, loadMoreState: PaginationService.getLoadMoreState() }
-    }
-    return { createViewModel }
-})()
+window.NotesQueryService = NotesQueryService
 
-const NotesUIAdapter = (() => {
-    function syncViewMeta() {
-        UI.updateViewTitle()
-        UI.updatePrimaryActionLabel()
-    }
-
-    function render(viewModel) {
-        syncViewMeta()
-        if (viewModel.view === "folders") {
-            UI.renderFolderGrid()
-            return
-        }
-        if (viewModel.view === "hidden_folders") {
-            UI.renderHiddenFolders()
-            return
-        }
-        if (viewModel.view === "admin_tools") {
-            UI.renderAdminToolsView()
-            return
-        }
-        if (viewModel.view === "trash") {
-            UI.renderTrash(viewModel.notes)
-            return
-        }
-        UI.updateEmptyState(viewModel.emptyState.icon, viewModel.emptyState.text)
-        NotesRenderer.render(viewModel.visibleNotes)
-        UI.updateNotesLoadMoreButton(viewModel.loadMoreState)
-    }
-    return { render }
-})()
