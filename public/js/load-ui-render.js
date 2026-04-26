@@ -1,4 +1,4 @@
-Object.assign(UI, {
+Object.assign(window.UI, {
     savePreferences() {
         const prefs = {
             folderViewMode: StateStore.read().config.folderViewMode,
@@ -16,7 +16,7 @@ const isHiddenLocked = (note) => !!(note && note.lock && note.lock.hidden)
 
 window.isHiddenLocked = isHiddenLocked;
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     renderLockCenter() {
         const listRoot = document.getElementById("lock-center-list")
         const empty = document.getElementById("lock-center-empty")
@@ -173,7 +173,7 @@ Object.assign(UI, {
     }
 });
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     setDropIndicator(card, position) {
         this.clearDragIndicators()
         card.classList.add(position === "before" ? "drop-before" : "drop-after")
@@ -297,7 +297,7 @@ Object.assign(UI, {
     }
 });
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     updateNavigationActiveState() {
         const stateSnapshot = StateStore.read()
         document.querySelectorAll(".nav-item").forEach(buttonElement => {
@@ -580,7 +580,7 @@ Object.assign(UI, {
     }
 });
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     async submitFeedback() {
         if (!this.isFeatureEnabled("feedback")) {
             this.showFeatureDisabledToast("feedback")
@@ -638,8 +638,8 @@ Object.assign(UI, {
 });
 
 const getCountLabel = (count, singleKey, pluralKey) => {
-    if (count === 1) return UI.getText(singleKey, singleKey)
-    return UI.getText(pluralKey, UI.getText(singleKey, singleKey))
+    if (count === 1) return window.UI.getText(singleKey, singleKey)
+    return window.UI.getText(pluralKey, window.UI.getText(singleKey, singleKey))
 }
 
 const getCleanText = (html) => {
@@ -683,14 +683,14 @@ const buildAutoTitle = (note) => {
         return normalized.length > 60 ? `${normalized.slice(0, 57)}…` : normalized
     }
     const mediaSummary = formatMediaSummary(getMediaCounts(note.content || ""))
-    return mediaSummary || UI.getText("untitled_note", "Untitled")
+    return mediaSummary || window.UI.getText("untitled_note", "Untitled")
 }
 
 const buildPreviewText = (note) => {
     const text = getCleanText(note.content || "")
     if (text) return text
     const mediaSummary = formatMediaSummary(getMediaCounts(note.content || ""))
-    return mediaSummary || UI.getText("empty_note", "No content")
+    return mediaSummary || window.UI.getText("empty_note", "No content")
 }
 
 window.NoteText = {

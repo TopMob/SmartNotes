@@ -1,4 +1,4 @@
-const UI = {
+window.UI = {
     els: {},
     currentNoteActionId: null,
     draggedNoteId: null,
@@ -198,7 +198,7 @@ const UI = {
     
 }
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     bindEvents() {
         if (this.eventListenersController) return
         this.eventsBound = true
@@ -1092,7 +1092,7 @@ Object.assign(UI, {
     const openPrintWindow = (printableDocument, dict) => {
         const printWindow = window.open("", "_blank")
         if (!printWindow || !printWindow.document) {
-            UI.showToast(dict.popup_blocked || "Allow popups to print")
+            window.UI.showToast(dict.popup_blocked || "Allow popups to print")
             return
         }
         const printableHtml = `<!doctype html><html lang="${Utils.escapeHtml(printableDocument.language)}"><head><meta charset="utf-8"><title>${Utils.escapeHtml(printableDocument.printableTitle)}</title><style>${printableDocument.printableStyles}</style></head><body><header><h1>${Utils.escapeHtml(printableDocument.printableTitle)}</h1><div class="note-date">${Utils.escapeHtml(printableDocument.printableDate)}</div></header><main class="note-content">${printableDocument.printableContentHtml}</main></body></html>`
@@ -1350,9 +1350,9 @@ window.UINoteActionsPanel = {
 
 ;(() => {
 const noteActionsPanel = window.UINoteActionsPanel
-if (noteActionsPanel && typeof noteActionsPanel === "object") Object.assign(UI, noteActionsPanel);
+if (noteActionsPanel && typeof noteActionsPanel === "object") Object.assign(window.UI, noteActionsPanel);
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     updateSidebarLayout() {
         const isDesktop = window.matchMedia("(min-width: 1024px)").matches
         const isActive = this.els.sidebar?.classList.contains("active")
@@ -2404,7 +2404,7 @@ Object.assign(UI, {
 
 })();
 
-Object.assign(UI, {
+Object.assign(window.UI, {
     getNextModalLayerBase() {
         const activeModals = Array.from(document.querySelectorAll(".modal-overlay.active"))
         const currentMax = activeModals.reduce((max, modalElement) => {
