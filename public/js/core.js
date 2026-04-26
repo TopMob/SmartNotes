@@ -171,19 +171,9 @@ function showAuthStartupFailure(messageText) {
         feedbackElement.classList.add("is-error")
     }
 
-    const loginScreen = document.getElementById("login-screen")
-    if (loginScreen) {
-        loginScreen.style.display = "flex"
-        loginScreen.classList.add("active")
-        loginScreen.style.opacity = "1"
-    }
-
-    const appScreen = document.getElementById("app")
-    if (appScreen) {
-        appScreen.style.display = "none"
-        appScreen.classList.remove("active")
-        appScreen.style.opacity = "0"
-    }
+    window.dispatchEvent(new CustomEvent("smartnotes-auth-changed", {
+        detail: { isAuthenticated: false }
+    }))
 
     const selectors = [
         "#email-signin-form button[type='submit']",

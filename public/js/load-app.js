@@ -192,29 +192,16 @@ const createRuntimeInitializer = () => {
         return initializationPromise
     }
 
-    const initWhenDomReady = () => {
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", () => {
-                init().catch(error => console.error("[Core] NotesApplication init failed", { message: error?.message || String(error || "") }))
-            }, { once: true })
-            return
-        }
-        init().catch(error => console.error("[Core] NotesApplication init failed", { message: error?.message || String(error || "") }))
-    }
-
     return {
-        init,
-        initWhenDomReady
+        init
     }
 }
 
 const NotesApplication = (() => {
     const runtime = createRuntimeInitializer()
     return {
-        init: runtime.init,
-        initWhenDomReady: runtime.initWhenDomReady
+        init: runtime.init
     }
 })()
 
 window.initApp = () => NotesApplication.init()
-NotesApplication.initWhenDomReady()

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react"
 declare global {
   interface Window {
     initApp?: () => void | Promise<void>
+    __smartnotesRuntimeStarted?: boolean
   }
 }
 
@@ -21,17 +22,34 @@ const hiddenFileInputStyle: CSSProperties = { display: "none" }
 export default function HomePage() {
   const initCalledRef = useRef(false)
   const [isAppLoaded, setIsAppLoaded] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     if (initCalledRef.current) return
     initCalledRef.current = true
 
+    const handleAuthChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isAuthenticated?: boolean }>
+      setIsAuthenticated(!!customEvent.detail?.isAuthenticated)
+      setIsAppLoaded(true)
+    }
+
+    window.addEventListener("smartnotes-auth-changed", handleAuthChanged)
+
+    return () => {
+      window.removeEventListener("smartnotes-auth-changed", handleAuthChanged)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAppLoaded || !isAuthenticated || window.__smartnotesRuntimeStarted) return
     if (!window.initApp) return
 
-    Promise.resolve(window.initApp()).then(() => {
-      setIsAppLoaded(true)
+    window.__smartnotesRuntimeStarted = true
+    Promise.resolve(window.initApp()).catch(() => {
+      window.__smartnotesRuntimeStarted = false
     })
-  }, [])
+  }, [isAppLoaded, isAuthenticated])
 
   return (
     <>
@@ -43,6 +61,7 @@ export default function HomePage() {
           <div className="loader" aria-hidden="true"></div>
         </div>
       )}
+      {isAppLoaded && !isAuthenticated && (
       <div id="login-screen" className="modal-overlay" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
         <div className="login-box">
           <h1 className="brand-text-fixed" data-brand-text="">SmartNotes</h1>
@@ -96,7 +115,8 @@ export default function HomePage() {
           </div>
         </div>
       </div>
-      {isAppLoaded && (
+      )}
+      {isAppLoaded && isAuthenticated && (
         <div id="app" className="app-layout" aria-hidden="false">
           <aside id="sidebar" className="sidebar-glass" aria-label="Навигация" data-lang-aria="nav_aria">
           <header className="sidebar-header">

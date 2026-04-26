@@ -145,6 +145,11 @@ export function createAuthManager({ auth }) {
                 window.hideSplashScreen()
             }
         },
+        _dispatchAuthChanged(isAuthenticated) {
+            window.dispatchEvent(new CustomEvent("smartnotes-auth-changed", {
+                detail: { isAuthenticated: !!isAuthenticated }
+            }))
+        },
         handleAuthError(err) {
             const code = err && err.code ? err.code : "auth/unknown"
             const message = err && err.message ? String(err.message).toLowerCase() : ""
@@ -444,8 +449,6 @@ export function createAuthManager({ auth }) {
             }
         },
         applySignedInUI(user) {
-            const loginScreen = document.getElementById("login-screen")
-            const appScreen = document.getElementById("app")
             const userPhoto = document.getElementById("user-photo")
             const userName = document.getElementById("user-name")
             const userUid = document.getElementById("user-uid")
@@ -453,32 +456,10 @@ export function createAuthManager({ auth }) {
             if (userPhoto) userPhoto.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || "User")}&background=random&color=fff`
             if (userName) userName.textContent = user.displayName || (user.email ? user.email.split("@")[0] : "User")
             if (userUid) userUid.textContent = "••••••"
-
-            if (loginScreen) {
-                loginScreen.classList.remove("active")
-                loginScreen.style.opacity = "0"
-                loginScreen.style.display = "none"
-            }
-            if (appScreen) {
-                appScreen.style.display = "flex"
-                appScreen.classList.add("active")
-                appScreen.style.opacity = "1"
-            }
+            this._dispatchAuthChanged(true)
         },
         applySignedOutUI() {
-            const loginScreen = document.getElementById("login-screen")
-            const appScreen = document.getElementById("app")
-
-            if (appScreen) {
-                appScreen.style.opacity = "0"
-                appScreen.classList.remove("active")
-                appScreen.style.display = "none"
-            }
-            if (loginScreen) {
-                loginScreen.style.display = "flex"
-                loginScreen.classList.add("active")
-                loginScreen.style.opacity = "1"
-            }
+            this._dispatchAuthChanged(false)
         },
         async _startSessionWhenReady(user, attempt = 0) {
             const maxAttempts = 20
