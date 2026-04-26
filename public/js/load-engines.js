@@ -622,10 +622,10 @@ async function deleteNoteById(noteId) {
 async function restoreNoteById(noteId) {
     const note = getNoteById(noteId)
     if (!note || !ensureManageAccess(note)) return
-    const snapshot = updateNoteInState(noteId, item => ({ ...item, trashedAt: null }))
+    const snapshot = updateNoteInState(noteId, item => ({ ...item, trashedAt: null, trashedByFolderId: null }))
     if (!snapshot) return
     try {
-        const savedNote = await NoteActionService.patch(noteId, { trashedAt: null })
+        const savedNote = await NoteActionService.patch(noteId, { trashedAt: null, trashedByFolderId: null })
         if (savedNote) replaceNoteInState(noteId, savedNote)
         UI.showToast(window.AppMessages.getAppMessage(UI, window.AppMessages.APP_MESSAGES.restored))
     } catch (error) {

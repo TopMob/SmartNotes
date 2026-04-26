@@ -97,6 +97,7 @@ const normalizeImportedRawNote = (source) => {
         tags: extractImportTags(safe),
         pageTitles: extractImportPageTitles(safe),
         pageDrawings: extractImportPageDrawings(safe),
+        folderId: safe.folderId ?? safe.folder_id ?? null,
         createdAt: safe.createdAt ?? safe.created_at ?? safe.created ?? null,
         updatedAt: safe.updatedAt ?? safe.updated_at ?? safe.updated ?? safe.modifiedAt ?? safe.modified_at ?? null
     }
@@ -161,6 +162,10 @@ const collectImportedFolders = (payload, visited = new Set()) => {
         for (const key of IMPORT_FOLDER_CONTAINER_KEYS) {
             if (!(key in payload)) continue
             const nested = collectImportedFolders(payload[key], visited)
+            if (nested.length) return nested
+        }
+        for (const value of Object.values(payload)) {
+            const nested = collectImportedFolders(value, visited)
             if (nested.length) return nested
         }
     }
@@ -306,6 +311,10 @@ const NoteIO = {
         const safe = t.replace(/[^\p{L}\p{N}\-_]+/gu, " ").replace(/\s+/g, "_").trim() || "note"
         return `${safe}.json`
     }
+}
+
+if (typeof window !== "undefined") {
+    window.NoteIO = NoteIO
 }
 
 

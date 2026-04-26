@@ -169,9 +169,18 @@ export function createAuthManager({ auth }) {
             const serviceUnavailable = message.includes("503") || message.includes("unavailable")
             const invalidCredentials = message.includes("invalid login credentials") || message.includes("invalid credentials")
             const emailExists = message.includes("already registered") || message.includes("already been registered")
+            const googleOnlyAccount = message.includes("google") && (message.includes("provider") || message.includes("sign in") || message.includes("signin") || message.includes("registered"))
+            const providerConflict = code === "auth/account-exists-with-different-credential"
+                || message.includes("different sign-in method")
+                || message.includes("different signin method")
+                || message.includes("different credential")
             const emailNotConfirmed = message.includes("email not confirmed")
             const text = (emailNotConfirmed
                 ? this._t("auth_email_not_confirmed", "Подтвердите email перед входом")
+                : googleOnlyAccount
+                    ? this._t("auth_email_google_only", "This email is registered with Google. Please sign in with Google")
+                    : providerConflict
+                        ? this._t("auth_email_provider_conflict", "A different sign-in method is used for this email")
                 : emailExists
                     ? this._t("auth_email_exists", "An account with this email already exists. Please sign in")
                     : invalidCredentials

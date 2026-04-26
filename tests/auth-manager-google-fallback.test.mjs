@@ -64,11 +64,14 @@ function createEnvironment() {
     async startUserSession() {},
     stopUserSession() {}
   }
+  const toasts = []
   globalThis.UI = {
     getText(_key, fallback) {
       return fallback
     },
-    showToast() {}
+    showToast(message) {
+      toasts.push(String(message || ''))
+    }
   }
   globalThis.document = {
     getElementById(id) {
@@ -86,7 +89,7 @@ function createEnvironment() {
   loginScreen.style = {}
   appScreen.style = {}
 
-  return { authButton, feedbackElement, loginScreen, appScreen, searchInput }
+  return { authButton, feedbackElement, loginScreen, appScreen, searchInput, toasts }
 }
 
 test('google fallback requires a second click after cooldown', async () => {
@@ -288,6 +291,108 @@ test('logout clears pending google redirect fallback state', async () => {
 
   globalThis.setTimeout = originalSetTimeout
   globalThis.clearTimeout = originalClearTimeout
+  delete globalThis.window
+  delete globalThis.HTMLElement
+  delete globalThis.StateActions
+  delete globalThis.StateStore
+  delete globalThis.SessionService
+  delete globalThis.UI
+  delete globalThis.document
+})
+
+test('provider conflict with google shows google-only guidance', async () => {
+  const { toasts } = createEnvironment()
+  const auth = {
+    currentUser: null,
+    Auth: { Persistence: { LOCAL: 'local' } },
+    async setPersistence() {
+      return true
+    },
+    onAuthStateChanged() {
+      return () => {}
+    },
+    async getRedirectResult() {
+      return null
+    },
+    preloadGoogleSignIn() {
+      return Promise.resolve(false)
+    }
+  }
+
+  const { createAuthManager } = await import(`../public/js/core/auth.js?test-auth-provider-conflict=${Date.now()}`)
+  const manager = createAuthManager({ auth })
+  manager.handleAuthError({ message: 'This email is registered with Google sign in', code: 'auth/unknown' })
+
+  assert.match(toasts.at(-1) || '', /registered with google|войдите через google/i)
+
+  delete globalThis.window
+  delete globalThis.HTMLElement
+  delete globalThis.StateActions
+  delete globalThis.StateStore
+  delete globalThis.SessionService
+  delete globalThis.UI
+  delete globalThis.document
+})
+
+test('provider conflict code shows provider conflict guidance', async () => {
+  const { toasts } = createEnvironment()
+  const auth = {
+    currentUser: null,
+    Auth: { Persistence: { LOCAL: 'local' } },
+    async setPersistence() {
+      return true
+    },
+    onAuthStateChanged() {
+      return () => {}
+    },
+    async getRedirectResult() {
+      return null
+    },
+    preloadGoogleSignIn() {
+      return Promise.resolve(false)
+    }
+  }
+
+  const { createAuthManager } = await import(`../public/js/core/auth.js?test-auth-provider-code=${Date.now()}`)
+  const manager = createAuthManager({ auth })
+  manager.handleAuthError({ message: 'different sign-in method', code: 'auth/account-exists-with-different-credential' })
+
+  assert.match(toasts.at(-1) || '', /different sign-in method|different sign-in|другой способ входа/i)
+
+  delete globalThis.window
+  delete globalThis.HTMLElement
+  delete globalThis.StateActions
+  delete globalThis.StateStore
+  delete globalThis.SessionService
+  delete globalThis.UI
+  delete globalThis.document
+})
+
+test('degraded auth storage error shows blocked storage guidance', async () => {
+  const { toasts } = createEnvironment()
+  const auth = {
+    currentUser: null,
+    Auth: { Persistence: { LOCAL: 'local' } },
+    async setPersistence() {
+      throw new Error('storage blocked')
+    },
+    onAuthStateChanged() {
+      return () => {}
+    },
+    async getRedirectResult() {
+      return null
+    },
+    preloadGoogleSignIn() {
+      return Promise.resolve(false)
+    }
+  }
+
+  const { createAuthManager } = await import(`../public/js/core/auth.js?test-auth-storage=${Date.now()}`)
+  const manager = createAuthManager({ auth })
+  manager.handleAuthError({ code: 'auth/web-storage-unsupported', message: 'blocked storage' })
+
+  assert.match(toasts.at(-1) || '', /storage is blocked|storage/i)
+
   delete globalThis.window
   delete globalThis.HTMLElement
   delete globalThis.StateActions
