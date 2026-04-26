@@ -215,3 +215,24 @@ export async function preloadGoogleIdentity({ clientId } = {}) {
         return false
     }
 }
+
+export async function resetGoogleIdentitySession() {
+    try {
+        await loadGoogleIdentityScript(GOOGLE_IDENTITY_PRELOAD_TIMEOUT_MS)
+    } catch {
+        return false
+    }
+
+    if (typeof window === "undefined" || !window.google?.accounts?.id) {
+        return false
+    }
+
+    try {
+        window.google.accounts.id.cancel?.()
+        window.google.accounts.id.disableAutoSelect?.()
+        lastGooglePromptStartedAt = 0
+        return true
+    } catch {
+        return false
+    }
+}

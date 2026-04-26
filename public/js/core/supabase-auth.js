@@ -1,5 +1,5 @@
 import { initSupabase } from "./supabase.js"
-import { preloadGoogleIdentity, requestGoogleIdentityToken } from "./googleIdentityAuth.js"
+import { preloadGoogleIdentity, requestGoogleIdentityToken, resetGoogleIdentitySession } from "./googleIdentityAuth.js"
 
 const sessionEndpoint = "/api/supabase/session"
 const PROFILE_SYNC_TIMEOUT_MS = 8000
@@ -263,6 +263,7 @@ export async function createSupabaseAuth() {
             return []
         },
         async signOut() {
+            await resetGoogleIdentitySession().catch(() => false)
             const { error } = await client.auth.signOut()
             if (error) throw error
             currentUser = null
