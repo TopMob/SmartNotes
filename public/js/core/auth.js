@@ -3,6 +3,7 @@ import { createLocalAuthManager } from "./localAuth.js"
 export function createAuthManager({ auth }) {
     const state = {
         initialized: false,
+        initPromise: null,
         loginInFlight: false,
         authReady: false,
         currentUser: null,
@@ -10,8 +11,10 @@ export function createAuthManager({ auth }) {
         localAuthManager: null,
         persistenceReady: false,
         authStateResolved: false,
+        initialAuthStateSettled: false,
         googleRedirectFallbackReady: false,
-        googleRedirectFallbackTimer: null
+        googleRedirectFallbackTimer: null,
+        authStateProcessingPromise: Promise.resolve()
     }
 
     const manager = {
@@ -472,59 +475,111 @@ export function createAuthManager({ auth }) {
             if (normalizedUser) this._resetRedirectFallbackState()
             state.authReady = true
             this.setAuthReady(true)
-            this._resolveStartupScreen()
             StateActions.setUser(normalizedUser)
 
             if (normalizedUser) {
                 this.applySignedInUI(normalizedUser)
                 if (shouldSkipSessionRestart) {
+                    this._resolveStartupScreen()
                     return
                 }
-                await this._startSessionWhenReady(normalizedUser)
+                try {
+                    await this._startSessionWhenReady(normalizedUser)
+                } catch (error) {
+                    console.error("[Auth] session startup failed", error)
+                    this._toast(this._t("sync_error", "Sync error"))
+                }
+                this._resolveStartupScreen()
                 return
             }
 
             this._stopSessionWhenReady()
             this.clearState()
             this.applySignedOutUI()
+            this._resolveStartupScreen()
         },
         async init() {
-            if (!auth || state.initialized) return
+            if (!auth) return
+            if (state.initPromise) return state.initPromise
             state.initialized = true
-
-            this._setLoginBusy(false)
-            this._ensureLocalAuthManager().bindUi()
-            this.setAuthReady(false)
-            if (!auth.currentUser && typeof auth.preloadGoogleSignIn === "function") {
-                auth.preloadGoogleSignIn().catch(() => false)
-            }
-
-            auth.onAuthStateChanged(async user => {
+            state.initPromise = (async () => {
                 this._setLoginBusy(false)
-                await this._handleAuthState(user)
-            }, error => {
-                this._setLoginBusy(false)
-                this.handleAuthError(error)
-            })
+                this._ensureLocalAuthManager().bindUi()
+                this.setAuthReady(false)
 
-            try {
-                await this._preparePersistenceForRedirectResult()
-            } catch (error) {
-                console.warn("[Auth] Persistence setup failed", error)
-            }
+                const waitForInitialAuthState = new Promise(resolve => {
+                    const settleInitialAuthState = () => {
+                        if (state.initialAuthStateSettled) return
+                        state.initialAuthStateSettled = true
+                        resolve()
+                    }
 
-            try {
-                await auth.getRedirectResult()
-            } catch (error) {
-                const errorCode = String(error?.code || "")
-                if (errorCode && errorCode !== "auth/no-auth-event" && errorCode !== "auth/internal-error") {
-                    this.handleAuthError(error)
-                } else {
-                    console.warn("[Auth] Redirect result skipped", error)
+                    auth.onAuthStateChanged(user => {
+                        this._setLoginBusy(false)
+                        state.authStateProcessingPromise = state.authStateProcessingPromise
+                            .catch(() => null)
+                            .then(() => this._handleAuthState(user))
+                            .catch(error => {
+                                console.error("[Auth] auth state processing failed", error)
+                                this._toast(this._t("sync_error", "Sync error"))
+                                this._resolveStartupScreen()
+                            })
+                            .finally(() => {
+                                settleInitialAuthState()
+                            })
+                    }, error => {
+                        this._setLoginBusy(false)
+                        console.error("[Auth] auth state subscription failed", error)
+                        this.handleAuthError(error)
+                        this._resolveStartupScreen()
+                        settleInitialAuthState()
+                    })
+
+                    Promise.resolve().then(() => {
+                        if (state.initialAuthStateSettled) return
+                        state.authStateProcessingPromise = state.authStateProcessingPromise
+                            .catch(() => null)
+                            .then(() => this._handleAuthState(auth.currentUser || null))
+                            .catch(error => {
+                                console.error("[Auth] initial auth fallback failed", error)
+                                this._toast(this._t("sync_error", "Sync error"))
+                                this._resolveStartupScreen()
+                            })
+                            .finally(() => {
+                                settleInitialAuthState()
+                            })
+                    })
+                })
+
+                try {
+                    await this._preparePersistenceForRedirectResult()
+                } catch (error) {
+                    console.warn("[Auth] Persistence setup failed", error)
                 }
-            } finally {
-                this._setLoginBusy(false)
-            }
+
+                try {
+                    await auth.getRedirectResult()
+                } catch (error) {
+                    const errorCode = String(error?.code || "")
+                    if (errorCode && errorCode !== "auth/no-auth-event" && errorCode !== "auth/internal-error") {
+                        this.handleAuthError(error)
+                    } else {
+                        console.warn("[Auth] Redirect result skipped", error)
+                    }
+                } finally {
+                    this._setLoginBusy(false)
+                }
+
+                await waitForInitialAuthState
+
+                if (!auth.currentUser && typeof auth.preloadGoogleSignIn === "function") {
+                    auth.preloadGoogleSignIn().catch(() => false)
+                }
+
+                return true
+            })()
+
+            return state.initPromise
         }
     }
 

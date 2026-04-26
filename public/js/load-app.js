@@ -409,7 +409,6 @@ const createRuntimeInitializer = () => {
         uiEvents.start()
         networkLifecycle.start()
         const user = StateStore.read().user
-        if (user?.uid) await SessionService.startUserSession(user)
         if (user?.uid && typeof UI.handleInviteLinkFromUrl === "function") {
             await UI.handleInviteLinkFromUrl()
         }

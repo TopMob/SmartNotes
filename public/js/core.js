@@ -255,7 +255,7 @@ async function startCore() {
     core.Auth = authManager
     window.Auth = core.Auth
     resolveAuthReady(authManager)
-    authManager.init().catch(error => {
+    await authManager.init().catch(error => {
         console.error("[Core] Auth manager init failed", error)
         if (typeof authManager.setDegradedState === "function") {
             authManager.setDegradedState("Некоторые функции входа временно недоступны")
