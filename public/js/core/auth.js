@@ -14,6 +14,7 @@ export function createAuthManager({ auth }) {
         persistenceReady: false,
         authStateResolved: false,
         initialAuthStateSettled: false,
+        logoutInFlight: false,
         googleRedirectFallbackReady: false,
         googleRedirectFallbackTimer: null,
         authStateProcessingPromise: Promise.resolve()
@@ -308,13 +309,18 @@ export function createAuthManager({ auth }) {
         },
         async logout() {
             if (!auth) return
+            state.logoutInFlight = true
             this._resetRedirectFallbackState()
             this._setLoginBusy(false)
+            await this._handleAuthState(null)
             try {
                 await auth.signOut()
-                await this._handleAuthState(null)
-            } catch {
-                this._toast(this._t("logout_failed", "Sign out failed"))
+            } catch (error) {
+                console.error("[Auth] sign out failed after local logout", error)
+            } finally {
+                setTimeout(() => {
+                    state.logoutInFlight = false
+                }, 0)
             }
         },
         async switchAccount() {
@@ -483,6 +489,9 @@ export function createAuthManager({ auth }) {
             const normalizedUser = user === undefined
                 ? (auth.currentUser || null)
                 : user
+            if (state.logoutInFlight && normalizedUser) {
+                return
+            }
             const previousUserUid = String(state.currentUser?.uid || "")
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
