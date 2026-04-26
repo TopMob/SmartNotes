@@ -285,3 +285,103 @@ test('expired stored session is preserved during temporary refresh outage until 
   delete globalThis.document
   delete globalThis.fetch
 })
+
+test('id token sign-in falls back to same-origin auth route on network failure', async () => {
+  const storage = new Map()
+  const issuedSession = createSession({ refreshToken: 'refresh-id-token' })
+
+  globalThis.window = {
+    location: {
+      href: 'https://smartnotes.local/',
+      origin: 'https://smartnotes.local',
+      hash: '',
+      search: '',
+      pathname: '/'
+    },
+    localStorage: {
+      getItem(key) {
+        return storage.has(key) ? storage.get(key) : null
+      },
+      setItem(key, value) {
+        storage.set(key, String(value))
+      },
+      removeItem(key) {
+        storage.delete(key)
+      }
+    },
+    addEventListener() {},
+    history: {
+      replaceState() {}
+    },
+    SmartNotesSupabaseConfig: runtimeConfig,
+    supabase: {
+      createClient() {
+        return {
+          auth: {
+            onAuthStateChange() {},
+            async signInWithIdToken() {
+              const error = new TypeError('NetworkError when attempting to fetch resource.')
+              throw error
+            }
+          }
+        }
+      }
+    }
+  }
+  globalThis.document = {
+    title: 'SmartNotes',
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+    querySelector() {
+      return null
+    },
+    createElement() {
+      return {
+        addEventListener() {},
+        remove() {}
+      }
+    }
+  }
+  globalThis.supabase = window.supabase
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input) !== '/api/supabase/auth') {
+      throw new Error(`Unexpected fetch: ${String(input)}`)
+    }
+
+    const body = init.body ? JSON.parse(init.body) : {}
+    assert.equal(body.path, 'token?grant_type=id_token')
+    assert.equal(body.body.provider, 'google')
+    assert.equal(body.body.token, 'google-id-token')
+
+    return new Response(JSON.stringify({
+      session: issuedSession,
+      user: issuedSession.user
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const supabaseModule = await import(`../public/js/core/supabase.js?test-id-token-fallback=${Date.now()}`)
+  window.__smartnotesSupabaseTestUtils.reset()
+
+  const client = supabaseModule.initSupabase()
+  const result = await client.auth.signInWithIdToken({
+    provider: 'google',
+    token: 'google-id-token',
+    clientId: 'google-client-id',
+    issuer: 'https://accounts.google.com',
+    nonce: ''
+  })
+
+  assert.equal(result.error, null)
+  assert.ok(result.data.session)
+  assert.equal(result.data.session.refresh_token, 'refresh-id-token')
+  assert.equal(JSON.parse(storage.get('smartnotes.supabase.session')).refresh_token, 'refresh-id-token')
+
+  window.__smartnotesSupabaseTestUtils.reset()
+  delete globalThis.window
+  delete globalThis.document
+  delete globalThis.fetch
+  delete globalThis.supabase
+})

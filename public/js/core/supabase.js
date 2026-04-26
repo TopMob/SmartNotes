@@ -371,7 +371,28 @@ function createDelegatedAuthMethod(methodName, mapResult = (result) => result) {
             }
         }
 
-        const result = await officialClient.auth[methodName](...args)
+        let result = null
+        try {
+            result = await officialClient.auth[methodName](...args)
+        } catch (error) {
+            const shouldUseFallback = methodName === "signInWithIdToken"
+                && typeof fetch === "function"
+                && (String(error?.name || "") === "TypeError"
+                    || String(error?.message || "").toLowerCase().includes("networkerror")
+                    || String(error?.message || "").toLowerCase().includes("failed to fetch"))
+
+            if (!shouldUseFallback) throw error
+
+            const fallbackResult = await callAuthFallback("token?grant_type=id_token", args[0] || {})
+            result = {
+                data: {
+                    session: fallbackResult.data?.session || null,
+                    user: fallbackResult.data?.user || null
+                },
+                error: fallbackResult.error
+            }
+        }
+
         const session = result?.data?.session || null
         if (session) setCurrentSession(session)
         return mapResult(result)

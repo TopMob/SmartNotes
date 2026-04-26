@@ -314,14 +314,11 @@ export function createAuthManager({ auth }) {
             this._setLoginBusy(false)
             this._clearUserLocalCache()
             await this._handleAuthState(null)
+            state.logoutInFlight = false
             try {
                 await auth.signOut()
             } catch (error) {
                 console.error("[Auth] sign out failed after local logout", error)
-            } finally {
-                setTimeout(() => {
-                    state.logoutInFlight = false
-                }, 0)
             }
         },
         async updateDisplayName(nextName = "") {
