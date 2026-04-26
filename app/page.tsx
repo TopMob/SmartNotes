@@ -11,6 +11,16 @@ declare global {
   interface Window {
     initApp?: () => void | Promise<void>
     __smartnotesRuntimeStarted?: boolean
+    SmartNotesAuthUi?: {
+      ready?: boolean
+    }
+    StateStore?: {
+      read?: () => {
+        user?: {
+          uid?: string
+        } | null
+      }
+    }
   }
 }
 
@@ -26,6 +36,19 @@ export default function HomePage() {
     if (initCalledRef.current) return
     initCalledRef.current = true
 
+    const resolveRuntimeState = () => {
+      const stateUser = window.StateStore?.read?.()?.user
+      const isReady = !!window.SmartNotesAuthUi?.ready
+      const splashScreen = document.getElementById("splash-screen")
+      const splashHidden = splashScreen?.classList.contains("hidden") || splashScreen?.style.display === "none"
+
+      if (!isReady && !splashHidden) return false
+
+      setIsAuthenticated(!!stateUser?.uid)
+      setIsAppLoaded(true)
+      return true
+    }
+
     const handleAuthChanged = (event: Event) => {
       const customEvent = event as CustomEvent<{ isAuthenticated?: boolean }>
       setIsAuthenticated(!!customEvent.detail?.isAuthenticated)
@@ -33,6 +56,24 @@ export default function HomePage() {
     }
 
     window.addEventListener("smartnotes-auth-changed", handleAuthChanged)
+
+    if (!resolveRuntimeState()) {
+      const bootstrapInterval = window.setInterval(() => {
+        if (!resolveRuntimeState()) return
+        window.clearInterval(bootstrapInterval)
+      }, 100)
+
+      const bootstrapTimeout = window.setTimeout(() => {
+        window.clearInterval(bootstrapInterval)
+        resolveRuntimeState()
+      }, 10000)
+
+      return () => {
+        window.clearInterval(bootstrapInterval)
+        window.clearTimeout(bootstrapTimeout)
+        window.removeEventListener("smartnotes-auth-changed", handleAuthChanged)
+      }
+    }
 
     return () => {
       window.removeEventListener("smartnotes-auth-changed", handleAuthChanged)
