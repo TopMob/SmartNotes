@@ -6,6 +6,8 @@ import { SUPABASE_BROWSER_STORAGE_KEY, getSupabaseBrowserClient } from "@/lib/su
 
 const PROFILE_SYNC_ENDPOINT = "/api/supabase/session"
 const PROFILE_SYNC_TIMEOUT_MS = 8000
+const SESSION_WAIT_TIMEOUT_MS = 12000
+const SESSION_WAIT_INTERVAL_MS = 150
 
 type CallbackState = "processing" | "error"
 
@@ -44,6 +46,24 @@ async function syncProfile(accessToken: string) {
   }
 }
 
+async function waitForOAuthSession() {
+  const supabase = getSupabaseBrowserClient()
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < SESSION_WAIT_TIMEOUT_MS) {
+    const sessionResult = await supabase.auth.getSession()
+    const session = sessionResult.data.session
+
+    if (session?.access_token) {
+      return session
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, SESSION_WAIT_INTERVAL_MS))
+  }
+
+  throw new Error("oauth-session-timeout")
+}
+
 export default function AuthCallbackPage() {
   const [status, setStatus] = useState<CallbackState>("processing")
 
@@ -53,13 +73,7 @@ export default function AuthCallbackPage() {
     const finalizeSignIn = async () => {
       const currentUrl = new URL(window.location.href)
       const nextPath = buildRedirectUrl(currentUrl)
-      const supabase = getSupabaseBrowserClient()
-      const sessionResult = await supabase.auth.getSession()
-      const session = sessionResult.data.session
-
-      if (!session?.access_token) {
-        throw sessionResult.error || new Error("oauth-session-missing")
-      }
+      const session = await waitForOAuthSession()
 
       try {
         window.localStorage.removeItem("smartnotes.supabase.session")
