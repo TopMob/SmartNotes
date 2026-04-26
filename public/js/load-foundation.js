@@ -538,10 +538,18 @@ const StateStore = (() => {
         folders: [],
         view: "notes",
         activeFolderId: null,
+        activeNoteId: null,
         searchQuery: "",
         currentNote: null,
         tempRating: 0,
-        config: { lang: "ru", folderViewMode: "compact", reduceMotion: false, editorTools: {}, interface: { showSavedFilters: true, showTagFilter: true, showUpdatedPeriodFilter: true }, notesFilter: { sort: "manual", folders: [] } },
+        config: {
+            lang: "ru",
+            folderViewMode: "compact",
+            reduceMotion: false,
+            editorTools: {},
+            interface: { showSavedFilters: true, showTagFilter: true, showUpdatedPeriodFilter: true },
+            notesFilter: { sort: "manual", folders: [], tags: [], updatedWindowDays: 0 }
+        },
         recording: false,
         mediaRecorder: null,
         editorDirty: false,
@@ -566,62 +574,132 @@ const StateStore = (() => {
         }
     }
 
-    let state = { ...initialState, config: { ...initialState.config }, pagination: { ...initialState.pagination } }
-    const subscribers = new Set()
-
-    const notifySubscribers = (nextState, previousState) => {
-        subscribers.forEach(subscriber => {
-            subscriber(nextState, previousState)
-        })
+    const clone = (value) => {
+        if (typeof structuredClone === "function") return structuredClone(value)
+        return JSON.parse(JSON.stringify(value))
     }
 
-    const read = () => state
+    const mergeConfig = (baseConfig, nextConfig = {}) => ({
+        ...baseConfig,
+        ...nextConfig,
+        interface: { ...(baseConfig?.interface || {}), ...(nextConfig?.interface || {}) },
+        notesFilter: { ...(baseConfig?.notesFilter || {}), ...(nextConfig?.notesFilter || {}) },
+        editorTools: { ...(baseConfig?.editorTools || {}), ...(nextConfig?.editorTools || {}) }
+    })
+
+    const mergeState = (baseState, nextState = {}) => {
+        const mergedCurrentNote = nextState.currentNote === undefined ? baseState.currentNote : nextState.currentNote
+        const mergedActiveNoteId = nextState.activeNoteId === undefined
+            ? (mergedCurrentNote?.id || baseState.activeNoteId || null)
+            : nextState.activeNoteId
+        return {
+            ...baseState,
+            ...nextState,
+            activeNoteId: mergedActiveNoteId,
+            currentNote: mergedCurrentNote,
+            config: mergeConfig(baseState.config, nextState.config || {}),
+            saveStatus: { ...(baseState.saveStatus || {}), ...(nextState.saveStatus || {}) },
+            adminAnalysisStatus: { ...(baseState.adminAnalysisStatus || {}), ...(nextState.adminAnalysisStatus || {}) },
+            pagination: { ...(baseState.pagination || {}), ...(nextState.pagination || {}) }
+        }
+    }
+
+    let storeApi = null
+    let bootstrapState = clone(initialState)
+    const queuedSubscribers = new Set()
+
+    const bindStoreApi = (api) => {
+        if (!api || typeof api.getState !== "function" || typeof api.setState !== "function") return null
+        storeApi = api
+        const currentState = api.getState()
+        if (typeof currentState?.hydrateFromLegacy === "function") {
+            currentState.hydrateFromLegacy(bootstrapState)
+        } else {
+            api.setState(mergeState(api.getState(), bootstrapState))
+        }
+        window.__smartnotesNotesStoreBound = true
+        return storeApi
+    }
+
+    const resolveStoreApi = () => {
+        if (storeApi) return storeApi
+        const zustandHook = window.useNotesStore
+        const api = zustandHook && typeof zustandHook.getState === "function" ? zustandHook : null
+        return bindStoreApi(api)
+    }
+
+    const read = () => {
+        const api = resolveStoreApi()
+        if (api) return api.getState()
+        return bootstrapState
+    }
 
     const set = (updater) => {
-        const previousState = state
-        const nextState = typeof updater === "function" ? updater(previousState) : { ...previousState, ...updater }
-        if (!nextState || typeof nextState !== "object") return state
-        if (nextState === previousState) return state
-        state = nextState
-        notifySubscribers(state, previousState)
-        return state
+        const api = resolveStoreApi()
+        if (!api) {
+            const previousState = bootstrapState
+            const nextState = typeof updater === "function"
+                ? updater(previousState)
+                : mergeState(previousState, updater)
+            if (nextState && typeof nextState === "object") bootstrapState = mergeState(previousState, nextState)
+            return bootstrapState
+        }
+        const previousState = api.getState()
+        const nextState = typeof updater === "function"
+            ? updater(previousState)
+            : mergeState(previousState, updater)
+        if (!nextState || typeof nextState !== "object" || nextState === previousState) return previousState
+        api.setState(mergeState(previousState, nextState))
+        return api.getState()
     }
 
-    const update = (key, value) => set(previousState => ({ ...previousState, [key]: value }))
+    const update = (key, value) => set(previousState => mergeState(previousState, { [key]: value }))
 
-    const updateConfig = (updates) => set(previousState => ({ ...previousState, config: { ...previousState.config, ...updates } }))
+    const updateConfig = (updates) => set(previousState => mergeState(previousState, { config: mergeConfig(previousState.config, updates) }))
 
-    const resetSession = () => set(previousState => ({
-        ...previousState,
-        user: null,
-        notes: [],
-        folders: [],
-        view: "notes",
-        activeFolderId: null,
-        searchQuery: "",
-        currentNote: null,
-        tempRating: 0,
-        recording: false,
-        mediaRecorder: null,
-        editorDirty: false,
-        isEditing: false,
-        isTyping: false,
-        orderHistory: [],
-        appearanceDraft: null,
-        originalUserSettings: null,
-        draftUserSettings: null,
-        saveStatus: { ...initialState.saveStatus },
-        adminAnalysisStatus: { ...initialState.adminAnalysisStatus },
-        pagination: { ...initialState.pagination, renderStep: previousState.pagination.renderStep, pageSize: previousState.pagination.pageSize },
-        config: { ...previousState.config }
-    }))
+    const resetSession = () => {
+        const currentState = read()
+        return set(mergeState(clone(initialState), {
+            config: currentState.config,
+            pagination: {
+                ...initialState.pagination,
+                renderStep: currentState.pagination?.renderStep ?? initialState.pagination.renderStep,
+                pageSize: currentState.pagination?.pageSize ?? initialState.pagination.pageSize
+            }
+        }))
+    }
 
     const subscribe = (subscriber) => {
         if (typeof subscriber !== "function") return () => {}
-        subscribers.add(subscriber)
-        return () => {
-            subscribers.delete(subscriber)
+        const api = resolveStoreApi()
+        if (api && typeof api.subscribe === "function") {
+            return api.subscribe((nextState, previousState) => {
+                subscriber(nextState, previousState)
+            })
         }
+        queuedSubscribers.add(subscriber)
+        return () => {
+            queuedSubscribers.delete(subscriber)
+        }
+    }
+
+    const flushQueuedSubscribers = () => {
+        const api = resolveStoreApi()
+        if (!api || typeof api.subscribe !== "function" || queuedSubscribers.size === 0) return
+        Array.from(queuedSubscribers).forEach(subscriber => {
+            api.subscribe((nextState, previousState) => {
+                subscriber(nextState, previousState)
+            })
+            queuedSubscribers.delete(subscriber)
+        })
+    }
+
+    if (typeof window !== "undefined") {
+        const bootstrapTimer = window.setInterval(() => {
+            if (!resolveStoreApi()) return
+            flushQueuedSubscribers()
+            window.clearInterval(bootstrapTimer)
+        }, 25)
     }
 
     return {
@@ -631,7 +709,7 @@ const StateStore = (() => {
         updateConfig,
         resetSession,
         subscribe,
-        initialState: () => ({ ...initialState, config: { ...initialState.config }, saveStatus: { ...initialState.saveStatus }, pagination: { ...initialState.pagination } })
+        initialState: () => clone(initialState)
     }
 })();
 
@@ -659,7 +737,7 @@ const StateActions = {
         StateStore.update("folders", folders)
     },
     setCurrentNote(note) {
-        StateStore.update("currentNote", note)
+        StateStore.set(prev => ({ ...prev, currentNote: note, activeNoteId: note?.id || null }))
     },
     setEditorDirty(flag) {
         StateStore.update("editorDirty", !!flag)

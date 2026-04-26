@@ -10,12 +10,56 @@ window.UI = {
     eventListenersController: null,
     resizeListenersController: null,
     inputPolicyObserver: null,
+    notesStoreUnsubscribe: null,
     toastDeduplication: { lastMessage: "", lastShownAt: 0 },
     loadingLocks: new Set(),
     inviteLinkHandlingPromise: null,
 
     resolveEventElementTarget(target) {
         return target instanceof Element ? target : null
+    },
+
+    getNotesStore() {
+        const notesStore = window.useNotesStore
+        if (!notesStore || typeof notesStore.getState !== "function") return null
+        return notesStore
+    },
+
+    getNotesStoreState() {
+        const notesStore = this.getNotesStore()
+        if (notesStore) return notesStore.getState()
+        return typeof StateStore?.read === "function" ? StateStore.read() : {}
+    },
+
+    initNotesStoreBridge() {
+        if (this.notesStoreUnsubscribe) return
+        const notesStore = this.getNotesStore()
+        if (!notesStore || typeof notesStore.subscribe !== "function") return
+        this.notesStoreUnsubscribe = notesStore.subscribe((nextState, previousState) => {
+            this.handleNotesStoreChange(nextState, previousState)
+        })
+    },
+
+    handleNotesStoreChange(nextState, previousState) {
+        if (!nextState || !previousState) return
+        if (nextState.config?.lang !== previousState.config?.lang) {
+            this.applyLangToDom()
+            this.renderFilterMenu()
+            this.updateViewTitle()
+            this.updatePrimaryActionLabel()
+        }
+        if (nextState.view !== previousState.view || nextState.activeFolderId !== previousState.activeFolderId) {
+            this.updateViewTitle()
+            this.updatePrimaryActionLabel()
+            this.updateTrashActionVisibility()
+        }
+        if (nextState.folders !== previousState.folders) {
+            this.renderFilterMenu()
+            this.updateViewTitle()
+        }
+        if (nextState.notes !== previousState.notes && this.currentNoteActionId) {
+            this.renderNoteActions?.(this.currentNoteActionId)
+        }
     },
 
     init() {
@@ -46,6 +90,7 @@ window.UI = {
             activeFolderHideButton: document.getElementById("active-folder-hide-button"),
             adminToolsNavButton: document.getElementById("admin-tools-nav-button")
         }
+        this.initNotesStoreBridge()
         this.bindEvents()
         if (window.matchMedia("(min-width: 1024px)").matches) {
             this.els.sidebar?.classList.add("active")
@@ -63,7 +108,7 @@ window.UI = {
     },
 
     getText(key, fallback = "") {
-        const dict = LANG[StateStore.read().config.lang] || LANG.ru
+        const dict = LANG[this.getNotesStoreState().config?.lang] || LANG.ru
         return dict[key] || fallback || key
     },
 
@@ -121,7 +166,7 @@ window.UI = {
     resolveNoteById(noteId) {
         const targetId = String(noteId || "")
         if (!targetId) return null
-        const notes = Array.isArray(StateStore.read().notes) ? StateStore.read().notes : []
+        const notes = Array.isArray(this.getNotesStoreState().notes) ? this.getNotesStoreState().notes : []
         return notes.find(note => String(note?.id || "") === targetId) || null
     },
 
@@ -179,8 +224,9 @@ window.UI = {
     },
 
     applyLangToDom() {
-        const dict = LANG[StateStore.read().config.lang] || LANG.ru
-        document.documentElement.lang = StateStore.read().config.lang === "en" ? "en" : "ru"
+        const state = this.getNotesStoreState()
+        const dict = LANG[state.config?.lang] || LANG.ru
+        document.documentElement.lang = state.config?.lang === "en" ? "en" : "ru"
         document.querySelectorAll("[data-lang]").forEach(el => {
             const k = el.getAttribute("data-lang")
             if (k && dict[k]) el.textContent = dict[k]

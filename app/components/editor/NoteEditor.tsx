@@ -1,5 +1,6 @@
 'use client'
 
+import { useNotesStore } from "@/store/useNotesStore"
 import type { CSSProperties } from "react"
 
 const swatchBlackStyle = { "--swatch-color": "#111111" } as CSSProperties
@@ -9,10 +10,23 @@ const swatchOrangeStyle = { "--swatch-color": "#f97316" } as CSSProperties
 const swatchRedStyle = { "--swatch-color": "#dc2626" } as CSSProperties
 const canvasStyle: CSSProperties = { touchAction: "none" }
 
+const countNotePages = (content: string | undefined, drawings: string[] | undefined, titles: string[] | undefined) => {
+  const html = String(content || "")
+  const pageMatches = html.match(/class=["'][^"']*note-page[^"']*["']/g)
+  const pageCountFromMarkup = Array.isArray(pageMatches) ? pageMatches.length : 0
+  const pageCountFromMeta = Math.max(Array.isArray(drawings) ? drawings.length : 0, Array.isArray(titles) ? titles.length : 0)
+  return Math.max(1, pageCountFromMarkup, pageCountFromMeta)
+}
+
 export default function NoteEditor() {
+  const currentNote = useNotesStore((state) => state.currentNote)
+  const isEditing = useNotesStore((state) => state.isEditing)
+  const pageCount = countNotePages(currentNote?.content as string | undefined, currentNote?.pageDrawings as string[] | undefined, currentNote?.pageTitles as string[] | undefined)
+  const editorClassName = isEditing ? "editor-overlay active" : "editor-overlay"
+
   return (
     <>
-      <div id="note-editor" className="editor-overlay" role="dialog" aria-modal="true" aria-label="Редактор" data-lang-aria="editor">
+      <div id="note-editor" className={editorClassName} role="dialog" aria-modal="true" aria-label="Редактор" data-lang-aria="editor">
         <div className="editor-container">
           <header className="editor-header-bar">
             <button type="button" className="btn-icon" data-action="close-editor" aria-label="Назад" data-lang-aria="back">
@@ -23,7 +37,7 @@ export default function NoteEditor() {
                 <button type="button" className="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
                   <i className="material-icons-round" aria-hidden="true">chevron_left</i>
                 </button>
-                <span id="editor-page-indicator" className="page-indicator" aria-live="polite">1/1</span>
+                <span id="editor-page-indicator" className="page-indicator" aria-live="polite">{`1/${pageCount}`}</span>
                 <button type="button" className="btn-icon" data-action="editor-next-page" aria-label="Следующая страница" data-lang-aria="page_next">
                   <i className="material-icons-round" aria-hidden="true">chevron_right</i>
                 </button>
@@ -54,7 +68,7 @@ export default function NoteEditor() {
             </div>
           </header>
           <div className="editor-scroll-area scrollable">
-            <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria" />
+            <input key={`title-${currentNote?.id || 'empty'}-${String(currentNote?.updatedAt || '')}`} id="note-title" type="text" defaultValue={String(currentNote?.title || "")} placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria" />
             <div id="editor-toolbar" className="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
             <div id="drawing-controls" className="drawing-controls hidden" aria-label="Настройки рисования" data-lang-aria="drawing_settings">
               <div className="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
@@ -100,13 +114,25 @@ export default function NoteEditor() {
               </label>
             </div>
             <div className="note-content-wrapper">
-              <div id="note-content-editable" className="note-content" role="group" aria-label="Текст заметки" data-lang-aria="note_body_aria"></div>
+              <div
+                key={`content-${currentNote?.id || 'empty'}-${String(currentNote?.updatedAt || '')}`}
+                id="note-content-editable"
+                className="note-content"
+                role="group"
+                aria-label="Текст заметки"
+                data-lang-aria="note_body_aria"
+                dangerouslySetInnerHTML={{ __html: String(currentNote?.content || "") }}
+              ></div>
             </div>
           </div>
           <div className="editor-bottom-panel">
             <div className="tags-row" aria-label="Теги" data-lang-aria="tags_aria">
               <input id="note-tags-input" type="text" placeholder="#тег (Enter)" data-lang-placeholder="note_tags" aria-label="Добавить тег" data-lang-aria="note_tags_aria" autoComplete="off" />
-              <div id="note-tags-container" className="tags-container" aria-live="polite"></div>
+              <div id="note-tags-container" className="tags-container" aria-live="polite">
+                {(Array.isArray(currentNote?.tags) ? currentNote.tags : []).map((tag) => (
+                  <span key={`${currentNote?.id || 'note'}-${tag}`} className="tag-chip">#{String(tag || "")}</span>
+                ))}
+              </div>
             </div>
             <div className="editor-bottom-actions">
               <button type="button" className="btn-primary" data-action="editor-save" aria-label="Сохранить" data-lang-aria="save_note">
