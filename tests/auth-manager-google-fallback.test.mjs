@@ -92,22 +92,7 @@ function createEnvironment() {
   return { authButton, feedbackElement, loginScreen, appScreen, searchInput, toasts }
 }
 
-test('google fallback requires a second click after cooldown', async () => {
-  const scheduledTimers = []
-  const originalSetTimeout = globalThis.setTimeout
-  const originalClearTimeout = globalThis.clearTimeout
-  const originalDateNow = Date.now
-  let now = 1000
-  Date.now = () => now
-  globalThis.setTimeout = (callback, delay) => {
-    const entry = { callback, delay, cleared: false }
-    scheduledTimers.push(entry)
-    return entry
-  }
-  globalThis.clearTimeout = (timer) => {
-    if (timer) timer.cleared = true
-  }
-
+test('google fallback redirects immediately when one tap is unavailable', async () => {
   const { authButton, feedbackElement } = createEnvironment()
   const calls = {
     oneTap: 0,
@@ -144,27 +129,9 @@ test('google fallback requires a second click after cooldown', async () => {
 
   await manager.login()
   assert.equal(calls.oneTap, 1)
-  assert.equal(calls.redirect, 0)
-  assert.equal(authButton.disabled, true)
-  assert.match(feedbackElement.textContent, /подождите 5 секунд|wait 5 seconds/i)
-  assert.equal(scheduledTimers.length, 1)
-  assert.equal(scheduledTimers[0].delay, 5000)
-
-  await manager.login()
-  assert.equal(calls.oneTap, 1)
-  assert.equal(calls.redirect, 0)
-
-  scheduledTimers[0].callback()
-  now += 5000
   assert.equal(authButton.disabled, false)
-  assert.match(feedbackElement.textContent, /нажмите кнопку ещё раз|press the button again/i)
-
-  await manager.login()
   assert.equal(calls.redirect, 1)
 
-  Date.now = originalDateNow
-  globalThis.setTimeout = originalSetTimeout
-  globalThis.clearTimeout = originalClearTimeout
   delete globalThis.window
   delete globalThis.HTMLElement
   delete globalThis.StateActions
@@ -234,19 +201,7 @@ test('logout updates UI immediately even without auth callback', async () => {
   delete globalThis.document
 })
 
-test('logout clears pending google redirect fallback state', async () => {
-  const scheduledTimers = []
-  const originalSetTimeout = globalThis.setTimeout
-  const originalClearTimeout = globalThis.clearTimeout
-  globalThis.setTimeout = (callback, delay) => {
-    const entry = { callback, delay, cleared: false }
-    scheduledTimers.push(entry)
-    return entry
-  }
-  globalThis.clearTimeout = (timer) => {
-    if (timer) timer.cleared = true
-  }
-
+test('logout does not trigger redirect fallback state leakage', async () => {
   createEnvironment()
   const calls = { redirect: 0 }
   const auth = {
@@ -280,17 +235,13 @@ test('logout clears pending google redirect fallback state', async () => {
   const manager = createAuthManager({ auth })
 
   await manager.login()
-  assert.equal(scheduledTimers.length, 1)
-  assert.equal(scheduledTimers[0].cleared, false)
+  assert.equal(calls.redirect, 1)
 
   await manager.logout()
-  assert.equal(scheduledTimers[0].cleared, true)
 
   await manager.login()
-  assert.equal(calls.redirect, 0)
+  assert.equal(calls.redirect, 2)
 
-  globalThis.setTimeout = originalSetTimeout
-  globalThis.clearTimeout = originalClearTimeout
   delete globalThis.window
   delete globalThis.HTMLElement
   delete globalThis.StateActions
