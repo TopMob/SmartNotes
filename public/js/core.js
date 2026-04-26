@@ -64,11 +64,8 @@ function initializeSplashScreen() {
     }
     splashScreen.classList.add("active")
     splashScreen.style.display = "flex"
-    const wrappedHide = () => {
-        hideSplashScreen()
-    }
-    window.hideSplashScreen = wrappedHide
-    return wrappedHide
+    window.hideSplashScreen = hideSplashScreen
+    return hideSplashScreen
 }
 
 function nextPaint() {

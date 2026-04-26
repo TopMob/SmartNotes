@@ -380,7 +380,6 @@ function createDelegatedAuthMethod(methodName, mapResult = (result) => result) {
 
 function createClientFacade() {
     getRuntimeConfig()
-    migrateLegacySession()
 
     return {
         auth: {
