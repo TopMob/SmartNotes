@@ -572,7 +572,7 @@ const OwnedNotesService = (() => {
 })()
 
 const SessionService = (() => {
-    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [] }
+    const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [], warmStartNotesApplied: false }
     let aggregationBound = false
     function sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
@@ -602,6 +602,7 @@ const SessionService = (() => {
         RemindersService.stop()
         state.activeUid = null
         state.ownedNotes = []
+        state.warmStartNotesApplied = false
         StateStore.resetSession()
     }
     async function startUserSession(user, options = {}) {
@@ -614,13 +615,14 @@ const SessionService = (() => {
         state.sessionStartPromise = (async () => {
             try {
                 StateActions.setUser(user)
-                await DataPath.ensureUserDocument(user)
-                await SettingsSyncService.initialize(user)
-                OwnedNotesService.subscribe(user)
                 const cachedNotes = NotesStorage.readCachedNotes(user.uid)
                 if (cachedNotes.length) {
                     StateStore.update("notes", NotesStorage.applyStoredFavorites(cachedNotes))
+                    state.warmStartNotesApplied = true
                 }
+                OwnedNotesService.subscribe(user)
+                await DataPath.ensureUserDocument(user)
+                await SettingsSyncService.initialize(user)
                 if (state.foldersUnsubscribe) state.foldersUnsubscribe()
                 state.foldersUnsubscribe = FoldersRepository.subscribeFolders(user, snapshot => {
                     const folders = sortFolders(snapshot.docs.map(documentEntry => normalizeFolderRecord({ id: documentEntry.id, ...documentEntry.data() })))

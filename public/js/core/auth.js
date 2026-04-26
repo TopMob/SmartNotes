@@ -164,6 +164,7 @@ export function createAuthManager({ auth }) {
                 "auth/google-identity-script-timeout": this._t("auth_network_failed", "No internet connection"),
                 "auth/google-identity-script-failed": this._t("auth_network_failed", "No internet connection"),
                 "auth/google-identity-unavailable": this._t("auth_env_failed", "Authentication is blocked in this browser"),
+                "auth/google-identity-cooldown": this._t("auth_google_starting", "Opening Google sign-in..."),
                 "auth/google-identity-not-displayed": this._t("auth_popup_blocked", "Popup was blocked by the browser"),
                 "auth/google-identity-dismissed": this._t("auth_popup_closed", "Sign-in canceled"),
                 "auth/google-identity-skipped": this._t("auth_popup_closed", "Sign-in canceled"),
@@ -318,7 +319,8 @@ export function createAuthManager({ auth }) {
         },
         async switchAccount() {
             await this.logout()
-            await this.loginWithEmail()
+            this._ensureLocalAuthManager().bindUi()
+            this._ensureLocalAuthManager().loginWithEmail()
         },
 
         async updateDisplayName(nextName = "") {
@@ -468,6 +470,15 @@ export function createAuthManager({ auth }) {
             if (attempt >= maxAttempts) return
             setTimeout(() => this._stopSessionWhenReady(attempt + 1), 100)
         },
+        _isExpectedSessionStartError(error) {
+            const message = String(error?.message || "").toLowerCase()
+            const code = String(error?.code || "").toLowerCase()
+            return code === "unauthorized"
+                || message.includes("401")
+                || message.includes("unauthorized")
+                || message.includes("jwt")
+                || message.includes("token")
+        },
         async _handleAuthState(user) {
             const normalizedUser = user === undefined
                 ? (auth.currentUser || null)
@@ -491,7 +502,9 @@ export function createAuthManager({ auth }) {
                     await this._startSessionWhenReady(normalizedUser)
                 } catch (error) {
                     console.error("[Auth] session startup failed", error)
-                    this._toast(this._t("sync_error", "Sync error"))
+                    if (!this._isExpectedSessionStartError(error)) {
+                        this._toast(this._t("sync_error", "Sync error"))
+                    }
                 }
                 this._resolveStartupScreen()
                 return
@@ -525,7 +538,9 @@ export function createAuthManager({ auth }) {
                             .then(() => this._handleAuthState(user))
                             .catch(error => {
                                 console.error("[Auth] auth state processing failed", error)
-                                this._toast(this._t("sync_error", "Sync error"))
+                                if (!this._isExpectedSessionStartError(error)) {
+                                    this._toast(this._t("sync_error", "Sync error"))
+                                }
                                 this._resolveStartupScreen()
                             })
                             .finally(() => {
@@ -546,7 +561,9 @@ export function createAuthManager({ auth }) {
                             .then(() => this._handleAuthState(auth.currentUser || null))
                             .catch(error => {
                                 console.error("[Auth] initial auth fallback failed", error)
-                                this._toast(this._t("sync_error", "Sync error"))
+                                if (!this._isExpectedSessionStartError(error)) {
+                                    this._toast(this._t("sync_error", "Sync error"))
+                                }
                                 this._resolveStartupScreen()
                             })
                             .finally(() => {

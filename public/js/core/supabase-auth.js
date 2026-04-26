@@ -138,6 +138,13 @@ export async function createSupabaseAuth() {
     const initialAuthStatePromise = new Promise(resolve => {
         initialAuthStatePromiseResolve = resolve
     })
+    const notifyCurrentUserChanged = () => {
+        authStateSubscribers.forEach(callback => {
+            Promise.resolve(callback(currentUser)).catch(error => {
+                console.error("[SupabaseAuth] auth state callback failed", error)
+            })
+        })
+    }
     const resolveUserFromSession = async (session) => {
         const accessToken = getSessionAccessToken(session)
         if (!session?.user || !accessToken) {
@@ -151,10 +158,13 @@ export async function createSupabaseAuth() {
         }
 
         if (inFlightProfileSync?.accessToken === accessToken) {
-            return inFlightProfileSync.promise
+            return currentUser || inFlightProfileSync.promise
         }
 
         const fallbackUser = normalizeUser(session.user, session, applyUserProfileUpdate)
+        currentUser = fallbackUser
+        lastResolvedAccessToken = accessToken
+
         const promise = syncProfile(session, applyUserProfileUpdate)
             .catch((error) => {
                 console.error("[SupabaseAuth] session sync failed", error)
@@ -162,16 +172,30 @@ export async function createSupabaseAuth() {
             })
             .then((resolvedUser) => {
                 const nextUser = resolvedUser || fallbackUser
+                const identityChanged = JSON.stringify({
+                    uid: currentUser?.uid || "",
+                    email: currentUser?.email || "",
+                    displayName: currentUser?.displayName || "",
+                    photoURL: currentUser?.photoURL || ""
+                }) !== JSON.stringify({
+                    uid: nextUser?.uid || "",
+                    email: nextUser?.email || "",
+                    displayName: nextUser?.displayName || "",
+                    photoURL: nextUser?.photoURL || ""
+                })
                 currentUser = nextUser
                 lastResolvedAccessToken = accessToken
                 if (inFlightProfileSync?.accessToken === accessToken) {
                     inFlightProfileSync = null
                 }
+                if (identityChanged) {
+                    notifyCurrentUserChanged()
+                }
                 return nextUser
             })
 
         inFlightProfileSync = { accessToken, promise }
-        return promise
+        return fallbackUser
     }
 
     const applyUserProfileUpdate = async ({ displayName, photoURL } = {}) => {
@@ -309,11 +333,7 @@ export async function createSupabaseAuth() {
         initialAuthStatePromiseResolve?.()
         initialAuthStatePromiseResolve = null
 
-        authStateSubscribers.forEach(callback => {
-            Promise.resolve(callback(currentUser)).catch(error => {
-                console.error("[SupabaseAuth] auth state callback failed", error)
-            })
-        })
+        notifyCurrentUserChanged()
     }
 
     const initialSessionResult = await client.auth.getSession()

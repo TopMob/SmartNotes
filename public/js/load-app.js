@@ -346,7 +346,14 @@ const createStateRenderingController = () => {
 
 const isNonCriticalSyncError = (error) => {
     const errorCode = String(error?.code || "")
-    return errorCode === "permission-denied" || errorCode === "failed-precondition" || errorCode === "not-found"
+    const errorMessage = String(error?.message || "").toLowerCase()
+    return errorCode === "permission-denied"
+        || errorCode === "failed-precondition"
+        || errorCode === "not-found"
+        || errorMessage.includes("401")
+        || errorMessage.includes("unauthorized")
+        || errorMessage.includes("jwt")
+        || errorMessage.includes("token")
 }
 
 const reportSyncError = (error, context) => {

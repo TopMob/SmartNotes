@@ -5,6 +5,8 @@ const GOOGLE_IDENTITY_SCRIPT_SRC = "https://accounts.google.com/gsi/client"
 const GOOGLE_IDENTITY_SCRIPT_TIMEOUT_MS = 4500
 const GOOGLE_IDENTITY_INTERACTIVE_TIMEOUT_MS = 6500
 const GOOGLE_IDENTITY_PRELOAD_TIMEOUT_MS = 3500
+const GOOGLE_IDENTITY_COOLDOWN_MS = 1200
+let lastGooglePromptStartedAt = 0
 
 function createError(code, message, details = {}) {
     const error = new Error(message)
@@ -136,6 +138,11 @@ export async function requestGoogleIdentityToken({
 
     await loadGoogleIdentityScript(GOOGLE_IDENTITY_SCRIPT_TIMEOUT_MS)
     ensureGoogleIdentityAvailable()
+
+    if (interactive && Date.now() - lastGooglePromptStartedAt < GOOGLE_IDENTITY_COOLDOWN_MS) {
+        throw createError("auth/google-identity-cooldown", "Google identity prompt cooldown")
+    }
+    lastGooglePromptStartedAt = Date.now()
 
     return new Promise((resolve, reject) => {
         let settled = false
