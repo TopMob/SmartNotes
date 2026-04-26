@@ -2,6 +2,8 @@ import { getSupabasePublishableKey, getSupabaseUrl, isSupabaseConfigured } from 
 
 export const runtime = "nodejs"
 
+const ALLOWED_AUTH_PATHS = new Set(["signup", "token", "recover", "logout"])
+
 function buildSupabaseAuthUrl(path: string) {
   const normalizedPath = String(path || "").replace(/^\/+/, "")
   return `${getSupabaseUrl().replace(/\/+$/g, "")}/auth/v1/${normalizedPath}`
@@ -31,6 +33,10 @@ export async function POST(request: Request) {
   const path = String(body.path || "").trim()
   if (!path) {
     return jsonResponse({ ok: false, error: "BAD_REQUEST" }, 400)
+  }
+
+  if (!ALLOWED_AUTH_PATHS.has(path)) {
+    return jsonResponse({ ok: false, error: "FORBIDDEN" }, 403)
   }
 
   const upstreamBody = body.body && typeof body.body === "object"

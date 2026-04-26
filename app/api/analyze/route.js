@@ -1,5 +1,6 @@
 export const runtime = "nodejs"
 
+import { timingSafeEqual } from "node:crypto"
 import { readJsonObject } from "@/lib/http/jsonBody"
 import { getAnalyzeDatabase } from "@/lib/supabase/analyze"
 import { ANALYZE_PROVIDER, API_SECRET, CORS_HEADERS, PROMPT_VERSION } from "./core/config"
@@ -22,6 +23,21 @@ function toBoolean(value) {
   return false
 }
 
+function isValidSecret(secret) {
+  if (!API_SECRET || typeof secret !== "string") {
+    return false
+  }
+
+  const providedSecret = Buffer.from(secret)
+  const expectedSecret = Buffer.from(API_SECRET)
+
+  if (providedSecret.length !== expectedSecret.length) {
+    return false
+  }
+
+  return timingSafeEqual(providedSecret, expectedSecret)
+}
+
 export async function OPTIONS() {
   return new Response(null, {
     status: 200,
@@ -32,7 +48,7 @@ export async function OPTIONS() {
 export async function POST(request) {
   const secret = request.headers.get("x-secret")
 
-  if (!API_SECRET || secret !== API_SECRET) {
+  if (!isValidSecret(secret)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: CORS_HEADERS
