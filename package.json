@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "serve:static": "http-server . -p 3000 -a 127.0.0.1 --cors",
     "test": "node --test tests/*.test.mjs",
     "check:module-graph": "node scripts/check-unconnected-modules.mjs",

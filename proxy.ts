@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { buildCspHeader, createCspNonce } from "@/lib/security/csp"
 
+function buildPublicSupabaseConfigCookie() {
+  const payload = encodeURIComponent(JSON.stringify({
+    url: String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim(),
+    publishableKey: String(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "").trim(),
+    googleClientId: String(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || "").trim()
+  }))
+
+  return `smartnotes-supabase-config=${payload}; Path=/; SameSite=Lax; Max-Age=300; Secure`
+}
+
 function applySecurityHeaders(request: NextRequest) {
   const nonce = createCspNonce()
   const requestHeaders = new Headers(request.headers)
@@ -15,6 +25,7 @@ function applySecurityHeaders(request: NextRequest) {
 
   response.headers.set("Content-Security-Policy", buildCspHeader(nonce))
   response.headers.set("x-nonce", nonce)
+  response.headers.append("Set-Cookie", buildPublicSupabaseConfigCookie())
 
   return response
 }

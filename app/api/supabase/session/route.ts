@@ -1,4 +1,4 @@
-import { ensureSupabaseProfile, getSupabaseProfile } from "@/lib/supabase/notes"
+import { ensureSupabaseProfile } from "@/lib/supabase/notes"
 import { handleRouteError, ok, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"

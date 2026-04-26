@@ -104,10 +104,10 @@ test('stored session survives reload by forcing refresh when user endpoint rejec
     throw new Error(`Unexpected fetch: ${String(input)}`)
   }
 
-  const module = await import(`../public/js/core/supabase.js?test=${Date.now()}`)
+  const supabaseModule = await import(`../public/js/core/supabase.js?test=${Date.now()}`)
   window.__smartnotesSupabaseTestUtils.reset()
 
-  const client = module.initSupabase()
+  const client = supabaseModule.initSupabase()
   const initialResult = await client.auth.getSession()
   const initialSession = initialResult?.data?.session || null
 
@@ -194,10 +194,10 @@ test('stored session is preserved on reload when profile verification temporaril
     throw new Error(`Unexpected fetch: ${String(input)}`)
   }
 
-  const module = await import(`../public/js/core/supabase.js?test-preserve=${Date.now()}`)
+  const supabaseModule = await import(`../public/js/core/supabase.js?test-preserve=${Date.now()}`)
   window.__smartnotesSupabaseTestUtils.reset()
 
-  const client = module.initSupabase()
+  const client = supabaseModule.initSupabase()
   const initialResult = await client.auth.getSession()
   const initialSession = initialResult?.data?.session || null
 
@@ -269,10 +269,10 @@ test('expired stored session is preserved during temporary refresh outage until 
     throw new Error(`Unexpected fetch: ${String(input)}`)
   }
 
-  const module = await import(`../public/js/core/supabase.js?test-expired=${Date.now()}`)
+  const supabaseModule = await import(`../public/js/core/supabase.js?test-expired=${Date.now()}`)
   window.__smartnotesSupabaseTestUtils.reset()
 
-  const client = module.initSupabase()
+  const client = supabaseModule.initSupabase()
   const result = await client.auth.getSession()
   const session = result?.data?.session || null
 
