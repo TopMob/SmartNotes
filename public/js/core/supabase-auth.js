@@ -296,7 +296,7 @@ export async function createSupabaseAuth() {
             const callback = typeof next === "function" ? next : () => {}
             authStateSubscribers.add(callback)
             initialAuthStatePromise.then(() => Promise.resolve(callback(currentUser))).catch(err => {
-                if (typeof error === "function") error(err)
+                console.error("[SupabaseAuth] initial auth callback failed", err)
             })
             return () => {
                 authStateSubscribers.delete(callback)
