@@ -15,7 +15,7 @@ export function getSupabaseBrowserClient() {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      flowType: "implicit",
+      flowType: "pkce",
       storageKey: SUPABASE_BROWSER_STORAGE_KEY
     }
   })

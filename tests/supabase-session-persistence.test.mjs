@@ -385,3 +385,85 @@ test('id token sign-in falls back to same-origin auth route on network failure',
   delete globalThis.fetch
   delete globalThis.supabase
 })
+
+test('official supabase client uses pkce flow for oauth redirects', async () => {
+  const storage = new Map()
+  const createClientCalls = []
+
+  globalThis.window = {
+    location: {
+      href: 'https://smartnotes.local/auth/callback?code=test-code',
+      origin: 'https://smartnotes.local',
+      hash: '',
+      search: '?code=test-code',
+      pathname: '/auth/callback'
+    },
+    localStorage: {
+      getItem(key) {
+        return storage.has(key) ? storage.get(key) : null
+      },
+      setItem(key, value) {
+        storage.set(key, String(value))
+      },
+      removeItem(key) {
+        storage.delete(key)
+      }
+    },
+    addEventListener() {},
+    history: {
+      replaceState() {}
+    },
+    SmartNotesSupabaseConfig: runtimeConfig,
+    supabase: {
+      createClient(_url, _key, options) {
+        createClientCalls.push(options)
+        return {
+          auth: {
+            onAuthStateChange() {},
+            async signInWithOAuth() {
+              return { data: {}, error: null }
+            },
+            async getUser() {
+              return { data: { user: null }, error: null }
+            }
+          }
+        }
+      }
+    }
+  }
+  globalThis.document = {
+    title: 'SmartNotes',
+    head: { appendChild() {} },
+    visibilityState: 'visible',
+    querySelector() {
+      return null
+    },
+    createElement() {
+      return {
+        addEventListener() {},
+        remove() {}
+      }
+    }
+  }
+  globalThis.supabase = window.supabase
+
+  const supabaseModule = await import(`../public/js/core/supabase.js?test-pkce=${Date.now()}`)
+  window.__smartnotesSupabaseTestUtils.reset()
+
+  const client = supabaseModule.initSupabase()
+  await client.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: 'https://smartnotes.local/auth/callback'
+    }
+  })
+
+  assert.equal(createClientCalls.length, 1)
+  assert.equal(createClientCalls[0]?.auth?.flowType, 'pkce')
+  assert.equal(createClientCalls[0]?.auth?.detectSessionInUrl, true)
+
+  window.__smartnotesSupabaseTestUtils.reset()
+  delete globalThis.window
+  delete globalThis.document
+  delete globalThis.supabase
+})

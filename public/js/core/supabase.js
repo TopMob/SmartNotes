@@ -345,7 +345,7 @@ async function getOfficialClient() {
                 persistSession: true,
                 autoRefreshToken: true,
                 detectSessionInUrl: true,
-                flowType: "implicit",
+                flowType: "pkce",
                 storageKey: OFFICIAL_STORAGE_KEY
             }
         })
