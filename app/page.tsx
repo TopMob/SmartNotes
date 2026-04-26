@@ -1,5 +1,8 @@
 'use client'
 
+import LoginScreen from "./components/auth/LoginScreen"
+import Header from "./components/layout/Header"
+import Sidebar from "./components/layout/Sidebar"
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 
 declare global {
@@ -61,212 +64,13 @@ export default function HomePage() {
           <div className="loader" aria-hidden="true"></div>
         </div>
       )}
-      {isAppLoaded && !isAuthenticated && (
-      <div id="login-screen" className="modal-overlay" role="dialog" aria-modal="true" aria-label="Авторизация" data-lang-aria="login_aria" data-modal-static="true">
-        <div className="login-box">
-          <h1 className="brand-text-fixed" data-brand-text="">SmartNotes</h1>
-          <p className="subtext" data-lang="login">Вход в систему</p>
-          <div className="auth-panel-switch" role="tablist" aria-label="Email authentication" data-lang-aria="email_authentication" inert={true} aria-busy="true">
-            <button type="button" className="btn-auth-tab active" id="email-signin-tab" data-auth-mode="signin" data-lang="email_signin_tab">Вход</button>
-            <button type="button" className="btn-auth-tab" id="email-signup-tab" data-auth-mode="signup" data-lang="email_signup_tab">Регистрация</button>
-          </div>
-          <form id="email-signin-form" className="auth-form" method="post" action="#" noValidate inert={true} aria-busy="true">
-            <label className="auth-field" htmlFor="email-signin-input">
-              <span data-lang="email_label">Email</span>
-              <input id="email-signin-input" type="email" autoComplete="email" required />
-            </label>
-            <label className="auth-field" htmlFor="password-signin-input">
-              <span data-lang="password_label">Пароль</span>
-              <div className="auth-password-row">
-                <input id="password-signin-input" type="password" autoComplete="current-password" required />
-                <button type="button" className="btn-auth-toggle-password" data-toggle-target="password-signin-input" data-lang="show_password">Показать</button>
-              </div>
-            </label>
-            <button type="button" className="btn-auth-link" data-auth-action="forgot-password" data-lang="forgot_password">Забыли пароль?</button>
-            <button type="submit" className="btn-auth primary" data-lang="email_signin_button">Войти по email</button>
-          </form>
-          <form id="email-signup-form" className="auth-form hidden" method="post" action="#" noValidate inert={true} aria-busy="true">
-            <label className="auth-field" htmlFor="email-signup-input">
-              <span data-lang="email_label">Email</span>
-              <input id="email-signup-input" type="email" autoComplete="email" required />
-            </label>
-            <label className="auth-field" htmlFor="password-signup-input">
-              <span data-lang="password_label">Пароль</span>
-              <div className="auth-password-row">
-                <input id="password-signup-input" type="password" autoComplete="new-password" required />
-                <button type="button" className="btn-auth-toggle-password" data-toggle-target="password-signup-input" data-lang="show_password">Показать</button>
-              </div>
-            </label>
-            <label className="auth-field" htmlFor="password-signup-repeat-input">
-              <span data-lang="password_repeat_label">Повторите пароль</span>
-              <div className="auth-password-row">
-                <input id="password-signup-repeat-input" type="password" autoComplete="new-password" required />
-                <button type="button" className="btn-auth-toggle-password" data-toggle-target="password-signup-repeat-input" data-lang="show_password">Показать</button>
-              </div>
-            </label>
-            <button type="submit" className="btn-auth primary" data-lang="email_signup_button">Зарегистрироваться</button>
-          </form>
-          <div id="email-auth-feedback" className="auth-feedback is-info" role="status" aria-live="polite">Подключение к сервису входа...</div>
-          <div className="auth-buttons-group">
-            <button type="button" className="btn-auth google" data-action="login">
-              <img src="css/Glogo.svg" alt="" width="20" height="20" />
-              <span data-lang="login_google">Войти через Google</span>
-            </button>
-          </div>
-        </div>
-      </div>
-      )}
+      {isAppLoaded && !isAuthenticated && <LoginScreen />}
       {isAppLoaded && isAuthenticated && (
         <div id="app" className="app-layout" aria-hidden="false">
-          <aside id="sidebar" className="sidebar-glass" aria-label="Навигация" data-lang-aria="nav_aria">
-          <header className="sidebar-header">
-            <span className="brand-text-fixed" data-brand-text="">SmartNotes</span>
-            <button type="button" className="btn-icon mobile-only" data-action="toggle-sidebar" data-force="false" aria-label="Закрыть меню" data-lang-aria="close_menu">
-              <i className="material-icons-round" aria-hidden="true">close</i>
-            </button>
-          </header>
-          <nav className="sidebar-nav scrollable" aria-label="Разделы" data-lang-aria="sections_aria">
-            <div className="nav-group">
-              <button type="button" className="nav-item active" data-action="switch-view" data-view="notes">
-                <i className="material-icons-round" aria-hidden="true">description</i>
-                <span data-lang="all_notes">Все записи</span>
-              </button>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="favorites">
-                <i className="material-icons-round" aria-hidden="true">star</i>
-                <span data-lang="favorites">Важное</span>
-              </button>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="archive">
-                <i className="material-icons-round" aria-hidden="true">archive</i>
-                <span data-lang="archive">Архив</span>
-              </button>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="reminders">
-                <i className="material-icons-round" aria-hidden="true">schedule</i>
-                <span data-lang="reminder_notes">Напоминания</span>
-              </button>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="trash">
-                <i className="material-icons-round" aria-hidden="true">delete</i>
-                <span data-lang="trash">Корзина</span>
-              </button>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="folders">
-                <i className="material-icons-round" aria-hidden="true">folder</i>
-                <span data-lang="folders_overview">Папки</span>
-              </button>
-              <button type="button" className="nav-item" data-action="create-folder">
-                <i className="material-icons-round" aria-hidden="true">create_new_folder</i>
-                <span data-lang="create_folder">Создать папку</span>
-              </button>
-            </div>
-            <div className="nav-group">
-              <div className="nav-title" data-lang="folders">ПАПКИ</div>
-              <div id="folder-list-root" className="folder-list-root"></div>
-            </div>
-            <div className="nav-group" id="pending-invites-group">
-              <div className="nav-title" data-lang="pending_invites_title">ПРИГЛАШЕНИЯ</div>
-              <div id="pending-invites-root" className="pending-invites-root"></div>
-            </div>
-            <div className="nav-group">
-              <div className="nav-title" data-lang="smart_features">УМНЫЕ ФУНКЦИИ</div>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="locked">
-                <i className="material-icons-round" aria-hidden="true">lock</i>
-                <span data-lang="lock_center">Защита заметок</span>
-              </button>
-              <button type="button" className="nav-item" data-action="switch-view" data-view="hidden_folders">
-                <i className="material-icons-round" aria-hidden="true">visibility_off</i>
-                <span data-lang="hidden_folders">Скрытые папки</span>
-              </button>
-              <button type="button" id="admin-tools-nav-button" className="nav-item hidden" data-action="switch-view" data-view="admin_tools">
-                <i className="material-icons-round" aria-hidden="true">admin_panel_settings</i>
-                <span data-lang="admin_tools">Админ-меню</span>
-              </button>
-            </div>
-          </nav>
-          <footer className="sidebar-footer">
-            <button type="button" className="footer-link" data-action="open-modal" data-modal="feedback-menu-modal">
-              <i className="material-icons-round" aria-hidden="true">info</i>
-              <span data-lang="about_menu">О приложении</span>
-            </button>
-            <button type="button" className="footer-link" data-action="open-settings">
-              <i className="material-icons-round" aria-hidden="true">settings</i>
-              <span data-lang="settings">Настройки</span>
-            </button>
-          </footer>
-        </aside>
-        <div id="sidebar-overlay" className="sidebar-overlay" aria-hidden="true"></div>
-        <main className="main-content">
-          <header className="top-bar" role="banner">
-            <div className="header-left">
-              <button type="button" id="menu-toggle" className="btn-icon" data-action="toggle-sidebar" aria-label="Открыть меню" data-lang-aria="open_menu">
-                <i className="material-icons-round" aria-hidden="true">menu</i>
-              </button>
-              <div className="view-title-group">
-                <h2 id="current-view-title" className="mobile-only-title">SmartNotes</h2>
-                <div id="active-folder-menu-wrapper" className="active-folder-menu-wrapper hidden">
-                  <button type="button" id="active-folder-menu-toggle" className="btn-icon" data-action="toggle-active-folder-menu" aria-label="Действия с папкой" data-lang-aria="folder_actions">
-                    <i className="material-icons-round" aria-hidden="true">more_vert</i>
-                  </button>
-                  <div id="active-folder-menu" className="dropdown-menu active-folder-menu" role="menu" aria-label="Действия с папкой" data-lang-aria="folder_actions">
-                    <button type="button" id="active-folder-share-button" className="dropdown-item" data-action="share-active-folder">
-                      <i className="material-icons-round" aria-hidden="true">person_add</i>
-                      <span data-lang="share_folder">Поделиться папкой</span>
-                    </button>
-                    <button type="button" className="dropdown-item" data-action="share-active-folder-link">
-                      <i className="material-icons-round" aria-hidden="true">link</i>
-                      <span data-lang="share_copy_link">Скопировать ссылку</span>
-                    </button>
-                    <button type="button" className="dropdown-item" data-action="rename-active-folder">
-                      <i className="material-icons-round" aria-hidden="true">edit</i>
-                      <span data-lang="rename_folder">Переименовать папку</span>
-                    </button>
-                    <button type="button" id="active-folder-hide-button" className="dropdown-item" data-action="toggle-active-folder-hidden">
-                      <i className="material-icons-round" aria-hidden="true">visibility_off</i>
-                      <span data-lang="hide_folder">Скрыть папку</span>
-                    </button>
-                    <button type="button" className="dropdown-item danger" data-action="delete-active-folder">
-                      <i className="material-icons-round" aria-hidden="true">delete</i>
-                      <span data-lang="delete_folder">Удалить папку</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="search-container" role="search">
-              <i className="material-icons-round search-icon" aria-hidden="true">search</i>
-              <input type="text" id="search-input" placeholder="Поиск..." data-lang-placeholder="search" autoComplete="off" aria-label="Поиск заметок" data-lang-aria="search_aria" />
-            </div>
-            <div className="header-right">
-              <button type="button" id="clear-trash-button" className="btn-icon hidden" data-action="clear-trash" aria-label="Очистить корзину" data-lang-aria="clear_trash">
-                <i className="material-icons-round" aria-hidden="true">delete_sweep</i>
-              </button>
-              <button type="button" id="notes-filter-toggle" className="btn-icon" data-action="toggle-filter-menu" aria-label="Фильтры" data-lang-aria="filters">
-                <i className="material-icons-round" aria-hidden="true">filter_alt</i>
-              </button>
-              <div className="user-avatar-wrapper">
-                <img id="user-photo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="User" className="header-avatar" data-action="toggle-user-menu" />
-                <div id="user-dropdown" className="dropdown-menu" role="menu" aria-label="Пользователь" data-lang-aria="user_menu">
-                  <div className="dropdown-header user-profile-header">
-                    <div className="user-name-row">
-                      <span id="user-name">.</span>
-                      <button type="button" className="btn-icon" data-action="edit-display-name" aria-label="Изменить имя" data-lang-aria="edit_display_name">
-                        <i className="material-icons-round" aria-hidden="true">edit</i>
-                      </button>
-                    </div>
-                    <button type="button" className="user-uid-row" data-action="copy-user-uid" aria-label="UID пользователя" data-lang-aria="copy_uid_row">
-                      <span data-lang="user_uid_label">UID пользователя</span>
-                      <span id="user-uid" className="user-uid-label">-</span>
-                      <i className="material-icons-round" aria-hidden="true">content_copy</i>
-                    </button>
-                    <div className="row-left">
-                      <button type="button" className="btn-secondary" data-action="change-avatar" data-lang="change_avatar">Изменить фото</button>
-                    </div>
-                  </div>
-                  <button type="button" className="dropdown-item danger" data-action="logout">
-                    <i className="material-icons-round" aria-hidden="true">logout</i>
-                    <span data-lang="logout">Выйти</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </header>
+          <Sidebar />
+          <div id="sidebar-overlay" className="sidebar-overlay" aria-hidden="true"></div>
+          <main className="main-content">
+            <Header />
           <div id="notes-filter-menu" className="dropdown-menu filter-menu" role="menu" aria-label="Фильтры" data-lang-aria="filters">
             <div className="filter-section" id="notes-filter-section-saved">
               <label htmlFor="notes-saved-filter-select" data-lang="saved_filters">Сохранённые фильтры</label>
