@@ -445,7 +445,9 @@ export function createAuthManager({ auth }) {
             setTimeout(() => this._stopSessionWhenReady(attempt + 1), 100)
         },
         async _handleAuthState(user) {
-            const normalizedUser = user || auth.currentUser || null
+            const normalizedUser = user === undefined
+                ? (auth.currentUser || null)
+                : user
             const previousUserUid = String(state.currentUser?.uid || "")
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
