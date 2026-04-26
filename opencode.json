@@ -29,7 +29,12 @@
       "*.tsbuildinfo",
       "next-env.d.ts",
       ".env*",
-      "*.pem"
+      "*.pem",
+      "public/vendor/**",
+      "public/css/fonts/**",
+      "tests/**",
+      "supabase/migrations/**",
+      "public/Logo.png"
     ]
   }
 }

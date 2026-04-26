@@ -259,13 +259,33 @@ window.Calculator = Calculator;
 
 const getNotesScrollContainer = () => document.getElementById("notes-content-area")
 
+const renderCurrentView = (stateSnapshot) => {
+    const queriedNotes = NotesQueryService.execute(stateSnapshot, stateSnapshot.searchQuery || "").notes
+    const visibleNotes = PaginationService.getVisibleNotesForRender(queriedNotes, stateSnapshot.view, stateSnapshot.searchQuery || "")
+
+    UI.updateViewTitle()
+    UI.updateNavigationActiveState()
+
+    if (stateSnapshot.view === "folders") {
+        UI.renderFolderGrid()
+    } else if (stateSnapshot.view === "hidden_folders") {
+        UI.renderHiddenFolders()
+    } else if (stateSnapshot.view === "admin_tools") {
+        UI.renderAdminToolsView()
+    } else if (stateSnapshot.view === "trash") {
+        UI.renderTrash(visibleNotes)
+    } else {
+        NotesRenderer.render(visibleNotes)
+    }
+
+    UI.updateNotesLoadMoreButton(PaginationService.getLoadMoreState())
+}
+
 const renderFromState = (options = {}) => {
     const shouldPreserveScrollPosition = !!options.preserveScrollPosition
     const scrollContainer = shouldPreserveScrollPosition ? getNotesScrollContainer() : null
     const scrollTopBeforeRender = scrollContainer ? scrollContainer.scrollTop : 0
-    const viewModel = NotesPresenter.createViewModel(StateStore.read())
-    NotesUIAdapter.render(viewModel)
-    UI.updateNavigationActiveState()
+    renderCurrentView(StateStore.read())
     if (scrollContainer) scrollContainer.scrollTop = scrollTopBeforeRender
 }
 
