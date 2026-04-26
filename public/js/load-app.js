@@ -373,6 +373,7 @@ const createUiEventsController = () => {
 const createNetworkLifecycleController = () => {
     let networkRetryTimer = null
     let networkListenersController = null
+    const getSessionService = () => globalThis.SessionService || window.SessionService || null
 
     const start = () => {
         if (networkListenersController) return
@@ -381,7 +382,10 @@ const createNetworkLifecycleController = () => {
             clearTimeout(networkRetryTimer)
             networkRetryTimer = setTimeout(() => {
                 const user = StateStore.read().user
-                if (user?.uid) SessionService.startUserSession(user, { forceResubscribe: true }).catch(() => {})
+                const sessionService = getSessionService()
+                if (user?.uid && sessionService?.startUserSession) {
+                    sessionService.startUserSession(user, { forceResubscribe: true }).catch(() => {})
+                }
             }, 1000)
         }, { signal: networkListenersController.signal })
     }

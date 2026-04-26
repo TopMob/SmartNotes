@@ -573,6 +573,7 @@ const OwnedNotesService = (() => {
 
 const SessionService = (() => {
     const state = { activeUid: null, sessionStartPromise: null, foldersUnsubscribe: null, ownedNotes: [] }
+    let aggregationBound = false
     function sortFolders(folders) {
         return [...folders].sort((firstFolder, secondFolder) => {
             const firstCreatedAt = firstFolder?.createdAt instanceof Date ? firstFolder.createdAt.getTime() : Date.parse(firstFolder?.createdAt || "") || 0
@@ -586,12 +587,13 @@ const SessionService = (() => {
         StateStore.update("notes", aggregatedNotes)
     }
     function bindAggregation() {
+        if (aggregationBound) return
+        aggregationBound = true
         EventBus.subscribe("ownedNotesUpdated", ownedNotes => {
             state.ownedNotes = Array.isArray(ownedNotes) ? ownedNotes : []
             publishNotes()
         })
     }
-    bindAggregation()
     function stopUserSession() {
         if (state.foldersUnsubscribe) state.foldersUnsubscribe()
         state.foldersUnsubscribe = null
@@ -605,6 +607,7 @@ const SessionService = (() => {
     async function startUserSession(user, options = {}) {
         console.info("[Session] startUserSession begin", user?.uid || "")
         if (!user?.uid) return
+        bindAggregation()
         const userIdentifier = String(user.uid)
         if (!options.forceResubscribe && state.activeUid === userIdentifier && state.sessionStartPromise) return state.sessionStartPromise
         state.activeUid = userIdentifier

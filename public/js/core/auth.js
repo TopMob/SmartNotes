@@ -1,6 +1,8 @@
 import { createLocalAuthManager } from "./localAuth.js"
 
 export function createAuthManager({ auth }) {
+    const getSessionService = () => globalThis.SessionService || window.SessionService || null
+
     const state = {
         initialized: false,
         initPromise: null,
@@ -443,8 +445,9 @@ export function createAuthManager({ auth }) {
         },
         async _startSessionWhenReady(user, attempt = 0) {
             const maxAttempts = 20
-            if (typeof SessionService !== "undefined" && typeof SessionService.startUserSession === "function") {
-                await SessionService.startUserSession(user)
+            const sessionService = getSessionService()
+            if (sessionService && typeof sessionService.startUserSession === "function") {
+                await sessionService.startUserSession(user)
                 return true
             }
             if (attempt >= maxAttempts) {
@@ -457,8 +460,9 @@ export function createAuthManager({ auth }) {
         },
         _stopSessionWhenReady(attempt = 0) {
             const maxAttempts = 20
-            if (typeof SessionService !== "undefined" && typeof SessionService.stopUserSession === "function") {
-                SessionService.stopUserSession()
+            const sessionService = getSessionService()
+            if (sessionService && typeof sessionService.stopUserSession === "function") {
+                sessionService.stopUserSession()
                 return
             }
             if (attempt >= maxAttempts) return

@@ -1,4 +1,34 @@
 (() => {
+    if (!window.EventBus) {
+        const listenersByEvent = new Map()
+        window.EventBus = {
+            subscribe(eventName, callback) {
+                const normalizedEventName = String(eventName || "")
+                if (!normalizedEventName || typeof callback !== "function") return () => {}
+                const listeners = listenersByEvent.get(normalizedEventName) || new Set()
+                listeners.add(callback)
+                listenersByEvent.set(normalizedEventName, listeners)
+                return () => {
+                    const currentListeners = listenersByEvent.get(normalizedEventName)
+                    if (!currentListeners) return
+                    currentListeners.delete(callback)
+                    if (!currentListeners.size) listenersByEvent.delete(normalizedEventName)
+                }
+            },
+            publish(eventName, payload) {
+                const listeners = listenersByEvent.get(String(eventName || ""))
+                if (!listeners || !listeners.size) return
+                listeners.forEach(listener => {
+                    try {
+                        listener(payload)
+                    } catch (error) {
+                        console.error("[EventBus] listener failed", error)
+                    }
+                })
+            }
+        }
+    }
+
     const imageDataPrefixPattern = /^data:image\//i
     const base64Marker = "base64,"
     const maxStringLength = 2000
