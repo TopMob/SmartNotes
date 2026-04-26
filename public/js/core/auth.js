@@ -14,6 +14,8 @@ export function createAuthManager({ auth }) {
         authStateResolved: false,
         initialAuthStateSettled: false,
         logoutInFlight: false,
+        googleRedirectFallbackReady: false,
+        googleRedirectFallbackTimer: null,
         authStateProcessingPromise: Promise.resolve()
     }
 
@@ -56,12 +58,36 @@ export function createAuthManager({ auth }) {
             }
         },
         async _startRedirectFallback() {
+            state.googleRedirectFallbackReady = false
+            if (state.googleRedirectFallbackTimer) {
+                clearTimeout(state.googleRedirectFallbackTimer)
+                state.googleRedirectFallbackTimer = null
+            }
             this._setLoginBusy(true)
             this._setAuthFeedback(this._t("auth_google_redirect_starting", "Opening backup Google sign-in..."), "info")
             try {
                 await auth.signInWithRedirect()
             } finally {
                 this._setLoginBusy(false)
+            }
+        },
+        _scheduleRedirectFallbackRetry() {
+            if (state.googleRedirectFallbackTimer) return
+            state.googleRedirectFallbackReady = false
+            this._setLoginBusy(true)
+            this._setAuthFeedback(this._t("auth_google_redirect_ready_soon", "If the Google window did not appear, wait 5 seconds and press the button again"), "info")
+            state.googleRedirectFallbackTimer = setTimeout(() => {
+                state.googleRedirectFallbackTimer = null
+                state.googleRedirectFallbackReady = true
+                this._setLoginBusy(false)
+                this._setAuthFeedback(this._t("auth_google_redirect_ready", "Google window did not open. Press the button again to continue with backup sign-in"), "info")
+            }, 5000)
+        },
+        _resetRedirectFallbackState() {
+            state.googleRedirectFallbackReady = false
+            if (state.googleRedirectFallbackTimer) {
+                clearTimeout(state.googleRedirectFallbackTimer)
+                state.googleRedirectFallbackTimer = null
             }
         },
         _setAuthInteractivity(flag) {
@@ -230,6 +256,14 @@ export function createAuthManager({ auth }) {
             }
 
             await this._ensureLocalPersistence()
+            if (state.googleRedirectFallbackReady && typeof auth.signInWithRedirect === "function") {
+                try {
+                    await this._startRedirectFallback()
+                } catch (error) {
+                    this.handleAuthError(error)
+                }
+                return
+            }
             this._setLoginBusy(true)
             this._setAuthFeedback(this._t("auth_google_starting", "Opening Google sign-in..."), "info")
             try {
@@ -242,12 +276,14 @@ export function createAuthManager({ auth }) {
             } catch (error) {
                 const canFallbackToRedirect = this._shouldUseGoogleRedirectFallback(error)
                 if (canFallbackToRedirect && typeof auth.signInWithRedirect === "function") {
-                    await this._startRedirectFallback()
+                    this._scheduleRedirectFallbackRetry()
                 } else {
                     this.handleAuthError(error)
                 }
             } finally {
-                this._setLoginBusy(false)
+                if (!state.googleRedirectFallbackTimer) {
+                    this._setLoginBusy(false)
+                }
             }
         },
         _ensureLocalAuthManager() {
@@ -267,6 +303,7 @@ export function createAuthManager({ auth }) {
         async logout() {
             if (!auth) return
             state.logoutInFlight = true
+            this._resetRedirectFallbackState()
             this._setLoginBusy(false)
             this._clearUserLocalCache()
             await this._handleAuthState(null)
@@ -488,6 +525,7 @@ export function createAuthManager({ auth }) {
             const nextUserUid = String(normalizedUser?.uid || "")
             const shouldSkipSessionRestart = !!nextUserUid && previousUserUid === nextUserUid && state.authReady
             state.currentUser = normalizedUser
+            if (normalizedUser) this._resetRedirectFallbackState()
             state.authReady = true
             this.setAuthReady(true)
             StateActions.setUser(normalizedUser)
