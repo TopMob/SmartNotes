@@ -51,7 +51,7 @@ function deferUntilAfterPaint(callback) {
 function registerServiceWorker() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => null)
+        navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => null)
     }, { once: true })
 }
 
