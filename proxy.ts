@@ -8,7 +8,7 @@ function buildPublicSupabaseConfigCookie() {
     googleClientId: String(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID || "").trim()
   }))
 
-  return `smartnotes-supabase-config=${payload}; Path=/; SameSite=Lax; Max-Age=300; Secure`
+  return `smartnotes-supabase-config=${payload}; Path=/; SameSite=Lax; Max-Age=86400; Secure`
 }
 
 function applySecurityHeaders(request: NextRequest) {

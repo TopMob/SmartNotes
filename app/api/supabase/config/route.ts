@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   if (responseFormat === "script") {
     return new Response(buildScriptResponseBody(), {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
         "Content-Type": "application/javascript; charset=utf-8"
       }
     })
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     googleClientId: config.googleClientId
   }, {
     headers: {
-      "Cache-Control": "no-store"
+      "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
     }
   })
 }

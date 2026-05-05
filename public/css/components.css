@@ -534,6 +534,13 @@ select.prompt-secondary-input {
     gap: 12px;
 }
 
+@media (max-width: 600px) {
+    .login-box {
+        backdrop-filter: none;
+        background: rgba(15, 15, 17, 0.96);
+    }
+}
+
 .brand-text-fixed {
     font-weight: 900;
     letter-spacing: -0.02em;
