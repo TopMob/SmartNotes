@@ -1,4 +1,4 @@
-const CACHE_NAME = "smartnotes-static-disabled-v1"
+
 
 self.addEventListener("install", event => {
   event.waitUntil(

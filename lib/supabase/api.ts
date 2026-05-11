@@ -72,3 +72,10 @@ export function handleRouteError(error: unknown, fallbackCode: string) {
 
   return fail(500, fallbackCode)
 }
+export function mapApiRouteError(error: unknown, badRequestMessages: string[]) {
+  const message = String(error instanceof Error ? error.message : error || "")
+  if (badRequestMessages.includes(message)) {
+    return new ApiRouteError(400, message)
+  }
+  return error
+}

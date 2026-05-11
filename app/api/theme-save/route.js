@@ -1,26 +1,9 @@
 import { readJsonObject } from "@/lib/http/jsonBody"
 import { requireRequestAuth } from "@/lib/auth"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
+import { toOpacity } from "@/lib/utils/number"
 
 export const runtime = "nodejs"
-
-function toNumber(value, fallbackValue) {
-  const numericValue = Number(value)
-  return Number.isFinite(numericValue) ? numericValue : fallbackValue
-}
-
-function toOpacity(value, fallbackValue) {
-  const numericValue = toNumber(value, fallbackValue)
-  if (numericValue < 0) {
-    return 0
-  }
-
-  if (numericValue > 1) {
-    return 1
-  }
-
-  return numericValue
-}
 
 function sanitizeSettings(settings) {
   return {

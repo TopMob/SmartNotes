@@ -317,7 +317,7 @@ export async function createSupabaseAuth() {
             if (result.error) throw result.error
             return { user: null }
         },
-        onAuthStateChanged(next, error) {
+        onAuthStateChanged(next) {
             const callback = typeof next === "function" ? next : () => {}
             authStateSubscribers.add(callback)
             initialAuthStatePromise.then(() => Promise.resolve(callback(currentUser))).catch(err => {
