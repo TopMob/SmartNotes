@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import "../../../public/css/base.css"
+import "../../../public/css/components.css"
 
 const PROFILE_SYNC_ENDPOINT = "/api/supabase/session"
 const SESSION_WAIT_TIMEOUT_MS = 12000
@@ -125,70 +127,13 @@ export default function AuthCallbackPage() {
   const description = status === "error" ? "Попробуйте снова со страницы входа." : "Завершаем вход..."
 
   return (
-    <main style={styles.page}>
-      <section style={styles.card} aria-live="polite">
-        <div style={styles.badge}>{status === "error" ? "Ошибка" : "OAuth"}</div>
-        <h1 style={styles.title}>{title}</h1>
-        <p style={styles.text}>{description}</p>
-        {status !== "error" ? <div style={styles.loader} aria-hidden="true" /> : null}
+    <main className="auth-callback-page">
+      <section className="auth-callback-card" aria-live="polite">
+        <div className="auth-callback-badge">{status === "error" ? "Ошибка" : "OAuth"}</div>
+        <h1 className="auth-callback-title">{title}</h1>
+        <p className="auth-callback-text">{description}</p>
+        {status !== "error" ? <div className="auth-callback-loader" aria-hidden="true" /> : null}
       </section>
     </main>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    display: "grid",
-    placeItems: "center",
-    padding: "24px",
-    background: "radial-gradient(circle at top, #1f2937 0%, #0f1115 52%, #090b0f 100%)",
-    color: "#f5f7fb",
-    fontFamily: "Inter, Arial, sans-serif"
-  },
-  card: {
-    width: "100%",
-    maxWidth: "460px",
-    padding: "32px 28px",
-    borderRadius: "20px",
-    background: "rgba(15, 17, 21, 0.88)",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
-    boxShadow: "0 24px 80px rgba(0, 0, 0, 0.35)",
-    textAlign: "center"
-  },
-  badge: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: "72px",
-    height: "32px",
-    marginBottom: "18px",
-    padding: "0 12px",
-    borderRadius: "999px",
-    background: "rgba(96, 165, 250, 0.14)",
-    color: "#93c5fd",
-    fontSize: "13px",
-    fontWeight: 600,
-    letterSpacing: "0.02em"
-  },
-  title: {
-    margin: 0,
-    fontSize: "28px",
-    lineHeight: 1.15
-  },
-  text: {
-    margin: "14px 0 0",
-    fontSize: "15px",
-    lineHeight: 1.6,
-    color: "rgba(245, 247, 251, 0.8)"
-  },
-  loader: {
-    width: "42px",
-    height: "42px",
-    margin: "22px auto 0",
-    borderRadius: "999px",
-    border: "3px solid rgba(255, 255, 255, 0.14)",
-    borderTopColor: "#60a5fa",
-    animation: "spin 0.8s linear infinite"
-  }
 }
