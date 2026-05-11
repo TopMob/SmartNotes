@@ -1,7 +1,6 @@
 export const ANALYSIS_CONTRACT_VERSION = "v1"
 export const ANALYSIS_MODEL_FAMILY = "folder-classification-v1"
 export const MAX_FOLDER_CANDIDATES = 8
-export const EVAL_FIXTURE_VERSION = "analyze-eval-v1"
 
 export const RESURFACING_CLASSES = [
   "task",
