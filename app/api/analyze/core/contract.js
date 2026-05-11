@@ -39,7 +39,7 @@ function scoreFolderCandidate(folder, note) {
     ...(note.currentUserTags || []),
     ...(note.currentHiddenTags || [])
   ])
-  const folderTokens = createTokenSet([folder.name, folder.description])
+  const folderTokens = folder.folderTokens || createTokenSet([folder.name, folder.description])
 
   let score = 0
   for (const token of folderTokens) {
@@ -66,12 +66,14 @@ function scoreFolderCandidate(folder, note) {
 function normalizeFolderCandidate(document) {
   const folderData = getDocumentData(document)
   const name = trimText(folderData.name, 120)
+  const description = trimText(folderData.description, 300)
 
   return {
     id: document.id,
     name,
-    description: trimText(folderData.description, 300),
-    isGeneric: GENERIC_FOLDER_NAMES.has(name.toLowerCase())
+    description,
+    isGeneric: GENERIC_FOLDER_NAMES.has(name.toLowerCase()),
+    folderTokens: createTokenSet([name, description])
   }
 }
 

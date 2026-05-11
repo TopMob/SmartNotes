@@ -758,18 +758,6 @@ export async function saveSupabaseUserSettings(userId: string, settings: Record<
   return getSupabaseUserSettings(userId)
 }
 
-export async function listSupabaseFolders(userId: string) {
-  const supabase = getSupabaseAdminClient()
-  const { data, error } = await supabase
-    .from("folders")
-    .select("id, name, description, sort_order, is_hidden, is_archived, metadata, created_at, updated_at, user_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-
-  if (error) throw error
-  return (data || []).map(mapFolderRow)
-}
-
 export async function listAccessibleSupabaseFolders(userId: string) {
   const supabase = getSupabaseAdminClient()
   const { data, error } = await supabase
