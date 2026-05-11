@@ -50,7 +50,7 @@ test('google identity script can be retried after timeout', async () => {
   const originalClearTimeout = globalThis.clearTimeout
   const scheduledTimers = []
 
-  globalThis.setTimeout = (callback, _delay) => {
+  globalThis.setTimeout = (callback) => {
     const timer = { callback, cleared: false }
     scheduledTimers.push(timer)
     return timer
@@ -104,12 +104,12 @@ test('google identity script can be retried after timeout', async () => {
     }
   }
 
-  const module = await import(`../public/js/core/googleIdentityAuth.js?test-google-timeout=${Date.now()}`)
+  const googleIdentityModule = await import(`../public/js/core/googleIdentityAuth.js?test-google-timeout=${Date.now()}`)
 
-  const firstAttempt = await module.preloadGoogleIdentity({ clientId: 'client-id' })
+  const firstAttempt = await googleIdentityModule.preloadGoogleIdentity({ clientId: 'client-id' })
   assert.equal(firstAttempt, false)
 
-  const result = await module.preloadGoogleIdentity({ clientId: 'client-id' })
+  const result = await googleIdentityModule.preloadGoogleIdentity({ clientId: 'client-id' })
 
   assert.equal(result, true)
   assert.equal(scriptLoadAttempt, 2)

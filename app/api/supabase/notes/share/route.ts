@@ -1,15 +1,10 @@
 import { listSupabaseNoteAccess, revokeSupabaseNoteAccess, shareSupabaseNote } from "@/lib/supabase/notes"
-import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
+import { mapApiRouteError, ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
 
 function mapShareError(error: unknown) {
-  const message = String(error instanceof Error ? error.message : error || "")
-  if (["NOTE_ID_REQUIRED", "NOTE_NOT_FOUND", "BAD_REQUEST", "COLLABORATOR_NOT_FOUND", "CANNOT_SHARE_WITH_SELF"].includes(message)) {
-    return new ApiRouteError(400, message)
-  }
-
-  return error
+  return mapApiRouteError(error, ["NOTE_ID_REQUIRED", "NOTE_NOT_FOUND", "BAD_REQUEST", "COLLABORATOR_NOT_FOUND", "CANNOT_SHARE_WITH_SELF"])
 }
 
 function normalizeShareTarget(value: unknown) {

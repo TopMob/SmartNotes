@@ -1,17 +1,12 @@
-import { deleteSupabaseNote, listSupabaseNoteAccess, listSupabaseNotes, patchSupabaseNote, revokeSupabaseNoteAccess, shareSupabaseNote, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
-import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
+import { deleteSupabaseNote, listSupabaseNoteAccess, listSupabaseNotes, patchSupabaseNote, updateSupabaseNote, upsertSupabaseNote } from "@/lib/supabase/notes"
+import { mapApiRouteError, ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 import { getAnalyzeDatabase } from "@/lib/supabase/analyze"
 import { processUserNotes } from "@/app/api/analyze/core/processor"
 
 export const runtime = "nodejs"
 
 function mapNoteError(error: unknown) {
-  const message = String(error instanceof Error ? error.message : error || "")
-  if (["NOTE_ID_REQUIRED", "NOTE_NOT_FOUND", "BAD_REQUEST", "COLLABORATOR_NOT_FOUND", "CANNOT_SHARE_WITH_SELF"].includes(message)) {
-    return new ApiRouteError(400, message)
-  }
-
-  return error
+  return mapApiRouteError(error, ["NOTE_ID_REQUIRED", "NOTE_NOT_FOUND", "BAD_REQUEST", "COLLABORATOR_NOT_FOUND", "CANNOT_SHARE_WITH_SELF"])
 }
 
 export async function GET(request: Request) {
@@ -117,28 +112,6 @@ export async function PATCH(request: Request) {
       })
 
       return ok({ note, processed })
-    }
-
-    if (action === "share") {
-      const access = await shareSupabaseNote({
-        noteId: normalizedNoteId,
-        ownerUserId: user.id,
-        ownerEmail: user.email,
-        ownerDisplayName: user.displayName,
-        ownerAvatarUrl: user.avatarUrl,
-        target: String(payload?.target || ""),
-        role: String(payload?.role || "viewer")
-      })
-      return ok({ access })
-    }
-
-    if (action === "revoke-access") {
-      const result = await revokeSupabaseNoteAccess({
-        noteId: normalizedNoteId,
-        ownerUserId: user.id,
-        target: String(payload?.target || "")
-      })
-      return ok({ access: result })
     }
 
     throw new ApiRouteError(400, "BAD_REQUEST")

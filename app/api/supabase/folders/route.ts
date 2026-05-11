@@ -1,15 +1,10 @@
 import { deleteSupabaseFolder, listAccessibleSupabaseFolders, updateSupabaseFolder, upsertSupabaseFolder } from "@/lib/supabase/notes"
-import { ApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
+import { mapApiRouteError, handleRouteError, ok, readJsonBody, requireSupabaseUser } from "@/lib/supabase/api"
 
 export const runtime = "nodejs"
 
 function mapFolderError(error: unknown) {
-  const message = String(error instanceof Error ? error.message : error || "")
-  if (message === "FOLDER_ID_REQUIRED" || message === "FOLDER_NAME_REQUIRED" || message === "FOLDER_NOT_FOUND") {
-    return new ApiRouteError(400, message)
-  }
-
-  return error
+  return mapApiRouteError(error, ["FOLDER_ID_REQUIRED", "FOLDER_NAME_REQUIRED", "FOLDER_NOT_FOUND"])
 }
 
 export async function GET(request: Request) {
