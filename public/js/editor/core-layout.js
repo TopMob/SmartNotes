@@ -1,6 +1,8 @@
 const MOBILE_QUERY = "(max-width: 760px)"
 const DESKTOP_BOTTOM_EXTRA = 4
 const MOBILE_BOTTOM_EXTRA = 44
+const SYNC_DEBOUNCE_MS = 60
+const MIN_PANEL_HEIGHT = 10
 
 export const createEditorLayoutHandlers = ({ elements }) => {
     let bottomPanelObserver = null
@@ -8,6 +10,8 @@ export const createEditorLayoutHandlers = ({ elements }) => {
     let releaseViewportListener = null
     let savedBodyOverflow = null
     let savedBodyPaddingRight = null
+    let syncDebounceTimer = null
+    let lastAppliedOffset = null
 
     const getToolbarToggleButton = () => document.getElementById("toolbar-toggle")
 
@@ -43,17 +47,40 @@ export const createEditorLayoutHandlers = ({ elements }) => {
         const bottomPanelElement = getBottomPanel()
         if (!bottomPanelElement) {
             scrollAreaElement.style.removeProperty("--editor-bottom-offset")
+            lastAppliedOffset = null
             return
         }
         const panelRect = bottomPanelElement.getBoundingClientRect()
         const computedPanelStyles = window.getComputedStyle(bottomPanelElement)
         const panelMarginTop = getSafeNumber(computedPanelStyles.marginTop)
         const panelMarginBottom = getSafeNumber(computedPanelStyles.marginBottom)
-        const baseOffset = panelRect.height + panelMarginTop + panelMarginBottom + DESKTOP_BOTTOM_EXTRA
-        const mobileOffset = panelRect.height + panelMarginTop + panelMarginBottom + MOBILE_BOTTOM_EXTRA
+        const panelHeight = panelRect.height
+
+        if (panelHeight < MIN_PANEL_HEIGHT) return
+
+        const baseOffset = panelHeight + panelMarginTop + panelMarginBottom + DESKTOP_BOTTOM_EXTRA
+        const mobileOffset = panelHeight + panelMarginTop + panelMarginBottom + MOBILE_BOTTOM_EXTRA
         const isMobile = window.matchMedia(MOBILE_QUERY).matches
         const nextOffset = Math.ceil(isMobile ? mobileOffset : baseOffset)
+
+        if (nextOffset < 0) return
+        if (lastAppliedOffset !== null && Math.abs(nextOffset - lastAppliedOffset) < 2) return
+
+        const savedScrollTop = scrollAreaElement.scrollTop
         scrollAreaElement.style.setProperty("--editor-bottom-offset", `${nextOffset}px`)
+        lastAppliedOffset = nextOffset
+
+        if (scrollAreaElement.scrollTop !== savedScrollTop) {
+            scrollAreaElement.scrollTop = savedScrollTop
+        }
+    }
+
+    const debouncedSyncBottomOffset = () => {
+        if (syncDebounceTimer !== null) return
+        syncDebounceTimer = setTimeout(() => {
+            syncDebounceTimer = null
+            syncBottomOffset()
+        }, SYNC_DEBOUNCE_MS)
     }
 
     const releaseBodyLock = () => {
@@ -81,13 +108,13 @@ export const createEditorLayoutHandlers = ({ elements }) => {
         if (bottomPanelObserver) return
         const panel = getBottomPanel()
         if (!panel) return
-        bottomPanelObserver = new ResizeObserver(() => syncBottomOffset())
+        bottomPanelObserver = new ResizeObserver(() => debouncedSyncBottomOffset())
         bottomPanelObserver.observe(panel)
     }
 
     const installViewportListener = () => {
         if (!window.visualViewport || releaseViewportListener) return
-        const listener = () => syncBottomOffset()
+        const listener = () => debouncedSyncBottomOffset()
         window.visualViewport.addEventListener("resize", listener)
         window.visualViewport.addEventListener("scroll", listener)
         releaseViewportListener = () => {
@@ -120,6 +147,10 @@ export const createEditorLayoutHandlers = ({ elements }) => {
 
     const deactivate = () => {
         releaseBodyLock()
+        if (syncDebounceTimer !== null) {
+            clearTimeout(syncDebounceTimer)
+            syncDebounceTimer = null
+        }
         if (bottomPanelObserver) {
             bottomPanelObserver.disconnect()
             bottomPanelObserver = null
@@ -128,6 +159,7 @@ export const createEditorLayoutHandlers = ({ elements }) => {
             releaseViewportListener()
         }
         uninstallMediaQueryListener()
+        lastAppliedOffset = null
         const scrollAreaElement = getScrollArea()
         if (scrollAreaElement) {
             scrollAreaElement.style.removeProperty("--editor-bottom-offset")

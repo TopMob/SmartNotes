@@ -29,6 +29,13 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
+}
+
+@supports (height: 100svh) {
+    .editor-container {
+        max-height: 100svh;
+    }
 }
 
 .editor-header-bar {
@@ -164,7 +171,7 @@
     gap: 8px;
     min-width: 0;
     overscroll-behavior: contain;
-    overflow-anchor: none;
+    overflow-anchor: auto;
 }
 
 #note-title {
@@ -203,7 +210,7 @@
     flex-direction: column;
     flex: 1 1 auto;
     scroll-padding-bottom: var(--editor-bottom-offset);
-    overflow-anchor: none;
+    overflow-anchor: auto;
 }
 
 .note-page {
@@ -1017,7 +1024,7 @@ body.platform-ios .editor-container {
     position: relative;
     overflow: visible;
     min-width: 0;
-    min-height: 0;
+    min-height: 100%;
     flex: 1 1 auto;
     display: flex;
 }

@@ -427,7 +427,7 @@ export const createSelectionHandlers = (context) => {
         range.selectNodeContents(node)
         range.collapse(true)
         setSelectionRange(range)
-        elements.content?.focus()
+        elements.content?.focus({ preventScroll: true })
     }
 
     const insertFragmentAtSelection = (contentNode) => {

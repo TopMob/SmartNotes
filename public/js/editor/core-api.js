@@ -1054,7 +1054,7 @@ export const EditorAPI = (() => {
         
         const root = document.getElementById("note-content-editable")
         if (root) {
-            root.focus()
+            root.focus({ preventScroll: true })
             if (backupRange) {
                 const currentSel = window.getSelection()
                 currentSel.removeAllRanges()

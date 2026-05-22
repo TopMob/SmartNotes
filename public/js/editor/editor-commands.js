@@ -232,7 +232,7 @@ export const createEditorCommands = (context) => {
     const finalizeChange = () => {
         storeSelection()
         queueSnapshot()
-        resolveRoot()?.focus()
+        resolveRoot()?.focus({ preventScroll: true })
     }
 
     const toggleInlineFormat = (formatDefinition) => {
