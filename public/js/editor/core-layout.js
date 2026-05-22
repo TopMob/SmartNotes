@@ -54,7 +54,7 @@ export const createEditorLayoutHandlers = ({ elements }) => {
         const computedPanelStyles = window.getComputedStyle(bottomPanelElement)
         const panelMarginTop = getSafeNumber(computedPanelStyles.marginTop)
         const panelMarginBottom = getSafeNumber(computedPanelStyles.marginBottom)
-        const panelHeight = panelRect.height
+        const panelHeight = Math.min(panelRect.height, 100)
 
         if (panelHeight < MIN_PANEL_HEIGHT) return
 
