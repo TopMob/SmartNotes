@@ -92,6 +92,8 @@ export const createEditorLayoutHandlers = ({ elements }) => {
             document.body.style.paddingRight = savedBodyPaddingRight
             savedBodyPaddingRight = null
         }
+        document.body.style.overscrollBehavior = ""
+        document.documentElement.style.overscrollBehavior = ""
     }
 
     const lockBodyScroll = () => {
@@ -102,6 +104,8 @@ export const createEditorLayoutHandlers = ({ elements }) => {
         const scrollbarCompensation = Math.max(0, window.innerWidth - document.documentElement.clientWidth)
         document.body.style.overflow = "hidden"
         document.body.style.paddingRight = scrollbarCompensation > 0 ? `${scrollbarCompensation}px` : savedBodyPaddingRight
+        document.body.style.overscrollBehavior = "none"
+        document.documentElement.style.overscrollBehavior = "none"
     }
 
     const installBottomPanelObserver = () => {

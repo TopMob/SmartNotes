@@ -5,6 +5,8 @@
     background: rgba(0, 0, 0, 0.55);
     display: none;
     overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
 }
 
 .editor-overlay.active {
@@ -30,6 +32,7 @@
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    touch-action: auto;
 }
 
 @supports (height: 100svh) {
@@ -170,7 +173,7 @@
     flex-direction: column;
     gap: 8px;
     min-width: 0;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: none;
     overflow-anchor: auto;
 }
 
