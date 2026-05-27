@@ -504,23 +504,33 @@ const SettingsSyncService = (() => {
         const initialSettings = normalizeUserSettings(cached || createDefaultUserSettings())
         writeOriginal(initialSettings)
         applyToRuntime(initialSettings, { resetVisibleLimit: true, persistTheme: false })
-        const resolved = await SettingsRepository.resolveReference(user)
-        if (!resolved.reference) return
-        state.reference = resolved.reference
-        let loaded = initialSettings
-        if (resolved.snapshot && resolved.snapshot.exists) loaded = normalizeUserSettings(resolved.snapshot.data() || {})
-        else await SettingsRepository.write(resolved.reference, loaded)
-        SafeStorage.local.setJson(getCacheKey(user.uid), loaded)
-        writeOriginal(loaded)
-        applyToRuntime(loaded, { resetVisibleLimit: true, persistTheme: false })
-        if (state.unsubscribe) state.unsubscribe()
-        state.unsubscribe = SettingsRepository.subscribe(resolved.reference, nextSnapshot => {
-            if (!nextSnapshot.exists) return
-            const incoming = normalizeUserSettings(nextSnapshot.data() || {})
-            SafeStorage.local.setJson(getCacheKey(user.uid), incoming)
-            writeOriginal(incoming)
-            applyToRuntime(incoming, { resetVisibleLimit: false, persistTheme: false })
-        }, error => EventBus.publish("settingsSyncError", error))
+
+        // Load remote database settings and subscribe to updates in the background
+        // to avoid blocking user login and app startup (Optimistic/Instant Loading)
+        const loadRemoteSettings = async () => {
+            try {
+                const resolved = await SettingsRepository.resolveReference(user)
+                if (!resolved.reference) return
+                state.reference = resolved.reference
+                let loaded = initialSettings
+                if (resolved.snapshot && resolved.snapshot.exists) loaded = normalizeUserSettings(resolved.snapshot.data() || {})
+                else await SettingsRepository.write(resolved.reference, loaded)
+                SafeStorage.local.setJson(getCacheKey(user.uid), loaded)
+                writeOriginal(loaded)
+                applyToRuntime(loaded, { resetVisibleLimit: true, persistTheme: false })
+                if (state.unsubscribe) state.unsubscribe()
+                state.unsubscribe = SettingsRepository.subscribe(resolved.reference, nextSnapshot => {
+                    if (!nextSnapshot.exists) return
+                    const incoming = normalizeUserSettings(nextSnapshot.data() || {})
+                    SafeStorage.local.setJson(getCacheKey(user.uid), incoming)
+                    writeOriginal(incoming)
+                    applyToRuntime(incoming, { resetVisibleLimit: false, persistTheme: false })
+                }, error => EventBus.publish("settingsSyncError", error))
+            } catch (error) {
+                console.warn("[SettingsSync] Background remote settings fetch failed:", error)
+            }
+        }
+        void loadRemoteSettings()
     }
     function clear() { if (state.unsubscribe) state.unsubscribe(); state.unsubscribe = null; state.reference = null }
     return { initialize, clear, saveUserSettings, applyUserSettingsToRuntime: applyToRuntime, normalizeUserSettings }

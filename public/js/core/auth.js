@@ -481,7 +481,7 @@ export function createAuthManager({ auth }) {
             }
         },
         async _startSessionWhenReady(user, attempt = 0) {
-            const maxAttempts = 20
+            const maxAttempts = 150 // Increase to 15 seconds (150 * 100ms) to support slow mobile connections without failing auth
             const sessionService = getSessionService()
             if (sessionService && typeof sessionService.startUserSession === "function") {
                 await sessionService.startUserSession(user)
