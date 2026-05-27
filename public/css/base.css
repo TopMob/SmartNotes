@@ -123,7 +123,7 @@
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 20px);
     --space-unit: 8px;
-    --editor-padding: 5px;
+    --editor-padding: 30px;
     --editor-line-height: 1.7;
     --editor-letter-spacing: 0px;
     --editor-toolbar-bg: rgba(255, 255, 255, 0.03);

@@ -217,12 +217,19 @@ export const createAutosaveHandlers = (context) => {
 
     updateSnapshotFrame(scheduleSnapshotFrame)
 
+    const cancel = () => {
+        resetTypingState.cancel?.()
+        queueSnapshotFrame.cancel?.()
+        scheduleAutoSave.cancel?.()
+    }
+
     return {
         captureSnapshot,
         persistDrawing,
         persistSnapshot,
         queueSnapshot,
         scheduleAutoSave,
-        scheduleSnapshotFrame
+        scheduleSnapshotFrame,
+        cancel
     }
 }

@@ -4,10 +4,17 @@ export const Utils = {
     snap: (value, step) => Math.round(value / step) * step,
     debounce: (func, wait) => {
         let timeout = null
-        return function (...args) {
+        const debounced = function (...args) {
             if (timeout) clearTimeout(timeout)
             timeout = setTimeout(() => func.apply(this, args), wait)
         }
+        debounced.cancel = () => {
+            if (timeout) {
+                clearTimeout(timeout)
+                timeout = null
+            }
+        }
+        return debounced
     },
     formatDate: (value) => {
         if (value === null || value === undefined || value === "") return ""

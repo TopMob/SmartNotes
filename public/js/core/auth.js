@@ -540,7 +540,10 @@ export function createAuthManager({ auth }) {
                     await this._startSessionWhenReady(normalizedUser)
                 } catch (error) {
                     console.error("[Auth] session startup failed", error)
-                    if (!this._isExpectedSessionStartError(error)) {
+                    if (this._isExpectedSessionStartError(error)) {
+                        this._toast(this._t("session_expired", "Сессия истекла, войдите снова"))
+                        await this.logout()
+                    } else {
                         this._toast(this._t("sync_error", "Sync error"))
                     }
                 }

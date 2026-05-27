@@ -344,6 +344,17 @@ const createStateRenderingController = () => {
     return { start, stop, renderFromState }
 }
 
+const isAuthError = (error) => {
+    const errorCode = String(error?.code || "")
+    const errorMessage = String(error?.message || "").toLowerCase()
+    return errorCode === "unauthenticated"
+        || errorCode === "auth/invalid-credential"
+        || errorMessage.includes("401")
+        || errorMessage.includes("unauthorized")
+        || errorMessage.includes("jwt")
+        || errorMessage.includes("token")
+}
+
 const isNonCriticalSyncError = (error) => {
     const errorCode = String(error?.code || "")
     const errorMessage = String(error?.message || "").toLowerCase()
@@ -358,6 +369,12 @@ const isNonCriticalSyncError = (error) => {
 
 const reportSyncError = (error, context) => {
     const details = { code: error?.code || "", message: error?.message || String(error || "") }
+    if (isAuthError(error)) {
+        console.error(`[Session] Auth session invalid, logging out: ${context}`, details)
+        UI.showToast(UI.getText("session_expired", "Сессия истекла, войдите снова"))
+        window.Auth?.logout?.()
+        return
+    }
     if (isNonCriticalSyncError(error)) {
         console.info(`[Session] ${context} secondary error`, details)
         return

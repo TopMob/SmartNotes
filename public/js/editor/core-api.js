@@ -1153,6 +1153,7 @@ export const EditorAPI = (() => {
         StateStore.update("editorDirty", false)
         state.pageIndex = 0
         state.titleTouched = !!prepared.title
+        state.snapshotToken += 1
 
         state.history = []
         state.future = []
@@ -1226,6 +1227,10 @@ export const EditorAPI = (() => {
         state.titleTouched = false
         state.autoSaveSnapshot = null
         state.initialEditorState = null
+        state.snapshotToken += 1
+        if (autosaveHandlers) {
+            autosaveHandlers.cancel?.()
+        }
         if (state.snapshotFrame) cancelAnimationFrame(state.snapshotFrame)
         state.snapshotFrame = null
         state.drawingState.active = false
@@ -1276,7 +1281,7 @@ export const EditorAPI = (() => {
             layoutHandlers.syncBottomOffset()
             if (state.observer) {
                 state.observer.disconnect()
-                state.observer.observe(contentElement, { childList: true, subtree: true, characterData: true, attributes: true })
+                state.observer.observe(contentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "data-width", "data-height"] })
             }
         } finally {
             state.isRenderingState = false

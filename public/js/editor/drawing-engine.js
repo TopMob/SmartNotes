@@ -395,6 +395,8 @@ const DrawingSurfaceEngine = (() => {
             async setSnapshot(snapshot, options = {}) {
                 const normalizedSnapshot = typeof snapshot === "string" ? snapshot : ""
                 state.currentSnapshot = normalizedSnapshot
+                state.loadToken += 1
+                const currentToken = state.loadToken
                 if (!normalizedSnapshot) {
                     clearCanvas()
                     if (options.resetHistory) {
@@ -406,6 +408,7 @@ const DrawingSurfaceEngine = (() => {
                 }
                 scheduleLayoutSync()
                 await new Promise(resolve => requestAnimationFrame(resolve))
+                if (currentToken !== state.loadToken) return
                 await drawSnapshotOnCanvas(normalizedSnapshot)
                 if (options.resetHistory) {
                     state.historyStack = [normalizedSnapshot]
