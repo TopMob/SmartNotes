@@ -662,7 +662,7 @@ export const EditorAPI = (() => {
                 const titleRect = boundElements.title.getBoundingClientRect()
                 const threshold = 64
                 if (titleRect.bottom < threshold) {
-                    headerTitleElement.textContent = boundElements.title.value || UI.getText("note_untitled", "Без названия")
+                    headerTitleElement.textContent = boundElements.title.value || UI.getText("untitled_note", "Без названия")
                     headerTitleElement.classList.add("visible")
                 } else {
                     headerTitleElement.classList.remove("visible")
@@ -869,7 +869,7 @@ export const EditorAPI = (() => {
 
         root.innerHTML = tools.map((t, idx) => `
             <span class="tool-wrapper">
-                <button type="button" class="tool-btn${t.id === "sketch" && state.drawingState.active ? " active" : ""}" data-tool-idx="${idx}" data-tool-id="${t.id}" aria-label="${t.i}">
+                <button type="button" class="tool-btn${t.id === "sketch" && state.drawingState.active ? " active" : ""}" data-tool-idx="${idx}" data-tool-id="${t.id}" aria-label="${Utils.escapeHtml(UI.getText(t.label, t.id))}">
                     <i class="material-icons-round" aria-hidden="true">${t.i}</i>
                 </button>
             </span>

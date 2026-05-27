@@ -52,11 +52,11 @@ export const createInputEngine = (context) => {
     const handleKeydown = (event) => {
         if (event.defaultPrevented) return
         if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            if (confirmEquationAtCaret?.()) {
+                event.preventDefault()
+                return
+            }
             enterHandlers.handleEnter(event)
-            if (event.defaultPrevented) return
-        }
-        if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-            if (confirmEquationAtCaret?.()) event.preventDefault()
             if (event.defaultPrevented) return
         }
         editingHistoryHandlers.handleKeydown(event)
