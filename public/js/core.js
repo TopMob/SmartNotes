@@ -22,6 +22,7 @@ const authReady = new Promise(resolve => {
 const AuthProxy = {
     login: () => authReady.then(auth => auth.login()),
     loginWithEmail: () => authReady.then(auth => auth.loginWithEmail()),
+    loginWithGoogleToken: (idToken) => authReady.then(auth => auth.loginWithGoogleToken(idToken)),
     logout: () => authReady.then(auth => auth.logout())
 }
 core.Auth = core.Auth || AuthProxy

@@ -303,6 +303,26 @@ export async function createSupabaseAuth() {
             currentUser = await resolveUserFromSession(session)
             return { user: currentUser }
         },
+        async signInWithGoogleToken(idToken) {
+            const clientId = await resolveRuntimeGoogleClientId()
+            const tokenPayload = decodeJwtPayload(idToken)
+            const result = await withTimeout(
+                client.auth.signInWithIdToken({
+                    provider: "google",
+                    token: idToken,
+                    clientId,
+                    issuer: String(tokenPayload?.iss || "https://accounts.google.com"),
+                    nonce: typeof tokenPayload?.nonce === "string" ? tokenPayload.nonce : ""
+                }),
+                GOOGLE_ID_TOKEN_SIGN_IN_TIMEOUT_MS,
+                "auth/google-id-token-sign-in-timeout",
+                "Google token sign-in timeout"
+            )
+            if (result.error) throw result.error
+            const session = result?.data?.session || (await client.auth.getSession())?.data?.session || null
+            currentUser = await resolveUserFromSession(session)
+            return { user: currentUser }
+        },
         async signInWithPopup(options = {}) {
             return this.signInWithGoogleOneTap(options)
         },

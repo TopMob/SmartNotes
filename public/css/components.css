@@ -557,6 +557,12 @@ select.prompt-secondary-input {
     margin-top: 6px;
 }
 
+.google-signin-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
 
 .auth-panel-switch {
     display: grid;

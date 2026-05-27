@@ -209,9 +209,67 @@ export async function preloadGoogleIdentity({ clientId } = {}) {
     try {
         await loadGoogleIdentityScript(GOOGLE_IDENTITY_PRELOAD_TIMEOUT_MS)
         ensureGoogleIdentityAvailable()
-        if (!googleOneTapInitialized) {
-            initializeGoogleOneTap({ clientId, callback() {} })
+
+        // Setup the identity callback to route the token back to AuthManager
+        window.google.accounts.id.initialize({
+            client_id: clientId,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            context: "signin",
+            itp_support: true,
+            use_fedcm_for_prompt: shouldUseFedCmPrompt(),
+            ux_mode: "popup",
+            callback: async (response) => {
+                const token = String(response?.credential || "")
+                if (token) {
+                    const getAuth = () => window.Auth || (window.__smartnotesCore && window.__smartnotesCore.Auth) || null
+                    const authManager = getAuth()
+                    if (authManager && typeof authManager.loginWithGoogleToken === "function") {
+                        await authManager.loginWithGoogleToken(token)
+                    } else {
+                        let attempts = 0
+                        const checkAndLogin = async () => {
+                            const manager = getAuth()
+                            if (manager && typeof manager.loginWithGoogleToken === "function") {
+                                await manager.loginWithGoogleToken(token)
+                            } else if (attempts < 20) {
+                                attempts++
+                                setTimeout(checkAndLogin, 100)
+                            }
+                        }
+                        void checkAndLogin()
+                    }
+                }
+            }
+        })
+        googleOneTapInitialized = true
+
+        // Try to render the official button in the container
+        const btnContainer = (typeof document !== "undefined" && typeof document.getElementById === "function")
+            ? document.getElementById("google-signin-button-container")
+            : null
+        if (btnContainer) {
+            window.google.accounts.id.renderButton(btnContainer, {
+                type: "standard",
+                theme: "outline",
+                size: "large",
+                text: "signin_with",
+                shape: "pill",
+                logo_alignment: "left",
+                width: btnContainer.clientWidth || 280
+            })
+            // Hide custom button
+            const customBtn = typeof document.getElementById === "function"
+                ? document.getElementById("custom-google-button")
+                : null
+            if (customBtn) {
+                customBtn.style.display = "none"
+            }
         }
+
+        // Also trigger One Tap prompt automatically for non-intrusive sign-in
+        window.google.accounts.id.prompt()
+
         return true
     } catch {
         return false

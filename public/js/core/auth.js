@@ -300,6 +300,27 @@ export function createAuthManager({ auth }) {
             await this._ensureLocalPersistence()
             await this._ensureLocalAuthManager().loginWithEmail()
         },
+        async loginWithGoogleToken(idToken) {
+            await this._ensureLocalPersistence()
+            if (!auth) {
+                console.error("[Auth] auth is unavailable: SDK not initialized")
+                this._toast(this._t("auth_unavailable", "Authentication unavailable"))
+                return
+            }
+            if (state.loginInFlight) return
+            this._setLoginBusy(true)
+            this._setAuthFeedback(this._t("auth_google_starting", "Opening Google sign-in..."), "info")
+            try {
+                const result = await auth.signInWithGoogleToken(idToken)
+                if (result?.user) {
+                    await this._handleAuthState(result.user)
+                }
+            } catch (error) {
+                this.handleAuthError(error)
+            } finally {
+                this._setLoginBusy(false)
+            }
+        },
         async logout() {
             if (!auth) return
             state.logoutInFlight = true

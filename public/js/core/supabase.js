@@ -339,7 +339,8 @@ async function getOfficialClient() {
         const createOfficialClient = await loadOfficialSupabaseCreateClient()
         if (typeof createOfficialClient !== "function") return null
 
-        const { url, publishableKey } = getRuntimeConfig()
+        const { publishableKey } = getRuntimeConfig()
+        const url = `${window.location.origin}/api/supabase/proxy`
         const officialClient = createOfficialClient(url, publishableKey, {
             auth: {
                 persistSession: true,

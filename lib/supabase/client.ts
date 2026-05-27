@@ -10,7 +10,11 @@ export function getSupabaseBrowserClient() {
     return browserClient
   }
 
-  browserClient = createClient(getSupabaseUrl(), getSupabasePublishableKey(), {
+  const url = typeof window !== "undefined"
+    ? `${window.location.origin}/api/supabase/proxy`
+    : getSupabaseUrl()
+
+  browserClient = createClient(url, getSupabasePublishableKey(), {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
