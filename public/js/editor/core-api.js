@@ -40,6 +40,12 @@ export const EditorAPI = (() => {
         return resolvedElements
     }
 
+    const adjustTitleHeight = (el) => {
+        if (!el) return
+        el.style.height = "auto"
+        el.style.height = `${el.scrollHeight}px`
+    }
+
     const getPages = () => {
         const contentElement = document.getElementById("note-content-editable")
         return contentElement ? Array.from(contentElement.querySelectorAll(".note-page")) : []
@@ -618,12 +624,51 @@ export const EditorAPI = (() => {
         const { signal } = state.abortController
 
         if (boundElements.title) {
+            // Auto-resize on open
+            setTimeout(() => {
+                adjustTitleHeight(boundElements.title)
+            }, 0)
+
             boundElements.title.addEventListener("input", (event) => {
                 const titleElement = event.currentTarget
                 state.titleTouched = !!titleElement.value.trim()
+                adjustTitleHeight(titleElement)
                 inputHandlers.syncAutoTitle()
                 queueSnapshot()
             }, { signal })
+
+            boundElements.title.addEventListener("focus", (event) => {
+                const titleElement = event.currentTarget
+                adjustTitleHeight(titleElement)
+                // Smooth scroll title into view at the top of the scroll area
+                if (boundElements.scrollArea) {
+                    boundElements.scrollArea.scrollTo({
+                        top: 0,
+                        behavior: "smooth"
+                    })
+                }
+            }, { signal })
+
+            boundElements.title.addEventListener("blur", (event) => {
+                const titleElement = event.currentTarget
+                adjustTitleHeight(titleElement)
+            }, { signal })
+        }
+
+        const headerTitleElement = document.getElementById("editor-header-title")
+        const scrollAreaElement = boundElements.scrollArea
+        if (scrollAreaElement && headerTitleElement && boundElements.title) {
+            const handleScroll = () => {
+                const titleRect = boundElements.title.getBoundingClientRect()
+                const threshold = 64
+                if (titleRect.bottom < threshold) {
+                    headerTitleElement.textContent = boundElements.title.value || UI.getText("note_untitled", "Без названия")
+                    headerTitleElement.classList.add("visible")
+                } else {
+                    headerTitleElement.classList.remove("visible")
+                }
+            }
+            scrollAreaElement.addEventListener("scroll", handleScroll, { signal, passive: true })
         }
 
         const pagesListElement = boundElements.pagesList
@@ -1269,6 +1314,7 @@ export const EditorAPI = (() => {
         state.isRenderingState = true
         try {
             titleElement.value = note.title || ""
+            adjustTitleHeight(titleElement)
             contentElement.innerHTML = Utils.sanitizeHtml(note.content || "")
             ensurePages()
             inputHandlers.syncAutoTitle()

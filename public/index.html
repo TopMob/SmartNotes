@@ -401,6 +401,7 @@
                 <button type="button" class="btn-icon" data-action="close-editor" aria-label="Назад" data-lang-aria="back">
                     <i class="material-icons-round" aria-hidden="true">arrow_back</i>
                 </button>
+                <div id="editor-header-title" class="editor-header-title"></div>
                 <div class="editor-tools" aria-label="Действия редактора" data-lang-aria="editor_actions">
                     <div class="editor-page-controls editor-page-controls-header" aria-label="Страницы" data-lang-aria="editor_pages">
                         <button type="button" class="btn-icon" data-action="editor-prev-page" aria-label="Предыдущая страница" data-lang-aria="page_prev">
@@ -437,7 +438,7 @@
                 </div>
             </header>
             <div class="editor-scroll-area scrollable">
-                <input id="note-title" type="text" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria">
+                <textarea id="note-title" placeholder="Без названия" data-lang-placeholder="note_title" aria-label="Заголовок заметки" data-lang-aria="note_title_aria" rows="1"></textarea>
                 <div id="editor-toolbar" class="editor-toolbar" role="toolbar" aria-label="Инструменты редактора" data-lang-aria="editor_toolbar"></div>
                 <div id="drawing-controls" class="drawing-controls hidden" aria-label="Настройки рисования" data-lang-aria="drawing_settings">
                     <div class="drawing-tool-group" role="group" aria-label="Инструменты рисования" data-lang-aria="drawing_tools">
